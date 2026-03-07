@@ -3,8 +3,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="订单物流信息更新"
-BUNDLE_ID="com.tuoling.order-logistics-updater"
+APP_NAME="TLS-shipinhao"
+BUNDLE_ID="com.tuoling.tls-shipinhao"
 DIST_DIR="$SCRIPT_DIR/dist"
 BUILD_DIR="$SCRIPT_DIR/build"
 SPEC_FILE="$SCRIPT_DIR/${APP_NAME}.spec"

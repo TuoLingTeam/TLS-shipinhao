@@ -1,4 +1,4 @@
-# 订单物流信息更新工具
+# TLS-shipinhao工具
 
 ## 项目说明
 
@@ -7,7 +7,7 @@
 ## 目录结构
 
 ```text
-订单物流信息更新/
+TLS-shipinhao/
 ├── main.py               # 根入口，仅负责启动 src.app.main
 ├── src/
 │   ├── __init__.py
@@ -87,7 +87,7 @@ python scripts/build.py
 build_windows.bat
 ```
 
-输出目录为 `dist/订单物流信息更新/`，主程序为 `dist/订单物流信息更新/订单物流信息更新.exe`。
+输出目录为 `dist/TLS-shipinhao/`，主程序为 `dist/TLS-shipinhao/TLS-shipinhao.exe`。
 
 ### macOS (.app)
 
@@ -98,4 +98,4 @@ chmod +x build_mac.sh
 ./build_mac.sh
 ```
 
-应用输出在 `dist/订单物流信息更新.app`。使用前将 `cookie.txt` 和 `biz_magic.txt` 放在 `dist/` 目录，与 `.app` 同级即可。
+应用输出在 `dist/TLS-shipinhao.app`。使用前将 `cookie.txt` 和 `biz_magic.txt` 放在 `dist/` 目录，与 `.app` 同级即可。
