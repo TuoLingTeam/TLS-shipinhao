@@ -34,23 +34,35 @@ MIN_WINDOW_WIDTH = 1120
 MIN_WINDOW_HEIGHT = 900
 
 APP_COLORS = {
-    "bg": "#EDF4FF",
+    "bg": "#F3F7FC",
+    "bg_panel": "#EAF1FB",
     "surface": "#FFFFFF",
+    "surface_soft": "#F8FBFF",
     "border": "#D7E3F4",
+    "border_strong": "#B9CCE8",
     "text": "#0F172A",
-    "muted": "#64748B",
+    "heading": "#102A43",
+    "muted": "#5B6B82",
+    "muted_soft": "#7B8BA4",
     "blue": "#2563EB",
+    "blue_deep": "#1D4ED8",
     "blue_soft": "#DBEAFE",
+    "blue_tint": "#F2F7FF",
     "orange": "#F97316",
+    "orange_deep": "#EA580C",
     "orange_soft": "#FFEDD5",
+    "orange_tint": "#FFF7ED",
     "green": "#16A34A",
     "green_soft": "#DCFCE7",
     "red": "#DC2626",
     "red_soft": "#FEE2E2",
-    "input_bg": "#F8FAFC",
-    "input_border": "#CBD5E1",
-    "log_bg": "#0F172A",
+    "input_bg": "#FFFFFF",
+    "input_border": "#C7D5E8",
+    "input_border_focus": "#7AA2F7",
+    "log_bg": "#0B1730",
+    "log_surface": "#081225",
     "log_fg": "#E2E8F0",
+    "log_muted": "#8FA7C8",
 }
 
 
@@ -437,10 +449,37 @@ class MainWindow(QWidget):
                 background: {APP_COLORS["bg"]};
                 color: {APP_COLORS["text"]};
             }}
+            QLabel {{
+                background: transparent;
+            }}
             QFrame#Card {{
                 background: {APP_COLORS["surface"]};
                 border: 1px solid {APP_COLORS["border"]};
-                border-radius: 16px;
+                border-radius: 20px;
+            }}
+            QFrame#HeroCard {{
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 {APP_COLORS["surface"]},
+                    stop: 1 {APP_COLORS["blue_tint"]}
+                );
+                border: 1px solid {APP_COLORS["border_strong"]};
+                border-radius: 22px;
+            }}
+            QFrame#InputCardBlue {{
+                background: {APP_COLORS["surface"]};
+                border: 1px solid {APP_COLORS["border"]};
+                border-radius: 20px;
+            }}
+            QFrame#InputCardOrange {{
+                background: {APP_COLORS["surface"]};
+                border: 1px solid {APP_COLORS["border"]};
+                border-radius: 20px;
+            }}
+            QFrame#LogCard {{
+                background: {APP_COLORS["log_bg"]};
+                border: 1px solid #102445;
+                border-radius: 20px;
             }}
             QFrame#InputShell {{
                 background: transparent;
@@ -450,33 +489,96 @@ class MainWindow(QWidget):
                 background: {APP_COLORS["input_bg"]};
                 color: {APP_COLORS["text"]};
                 border: 1px solid {APP_COLORS["input_border"]};
-                border-radius: 12px;
-                padding: 12px;
+                border-radius: 16px;
+                padding: 14px;
                 selection-background-color: {APP_COLORS["blue"]};
             }}
+            QPlainTextEdit#InputEdit:focus {{
+                border: 2px solid {APP_COLORS["input_border_focus"]};
+                background: {APP_COLORS["surface"]};
+            }}
             QPlainTextEdit#LogEdit {{
-                background: {APP_COLORS["log_bg"]};
+                background: {APP_COLORS["log_surface"]};
                 color: {APP_COLORS["log_fg"]};
-                border: none;
-                border-radius: 12px;
-                padding: 12px;
+                border: 1px solid #16325A;
+                border-radius: 16px;
+                padding: 14px;
                 selection-background-color: {APP_COLORS["blue"]};
             }}
             QPushButton#PrimaryButton {{
-                background: {APP_COLORS["orange"]};
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 {APP_COLORS["orange"]},
+                    stop: 1 {APP_COLORS["orange_deep"]}
+                );
                 color: white;
-                border: none;
-                border-radius: 14px;
+                border: 1px solid #C2410C;
+                border-radius: 16px;
                 padding: 16px 20px;
-                font-size: 16px;
+                font-size: 17px;
                 font-weight: 700;
             }}
             QPushButton#PrimaryButton:hover {{
-                background: #EA580C;
+                background: {APP_COLORS["orange_deep"]};
+            }}
+            QPushButton#PrimaryButton:pressed {{
+                padding-top: 17px;
+                padding-bottom: 15px;
             }}
             QPushButton#PrimaryButton:disabled {{
-                background: #FDBA74;
+                background: #FED7AA;
                 color: #FFF7ED;
+                border: 1px solid #F59E0B;
+            }}
+            QLabel#HeroEyebrow {{
+                color: {APP_COLORS["blue_deep"]};
+                background: {APP_COLORS["blue_soft"]};
+                border: 1px solid #BFDBFE;
+                border-radius: 9px;
+                padding: 5px 10px;
+                font-weight: 700;
+            }}
+            QLabel#HeroTitle {{
+                color: {APP_COLORS["heading"]};
+            }}
+            QLabel#HeroSubtitle {{
+                color: {APP_COLORS["muted"]};
+            }}
+            QLabel#SectionTitle {{
+                color: {APP_COLORS["heading"]};
+            }}
+            QLabel#SectionHint {{
+                color: {APP_COLORS["muted"]};
+            }}
+            QLabel#LogTitle {{
+                color: white;
+            }}
+            QLabel#LogHint {{
+                color: {APP_COLORS["log_muted"]};
+            }}
+            QScrollArea {{
+                border: none;
+                background: transparent;
+            }}
+            QScrollBar:vertical {{
+                background: #E5EDF8;
+                width: 12px;
+                margin: 8px 4px 8px 0;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: #9FB7DA;
+                min-height: 36px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: #7E9FCE;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: transparent;
             }}
             """
         )
@@ -511,7 +613,7 @@ class MainWindow(QWidget):
         self.page_layout.setStretch(2, 0)
         self.page_layout.setStretch(3, 4)
 
-        self.header_card = self._create_card(self.page_layout)
+        self.header_card = self._create_card(self.page_layout, object_name="HeroCard")
         header_layout = QVBoxLayout(self.header_card)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
@@ -520,24 +622,31 @@ class MainWindow(QWidget):
         header_body = QWidget()
         header_body.setStyleSheet("background: transparent;")
         header_box = QHBoxLayout(header_body)
-        header_box.setContentsMargins(22, 18, 22, 18)
-        header_box.setSpacing(12)
+        header_box.setContentsMargins(28, 24, 28, 24)
+        header_box.setSpacing(18)
 
         title_wrap = QWidget()
         title_box = QVBoxLayout(title_wrap)
         title_box.setContentsMargins(0, 0, 0, 0)
-        title_box.setSpacing(6)
+        title_box.setSpacing(10)
+
+        hero_eyebrow = QLabel("批量物流更新工作台")
+        hero_eyebrow.setObjectName("HeroEyebrow")
+        hero_eyebrow.setFont(build_font(9, bold=True))
+        hero_eyebrow.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        title_box.addWidget(hero_eyebrow, 0, Qt.AlignLeft)
 
         title_label = QLabel("驼铃视频小店中差评处理")
+        title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(22, bold=True))
         title_box.addWidget(title_label)
 
         self.title_description_label = QLabel(
             "批量填写订单号与物流单号，系统会自动整理并按顺序逐条执行更新。"
         )
+        self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(False)
         self.title_description_label.setFont(build_font(12))
-        self.title_description_label.setStyleSheet(f"color: {APP_COLORS['muted']};")
         title_box.addWidget(self.title_description_label)
 
         header_box.addWidget(title_wrap, 1)
@@ -547,9 +656,10 @@ class MainWindow(QWidget):
         self.author_badge.setFont(build_font(10, bold=True))
         self.author_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
-            f"color: {APP_COLORS['blue']};"
-            "border-radius: 10px;"
-            "padding: 8px 12px;"
+            f"color: {APP_COLORS['blue_deep']};"
+            "border: 1px solid #BFDBFE;"
+            "border-radius: 12px;"
+            "padding: 10px 14px;"
         )
         self.author_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         header_box.addWidget(self.author_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
@@ -597,6 +707,7 @@ class MainWindow(QWidget):
             self.order_count_badge,
             self.order_edit,
             APP_COLORS["blue"],
+            "InputCardBlue",
         )
         self.tracking_card = self._create_input_card(
             "填写物流单号",
@@ -604,6 +715,7 @@ class MainWindow(QWidget):
             self.tracking_count_badge,
             self.tracking_edit,
             APP_COLORS["orange"],
+            "InputCardOrange",
         )
 
         self.page_layout.addWidget(self.input_container, 1)
@@ -619,7 +731,7 @@ class MainWindow(QWidget):
         self.submit_button.clicked.connect(self.on_submit)
         self.page_layout.addWidget(self.submit_button)
 
-        self.log_card = self._create_card(self.page_layout, stretch=1)
+        self.log_card = self._create_card(self.page_layout, object_name="LogCard")
         log_layout = QVBoxLayout(self.log_card)
         log_layout.setContentsMargins(0, 0, 0, 0)
         log_layout.setSpacing(0)
@@ -636,13 +748,14 @@ class MainWindow(QWidget):
         log_header_box.setSpacing(12)
 
         log_title = QLabel("执行日志")
+        log_title.setObjectName("LogTitle")
         log_title.setFont(build_font(15, bold=True))
         log_header_box.addWidget(log_title)
 
         self.log_hint_label = QLabel("最近执行记录会按时间顺序滚动显示。")
+        self.log_hint_label.setObjectName("LogHint")
         self.log_hint_label.setWordWrap(False)
         self.log_hint_label.setFont(build_font(10))
-        self.log_hint_label.setStyleSheet(f"color: {APP_COLORS['muted']};")
         self.log_hint_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         log_header_box.addWidget(self.log_hint_label, 1)
         log_box.addWidget(log_header)
@@ -656,10 +769,10 @@ class MainWindow(QWidget):
 
         log_layout.addWidget(log_body)
 
-    def _create_card(self, parent_layout, stretch=0):
+    def _create_card(self, parent_layout, stretch=0, object_name="Card"):
         """创建卡片容器。"""
         card = QFrame()
-        card.setObjectName("Card")
+        card.setObjectName(object_name)
         if stretch:
             parent_layout.addWidget(card, stretch)
         else:
@@ -679,10 +792,10 @@ class MainWindow(QWidget):
         )
         parent_layout.addWidget(bar)
 
-    def _create_input_card(self, title, hint, badge, editor, accent):
+    def _create_input_card(self, title, hint, badge, editor, accent, object_name):
         """创建输入卡片。"""
         card = QFrame()
-        card.setObjectName("Card")
+        card.setObjectName(object_name)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(0)
@@ -699,15 +812,16 @@ class MainWindow(QWidget):
         header_layout.setSpacing(12)
 
         title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
         title_label.setFont(build_font(15, bold=True))
         header_layout.addWidget(title_label)
         header_layout.addWidget(badge, 0, Qt.AlignRight)
         body_layout.addWidget(header)
 
         hint_label = QLabel(hint)
+        hint_label.setObjectName("SectionHint")
         hint_label.setWordWrap(False)
         hint_label.setFont(build_font(10))
-        hint_label.setStyleSheet(f"color: {APP_COLORS['muted']};")
         body_layout.addWidget(hint_label)
         card.hint_label = hint_label
 
@@ -722,8 +836,9 @@ class MainWindow(QWidget):
             return
 
         available = screen.availableGeometry()
-        target_width = min(DESIGN_WIDTH, max(MIN_WINDOW_WIDTH, available.width() - 80))
-        target_height = min(DESIGN_HEIGHT, max(MIN_WINDOW_HEIGHT, available.height() - 80))
+        target_width = min(DESIGN_WIDTH, max(MIN_WINDOW_WIDTH, available.width() - 48))
+        target_height = min(DESIGN_HEIGHT, max(820, available.height() - 48))
+        self.setMinimumSize(min(MIN_WINDOW_WIDTH, target_width), min(MIN_WINDOW_HEIGHT, target_height))
         self.resize(target_width, target_height)
 
     def _sync_responsive_metrics(self):
@@ -737,27 +852,19 @@ class MainWindow(QWidget):
         page_margin_y = max(14, int(22 * scale))
         page_spacing = max(10, int(16 * scale))
         button_height = max(56, int(60 * scale))
-
-        available_height = max(
-            MIN_WINDOW_HEIGHT,
-            viewport.height() - (page_margin_y * 2) - (page_spacing * 3),
-        )
         header_height = max(120, int(138 * scale))
-        remaining_height = max(420, available_height - header_height - button_height)
-        input_area_height = max(250, int(remaining_height * 0.44))
-        log_area_height = max(260, remaining_height - input_area_height)
-        input_editor_height = max(130, input_area_height - 112)
-        log_editor_height = max(210, log_area_height - 74)
+        input_editor_height = max(150, int(220 * scale))
+        log_editor_height = max(300, int(340 * scale))
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
         self.input_grid.setHorizontalSpacing(max(12, int(20 * scale)))
         self.input_grid.setVerticalSpacing(max(12, int(16 * scale)))
         self.header_card.setMinimumHeight(header_height)
-        self.order_edit.setFixedHeight(input_editor_height)
-        self.tracking_edit.setFixedHeight(input_editor_height)
-        self.log_view.setFixedHeight(log_editor_height)
         self.submit_button.setFixedHeight(button_height)
+        self.order_edit.setMinimumHeight(input_editor_height)
+        self.tracking_edit.setMinimumHeight(input_editor_height)
+        self.log_view.setMinimumHeight(log_editor_height)
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
