@@ -22,7 +22,7 @@ jobs:
           - os: windows-latest
             label: Windows
             artifact_name: tls-shipinhao-windows
-            artifact_path: dist/TLS-shipinhao
+            artifact_path: dist/TLS-shipinhao.exe
 
     steps:
       - name: Checkout
