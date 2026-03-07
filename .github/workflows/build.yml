@@ -18,11 +18,11 @@ jobs:
           - os: macos-latest
             label: macOS
             artifact_name: tls-shipinhao-macos
-            artifact_path: dist/订单物流信息更新.app
+            artifact_path: dist/TLS-shipinhao.app
           - os: windows-latest
             label: Windows
             artifact_name: tls-shipinhao-windows
-            artifact_path: dist/订单物流信息更新
+            artifact_path: dist/TLS-shipinhao
 
     steps:
       - name: Checkout
