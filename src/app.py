@@ -543,7 +543,6 @@ class MainWindow(QWidget):
                 border: 1px solid #92400E;
                 border-radius: 16px;
                 padding: 16px 20px;
-                font-size: 17px;
                 font-weight: 700;
             }}
             QPushButton#PrimaryButton:hover {{
@@ -653,6 +652,7 @@ class MainWindow(QWidget):
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(22, bold=True))
+        self.hero_title_label = title_label
         title_box.addWidget(title_label)
 
         self.title_description_label = QLabel(
@@ -744,6 +744,7 @@ class MainWindow(QWidget):
         self.submit_button = QPushButton("点击开始批量处理")
         self.submit_button.setObjectName("PrimaryButton")
         self.submit_button.setCursor(Qt.PointingHandCursor)
+        self.submit_button.setFont(build_font(17, bold=True))
         self.submit_button.setMinimumHeight(60)
         self.submit_button.clicked.connect(self.on_submit)
         self.page_layout.addWidget(self.submit_button)
@@ -768,6 +769,7 @@ class MainWindow(QWidget):
         log_title = QLabel("执行日志")
         log_title.setObjectName("LogTitle")
         log_title.setFont(build_font(15, bold=True))
+        self.log_title_label = log_title
         log_header_box.addWidget(log_title)
 
         self.log_hint_label = QLabel("最近执行记录会按时间顺序滚动显示。")
@@ -820,6 +822,7 @@ class MainWindow(QWidget):
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
         title_label.setFont(build_font(15, bold=True))
+        card.title_label = title_label
         header_layout.addWidget(title_label)
         header_layout.addWidget(badge, 0, Qt.AlignRight)
         body_layout.addWidget(header)
@@ -848,74 +851,57 @@ class MainWindow(QWidget):
         self.resize(target_width, target_height)
 
     def _sync_responsive_metrics(self):
-        """按可视区高度压缩或扩展关键区块，避免默认窗口下日志区被推出可视范围。"""
+        """窗口变小时整体等比例缩放，窗口变大时让日志区优先扩展。"""
         viewport = self.scroll_area.viewport().size()
         if not viewport.width() or not viewport.height():
             return
 
         width_scale = viewport.width() / DESIGN_WIDTH
         height_scale = viewport.height() / DESIGN_HEIGHT
-        scale = max(0.70, min(1.0, width_scale, height_scale))
+        scale = max(0.72, min(1.0, width_scale, height_scale))
 
         page_margin_x = max(14, int(24 * scale))
         page_margin_y = max(12, int(22 * scale))
         page_spacing = max(8, int(16 * scale))
-        button_height = max(50, int(60 * scale))
+        button_height = max(48, int(60 * scale))
         header_height = max(104, int(138 * scale))
         input_editor_height = max(118, int(220 * scale))
         log_editor_height = max(185, int(340 * scale))
 
-        # 先按设计比例给出目标尺寸，再根据真实可视高度回算溢出量。
-        input_card_chrome = max(92, int(108 * scale))
-        log_card_chrome = max(64, int(74 * scale))
-        estimated_total = (
-            page_margin_y * 2
-            + page_spacing * 3
-            + header_height
-            + (input_card_chrome + input_editor_height)
-            + button_height
-            + (log_card_chrome + log_editor_height)
-        )
-        overflow = estimated_total - viewport.height()
-
-        # 情况 1：默认窗口或较小窗口下空间不足，按优先级压缩内容区。
-        if overflow > 0:
-            shrink = min(overflow, log_editor_height - 150)
-            log_editor_height -= shrink
-            overflow -= shrink
-
-        if overflow > 0:
-            shrink = min(overflow, input_editor_height - 104)
-            input_editor_height -= shrink
-            overflow -= shrink
-
-        if overflow > 0:
-            shrink = min(overflow, header_height - 96)
-            header_height -= shrink
-            overflow -= shrink
-
-        if overflow > 0:
-            shrink = min(overflow, button_height - 46)
-            button_height -= shrink
-            overflow -= shrink
-
-        # 情况 2：窗口放大后，把新增空间优先分给日志区，其次输入区。
+        # 窗口放大时，让富余高度优先分给日志区，再分给输入区。
         spare_height = viewport.height() - (
             page_margin_y * 2
             + page_spacing * 3
             + header_height
-            + (input_card_chrome + input_editor_height)
+            + max(92, int(108 * scale))
+            + input_editor_height
             + button_height
-            + (log_card_chrome + log_editor_height)
+            + max(64, int(74 * scale))
+            + log_editor_height
         )
         if spare_height > 24:
             log_growth = min(spare_height, 140)
             log_editor_height += log_growth
             spare_height -= log_growth
-
         if spare_height > 16:
-            input_growth = min(spare_height // 2, 72)
-            input_editor_height += input_growth
+            input_editor_height += min(spare_height // 2, 72)
+
+        # 同步字体，避免按钮和标题在窗口缩小时保持大字号导致截断。
+        self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
+        self.title_description_label.setFont(build_font(max(10, int(12 * scale))))
+        self.author_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
+        self.order_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
+        self.tracking_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
+        self.order_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
+        self.tracking_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
+        self.order_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
+        self.tracking_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
+        self.log_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
+        self.log_hint_label.setFont(build_font(max(9, int(10 * scale))))
+        self.submit_button.setFont(build_font(max(14, int(17 * scale)), bold=True))
+        self.order_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
+        self.tracking_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
+        self.log_view.setFont(build_fixed_font(max(9, int(11 * scale))))
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
