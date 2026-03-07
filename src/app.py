@@ -49,11 +49,16 @@ APP_COLORS = {
     "blue": "#1D4ED8",
     "blue_deep": "#1E3A8A",
     "blue_soft": "#DDEAFE",
-    "blue_tint": "#F6F9FF",
+    "blue_tint": "#DCE8F7",
+    "hero_tint": "#C9D9EE",
+    "hero_tint_deep": "#B5CAE6",
+    "hero_border": "#9FB7D6",
     "orange": "#C96B12",
     "orange_deep": "#A9550A",
     "orange_soft": "#F8E1C3",
-    "orange_tint": "#FFF9F2",
+    "orange_tint": "#F4E5D2",
+    "orange_tint_deep": "#EAD4BA",
+    "orange_border": "#DAB995",
     "green": "#16A34A",
     "green_soft": "#DCFCE7",
     "red": "#DC2626",
@@ -475,20 +480,28 @@ class MainWindow(QWidget):
             QFrame#HeroCard {{
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 {APP_COLORS["surface"]},
-                    stop: 1 {APP_COLORS["blue_tint"]}
+                    stop: 0 {APP_COLORS["hero_tint"]},
+                    stop: 1 {APP_COLORS["hero_tint_deep"]}
                 );
-                border: 1px solid {APP_COLORS["border_strong"]};
+                border: 1px solid {APP_COLORS["hero_border"]};
                 border-radius: 22px;
             }}
             QFrame#InputCardBlue {{
-                background: {APP_COLORS["blue_tint"]};
-                border: 1px solid #CBD9EA;
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 {APP_COLORS["blue_tint"]},
+                    stop: 1 #D3E1F2
+                );
+                border: 1px solid #B8CAE2;
                 border-radius: 20px;
             }}
             QFrame#InputCardOrange {{
-                background: {APP_COLORS["orange_tint"]};
-                border: 1px solid #E9D3BA;
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 {APP_COLORS["orange_tint"]},
+                    stop: 1 {APP_COLORS["orange_tint_deep"]}
+                );
+                border: 1px solid {APP_COLORS["orange_border"]};
                 border-radius: 20px;
             }}
             QFrame#LogCard {{
