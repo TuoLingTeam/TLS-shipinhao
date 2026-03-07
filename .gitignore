@@ -4,11 +4,12 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.venv/
+.venv-mac-build/
 venv/
 env/
 ENV/
 *.egg-info/
-dist/
 build/
 
 # Downloaded files
@@ -28,6 +29,7 @@ screenshot.png
 .vscode/
 .idea/
 .kiro/
+.codex/
 .cursor/
 *.swp
 *.swo
@@ -43,6 +45,7 @@ dist/
 
 # OS
 .DS_Store
+**/.DS_Store
 Thumbs.db
 
 # Testing

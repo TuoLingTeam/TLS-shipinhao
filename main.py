@@ -34,35 +34,35 @@ MIN_WINDOW_WIDTH = 1120
 MIN_WINDOW_HEIGHT = 900
 
 APP_COLORS = {
-    "bg": "#F3F7FC",
-    "bg_panel": "#EAF1FB",
+    "bg": "#F8FAFC",
+    "bg_panel": "#EEF3F9",
     "surface": "#FFFFFF",
-    "surface_soft": "#F8FBFF",
-    "border": "#D7E3F4",
-    "border_strong": "#B9CCE8",
-    "text": "#0F172A",
-    "heading": "#102A43",
-    "muted": "#5B6B82",
-    "muted_soft": "#7B8BA4",
-    "blue": "#2563EB",
-    "blue_deep": "#1D4ED8",
-    "blue_soft": "#DBEAFE",
-    "blue_tint": "#F2F7FF",
-    "orange": "#F97316",
-    "orange_deep": "#EA580C",
-    "orange_soft": "#FFEDD5",
-    "orange_tint": "#FFF7ED",
+    "surface_soft": "#F8FBFE",
+    "border": "#D6E2F0",
+    "border_strong": "#BED0E3",
+    "text": "#172554",
+    "heading": "#0F172A",
+    "muted": "#64748B",
+    "muted_soft": "#94A3B8",
+    "blue": "#1D4ED8",
+    "blue_deep": "#1E3A8A",
+    "blue_soft": "#E0ECFF",
+    "blue_tint": "#F7FAFF",
+    "orange": "#D97706",
+    "orange_deep": "#B45309",
+    "orange_soft": "#FDE7C7",
+    "orange_tint": "#FFFBF5",
     "green": "#16A34A",
     "green_soft": "#DCFCE7",
     "red": "#DC2626",
     "red_soft": "#FEE2E2",
     "input_bg": "#FFFFFF",
-    "input_border": "#C7D5E8",
-    "input_border_focus": "#7AA2F7",
-    "log_bg": "#0B1730",
-    "log_surface": "#081225",
-    "log_fg": "#E2E8F0",
-    "log_muted": "#8FA7C8",
+    "input_border": "#CBD5E1",
+    "input_border_focus": "#60A5FA",
+    "log_bg": "#10233F",
+    "log_surface": "#0C1A31",
+    "log_fg": "#E5EDF7",
+    "log_muted": "#A9BCD6",
 }
 
 
@@ -467,18 +467,18 @@ class MainWindow(QWidget):
                 border-radius: 22px;
             }}
             QFrame#InputCardBlue {{
-                background: {APP_COLORS["surface"]};
+                background: {APP_COLORS["blue_tint"]};
                 border: 1px solid {APP_COLORS["border"]};
                 border-radius: 20px;
             }}
             QFrame#InputCardOrange {{
-                background: {APP_COLORS["surface"]};
+                background: {APP_COLORS["orange_tint"]};
                 border: 1px solid {APP_COLORS["border"]};
                 border-radius: 20px;
             }}
             QFrame#LogCard {{
                 background: {APP_COLORS["log_bg"]};
-                border: 1px solid #102445;
+                border: 1px solid #183252;
                 border-radius: 20px;
             }}
             QFrame#InputShell {{
@@ -500,7 +500,7 @@ class MainWindow(QWidget):
             QPlainTextEdit#LogEdit {{
                 background: {APP_COLORS["log_surface"]};
                 color: {APP_COLORS["log_fg"]};
-                border: 1px solid #16325A;
+                border: 1px solid #25476E;
                 border-radius: 16px;
                 padding: 14px;
                 selection-background-color: {APP_COLORS["blue"]};
@@ -512,31 +512,23 @@ class MainWindow(QWidget):
                     stop: 1 {APP_COLORS["orange_deep"]}
                 );
                 color: white;
-                border: 1px solid #C2410C;
+                border: 1px solid #92400E;
                 border-radius: 16px;
                 padding: 16px 20px;
                 font-size: 17px;
                 font-weight: 700;
             }}
             QPushButton#PrimaryButton:hover {{
-                background: {APP_COLORS["orange_deep"]};
+                background: #C46A08;
             }}
             QPushButton#PrimaryButton:pressed {{
                 padding-top: 17px;
                 padding-bottom: 15px;
             }}
             QPushButton#PrimaryButton:disabled {{
-                background: #FED7AA;
+                background: #FDE8C8;
                 color: #FFF7ED;
-                border: 1px solid #F59E0B;
-            }}
-            QLabel#HeroEyebrow {{
-                color: {APP_COLORS["blue_deep"]};
-                background: {APP_COLORS["blue_soft"]};
-                border: 1px solid #BFDBFE;
-                border-radius: 9px;
-                padding: 5px 10px;
-                font-weight: 700;
+                border: 1px solid #E8B978;
             }}
             QLabel#HeroTitle {{
                 color: {APP_COLORS["heading"]};
@@ -561,18 +553,18 @@ class MainWindow(QWidget):
                 background: transparent;
             }}
             QScrollBar:vertical {{
-                background: #E5EDF8;
+                background: #E8EEF5;
                 width: 12px;
                 margin: 8px 4px 8px 0;
                 border-radius: 6px;
             }}
             QScrollBar::handle:vertical {{
-                background: #9FB7DA;
+                background: #AABCD3;
                 min-height: 36px;
                 border-radius: 6px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: #7E9FCE;
+                background: #8FA7C5;
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
@@ -617,7 +609,6 @@ class MainWindow(QWidget):
         header_layout = QVBoxLayout(self.header_card)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
-        self._create_accent_bar(header_layout, APP_COLORS["blue"])
 
         header_body = QWidget()
         header_body.setStyleSheet("background: transparent;")
@@ -629,12 +620,6 @@ class MainWindow(QWidget):
         title_box = QVBoxLayout(title_wrap)
         title_box.setContentsMargins(0, 0, 0, 0)
         title_box.setSpacing(10)
-
-        hero_eyebrow = QLabel("批量物流更新工作台")
-        hero_eyebrow.setObjectName("HeroEyebrow")
-        hero_eyebrow.setFont(build_font(9, bold=True))
-        hero_eyebrow.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        title_box.addWidget(hero_eyebrow, 0, Qt.AlignLeft)
 
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
@@ -657,7 +642,7 @@ class MainWindow(QWidget):
         self.author_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue_deep']};"
-            "border: 1px solid #BFDBFE;"
+            "border: 1px solid #C8DAF4;"
             "border-radius: 12px;"
             "padding: 10px 14px;"
         )
@@ -678,6 +663,7 @@ class MainWindow(QWidget):
         self.order_count_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue']};"
+            "border: 1px solid #C8DAF4;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )
@@ -689,6 +675,7 @@ class MainWindow(QWidget):
         self.tracking_count_badge.setStyleSheet(
             f"background: {APP_COLORS['orange_soft']};"
             f"color: {APP_COLORS['orange']};"
+            "border: 1px solid #F2D1A4;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )
@@ -735,7 +722,6 @@ class MainWindow(QWidget):
         log_layout = QVBoxLayout(self.log_card)
         log_layout.setContentsMargins(0, 0, 0, 0)
         log_layout.setSpacing(0)
-        self._create_accent_bar(log_layout, APP_COLORS["blue"])
 
         log_body = QWidget()
         log_box = QVBoxLayout(log_body)
@@ -779,19 +765,6 @@ class MainWindow(QWidget):
             parent_layout.addWidget(card)
         return card
 
-    def _create_accent_bar(self, parent_layout, color):
-        """卡片顶部强调条。"""
-        bar = QFrame()
-        bar.setFixedHeight(4)
-        bar.setStyleSheet(
-            f"background: {color};"
-            "border-top-left-radius: 16px;"
-            "border-top-right-radius: 16px;"
-            "border-bottom-left-radius: 0;"
-            "border-bottom-right-radius: 0;"
-        )
-        parent_layout.addWidget(bar)
-
     def _create_input_card(self, title, hint, badge, editor, accent, object_name):
         """创建输入卡片。"""
         card = QFrame()
@@ -799,7 +772,6 @@ class MainWindow(QWidget):
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(0)
-        self._create_accent_bar(card_layout, accent)
 
         body = QWidget()
         body_layout = QVBoxLayout(body)
