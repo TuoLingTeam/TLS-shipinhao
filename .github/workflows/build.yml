@@ -18,7 +18,7 @@ jobs:
           - os: macos-latest
             label: macOS
             artifact_name: tls-shipinhao-macos
-            artifact_path: dist/TLS-shipinhao.app
+            artifact_path: dist/tls-shipinhao-macos.zip
           - os: windows-latest
             label: Windows
             artifact_name: tls-shipinhao-windows
@@ -50,20 +50,25 @@ jobs:
           if [ -f requirements.txt ]; then
             python -m pip install -r requirements.txt
           fi
-          python -m pip install PySide6 pyinstaller charset_normalizer
+          python -m pip install pyinstaller
         shell: bash
 
       - name: Build macOS app
         if: runner.os == 'macOS'
-        run: |
-          chmod +x build_mac.sh
-          ./build_mac.sh
+        run: python scripts/build.py macos
         shell: bash
 
       - name: Build Windows app
         if: runner.os == 'Windows'
-        run: .\build_windows.bat
+        run: python scripts/build.py windows
         shell: pwsh
+
+      - name: Package macOS app bundle
+        if: runner.os == 'macOS'
+        run: |
+          rm -f dist/tls-shipinhao-macos.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/TLS-shipinhao.app dist/tls-shipinhao-macos.zip
+        shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
