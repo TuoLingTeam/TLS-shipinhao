@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Downloaded files
+downloaded_invoices/*.pdf
+test_output/
+test_qr/
+test_single/
+test_download/
+
+# Debug files
+debug_*.py
+page_source.html
+screenshot.png
+*.log
+
+# IDE
+.vscode/
+.idea/
+.kiro/
+.cursor/
+*.swp
+*.swo
+*~
+
+# PyInstaller
+*.spec
+
+# Build logs
+logs_*/
+logs/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Selenium
+*.crdownload

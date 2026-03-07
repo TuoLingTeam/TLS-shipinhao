@@ -12,7 +12,7 @@ set "OLD_EXE_FILE=%DIST_DIR%\%APP_NAME%.exe"
 set "SPEC_FILE=%CD%\%APP_NAME%.spec"
 set "VENV_DIR=%CD%\.venv"
 set "PYTHON_BIN=%VENV_DIR%\Scripts\python.exe"
-set "CXFREEZE_BIN=%VENV_DIR%\Scripts\cxfreeze.exe"
+set "PYINSTALLER_BIN=%VENV_DIR%\Scripts\pyinstaller.exe"
 set "COOKIE_FILE=%CD%\cookie.txt"
 set "MAGIC_FILE=%CD%\biz_magic.txt"
 
@@ -33,29 +33,42 @@ if exist "%APP_DIR%" (
 )
 if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
 
-if exist "%CXFREEZE_BIN%" (
-  set "FREEZE_CMD=%CXFREEZE_BIN%"
-) else (
-  echo Installing cx_Freeze if needed...
-  "%PYTHON_BIN%" -m pip install cx_Freeze -q
+echo Ensuring Qt build dependencies are installed...
+"%PYTHON_BIN%" -c "import PySide6, requests, charset_normalizer" >nul 2>&1
+if errorlevel 1 (
+  "%PYTHON_BIN%" -m pip install PySide6 requests charset_normalizer -q
   if errorlevel 1 goto :error
-  if exist "%VENV_DIR%\Scripts\cxfreeze.exe" (
-    set "FREEZE_CMD=%VENV_DIR%\Scripts\cxfreeze.exe"
+)
+
+if exist "%PYINSTALLER_BIN%" (
+  set "PYINSTALLER_CMD=%PYINSTALLER_BIN%"
+) else (
+  echo Installing PyInstaller if needed...
+  "%PYTHON_BIN%" -m pip install pyinstaller -q
+  if errorlevel 1 goto :error
+  if exist "%VENV_DIR%\Scripts\pyinstaller.exe" (
+    set "PYINSTALLER_CMD=%VENV_DIR%\Scripts\pyinstaller.exe"
   ) else (
-    set "FREEZE_CMD=cxfreeze"
+    set "PYINSTALLER_CMD=pyinstaller"
   )
 )
 
 echo Building Windows package...
-"%FREEZE_CMD%" ^
-  --script main.py ^
-  --target-dir "%APP_DIR%" ^
-  --target-name "%APP_NAME%.exe" ^
-  --base-name gui
+"%PYINSTALLER_CMD%" ^
+  --clean ^
+  --noconfirm ^
+  --onedir ^
+  --windowed ^
+  --collect-all charset_normalizer ^
+  --collect-all shiboken6 ^
+  --collect-all PySide6 ^
+  --name "%APP_NAME%" ^
+  main.py
 
 if errorlevel 1 goto :error
 
 if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
+if exist "%SPEC_FILE%" del /f /q "%SPEC_FILE%"
 if exist "%COOKIE_FILE%" copy /y "%COOKIE_FILE%" "%APP_DIR%\cookie.txt" >nul
 if exist "%MAGIC_FILE%" copy /y "%MAGIC_FILE%" "%APP_DIR%\biz_magic.txt" >nul
 

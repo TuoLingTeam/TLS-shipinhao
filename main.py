@@ -1,24 +1,41 @@
 # -*- coding: utf-8 -*-
-"""
-订单物流信息更新工具
-用于更新微信小商店订单的物流信息
-"""
+"""订单物流信息更新工具。"""
+
 import json
 import os
 import re
 import sys
-import threading
-from tkinter import messagebox, scrolledtext
-import tkinter as tk
-from tkinter import ttk
+
 import requests
+from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
 
 MAX_BATCH_SIZE = 10
 REQUEST_TIMEOUT = 30
+WINDOW_TITLE = "驼铃视频小店中差评处理"
+DESIGN_WIDTH = 1240
+DESIGN_HEIGHT = 980
+MIN_WINDOW_WIDTH = 1120
+MIN_WINDOW_HEIGHT = 900
+
 APP_COLORS = {
     "bg": "#EDF4FF",
     "surface": "#FFFFFF",
-    "surface_soft": "#F8FBFF",
     "border": "#D7E3F4",
     "text": "#0F172A",
     "muted": "#64748B",
@@ -30,94 +47,74 @@ APP_COLORS = {
     "green_soft": "#DCFCE7",
     "red": "#DC2626",
     "red_soft": "#FEE2E2",
-    "slate_soft": "#E2E8F0",
     "input_bg": "#F8FAFC",
     "input_border": "#CBD5E1",
     "log_bg": "#0F172A",
     "log_fg": "#E2E8F0",
-    "log_muted": "#94A3B8"
 }
-APP_FONTS = {}
-match_value_label = None
-status_badge_label = None
-btn_normalize = None
-btn_clear = None
-progress_var = None
-progress_meta_var = None
-progress_note_var = None
-status_var = None
-status_badge_var = None
 
 
 def get_app_dir():
-    """获取配置文件的查找目录。
-    开发时：脚本所在目录。
-    打包后 Windows：可执行文件同目录。
-    打包后 macOS .app：与 .app 包同路径的目录（即 .app 所在目录）。
-    """
+    """获取配置文件目录。"""
     if getattr(sys, "frozen", False):
         exe_dir = os.path.abspath(os.path.dirname(sys.executable))
         if sys.platform == "darwin":
-            # 可执行文件在 xxx.app/Contents/MacOS/ 内，上两级即 .app 包根目录
             bundle_root = os.path.abspath(os.path.join(exe_dir, "..", ".."))
             if bundle_root.endswith(".app"):
-                # 与 .app 同路径 = 包所在目录
                 return os.path.dirname(bundle_root)
         return exe_dir
     return os.path.dirname(os.path.abspath(__file__))
 
 
 def getCookie():
-    """从 cookie.txt 文件读取 Cookie 信息"""
+    """从 cookie.txt 文件读取 Cookie 信息。"""
     path = os.path.join(get_app_dir(), "cookie.txt")
     with open(path, "r", encoding="utf-8") as file:
         content = file.read().strip()
-    
+
     pairs = content.split(";")
     data = {}
     for pair in pairs:
         if "=" in pair:
             key, value = pair.strip().split("=", 1)
             data[key.strip()] = value.strip()
-    
+
     return data
 
 
 def getMagic():
-    """从 biz_magic.txt 文件读取 magic 值"""
+    """从 biz_magic.txt 文件读取 magic 值。"""
     path = os.path.join(get_app_dir(), "biz_magic.txt")
     with open(path, "r", encoding="utf-8") as file:
-        content = file.read().strip()
-    return content
+        return file.read().strip()
 
 
 def build_headers(magic):
-    """根据 magic 构建 HTTP 请求头。
-
-    浏览器开发者工具里复制出来的 header 值常带有包裹引号，
-    直接原样发给 requests 会导致微信接口长时间无响应。
-    """
+    """根据 magic 构建 HTTP 请求头。"""
     return {
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Content-Type': 'application/json',
-        'Origin': 'https://store.weixin.qq.com',
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-        'biz_magic': magic,
-        'mcn_magic': '',
-        'potter-scene': 'weixinShop',
-        'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'supplier_magic': '',
-        'talent_magic': '',
-        'wecom_magic': ''
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Origin": "https://store.weixin.qq.com",
+        "Pragma": "no-cache",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+        ),
+        "biz_magic": magic,
+        "mcn_magic": "",
+        "potter-scene": "weixinShop",
+        "sec-ch-ua": '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "supplier_magic": "",
+        "talent_magic": "",
+        "wecom_magic": "",
     }
 
 
@@ -147,20 +144,20 @@ def get_response_error(response):
 
 
 def normalize_product_infos(delivery_product_info):
-    """保留订单详情里的商品信息，避免更新请求丢失商品数量。"""
+    """保留订单详情里的商品信息。"""
     product_infos = []
     for item in delivery_product_info.get("productInfos") or []:
         product_id = item.get("productId")
         sku_id = item.get("skuId")
         if product_id is None or sku_id is None:
             continue
-
-        product_infos.append({
-            "productId": product_id,
-            "skuId": sku_id,
-            "productCnt": item.get("productCnt", 1)
-        })
-
+        product_infos.append(
+            {
+                "productId": product_id,
+                "skuId": sku_id,
+                "productCnt": item.get("productCnt", 1),
+            }
+        )
     return product_infos
 
 
@@ -183,7 +180,7 @@ def get_payload_error(payload, default_message):
 
 
 def parse_batch_input(raw_text):
-    """解析批量输入，支持空格、英文逗号和换行分隔。"""
+    """解析批量输入，支持空格、英文逗号、中文逗号和换行。"""
     return [
         item.strip()
         for item in re.split(r"[\s,，]+", raw_text.strip())
@@ -192,236 +189,12 @@ def parse_batch_input(raw_text):
 
 
 def normalize_batch_text(raw_text):
-    """将批量输入规范化为一行一个值，自动去掉多余空格和逗号。"""
+    """将批量输入规范化为一行一个值。"""
     return "\n".join(parse_batch_input(raw_text))
 
 
-def normalize_text_widget(widget):
-    """就地清洗输入框内容，删除空白行和多余分隔符。"""
-    if str(widget.cget("state")) == tk.DISABLED:
-        return
-
-    normalized_text = normalize_batch_text(widget.get("1.0", tk.END))
-    current_text = widget.get("1.0", tk.END).strip()
-    if normalized_text == current_text:
-        return
-
-    widget.delete("1.0", tk.END)
-    if normalized_text:
-        widget.insert("1.0", normalized_text)
-
-
-def schedule_normalize_widget(widget):
-    """在粘贴结束后再清洗输入框，避免打断默认粘贴行为。"""
-    root.after_idle(lambda widget=widget: normalize_and_refresh_widget(widget))
-
-
-def get_font_tokens():
-    """根据系统返回一组桌面端更稳妥的字体配置。"""
-    if sys.platform == "darwin":
-        heading_family = "SF Pro Display"
-        body_family = "SF Pro Text"
-        mono_family = "Menlo"
-    elif sys.platform.startswith("win"):
-        heading_family = "Segoe UI"
-        body_family = "Segoe UI"
-        mono_family = "Consolas"
-    else:
-        heading_family = "DejaVu Sans"
-        body_family = "DejaVu Sans"
-        mono_family = "DejaVu Sans Mono"
-
-    return {
-        "eyebrow": (body_family, 10, "bold"),
-        "hero": (heading_family, 22, "bold"),
-        "title": (heading_family, 13, "bold"),
-        "stat": (heading_family, 18, "bold"),
-        "body": (body_family, 12),
-        "small": (body_family, 10),
-        "button": (body_family, 12, "bold"),
-        "mono": (mono_family, 13),
-        "log": (mono_family, 11)
-    }
-
-
-def get_tone_palette(tone):
-    """统一管理标签和状态色。"""
-    tone_map = {
-        "blue": (APP_COLORS["blue_soft"], APP_COLORS["blue"]),
-        "orange": (APP_COLORS["orange_soft"], APP_COLORS["orange"]),
-        "green": (APP_COLORS["green_soft"], APP_COLORS["green"]),
-        "red": (APP_COLORS["red_soft"], APP_COLORS["red"]),
-        "slate": (APP_COLORS["slate_soft"], APP_COLORS["muted"])
-    }
-    return tone_map.get(tone, tone_map["slate"])
-
-
-def configure_app_styles():
-    """配置按钮与进度条样式。"""
-    style = ttk.Style()
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
-        pass
-
-    style.configure(
-        "Primary.TButton",
-        font=APP_FONTS["button"],
-        background=APP_COLORS["orange"],
-        foreground="#FFFFFF",
-        borderwidth=0,
-        focusthickness=0,
-        padding=(20, 12)
-    )
-    style.map(
-        "Primary.TButton",
-        background=[
-            ("active", "#EA580C"),
-            ("disabled", "#FDBA74")
-        ],
-        foreground=[("disabled", "#FFF7ED")]
-    )
-
-    style.configure(
-        "Ghost.TButton",
-        font=APP_FONTS["button"],
-        background=APP_COLORS["surface"],
-        foreground=APP_COLORS["text"],
-        borderwidth=1,
-        focusthickness=0,
-        padding=(16, 11)
-    )
-    style.map(
-        "Ghost.TButton",
-        background=[
-            ("active", APP_COLORS["surface_soft"]),
-            ("disabled", "#F8FAFC")
-        ],
-        foreground=[("disabled", "#94A3B8")]
-    )
-
-    style.configure(
-        "Blue.Horizontal.TProgressbar",
-        troughcolor=APP_COLORS["surface_soft"],
-        background=APP_COLORS["blue"],
-        lightcolor=APP_COLORS["blue"],
-        darkcolor=APP_COLORS["blue"],
-        bordercolor=APP_COLORS["surface_soft"]
-    )
-
-
-def apply_badge_tone(widget, tone):
-    """给徽标类标签套用统一色盘。"""
-    if widget is None:
-        return
-    bg_color, fg_color = get_tone_palette(tone)
-    widget.configure(bg=bg_color, fg=fg_color)
-
-
-def apply_stat_tone(widget, tone):
-    """给统计数字切换强调色。"""
-    if widget is None:
-        return
-    _, fg_color = get_tone_palette(tone)
-    widget.configure(fg=fg_color)
-
-
-def set_text_shell_tone(shell, tone="default", accent=None):
-    """切换输入框外层描边状态。"""
-    if tone == "focus" and accent:
-        border_color = accent
-    else:
-        border_color = APP_COLORS["input_border"]
-    shell.configure(bg=border_color)
-
-
-def configure_text_editor(widget):
-    """统一配置输入框和日志框外观。"""
-    widget.configure(
-        relief=tk.FLAT,
-        bd=0,
-        bg=APP_COLORS["input_bg"],
-        fg=APP_COLORS["text"],
-        insertbackground=APP_COLORS["blue"],
-        selectbackground=APP_COLORS["blue"],
-        selectforeground="#FFFFFF",
-        highlightthickness=0,
-        padx=14,
-        pady=14,
-        spacing1=1,
-        spacing3=5,
-        undo=True
-    )
-
-    try:
-        widget.vbar.configure(
-            bd=0,
-            relief=tk.FLAT,
-            width=12,
-            bg=APP_COLORS["surface_soft"],
-            activebackground=APP_COLORS["blue_soft"],
-            troughcolor=APP_COLORS["bg"],
-            highlightthickness=0
-        )
-    except tk.TclError:
-        pass
-
-
-def scroll_canvas_with_mousewheel(event, canvas):
-    """让整页在内容溢出时支持鼠标滚轮滚动。"""
-    if getattr(event, "num", None) == 4:
-        canvas.yview_scroll(-1, "units")
-        return "break"
-
-    if getattr(event, "num", None) == 5:
-        canvas.yview_scroll(1, "units")
-        return "break"
-
-    if not getattr(event, "delta", 0):
-        return None
-
-    if sys.platform == "darwin":
-        step = -1 if event.delta > 0 else 1
-    else:
-        step = -int(event.delta / 120)
-        if step == 0:
-            step = -1 if event.delta > 0 else 1
-
-    canvas.yview_scroll(step, "units")
-    return "break"
-
-
-def bind_canvas_scroll_support(widget, canvas):
-    """为非文本组件补充页面级滚动支持。"""
-    if not isinstance(widget, tk.Text):
-        widget.bind(
-            "<MouseWheel>",
-            lambda event, canvas=canvas: scroll_canvas_with_mousewheel(event, canvas),
-            add="+"
-        )
-        widget.bind(
-            "<Button-4>",
-            lambda event, canvas=canvas: scroll_canvas_with_mousewheel(event, canvas),
-            add="+"
-        )
-        widget.bind(
-            "<Button-5>",
-            lambda event, canvas=canvas: scroll_canvas_with_mousewheel(event, canvas),
-            add="+"
-        )
-
-    for child in widget.winfo_children():
-        bind_canvas_scroll_support(child, canvas)
-
-
-def normalize_and_refresh_widget(widget):
-    """整理单个输入框后刷新批量统计。"""
-    normalize_text_widget(widget)
-    refresh_input_metrics()
-
-
 def create_session():
-    """创建复用连接的会话，批量执行时顺序请求。"""
+    """创建复用连接的会话。"""
     cookies = getCookie()
     magic = getMagic()
     session = requests.Session()
@@ -433,21 +206,21 @@ def create_session():
 def fetch_delivery_product_info(order_id, session):
     """查询单个订单详情并返回物流产品信息。"""
     url = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail"
-    params = {'token': "", 'lang': "zh_CN"}
-    data = json.dumps({"id": str(order_id)}, separators=(',', ':'))
+    params = {"token": "", "lang": "zh_CN"}
+    data = json.dumps({"id": str(order_id)}, separators=(",", ":"))
 
     try:
         response = session.post(url, params=params, data=data, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        raise RuntimeError(f"获取订单详情失败：{e}") from e
+    except requests.RequestException as exc:
+        raise RuntimeError(f"获取订单详情失败：{exc}") from exc
 
     if response.status_code != 200:
         raise RuntimeError(f"获取订单详情失败：{get_response_error(response)}")
 
     try:
         detail_payload = response.json()
-    except ValueError as e:
-        raise RuntimeError("获取订单详情失败：接口返回了非 JSON 响应。") from e
+    except ValueError as exc:
+        raise RuntimeError("获取订单详情失败：接口返回了非 JSON 响应。") from exc
 
     if detail_payload.get("success") is False:
         raise RuntimeError(
@@ -479,42 +252,48 @@ def fetch_delivery_product_info(order_id, session):
 
 def update_delivery_info(order_id, tracking_number, delivery_product_info, session):
     """提交单个订单的物流更新。"""
-    url = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateOrderDeliveryInfo"
-    params = {'token': "", 'lang': "zh_CN"}
+    url = (
+        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/"
+        "ship/cgi/updateOrderDeliveryInfo"
+    )
+    params = {"token": "", "lang": "zh_CN"}
+
     delivery_item = {
-        'waybillId': str(tracking_number),
-        'deliveryId': delivery_product_info.get('deliveryId'),
-        'productInfos': normalize_product_infos(delivery_product_info),
-        'isAllProduct': delivery_product_info.get('isAllProduct', False),
-        'deliverType': delivery_product_info.get('deliverType', 1),
-        'waybillStatus': delivery_product_info.get('waybillStatus', 2)
+        "waybillId": str(tracking_number),
+        "deliveryId": delivery_product_info.get("deliveryId"),
+        "productInfos": normalize_product_infos(delivery_product_info),
+        "isAllProduct": delivery_product_info.get("isAllProduct", False),
+        "deliverType": delivery_product_info.get("deliverType", 1),
+        "waybillStatus": delivery_product_info.get("waybillStatus", 2),
     }
-    for optional_key in ('deliveryName', 'deliveryTime'):
+    for optional_key in ("deliveryName", "deliveryTime"):
         optional_value = delivery_product_info.get(optional_key)
         if optional_value not in (None, ""):
             delivery_item[optional_key] = optional_value
 
-    data = {
-        'orderId': str(order_id),
-        'deliveryInfo': {
-            'deliverType': delivery_product_info.get('deliverType', 1),
-            'deliveryProductInfo': [delivery_item]
-        }
-    }
-    data = json.dumps(data, separators=(',', ':'))
+    payload = json.dumps(
+        {
+            "orderId": str(order_id),
+            "deliveryInfo": {
+                "deliverType": delivery_product_info.get("deliverType", 1),
+                "deliveryProductInfo": [delivery_item],
+            },
+        },
+        separators=(",", ":"),
+    )
 
     try:
-        response = session.post(url, params=params, data=data, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as e:
-        raise RuntimeError(f"更新物流信息失败：{e}") from e
+        response = session.post(url, params=params, data=payload, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"更新物流信息失败：{exc}") from exc
 
     if response.status_code != 200:
         raise RuntimeError(f"更新物流信息失败：{get_response_error(response)}")
 
     try:
         result = response.json()
-    except ValueError as e:
-        raise RuntimeError("更新物流信息失败：接口返回了非 JSON 响应。") from e
+    except ValueError as exc:
+        raise RuntimeError("更新物流信息失败：接口返回了非 JSON 响应。") from exc
 
     if result.get("success") is True:
         return
@@ -522,626 +301,615 @@ def update_delivery_info(order_id, tracking_number, delivery_product_info, sessi
     if result.get("ret") == 0 and result.get("code") in (None, 0):
         return
 
-    raise RuntimeError(
-        f"更新物流信息失败：{get_payload_error(result, '物流信息修改失败。')}"
-    )
+    raise RuntimeError(f"更新物流信息失败：{get_payload_error(result, '物流信息修改失败。')}")
 
 
 def update_single_order(order_id, tracking_number, session):
-    """顺序执行单个订单更新，返回原物流单号用于展示。"""
+    """顺序执行单个订单更新。"""
     delivery_product_info = fetch_delivery_product_info(order_id, session)
     old_waybill = delivery_product_info.get("waybillId", "")
     update_delivery_info(order_id, tracking_number, delivery_product_info, session)
     return old_waybill
 
 
-def refresh_input_metrics():
-    """刷新输入计数与匹配状态。"""
-    order_count = len(parse_batch_input(text_order.get("1.0", tk.END)))
-    tracking_count = len(parse_batch_input(text_tracking.get("1.0", tk.END)))
-
-    order_count_var.set(f"{order_count}/{MAX_BATCH_SIZE}")
-    tracking_count_var.set(f"{tracking_count}/{MAX_BATCH_SIZE}")
-
-    if order_count == 0 and tracking_count == 0:
-        match_state_var.set("等待输入")
-        match_note_var.set("粘贴 1-10 组数据后，系统会自动整理并准备执行。")
-        apply_stat_tone(match_value_label, "slate")
-        return
-
-    if order_count == tracking_count:
-        match_state_var.set("数量匹配")
-        match_note_var.set(f"已准备好 {order_count} 组映射，将按顺序逐条处理。")
-        apply_stat_tone(match_value_label, "green")
-        return
-
-    match_state_var.set("需要修正")
-    match_note_var.set(
-        f"订单号 {order_count} 条，物流单号 {tracking_count} 条，请补齐后再执行。"
-    )
-    apply_stat_tone(match_value_label, "red")
+def build_font(size, bold=False):
+    """获取通用字体。"""
+    font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
+    font.setPointSize(size)
+    font.setBold(bold)
+    return font
 
 
-def set_submit_running(is_running):
-    """切换按钮状态，避免重复提交。"""
-    widget_state = tk.DISABLED if is_running else tk.NORMAL
-    for widget in (text_order, text_tracking):
-        widget.configure(state=widget_state)
-
-    if btn_normalize is not None:
-        btn_normalize.configure(state=tk.DISABLED if is_running else tk.NORMAL)
-
-    if btn_clear is not None:
-        btn_clear.configure(state=tk.DISABLED if is_running else tk.NORMAL)
-
-    btn_submit.configure(
-        state=tk.DISABLED if is_running else tk.NORMAL,
-        text="执行中..." if is_running else "点击开始批量处理"
-    )
+def build_fixed_font(size):
+    """获取等宽字体。"""
+    font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+    font.setPointSize(size)
+    return font
 
 
-def set_status(text, tone="slate", badge_text=None):
-    """更新界面状态栏。"""
-    if status_var is not None:
-        status_var.set(text)
+class BatchInputEdit(QPlainTextEdit):
+    """批量输入框。"""
 
-    if status_badge_var is not None:
-        status_badge_var.set(
-            badge_text or {
-                "blue": "执行中",
-                "green": "完成",
-                "orange": "提示",
-                "red": "异常",
-                "slate": "待执行"
-            }.get(tone, "状态")
-        )
+    normalized = Signal()
 
-    apply_badge_tone(status_badge_label, tone)
+    def __init__(self, placeholder, parent=None):
+        super().__init__(parent)
+        self.setPlaceholderText(placeholder)
+        self.setTabChangesFocus(True)
+        self.setObjectName("InputEdit")
+        self.setFont(build_fixed_font(13))
 
+    def normalize_content(self):
+        """整理输入框内容。"""
+        normalized_text = normalize_batch_text(self.toPlainText())
+        current_text = self.toPlainText().strip()
+        if normalized_text == current_text:
+            return
+        self.blockSignals(True)
+        self.setPlainText(normalized_text)
+        self.blockSignals(False)
+        self.normalized.emit()
 
-def set_progress(completed, total):
-    """更新批量执行进度。"""
-    if progress_var is None or progress_meta_var is None or progress_note_var is None:
-        return
-
-    if total <= 0:
-        progress_var.set(0)
-        progress_meta_var.set("0/0")
-        progress_note_var.set("尚未开始执行")
-        return
-
-    progress_var.set((completed / total) * 100)
-    progress_meta_var.set(f"{completed}/{total}")
-    progress_note_var.set(f"已完成 {completed} 条，共 {total} 条")
+    def focusOutEvent(self, event):
+        """失焦时自动清理多余空格和空白行。"""
+        self.normalize_content()
+        super().focusOutEvent(event)
 
 
-def clear_result_log():
-    """清空执行日志。"""
-    text_result.configure(state=tk.NORMAL)
-    text_result.delete("1.0", tk.END)
-    text_result.configure(state=tk.DISABLED)
+class BatchWorker(QObject):
+    """后台批量执行器。"""
 
+    started = Signal(int)
+    step_started = Signal(int, int, str)
+    step_succeeded = Signal(int, int, str, str, str)
+    step_failed = Signal(int, int, str, str, str)
+    fatal_error = Signal(str)
+    missing_config = Signal(str)
+    finished = Signal(int, int, int, bool)
 
-def append_result_log(text):
-    """追加执行日志。"""
-    text_result.configure(state=tk.NORMAL)
-    text_result.insert(tk.END, text + "\n")
-    text_result.see(tk.END)
-    text_result.configure(state=tk.DISABLED)
+    def __init__(self, order_ids, tracking_numbers):
+        super().__init__()
+        self.order_ids = order_ids
+        self.tracking_numbers = tracking_numbers
 
+    def run(self):
+        """后台线程执行入口。"""
+        success_count = 0
+        failure_count = 0
+        total_count = len(self.order_ids)
+        self.started.emit(total_count)
 
-def show_missing_config_error():
-    """提示缺少配置文件。"""
-    config_dir = get_app_dir()
-    messagebox.showerror(
-        "缺少配置文件",
-        "未找到配置文件 cookie.txt 或 biz_magic.txt。\n\n"
-        f"请将这两个文件放在以下目录（与 .app 同路径）：\n{config_dir}"
-    )
+        try:
+            session = create_session()
+        except FileNotFoundError:
+            self.missing_config.emit(get_app_dir())
+            self.finished.emit(0, 0, total_count, True)
+            return
 
-
-def normalize_inputs():
-    """手动整理两个输入框内容。"""
-    normalize_and_refresh_widget(text_order)
-    normalize_and_refresh_widget(text_tracking)
-    set_status("输入内容已整理，可直接开始执行。", tone="blue", badge_text="已整理")
-
-
-def clear_inputs():
-    """清空输入与日志。"""
-    for widget in (text_order, text_tracking):
-        widget.configure(state=tk.NORMAL)
-        widget.delete("1.0", tk.END)
-
-    clear_result_log()
-    set_progress(0, 0)
-    set_status(
-        "粘贴 1-10 条订单号与物流单号，系统会自动整理格式并顺序执行。",
-        tone="slate",
-        badge_text="待执行"
-    )
-    refresh_input_metrics()
-    text_order.focus_set()
-
-
-def announce_batch_step(index, total_count, order_id):
-    """更新当前执行进度显示。"""
-    set_progress(index - 1, total_count)
-    set_status(
-        f"执行中 {index}/{total_count}：正在处理订单 {order_id}",
-        tone="blue",
-        badge_text="执行中"
-    )
-
-
-def record_batch_success(index, total_count, order_id, tracking_number, old_waybill):
-    """记录单条成功结果。"""
-    set_progress(index, total_count)
-    append_result_log(
-        f"[{index}/{total_count}] 订单 {order_id} 成功："
-        f"{old_waybill or '无原物流单号'} -> {tracking_number}"
-    )
-
-
-def record_batch_failure(index, total_count, order_id, tracking_number, error_message):
-    """记录单条失败结果。"""
-    set_progress(index, total_count)
-    append_result_log(
-        f"[{index}/{total_count}] 订单 {order_id} -> {tracking_number} 失败："
-        f"{error_message}"
-    )
-    set_status(
-        f"第 {index}/{total_count} 条失败，继续执行剩余任务。",
-        tone="orange",
-        badge_text="执行中"
-    )
-
-
-def finish_batch(success_count, failure_count, total_count, aborted=False):
-    """恢复界面并汇总批量结果。"""
-    set_submit_running(False)
-
-    if aborted:
-        set_progress(0, 0)
-        return
-
-    set_progress(total_count, total_count)
-    summary = (
-        f"批量执行完成：共 {total_count} 条，成功 {success_count} 条，"
-        f"失败 {failure_count} 条。"
-    )
-    append_result_log(summary)
-    set_status(
-        summary,
-        tone="green" if failure_count == 0 else "orange",
-        badge_text="已完成"
-    )
-
-    if failure_count > 0:
-        messagebox.showwarning("批量执行完成", summary)
-    else:
-        messagebox.showinfo("批量执行完成", summary)
-
-
-def run_batch_updates(order_ids, tracking_numbers):
-    """后台线程：按顺序逐条执行物流更新。"""
-    success_count = 0
-    failure_count = 0
-    total_count = len(order_ids)
-
-    try:
-        session = create_session()
-    except FileNotFoundError:
-        root.after(0, show_missing_config_error)
-        root.after(
-            0,
-            lambda: set_status(
-                "执行已中止：缺少配置文件。",
-                tone="red",
-                badge_text="异常"
-            )
-        )
-        root.after(0, lambda: finish_batch(0, 0, total_count, aborted=True))
-        return
-
-    try:
-        with session:
-            for index, (order_id, tracking_number) in enumerate(
-                zip(order_ids, tracking_numbers), start=1
-            ):
-                root.after(
-                    0,
-                    lambda index=index, total_count=total_count, order_id=order_id:
-                    announce_batch_step(index, total_count, order_id)
-                )
-
-                try:
-                    old_waybill = update_single_order(order_id, tracking_number, session)
-                except Exception as e:
-                    failure_count += 1
-                    root.after(
-                        0,
-                        lambda index=index,
-                        total_count=total_count,
-                        order_id=order_id,
-                        tracking_number=tracking_number,
-                        error_message=str(e):
-                        record_batch_failure(
-                            index, total_count, order_id, tracking_number, error_message
+        try:
+            with session:
+                for index, (order_id, tracking_number) in enumerate(
+                    zip(self.order_ids, self.tracking_numbers), start=1
+                ):
+                    self.step_started.emit(index, total_count, order_id)
+                    try:
+                        old_waybill = update_single_order(order_id, tracking_number, session)
+                    except Exception as exc:  # noqa: BLE001
+                        failure_count += 1
+                        self.step_failed.emit(
+                            index,
+                            total_count,
+                            order_id,
+                            tracking_number,
+                            str(exc),
                         )
-                    )
-                    continue
+                        continue
 
-                success_count += 1
-                root.after(
-                    0,
-                    lambda index=index,
-                    total_count=total_count,
-                    order_id=order_id,
-                    tracking_number=tracking_number,
-                    old_waybill=old_waybill:
-                    record_batch_success(
-                        index, total_count, order_id, tracking_number, old_waybill
+                    success_count += 1
+                    self.step_succeeded.emit(
+                        index,
+                        total_count,
+                        order_id,
+                        tracking_number,
+                        old_waybill or "无原物流单号",
                     )
-                )
-    except Exception as e:
-        failure_count += (total_count - success_count - failure_count)
-        root.after(
-            0,
-            lambda error_message=str(e): (
-                append_result_log(f"批量执行中断：{error_message}"),
-                set_status(
-                    f"批量执行中断：{error_message}",
-                    tone="red",
-                    badge_text="异常"
-                )
+        except Exception as exc:  # noqa: BLE001
+            failure_count += total_count - success_count - failure_count
+            self.fatal_error.emit(str(exc))
+        finally:
+            self.finished.emit(success_count, failure_count, total_count, False)
+
+
+class MainWindow(QWidget):
+    """主窗口。"""
+
+    def __init__(self):
+        super().__init__()
+        self.worker_thread = None
+        self.worker = None
+
+        self.setWindowTitle(WINDOW_TITLE)
+        self.resize(DESIGN_WIDTH, DESIGN_HEIGHT)
+        self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+        self.setStyleSheet(
+            f"""
+            QWidget {{
+                background: {APP_COLORS["bg"]};
+                color: {APP_COLORS["text"]};
+            }}
+            QFrame#Card {{
+                background: {APP_COLORS["surface"]};
+                border: 1px solid {APP_COLORS["border"]};
+                border-radius: 16px;
+            }}
+            QFrame#InputShell {{
+                background: transparent;
+                border: none;
+            }}
+            QPlainTextEdit#InputEdit {{
+                background: {APP_COLORS["input_bg"]};
+                color: {APP_COLORS["text"]};
+                border: 1px solid {APP_COLORS["input_border"]};
+                border-radius: 12px;
+                padding: 12px;
+                selection-background-color: {APP_COLORS["blue"]};
+            }}
+            QPlainTextEdit#LogEdit {{
+                background: {APP_COLORS["log_bg"]};
+                color: {APP_COLORS["log_fg"]};
+                border: none;
+                border-radius: 12px;
+                padding: 12px;
+                selection-background-color: {APP_COLORS["blue"]};
+            }}
+            QPushButton#PrimaryButton {{
+                background: {APP_COLORS["orange"]};
+                color: white;
+                border: none;
+                border-radius: 14px;
+                padding: 16px 20px;
+                font-size: 16px;
+                font-weight: 700;
+            }}
+            QPushButton#PrimaryButton:hover {{
+                background: #EA580C;
+            }}
+            QPushButton#PrimaryButton:disabled {{
+                background: #FDBA74;
+                color: #FFF7ED;
+            }}
+            """
+        )
+
+        self._build_ui()
+        self._fit_window_to_screen()
+        self.refresh_input_metrics()
+        self._sync_responsive_metrics()
+
+    def _build_ui(self):
+        """构建界面。"""
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        root_layout.addWidget(self.scroll_area)
+
+        self.page_widget = QWidget()
+        self.page_widget.setStyleSheet("background: transparent;")
+        self.scroll_area.setWidget(self.page_widget)
+
+        self.page_layout = QVBoxLayout(self.page_widget)
+        self.page_layout.setContentsMargins(24, 22, 24, 22)
+        self.page_layout.setSpacing(16)
+        self.page_layout.setStretch(0, 0)
+        self.page_layout.setStretch(1, 3)
+        self.page_layout.setStretch(2, 0)
+        self.page_layout.setStretch(3, 4)
+
+        self.header_card = self._create_card(self.page_layout)
+        header_layout = QVBoxLayout(self.header_card)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+        self._create_accent_bar(header_layout, APP_COLORS["blue"])
+
+        header_body = QWidget()
+        header_body.setStyleSheet("background: transparent;")
+        header_box = QHBoxLayout(header_body)
+        header_box.setContentsMargins(22, 18, 22, 18)
+        header_box.setSpacing(12)
+
+        title_wrap = QWidget()
+        title_box = QVBoxLayout(title_wrap)
+        title_box.setContentsMargins(0, 0, 0, 0)
+        title_box.setSpacing(6)
+
+        title_label = QLabel("驼铃视频小店中差评处理")
+        title_label.setFont(build_font(22, bold=True))
+        title_box.addWidget(title_label)
+
+        self.title_description_label = QLabel(
+            "批量填写订单号与物流单号，系统会自动整理并按顺序逐条执行更新。"
+        )
+        self.title_description_label.setWordWrap(False)
+        self.title_description_label.setFont(build_font(12))
+        self.title_description_label.setStyleSheet(f"color: {APP_COLORS['muted']};")
+        title_box.addWidget(self.title_description_label)
+
+        header_box.addWidget(title_wrap, 1)
+
+        self.author_badge = QLabel("作者微信：TLS-801")
+        self.author_badge.setAlignment(Qt.AlignCenter)
+        self.author_badge.setFont(build_font(10, bold=True))
+        self.author_badge.setStyleSheet(
+            f"background: {APP_COLORS['blue_soft']};"
+            f"color: {APP_COLORS['blue']};"
+            "border-radius: 10px;"
+            "padding: 8px 12px;"
+        )
+        self.author_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        header_box.addWidget(self.author_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
+        header_layout.addWidget(header_body)
+
+        self.input_container = QWidget()
+        self.input_grid = QGridLayout(self.input_container)
+        self.input_grid.setContentsMargins(0, 0, 0, 0)
+        self.input_grid.setHorizontalSpacing(20)
+        self.input_grid.setVerticalSpacing(16)
+
+        self.order_count_badge = QLabel()
+        self.order_count_badge.setAlignment(Qt.AlignCenter)
+        self.order_count_badge.setMinimumWidth(72)
+        self.order_count_badge.setFont(build_font(10, bold=True))
+        self.order_count_badge.setStyleSheet(
+            f"background: {APP_COLORS['blue_soft']};"
+            f"color: {APP_COLORS['blue']};"
+            "border-radius: 10px;"
+            "padding: 8px 10px;"
+        )
+
+        self.tracking_count_badge = QLabel()
+        self.tracking_count_badge.setAlignment(Qt.AlignCenter)
+        self.tracking_count_badge.setMinimumWidth(72)
+        self.tracking_count_badge.setFont(build_font(10, bold=True))
+        self.tracking_count_badge.setStyleSheet(
+            f"background: {APP_COLORS['orange_soft']};"
+            f"color: {APP_COLORS['orange']};"
+            "border-radius: 10px;"
+            "padding: 8px 10px;"
+        )
+
+        self.order_edit = BatchInputEdit("每行一个订单号，最多 10 条。")
+        self.tracking_edit = BatchInputEdit("每行一个物流单号，最多 10 条。")
+
+        self.order_edit.textChanged.connect(self.refresh_input_metrics)
+        self.tracking_edit.textChanged.connect(self.refresh_input_metrics)
+        self.order_edit.normalized.connect(self.refresh_input_metrics)
+        self.tracking_edit.normalized.connect(self.refresh_input_metrics)
+
+        self.order_card = self._create_input_card(
+            "填写订单号",
+            "支持空格、英文逗号、中文逗号、换行分隔；系统会自动整理成一行一个。",
+            self.order_count_badge,
+            self.order_edit,
+            APP_COLORS["blue"],
+        )
+        self.tracking_card = self._create_input_card(
+            "填写物流单号",
+            "支持空格、英文逗号、中文逗号、换行分隔；系统会自动整理成一行一个。",
+            self.tracking_count_badge,
+            self.tracking_edit,
+            APP_COLORS["orange"],
+        )
+
+        self.page_layout.addWidget(self.input_container, 1)
+        self.input_grid.addWidget(self.order_card, 0, 0)
+        self.input_grid.addWidget(self.tracking_card, 0, 1)
+        self.input_grid.setColumnStretch(0, 1)
+        self.input_grid.setColumnStretch(1, 1)
+
+        self.submit_button = QPushButton("点击开始批量处理")
+        self.submit_button.setObjectName("PrimaryButton")
+        self.submit_button.setCursor(Qt.PointingHandCursor)
+        self.submit_button.setMinimumHeight(60)
+        self.submit_button.clicked.connect(self.on_submit)
+        self.page_layout.addWidget(self.submit_button)
+
+        self.log_card = self._create_card(self.page_layout, stretch=1)
+        log_layout = QVBoxLayout(self.log_card)
+        log_layout.setContentsMargins(0, 0, 0, 0)
+        log_layout.setSpacing(0)
+        self._create_accent_bar(log_layout, APP_COLORS["blue"])
+
+        log_body = QWidget()
+        log_box = QVBoxLayout(log_body)
+        log_box.setContentsMargins(18, 16, 18, 16)
+        log_box.setSpacing(12)
+
+        log_header = QWidget()
+        log_header_box = QHBoxLayout(log_header)
+        log_header_box.setContentsMargins(0, 0, 0, 0)
+        log_header_box.setSpacing(12)
+
+        log_title = QLabel("执行日志")
+        log_title.setFont(build_font(15, bold=True))
+        log_header_box.addWidget(log_title)
+
+        self.log_hint_label = QLabel("最近执行记录会按时间顺序滚动显示。")
+        self.log_hint_label.setWordWrap(False)
+        self.log_hint_label.setFont(build_font(10))
+        self.log_hint_label.setStyleSheet(f"color: {APP_COLORS['muted']};")
+        self.log_hint_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        log_header_box.addWidget(self.log_hint_label, 1)
+        log_box.addWidget(log_header)
+
+        self.log_view = QPlainTextEdit()
+        self.log_view.setObjectName("LogEdit")
+        self.log_view.setReadOnly(True)
+        self.log_view.setFont(build_fixed_font(11))
+        self.log_view.setMinimumHeight(300)
+        log_box.addWidget(self.log_view, 1)
+
+        log_layout.addWidget(log_body)
+
+    def _create_card(self, parent_layout, stretch=0):
+        """创建卡片容器。"""
+        card = QFrame()
+        card.setObjectName("Card")
+        if stretch:
+            parent_layout.addWidget(card, stretch)
+        else:
+            parent_layout.addWidget(card)
+        return card
+
+    def _create_accent_bar(self, parent_layout, color):
+        """卡片顶部强调条。"""
+        bar = QFrame()
+        bar.setFixedHeight(4)
+        bar.setStyleSheet(
+            f"background: {color};"
+            "border-top-left-radius: 16px;"
+            "border-top-right-radius: 16px;"
+            "border-bottom-left-radius: 0;"
+            "border-bottom-right-radius: 0;"
+        )
+        parent_layout.addWidget(bar)
+
+    def _create_input_card(self, title, hint, badge, editor, accent):
+        """创建输入卡片。"""
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+        self._create_accent_bar(card_layout, accent)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(18, 16, 18, 16)
+        body_layout.setSpacing(12)
+
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(12)
+
+        title_label = QLabel(title)
+        title_label.setFont(build_font(15, bold=True))
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(badge, 0, Qt.AlignRight)
+        body_layout.addWidget(header)
+
+        hint_label = QLabel(hint)
+        hint_label.setWordWrap(False)
+        hint_label.setFont(build_font(10))
+        hint_label.setStyleSheet(f"color: {APP_COLORS['muted']};")
+        body_layout.addWidget(hint_label)
+        card.hint_label = hint_label
+
+        body_layout.addWidget(editor, 1)
+        card_layout.addWidget(body)
+        return card
+
+    def _fit_window_to_screen(self):
+        """按屏幕可用区域修正初始尺寸，避免首次打开时底部被裁切。"""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        target_width = min(DESIGN_WIDTH, max(MIN_WINDOW_WIDTH, available.width() - 80))
+        target_height = min(DESIGN_HEIGHT, max(MIN_WINDOW_HEIGHT, available.height() - 80))
+        self.resize(target_width, target_height)
+
+    def _sync_responsive_metrics(self):
+        """保持原有双列设计，只在允许范围内按比例缩放内部尺寸。"""
+        viewport = self.scroll_area.viewport().size()
+        width_scale = viewport.width() / DESIGN_WIDTH if viewport.width() else 1.0
+        height_scale = viewport.height() / DESIGN_HEIGHT if viewport.height() else 1.0
+        scale = max(0.82, min(1.0, width_scale, height_scale))
+
+        page_margin_x = max(14, int(24 * scale))
+        page_margin_y = max(14, int(22 * scale))
+        page_spacing = max(10, int(16 * scale))
+        button_height = max(56, int(60 * scale))
+
+        available_height = max(
+            MIN_WINDOW_HEIGHT,
+            viewport.height() - (page_margin_y * 2) - (page_spacing * 3),
+        )
+        header_height = max(120, int(138 * scale))
+        remaining_height = max(420, available_height - header_height - button_height)
+        input_area_height = max(250, int(remaining_height * 0.44))
+        log_area_height = max(260, remaining_height - input_area_height)
+        input_editor_height = max(130, input_area_height - 112)
+        log_editor_height = max(210, log_area_height - 74)
+
+        self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
+        self.page_layout.setSpacing(page_spacing)
+        self.input_grid.setHorizontalSpacing(max(12, int(20 * scale)))
+        self.input_grid.setVerticalSpacing(max(12, int(16 * scale)))
+        self.header_card.setMinimumHeight(header_height)
+        self.order_edit.setFixedHeight(input_editor_height)
+        self.tracking_edit.setFixedHeight(input_editor_height)
+        self.log_view.setFixedHeight(log_editor_height)
+        self.submit_button.setFixedHeight(button_height)
+
+    def resizeEvent(self, event):
+        """窗口尺寸变化时同步内部尺寸。"""
+        self._sync_responsive_metrics()
+        super().resizeEvent(event)
+
+    def refresh_input_metrics(self):
+        """刷新两个输入框的数量徽标。"""
+        order_count = len(parse_batch_input(self.order_edit.toPlainText()))
+        tracking_count = len(parse_batch_input(self.tracking_edit.toPlainText()))
+        self.order_count_badge.setText(f"{order_count}/{MAX_BATCH_SIZE}")
+        self.tracking_count_badge.setText(f"{tracking_count}/{MAX_BATCH_SIZE}")
+
+    def normalize_inputs(self):
+        """整理两个输入框内容。"""
+        self.order_edit.normalize_content()
+        self.tracking_edit.normalize_content()
+        self.refresh_input_metrics()
+
+    def append_result_log(self, text):
+        """追加执行日志。"""
+        self.log_view.appendPlainText(text)
+        scrollbar = self.log_view.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def clear_result_log(self):
+        """清空执行日志。"""
+        self.log_view.clear()
+
+    def set_submit_running(self, is_running):
+        """切换按钮和输入框状态。"""
+        self.order_edit.setReadOnly(is_running)
+        self.tracking_edit.setReadOnly(is_running)
+        self.submit_button.setDisabled(is_running)
+        self.submit_button.setText("执行中..." if is_running else "点击开始批量处理")
+
+    def show_missing_config_error(self, config_dir):
+        """提示缺少配置文件。"""
+        QMessageBox.critical(
+            self,
+            "缺少配置文件",
+            "未找到配置文件 cookie.txt 或 biz_magic.txt。\n\n"
+            f"请将这两个文件放在以下目录（与 .app 同路径）：\n{config_dir}",
+        )
+
+    def on_submit(self):
+        """开始批量处理。"""
+        self.normalize_inputs()
+
+        order_ids = parse_batch_input(self.order_edit.toPlainText())
+        tracking_numbers = parse_batch_input(self.tracking_edit.toPlainText())
+
+        if not order_ids or not tracking_numbers:
+            QMessageBox.information(self, "提示", "请输入订单号和新物流单号。")
+            return
+
+        if len(order_ids) != len(tracking_numbers):
+            QMessageBox.critical(
+                self,
+                "数量不匹配",
+                f"订单号共 {len(order_ids)} 个，新物流单号共 {len(tracking_numbers)} 个。\n"
+                "请确保一一对应后再执行。",
             )
+            return
+
+        if len(order_ids) > MAX_BATCH_SIZE:
+            QMessageBox.critical(
+                self,
+                "超出数量限制",
+                f"一次最多处理 {MAX_BATCH_SIZE} 条，请拆分后再执行。",
+            )
+            return
+
+        self.clear_result_log()
+        self.append_result_log(
+            f"开始执行：共 {len(order_ids)} 条。输入支持空格、英文逗号、中文逗号或换行分隔。"
         )
-    finally:
-        root.after(
-            0,
-            lambda: finish_batch(success_count, failure_count, total_count)
+        self.set_submit_running(True)
+
+        self.worker_thread = QThread(self)
+        self.worker = BatchWorker(order_ids, tracking_numbers)
+        self.worker.moveToThread(self.worker_thread)
+
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.started.connect(self._on_worker_started)
+        self.worker.step_started.connect(self._on_worker_step_started)
+        self.worker.step_succeeded.connect(self._on_worker_step_succeeded)
+        self.worker.step_failed.connect(self._on_worker_step_failed)
+        self.worker.fatal_error.connect(self._on_worker_fatal_error)
+        self.worker.missing_config.connect(self.show_missing_config_error)
+        self.worker.finished.connect(self._on_worker_finished)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker_thread.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.finished.connect(self._clear_worker_refs)
+        self.worker_thread.start()
+
+    def _clear_worker_refs(self):
+        """清理线程引用。"""
+        self.worker = None
+        self.worker_thread = None
+
+    def _on_worker_started(self, total_count):
+        """记录任务开始。"""
+        self.append_result_log(f"任务已创建：共 {total_count} 条，准备顺序执行。")
+
+    def _on_worker_step_started(self, index, total_count, order_id):
+        """记录单条开始。"""
+        self.append_result_log(f"[{index}/{total_count}] 开始处理订单 {order_id}")
+
+    def _on_worker_step_succeeded(self, index, total_count, order_id, tracking_number, old_waybill):
+        """记录单条成功。"""
+        self.append_result_log(
+            f"[{index}/{total_count}] 订单 {order_id} 成功：{old_waybill} -> {tracking_number}"
         )
 
-
-def on_submit():
-    """按钮点击事件处理函数 - 批量顺序更新物流信息。"""
-    normalize_inputs()
-
-    order_ids = parse_batch_input(text_order.get("1.0", tk.END))
-    tracking_numbers = parse_batch_input(text_tracking.get("1.0", tk.END))
-
-    if not order_ids or not tracking_numbers:
-        set_status("请先填写订单号和新物流单号。", tone="orange", badge_text="待补充")
-        messagebox.showinfo("提示", "请输入订单号和新物流单号！")
-        return
-
-    if len(order_ids) != len(tracking_numbers):
-        set_status("输入数量不一致，请先修正再执行。", tone="red", badge_text="需修正")
-        messagebox.showerror(
-            "数量不匹配",
-            f"订单号共 {len(order_ids)} 个，新物流单号共 {len(tracking_numbers)} 个。\n"
-            "请确保一一对应后再执行。"
+    def _on_worker_step_failed(self, index, total_count, order_id, tracking_number, error_message):
+        """记录单条失败。"""
+        self.append_result_log(
+            f"[{index}/{total_count}] 订单 {order_id} -> {tracking_number} 失败：{error_message}"
         )
-        return
 
-    if len(order_ids) > MAX_BATCH_SIZE:
-        set_status("超出单次处理上限，请拆分后再执行。", tone="red", badge_text="超出上限")
-        messagebox.showerror(
-            "超出数量限制",
-            f"一次最多处理 {MAX_BATCH_SIZE} 条，请拆分后再执行。"
+    def _on_worker_fatal_error(self, error_message):
+        """记录批量中断。"""
+        self.append_result_log(f"批量执行中断：{error_message}")
+
+    def _on_worker_finished(self, success_count, failure_count, total_count, aborted):
+        """恢复界面并汇总结果。"""
+        self.set_submit_running(False)
+
+        if aborted:
+            return
+
+        summary = (
+            f"批量执行完成：共 {total_count} 条，成功 {success_count} 条，失败 {failure_count} 条。"
         )
-        return
+        self.append_result_log(summary)
 
-    clear_result_log()
-    set_progress(0, len(order_ids))
-    append_result_log(
-        f"开始执行：共 {len(order_ids)} 条。输入支持空格、英文逗号或换行分隔。"
-    )
-    set_status(
-        f"任务已创建：共 {len(order_ids)} 条，准备顺序执行。",
-        tone="blue",
-        badge_text="执行中"
-    )
-    set_submit_running(True)
+        if failure_count > 0:
+            QMessageBox.warning(self, "批量执行完成", summary)
+        else:
+            QMessageBox.information(self, "批量执行完成", summary)
 
-    worker = threading.Thread(
-        target=run_batch_updates,
-        args=(order_ids, tracking_numbers),
-        daemon=True
-    )
-    worker.start()
+
+def main():
+    """程序入口。"""
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("驼铃视频小店中差评处理")
-    root.geometry("1240x860")
-    root.minsize(880, 680)
-    root.resizable(True, True)
-    root.configure(bg=APP_COLORS["bg"])
-
-    APP_FONTS = get_font_tokens()
-    configure_app_styles()
-
-    main_frame = tk.Frame(root, bg=APP_COLORS["bg"], padx=24, pady=22)
-    main_frame.pack(fill=tk.BOTH, expand=True)
-    main_frame.columnconfigure(0, weight=1)
-    main_frame.rowconfigure(1, weight=3)
-    main_frame.rowconfigure(3, weight=2)
-
-    header_card = tk.Frame(
-        main_frame,
-        bg=APP_COLORS["surface"],
-        highlightthickness=1,
-        highlightbackground=APP_COLORS["border"]
-    )
-    header_card.grid(row=0, column=0, sticky="ew")
-    tk.Frame(header_card, bg=APP_COLORS["blue"], height=5).pack(fill=tk.X)
-
-    header_body = tk.Frame(header_card, bg=APP_COLORS["surface"], padx=22, pady=18)
-    header_body.pack(fill=tk.X)
-    header_body.columnconfigure(0, weight=1)
-
-    title_wrap = tk.Frame(header_body, bg=APP_COLORS["surface"])
-    title_wrap.grid(row=0, column=0, sticky="w")
-    tk.Label(
-        title_wrap,
-        text="驼铃视频小店中差评处理",
-        font=APP_FONTS["hero"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["text"]
-    ).pack(anchor="w")
-    title_description_label = tk.Label(
-        title_wrap,
-        text="批量填写订单号，自动化批量处理中差评。",
-        font=APP_FONTS["body"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["muted"],
-        justify=tk.LEFT
-    )
-    title_description_label.pack(anchor="w", pady=(6, 0))
-
-    meta_wrap = tk.Frame(header_body, bg=APP_COLORS["surface"])
-    meta_wrap.grid(row=0, column=1, sticky="e")
-    author_badge = tk.Label(
-        meta_wrap,
-        text="作者微信：TLS-801",
-        font=APP_FONTS["small"],
-        bg=APP_COLORS["blue_soft"],
-        fg=APP_COLORS["blue"],
-        padx=10,
-        pady=6
-    )
-    author_badge.pack()
-
-    order_count_var = tk.StringVar(value=f"0/{MAX_BATCH_SIZE}")
-    tracking_count_var = tk.StringVar(value=f"0/{MAX_BATCH_SIZE}")
-    match_state_var = tk.StringVar(value="等待输入")
-    match_note_var = tk.StringVar(value="粘贴 1-10 组数据后，系统会自动整理并准备执行。")
-    input_frame = tk.Frame(main_frame, bg=APP_COLORS["bg"])
-    input_frame.grid(row=1, column=0, sticky="nsew", pady=(16, 0))
-    input_frame.columnconfigure(0, weight=1, uniform="input")
-    input_frame.columnconfigure(1, weight=1, uniform="input")
-    input_frame.rowconfigure(0, weight=1)
-
-    order_card = tk.Frame(
-        input_frame,
-        bg=APP_COLORS["surface"],
-        highlightthickness=1,
-        highlightbackground=APP_COLORS["border"]
-    )
-    order_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-    tk.Frame(order_card, bg=APP_COLORS["blue"], height=4).pack(fill=tk.X)
-    order_body = tk.Frame(order_card, bg=APP_COLORS["surface"], padx=18, pady=16)
-    order_body.pack(fill=tk.BOTH, expand=True)
-    order_header = tk.Frame(order_body, bg=APP_COLORS["surface"])
-    order_header.pack(fill=tk.X)
-    tk.Label(
-        order_header,
-        text="填写订单号",
-        font=APP_FONTS["title"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["text"]
-    ).pack(side=tk.LEFT)
-    order_badge = tk.Label(
-        order_header,
-        textvariable=order_count_var,
-        font=APP_FONTS["small"],
-        bg=APP_COLORS["blue_soft"],
-        fg=APP_COLORS["blue"],
-        padx=10,
-        pady=5
-    )
-    order_badge.pack(side=tk.RIGHT)
-    order_hint_label = tk.Label(
-        order_body,
-        text="支持空格、英文逗号、换行分隔；建议一行一个，便于核对。",
-        font=APP_FONTS["small"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["muted"],
-        justify=tk.LEFT
-    )
-    order_hint_label.pack(anchor="w", pady=(8, 12))
-    order_shell = tk.Frame(order_body, bg=APP_COLORS["input_border"])
-    order_shell.pack(fill=tk.BOTH, expand=True)
-    text_order = scrolledtext.ScrolledText(order_shell, wrap=tk.CHAR, height=10, width=1)
-    configure_text_editor(text_order)
-    text_order.configure(font=APP_FONTS["mono"])
-    text_order.pack(fill=tk.BOTH, expand=True)
-
-    tracking_card = tk.Frame(
-        input_frame,
-        bg=APP_COLORS["surface"],
-        highlightthickness=1,
-        highlightbackground=APP_COLORS["border"]
-    )
-    tracking_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-    tk.Frame(tracking_card, bg=APP_COLORS["orange"], height=4).pack(fill=tk.X)
-    tracking_body = tk.Frame(tracking_card, bg=APP_COLORS["surface"], padx=18, pady=16)
-    tracking_body.pack(fill=tk.BOTH, expand=True)
-    tracking_header = tk.Frame(tracking_body, bg=APP_COLORS["surface"])
-    tracking_header.pack(fill=tk.X)
-    tk.Label(
-        tracking_header,
-        text="填写物流单号",
-        font=APP_FONTS["title"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["text"]
-    ).pack(side=tk.LEFT)
-    tracking_badge = tk.Label(
-        tracking_header,
-        textvariable=tracking_count_var,
-        font=APP_FONTS["small"],
-        bg=APP_COLORS["orange_soft"],
-        fg=APP_COLORS["orange"],
-        padx=10,
-        pady=5
-    )
-    tracking_badge.pack(side=tk.RIGHT)
-    tracking_hint_label = tk.Label(
-        tracking_body,
-        text="支持空格、英文逗号、换行分隔；建议一行一个，便于核对。",
-        font=APP_FONTS["small"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["muted"],
-        justify=tk.LEFT
-    )
-    tracking_hint_label.pack(anchor="w", pady=(8, 12))
-    tracking_shell = tk.Frame(tracking_body, bg=APP_COLORS["input_border"])
-    tracking_shell.pack(fill=tk.BOTH, expand=True)
-    text_tracking = scrolledtext.ScrolledText(tracking_shell, wrap=tk.CHAR, height=10, width=1)
-    configure_text_editor(text_tracking)
-    text_tracking.configure(font=APP_FONTS["mono"])
-    text_tracking.pack(fill=tk.BOTH, expand=True)
-
-    set_input_cards_layout(input_frame, order_card, tracking_card, is_stacked=False)
-
-    status_badge_var = tk.StringVar(value="待执行")
-    status_var = tk.StringVar(value="粘贴 1-10 条订单号与物流单号，系统会自动整理格式并顺序执行。")
-    progress_meta_var = tk.StringVar(value="0/0")
-    progress_note_var = tk.StringVar(value="尚未开始执行")
-    progress_var = tk.DoubleVar(value=0)
-
-    button_row = tk.Frame(main_frame, bg=APP_COLORS["bg"])
-    button_row.grid(row=2, column=0, sticky="ew", pady=(16, 0))
-    button_row.columnconfigure(0, weight=1)
-
-    btn_submit = ttk.Button(
-        button_row,
-        text="点击开始批量处理",
-        command=on_submit,
-        style="Primary.TButton"
-    )
-    btn_submit.grid(row=0, column=0, sticky="ew", ipady=4)
-
-    console_card = tk.Frame(
-        main_frame,
-        bg=APP_COLORS["surface"],
-        highlightthickness=1,
-        highlightbackground=APP_COLORS["border"]
-    )
-    console_card.grid(row=3, column=0, sticky="nsew", pady=(16, 0))
-    tk.Frame(console_card, bg=APP_COLORS["blue"], height=4).pack(fill=tk.X)
-    console_body = tk.Frame(console_card, bg=APP_COLORS["surface"], padx=18, pady=16)
-    console_body.pack(fill=tk.BOTH, expand=True)
-    console_header = tk.Frame(console_body, bg=APP_COLORS["surface"])
-    console_header.pack(fill=tk.X)
-    tk.Label(
-        console_header,
-        text="执行日志",
-        font=APP_FONTS["title"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["text"]
-    ).pack(side=tk.LEFT)
-    console_hint_label = tk.Label(
-        console_header,
-        text="最近执行记录会按时间顺序滚动显示。",
-        font=APP_FONTS["small"],
-        bg=APP_COLORS["surface"],
-        fg=APP_COLORS["muted"],
-        justify=tk.RIGHT
-    )
-    console_hint_label.pack(side=tk.RIGHT)
-    log_shell = tk.Frame(console_body, bg=APP_COLORS["log_bg"])
-    log_shell.pack(fill=tk.BOTH, expand=True, pady=(12, 0))
-    text_result = scrolledtext.ScrolledText(
-        log_shell,
-        width=1,
-        height=13,
-        wrap=tk.WORD,
-        state=tk.DISABLED
-    )
-    text_result.configure(
-        relief=tk.FLAT,
-        bd=0,
-        bg=APP_COLORS["log_bg"],
-        fg=APP_COLORS["log_fg"],
-        insertbackground=APP_COLORS["log_fg"],
-        selectbackground=APP_COLORS["blue"],
-        selectforeground="#FFFFFF",
-        highlightthickness=0,
-        padx=14,
-        pady=14,
-        spacing3=4,
-        font=APP_FONTS["log"]
-    )
-    try:
-        text_result.vbar.configure(
-            bd=0,
-            relief=tk.FLAT,
-            width=12,
-            bg="#1E293B",
-            activebackground="#334155",
-            troughcolor=APP_COLORS["log_bg"],
-            highlightthickness=0
-        )
-    except tk.TclError:
-        pass
-    text_result.pack(fill=tk.BOTH, expand=True)
-
-    for widget, shell, accent in (
-        (text_order, order_shell, APP_COLORS["blue"]),
-        (text_tracking, tracking_shell, APP_COLORS["orange"])
-    ):
-        widget.bind(
-            "<FocusIn>",
-            lambda event, shell=shell, accent=accent: set_text_shell_tone(shell, "focus", accent)
-        )
-        widget.bind(
-            "<FocusOut>",
-            lambda event, widget=widget, shell=shell: (
-                normalize_and_refresh_widget(widget),
-                set_text_shell_tone(shell)
-            )
-        )
-        widget.bind(
-            "<<Paste>>",
-            lambda event, widget=widget: schedule_normalize_widget(widget)
-        )
-        widget.bind("<KeyRelease>", lambda event: refresh_input_metrics())
-
-    current_layout = {"stacked": False}
-
-    def refresh_responsive_layout(event=None):
-        content_width = max(main_frame.winfo_width() - 48, 720)
-        should_stack = root.winfo_width() < 1080
-
-        if should_stack != current_layout["stacked"]:
-            set_input_cards_layout(input_frame, order_card, tracking_card, should_stack)
-            current_layout["stacked"] = should_stack
-
-        column_width = content_width - 36 if should_stack else max((content_width - 20) // 2, 320)
-        title_description_label.configure(wraplength=max(420, content_width - 240))
-        order_hint_label.configure(wraplength=max(300, column_width - 64))
-        tracking_hint_label.configure(wraplength=max(300, column_width - 64))
-        console_hint_label.configure(wraplength=max(260, min(420, content_width // 3)))
-
-    root.bind("<Configure>", refresh_responsive_layout)
-    root.after_idle(refresh_responsive_layout)
-
-    apply_badge_tone(status_badge_label, "slate")
-    refresh_input_metrics()
-    set_progress(0, 0)
-    text_order.focus_set()
-    root.mainloop()
+    main()

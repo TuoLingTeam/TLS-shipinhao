@@ -10,12 +10,8 @@ BUILD_DIR="$SCRIPT_DIR/build"
 SPEC_FILE="$SCRIPT_DIR/${APP_NAME}.spec"
 APP_BUNDLE="$DIST_DIR/${APP_NAME}.app"
 BIN_FILE="$DIST_DIR/${APP_NAME}"
-MAC_BUILD_VENV="$SCRIPT_DIR/.venv-mac-build"
 VENV_DIR="$SCRIPT_DIR/.venv"
-if [ -x "$MAC_BUILD_VENV/bin/python" ]; then
-  PYTHON_BIN="$MAC_BUILD_VENV/bin/python"
-  PYINSTALLER_BIN="$MAC_BUILD_VENV/bin/pyinstaller"
-elif [ -x "$VENV_DIR/bin/python" ]; then
+if [ -x "$VENV_DIR/bin/python" ]; then
   PYTHON_BIN="$VENV_DIR/bin/python"
   PYINSTALLER_BIN="$VENV_DIR/bin/pyinstaller"
 else
@@ -52,6 +48,8 @@ $PYINSTALLER_CMD \
   --clean \
   --noconfirm \
   --collect-all charset_normalizer \
+  --collect-all shiboken6 \
+  --collect-all PySide6 \
   --osx-bundle-identifier "$BUNDLE_ID" \
   --windowed \
   --name "$APP_NAME" \
