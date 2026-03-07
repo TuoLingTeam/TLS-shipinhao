@@ -13,10 +13,8 @@ BIN_FILE="$DIST_DIR/${APP_NAME}"
 VENV_DIR="$SCRIPT_DIR/.venv"
 if [ -x "$VENV_DIR/bin/python" ]; then
   PYTHON_BIN="$VENV_DIR/bin/python"
-  PYINSTALLER_BIN="$VENV_DIR/bin/pyinstaller"
 else
   PYTHON_BIN="$(command -v python3)"
-  PYINSTALLER_BIN=""
 fi
 CLEAN_TARGETS=(
   "$BUILD_DIR"
@@ -35,16 +33,13 @@ echo "清理旧构建产物..."
 clean_build_artifacts
 mkdir -p "$DIST_DIR"
 
-if [ -n "$PYINSTALLER_BIN" ] && [ -x "$PYINSTALLER_BIN" ]; then
-  PYINSTALLER_CMD="$PYINSTALLER_BIN"
-else
+if ! "$PYTHON_BIN" -m PyInstaller --version >/dev/null 2>&1; then
   echo "安装 PyInstaller（若未安装）..."
   "$PYTHON_BIN" -m pip install pyinstaller -q
-  PYINSTALLER_CMD="$PYTHON_BIN -m PyInstaller"
 fi
 
 echo "开始打包 macOS 应用..."
-$PYINSTALLER_CMD \
+"$PYTHON_BIN" -m PyInstaller \
   --clean \
   --noconfirm \
   --collect-all charset_normalizer \
