@@ -848,24 +848,79 @@ class MainWindow(QWidget):
         self.resize(target_width, target_height)
 
     def _sync_responsive_metrics(self):
-        """保持原有双列设计，只在允许范围内按比例缩放内部尺寸。"""
+        """按可视区高度压缩或扩展关键区块，避免默认窗口下日志区被推出可视范围。"""
         viewport = self.scroll_area.viewport().size()
-        width_scale = viewport.width() / DESIGN_WIDTH if viewport.width() else 1.0
-        height_scale = viewport.height() / DESIGN_HEIGHT if viewport.height() else 1.0
-        scale = max(0.82, min(1.0, width_scale, height_scale))
+        if not viewport.width() or not viewport.height():
+            return
+
+        width_scale = viewport.width() / DESIGN_WIDTH
+        height_scale = viewport.height() / DESIGN_HEIGHT
+        scale = max(0.70, min(1.0, width_scale, height_scale))
 
         page_margin_x = max(14, int(24 * scale))
-        page_margin_y = max(14, int(22 * scale))
-        page_spacing = max(10, int(16 * scale))
-        button_height = max(56, int(60 * scale))
-        header_height = max(120, int(138 * scale))
-        input_editor_height = max(150, int(220 * scale))
-        log_editor_height = max(300, int(340 * scale))
+        page_margin_y = max(12, int(22 * scale))
+        page_spacing = max(8, int(16 * scale))
+        button_height = max(50, int(60 * scale))
+        header_height = max(104, int(138 * scale))
+        input_editor_height = max(118, int(220 * scale))
+        log_editor_height = max(185, int(340 * scale))
+
+        # 先按设计比例给出目标尺寸，再根据真实可视高度回算溢出量。
+        input_card_chrome = max(92, int(108 * scale))
+        log_card_chrome = max(64, int(74 * scale))
+        estimated_total = (
+            page_margin_y * 2
+            + page_spacing * 3
+            + header_height
+            + (input_card_chrome + input_editor_height)
+            + button_height
+            + (log_card_chrome + log_editor_height)
+        )
+        overflow = estimated_total - viewport.height()
+
+        # 情况 1：默认窗口或较小窗口下空间不足，按优先级压缩内容区。
+        if overflow > 0:
+            shrink = min(overflow, log_editor_height - 150)
+            log_editor_height -= shrink
+            overflow -= shrink
+
+        if overflow > 0:
+            shrink = min(overflow, input_editor_height - 104)
+            input_editor_height -= shrink
+            overflow -= shrink
+
+        if overflow > 0:
+            shrink = min(overflow, header_height - 96)
+            header_height -= shrink
+            overflow -= shrink
+
+        if overflow > 0:
+            shrink = min(overflow, button_height - 46)
+            button_height -= shrink
+            overflow -= shrink
+
+        # 情况 2：窗口放大后，把新增空间优先分给日志区，其次输入区。
+        spare_height = viewport.height() - (
+            page_margin_y * 2
+            + page_spacing * 3
+            + header_height
+            + (input_card_chrome + input_editor_height)
+            + button_height
+            + (log_card_chrome + log_editor_height)
+        )
+        if spare_height > 24:
+            log_growth = min(spare_height, 140)
+            log_editor_height += log_growth
+            spare_height -= log_growth
+
+        if spare_height > 16:
+            input_growth = min(spare_height // 2, 72)
+            input_editor_height += input_growth
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
         self.input_grid.setHorizontalSpacing(max(12, int(20 * scale)))
-        self.input_grid.setVerticalSpacing(max(12, int(16 * scale)))
+        self.input_grid.setVerticalSpacing(max(10, int(16 * scale)))
         self.header_card.setMinimumHeight(header_height)
         self.submit_button.setFixedHeight(button_height)
         self.order_edit.setMinimumHeight(input_editor_height)
