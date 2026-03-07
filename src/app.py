@@ -30,8 +30,10 @@ REQUEST_TIMEOUT = 30
 WINDOW_TITLE = "驼铃视频小店中差评处理"
 DESIGN_WIDTH = 1240
 DESIGN_HEIGHT = 980
-MIN_WINDOW_WIDTH = 1120
-MIN_WINDOW_HEIGHT = 900
+DEFAULT_WINDOW_WIDTH = 1080
+DEFAULT_WINDOW_HEIGHT = 853
+MIN_WINDOW_WIDTH = 940
+MIN_WINDOW_HEIGHT = 742
 
 APP_COLORS = {
     "bg": "#F4F7FB",
@@ -442,7 +444,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setObjectName("AppRoot")
-        self.resize(DESIGN_WIDTH, DESIGN_HEIGHT)
+        self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
         self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         self.setStyleSheet(
             f"""
@@ -827,8 +829,8 @@ class MainWindow(QWidget):
             return
 
         available = screen.availableGeometry()
-        target_width = min(DESIGN_WIDTH, max(MIN_WINDOW_WIDTH, available.width() - 48))
-        target_height = min(DESIGN_HEIGHT, max(820, available.height() - 48))
+        target_width = min(DEFAULT_WINDOW_WIDTH, max(MIN_WINDOW_WIDTH, available.width() - 72))
+        target_height = min(DEFAULT_WINDOW_HEIGHT, max(MIN_WINDOW_HEIGHT, available.height() - 72))
         self.setMinimumSize(min(MIN_WINDOW_WIDTH, target_width), min(MIN_WINDOW_HEIGHT, target_height))
         self.resize(target_width, target_height)
 
