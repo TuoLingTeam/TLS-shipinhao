@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 MAX_BATCH_SIZE = 10
 REQUEST_TIMEOUT = 30
-WINDOW_TITLE = "TLS-shipinhao"
+WINDOW_TITLE = "驼铃视频小店中差评处理"
 DESIGN_WIDTH = 1240
 DESIGN_HEIGHT = 980
 MIN_WINDOW_WIDTH = 1120
@@ -635,7 +635,7 @@ class MainWindow(QWidget):
         title_box.setContentsMargins(0, 0, 0, 0)
         title_box.setSpacing(10)
 
-        title_label = QLabel("TLS-shipinhao")
+        title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(22, bold=True))
         title_box.addWidget(title_label)
