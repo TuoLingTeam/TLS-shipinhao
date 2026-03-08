@@ -449,7 +449,15 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setObjectName("AppRoot")
-        self.setFixedSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+        screen = self.screen() or QApplication.primaryScreen()
+        scale = max(1.0, screen.devicePixelRatio()) if screen is not None else 1.0
+        available = screen.availableGeometry() if screen is not None else None
+        fixed_width = int(round(DEFAULT_WINDOW_WIDTH / scale))
+        fixed_height = int(round(DEFAULT_WINDOW_HEIGHT / scale))
+        if available is not None:
+            fixed_width = min(fixed_width, available.width())
+            fixed_height = min(fixed_height, available.height())
+        self.setFixedSize(fixed_width, fixed_height)
         self.setStyleSheet(
             f"""
             QWidget#AppRoot {{
@@ -834,8 +842,16 @@ class MainWindow(QWidget):
         return card
 
     def _fit_window_to_screen(self):
-        """将窗口锁定为固定尺寸。"""
-        self.setFixedSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+        """按屏幕缩放比例锁定固定窗口尺寸。"""
+        screen = self.screen() or QApplication.primaryScreen()
+        scale = max(1.0, screen.devicePixelRatio()) if screen is not None else 1.0
+        available = screen.availableGeometry() if screen is not None else None
+        fixed_width = int(round(DEFAULT_WINDOW_WIDTH / scale))
+        fixed_height = int(round(DEFAULT_WINDOW_HEIGHT / scale))
+        if available is not None:
+            fixed_width = min(fixed_width, available.width())
+            fixed_height = min(fixed_height, available.height())
+        self.setFixedSize(fixed_width, fixed_height)
 
     def _sync_responsive_metrics(self):
         """窗口变化时整体等比例缩放，并保持各板块高度稳定。"""
