@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -72,9 +73,23 @@ APP_COLORS = {
     "log_muted": "#AFC1D9",
 }
 
+CONFIG_DIR_NAME = ".tls-shipinhao"
+COOKIE_FILE_NAME = "cookie.txt"
+MAGIC_FILE_NAME = "biz_magic.txt"
+USER_CONFIG_POINTER = "selected_config_dir.txt"
+_CONFIG_DIR_CACHE = None
+
+
+class ConfigNotFoundError(FileNotFoundError):
+    """配置文件缺失时抛出更明确的错误。"""
+
+    def __init__(self, searched_dirs):
+        self.searched_dirs = searched_dirs
+        super().__init__("未找到配置文件。")
+
 
 def get_app_dir():
-    """获取配置文件目录。"""
+    """获取 .app 同级目录或源码项目根目录。"""
     if getattr(sys, "frozen", False):
         exe_dir = os.path.abspath(os.path.dirname(sys.executable))
         if sys.platform == "darwin":
@@ -85,9 +100,73 @@ def get_app_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def get_home_config_dir():
+    """获取用户主目录下的固定配置目录。"""
+    return os.path.join(os.path.expanduser("~"), CONFIG_DIR_NAME)
+
+
+def get_user_config_pointer_path():
+    """记录用户指定配置目录的指针文件。"""
+    return os.path.join(get_home_config_dir(), USER_CONFIG_POINTER)
+
+
+def get_saved_user_config_dir():
+    """读取用户上次选择的配置目录。"""
+    pointer_path = get_user_config_pointer_path()
+    if not os.path.exists(pointer_path):
+        return None
+    with open(pointer_path, "r", encoding="utf-8") as file:
+        selected_dir = file.read().strip()
+    if selected_dir and os.path.isdir(selected_dir):
+        return selected_dir
+    return None
+
+
+def save_user_config_dir(config_dir):
+    """保存用户指定的配置目录。"""
+    global _CONFIG_DIR_CACHE
+    config_dir = os.path.abspath(config_dir)
+    os.makedirs(get_home_config_dir(), exist_ok=True)
+    with open(get_user_config_pointer_path(), "w", encoding="utf-8") as file:
+        file.write(config_dir)
+    _CONFIG_DIR_CACHE = config_dir
+
+
+def get_config_search_dirs():
+    """按优先级返回配置目录搜索链路。"""
+    search_dirs = []
+    for candidate in (get_app_dir(), _CONFIG_DIR_CACHE or get_saved_user_config_dir(), get_home_config_dir()):
+        if not candidate:
+            continue
+        normalized = os.path.abspath(candidate)
+        if normalized not in search_dirs:
+            search_dirs.append(normalized)
+    return search_dirs
+
+
+def resolve_config_dir():
+    """解析实际可用的配置目录。"""
+    global _CONFIG_DIR_CACHE
+    if _CONFIG_DIR_CACHE:
+        cookie_path = os.path.join(_CONFIG_DIR_CACHE, COOKIE_FILE_NAME)
+        magic_path = os.path.join(_CONFIG_DIR_CACHE, MAGIC_FILE_NAME)
+        if os.path.exists(cookie_path) and os.path.exists(magic_path):
+            return _CONFIG_DIR_CACHE
+
+    search_dirs = get_config_search_dirs()
+    for config_dir in search_dirs:
+        cookie_path = os.path.join(config_dir, COOKIE_FILE_NAME)
+        magic_path = os.path.join(config_dir, MAGIC_FILE_NAME)
+        if os.path.exists(cookie_path) and os.path.exists(magic_path):
+            _CONFIG_DIR_CACHE = config_dir
+            return config_dir
+
+    raise ConfigNotFoundError(search_dirs)
+
+
 def getCookie():
     """从 cookie.txt 文件读取 Cookie 信息。"""
-    path = os.path.join(get_app_dir(), "cookie.txt")
+    path = os.path.join(resolve_config_dir(), COOKIE_FILE_NAME)
     with open(path, "r", encoding="utf-8") as file:
         content = file.read().strip()
 
@@ -103,7 +182,7 @@ def getCookie():
 
 def getMagic():
     """从 biz_magic.txt 文件读取 magic 值。"""
-    path = os.path.join(get_app_dir(), "biz_magic.txt")
+    path = os.path.join(resolve_config_dir(), MAGIC_FILE_NAME)
     with open(path, "r", encoding="utf-8") as file:
         return file.read().strip()
 
@@ -400,8 +479,8 @@ class BatchWorker(QObject):
 
         try:
             session = create_session()
-        except FileNotFoundError:
-            self.missing_config.emit(get_app_dir())
+        except ConfigNotFoundError as exc:
+            self.missing_config.emit("\n".join(exc.searched_dirs))
             self.finished.emit(0, 0, total_count, True)
             return
 
@@ -511,6 +590,15 @@ class MainWindow(QWidget):
                 border: 1px solid {APP_COLORS["orange_border"]};
                 border-radius: 20px;
             }}
+            QFrame#ConfigCard {{
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #E9EEF6,
+                    stop: 1 #DCE6F3
+                );
+                border: 1px solid #C2CFDF;
+                border-radius: 20px;
+            }}
             QFrame#LogCard {{
                 background: {APP_COLORS["log_bg"]};
                 border: 1px solid #183252;
@@ -582,6 +670,28 @@ class MainWindow(QWidget):
             QLabel#LogHint {{
                 color: {APP_COLORS["log_muted"]};
             }}
+            QLabel#ConfigPath {{
+                color: {APP_COLORS["muted"]};
+                background: rgba(255, 255, 255, 0.55);
+                border: 1px solid #C9D4E3;
+                border-radius: 12px;
+                padding: 10px 12px;
+            }}
+            QPushButton#SecondaryButton {{
+                background: #FFFFFF;
+                color: {APP_COLORS["blue_deep"]};
+                border: 1px solid #B7C7DA;
+                border-radius: 12px;
+                padding: 10px 14px;
+                font-weight: 700;
+            }}
+            QPushButton#SecondaryButton:hover {{
+                background: #F8FBFF;
+                border-color: #9FB5D1;
+            }}
+            QPushButton#SecondaryButton:pressed {{
+                background: #EEF4FB;
+            }}
             QScrollArea {{
                 border: none;
                 background: transparent;
@@ -610,6 +720,7 @@ class MainWindow(QWidget):
         )
 
         self._build_ui()
+        self.refresh_config_path_label()
         self._fit_window_to_screen()
         self.refresh_input_metrics()
         self._sync_responsive_metrics()
@@ -634,10 +745,6 @@ class MainWindow(QWidget):
         self.page_layout = QVBoxLayout(self.page_widget)
         self.page_layout.setContentsMargins(24, 22, 24, 22)
         self.page_layout.setSpacing(16)
-        self.page_layout.setStretch(0, 0)
-        self.page_layout.setStretch(1, 3)
-        self.page_layout.setStretch(2, 0)
-        self.page_layout.setStretch(3, 4)
 
         self.header_card = self._create_card(self.page_layout, object_name="HeroCard")
         header_layout = QVBoxLayout(self.header_card)
@@ -743,12 +850,15 @@ class MainWindow(QWidget):
             APP_COLORS["orange"],
             "InputCardOrange",
         )
+        self.config_card = self._create_config_card()
 
-        self.page_layout.addWidget(self.input_container, 1)
+        self.page_layout.addWidget(self.input_container)
         self.input_grid.addWidget(self.order_card, 0, 0)
         self.input_grid.addWidget(self.tracking_card, 0, 1)
-        self.input_grid.setColumnStretch(0, 1)
-        self.input_grid.setColumnStretch(1, 1)
+        self.input_grid.addWidget(self.config_card, 0, 2)
+        self.input_grid.setColumnStretch(0, 5)
+        self.input_grid.setColumnStretch(1, 5)
+        self.input_grid.setColumnStretch(2, 4)
 
         self.submit_button = QPushButton("点击开始批量处理")
         self.submit_button.setObjectName("PrimaryButton")
@@ -846,9 +956,63 @@ class MainWindow(QWidget):
         body_layout.addWidget(hint_label)
         card.hint_label = hint_label
 
-        body_layout.addWidget(editor, 1)
+        body_layout.addWidget(editor)
         card_layout.addWidget(body)
         return card
+
+    def _create_config_card(self):
+        """创建配置目录卡片。"""
+        card = QFrame()
+        card.setObjectName("ConfigCard")
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(16, 14, 16, 14)
+        body_layout.setSpacing(10)
+
+        title_label = QLabel("配置目录")
+        title_label.setObjectName("SectionTitle")
+        title_label.setFont(build_font(15, bold=True))
+        body_layout.addWidget(title_label)
+        self.config_title_label = title_label
+
+        hint_label = QLabel("选择 cookie.txt 与 biz_magic.txt 所在目录，程序会自动记住。")
+        hint_label.setObjectName("SectionHint")
+        hint_label.setWordWrap(True)
+        hint_label.setFont(build_font(10))
+        body_layout.addWidget(hint_label)
+        self.config_hint_label = hint_label
+
+        path_label = QLabel()
+        path_label.setObjectName("ConfigPath")
+        path_label.setWordWrap(True)
+        path_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        path_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        body_layout.addWidget(path_label)
+        self.config_path_label = path_label
+
+        button = QPushButton("选择配置目录")
+        button.setObjectName("SecondaryButton")
+        button.setCursor(Qt.PointingHandCursor)
+        button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        button.clicked.connect(self.choose_config_dir)
+        body_layout.addWidget(button)
+        self.config_button = button
+
+        card_layout.addWidget(body)
+        return card
+
+    def _calculate_editor_height(self, editor, visible_lines=10):
+        """按指定可见行数计算输入框高度。"""
+        line_height = editor.fontMetrics().lineSpacing()
+        document_margin = int(editor.document().documentMargin() * 2)
+        frame = editor.frameWidth() * 2
+        padding = 30
+        return line_height * visible_lines + document_margin + frame + padding
 
     def _fit_window_to_screen(self):
         """按屏幕缩放比例锁定固定窗口尺寸。"""
@@ -863,42 +1027,22 @@ class MainWindow(QWidget):
         self.setFixedSize(fixed_width, fixed_height)
 
     def _sync_responsive_metrics(self):
-        """窗口变化时整体等比例缩放。"""
+        """窗口变化时同步紧凑布局尺寸。"""
         viewport = self.scroll_area.viewport().size()
         if not viewport.width() or not viewport.height():
             return
 
         width_scale = viewport.width() / DESIGN_WIDTH
         height_scale = viewport.height() / DESIGN_HEIGHT
-        scale = max(0.72, min(1.0, width_scale, height_scale))
+        scale = max(0.78, min(1.0, width_scale, height_scale))
 
         page_margin_x = max(12, int(18 * scale))
         page_margin_y = max(10, int(16 * scale))
-        page_spacing = max(6, int(12 * scale))
-        button_height = max(46, int(54 * scale))
-        header_height = max(92, int(118 * scale))
-        input_editor_height = max(108, int(176 * scale))
-        log_editor_height = max(176, int(300 * scale))
+        page_spacing = max(8, int(14 * scale))
+        button_height = max(48, int(56 * scale))
+        header_height = max(100, int(120 * scale))
+        log_editor_height = max(190, int(300 * scale))
 
-        # 窗口放大时，让富余高度优先分给日志区，再分给输入区。
-        spare_height = viewport.height() - (
-            page_margin_y * 2
-            + page_spacing * 3
-            + header_height
-            + max(92, int(108 * scale))
-            + input_editor_height
-            + button_height
-            + max(64, int(74 * scale))
-            + log_editor_height
-        )
-        if spare_height > 24:
-            log_growth = min(spare_height, 140)
-            log_editor_height += log_growth
-            spare_height -= log_growth
-        if spare_height > 16:
-            input_editor_height += min(spare_height // 2, 72)
-
-        # 同步字体，避免按钮和标题在窗口缩小时保持大字号导致截断。
         self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
         self.title_description_label.setFont(build_font(max(10, int(12 * scale))))
         self.author_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
@@ -908,6 +1052,10 @@ class MainWindow(QWidget):
         self.tracking_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
         self.order_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
         self.tracking_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
+        self.config_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
+        self.config_hint_label.setFont(build_font(max(9, int(10 * scale))))
+        self.config_path_label.setFont(build_font(max(9, int(10 * scale))))
+        self.config_button.setFont(build_font(max(10, int(11 * scale)), bold=True))
         self.log_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
         self.log_hint_label.setFont(build_font(max(9, int(10 * scale))))
         self.submit_button.setFont(build_font(max(14, int(17 * scale)), bold=True))
@@ -916,19 +1064,22 @@ class MainWindow(QWidget):
         self.log_view.setFont(build_fixed_font(max(9, int(11 * scale))))
 
         badge_height = max(36, int(40 * scale))
+        input_editor_height = self._calculate_editor_height(self.order_edit, 10)
+
         self.author_badge.setFixedHeight(badge_height)
         self.order_count_badge.setFixedHeight(badge_height)
         self.tracking_count_badge.setFixedHeight(badge_height)
+        self.submit_button.setFixedHeight(button_height)
+        self.header_card.setMinimumHeight(header_height)
+        self.order_edit.setFixedHeight(input_editor_height)
+        self.tracking_edit.setFixedHeight(input_editor_height)
+        self.log_view.setMinimumHeight(log_editor_height)
+        self.config_button.setFixedHeight(max(40, int(44 * scale)))
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
-        self.input_grid.setHorizontalSpacing(max(10, int(16 * scale)))
-        self.input_grid.setVerticalSpacing(max(8, int(12 * scale)))
-        self.header_card.setMinimumHeight(header_height)
-        self.submit_button.setFixedHeight(button_height)
-        self.order_edit.setMinimumHeight(input_editor_height)
-        self.tracking_edit.setMinimumHeight(input_editor_height)
-        self.log_view.setMinimumHeight(log_editor_height)
+        self.input_grid.setHorizontalSpacing(max(10, int(14 * scale)))
+        self.input_grid.setVerticalSpacing(max(8, int(10 * scale)))
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
@@ -965,14 +1116,81 @@ class MainWindow(QWidget):
         self.submit_button.setDisabled(is_running)
         self.submit_button.setText("执行中..." if is_running else "点击开始批量处理")
 
-    def show_missing_config_error(self, config_dir):
-        """提示缺少配置文件。"""
-        QMessageBox.critical(
-            self,
-            "缺少配置文件",
-            "未找到配置文件 cookie.txt 或 biz_magic.txt。\n\n"
-            f"请将这两个文件放在以下目录（与 .app 同路径）：\n{config_dir}",
+    def refresh_config_path_label(self):
+        """刷新配置目录卡片文案。"""
+        saved_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir()
+        try:
+            resolved_dir = resolve_config_dir()
+        except ConfigNotFoundError:
+            resolved_dir = None
+
+        if resolved_dir:
+            text = (
+                "当前已生效目录：\n"
+                f"{resolved_dir}\n\n"
+                "程序会优先读取这里的 cookie.txt 与 biz_magic.txt。"
+            )
+        elif saved_dir:
+            text = (
+                "已记录目录：\n"
+                f"{saved_dir}\n\n"
+                "但这里暂未同时找到 cookie.txt 与 biz_magic.txt。"
+            )
+        else:
+            text = (
+                "当前未指定目录。\n\n"
+                "程序会依次在 .app 同级目录、你手动选择的目录、"
+                "主目录固定配置目录 ~/.tls-shipinhao 中查找。"
+            )
+        self.config_path_label.setText(text)
+
+    def choose_config_dir(self):
+        """选择配置文件所在目录并记住。"""
+        start_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir() or get_app_dir()
+        selected_dir = QFileDialog.getExistingDirectory(self, "选择配置目录", start_dir)
+        if not selected_dir:
+            return
+
+        cookie_path = os.path.join(selected_dir, COOKIE_FILE_NAME)
+        magic_path = os.path.join(selected_dir, MAGIC_FILE_NAME)
+        missing_files = []
+        if not os.path.exists(cookie_path):
+            missing_files.append(COOKIE_FILE_NAME)
+        if not os.path.exists(magic_path):
+            missing_files.append(MAGIC_FILE_NAME)
+
+        if missing_files:
+            QMessageBox.warning(
+                self,
+                "目录不完整",
+                "所选目录缺少以下文件：\n"
+                + "\n".join(missing_files)
+                + "\n\n请选择同时包含 cookie.txt 与 biz_magic.txt 的目录。",
+            )
+            return
+
+        save_user_config_dir(selected_dir)
+        self.refresh_config_path_label()
+        QMessageBox.information(self, "配置目录已更新", f"后续将优先使用：\n{selected_dir}")
+
+    def show_missing_config_error(self, searched_dirs):
+        """提示缺少配置文件，并允许用户直接选择目录。"""
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Warning)
+        dialog.setWindowTitle("缺少配置文件")
+        dialog.setText("未找到配置文件 cookie.txt 或 biz_magic.txt。")
+        dialog.setInformativeText(
+            "程序会按以下顺序查找配置目录：\n"
+            "1. .app 同级目录\n"
+            "2. 你手动选择并记住的目录\n"
+            "3. 主目录固定配置目录 ~/.tls-shipinhao\n\n"
+            f"本次已检查：\n{searched_dirs}"
         )
+        choose_button = dialog.addButton("选择配置目录", QMessageBox.AcceptRole)
+        dialog.addButton("关闭", QMessageBox.RejectRole)
+        dialog.exec()
+        if dialog.clickedButton() is choose_button:
+            self.choose_config_dir()
 
     def on_submit(self):
         """开始批量处理。"""
