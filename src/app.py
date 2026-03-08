@@ -634,6 +634,10 @@ class MainWindow(QWidget):
         self.page_layout = QVBoxLayout(self.page_widget)
         self.page_layout.setContentsMargins(24, 22, 24, 22)
         self.page_layout.setSpacing(16)
+        self.page_layout.setStretch(0, 0)
+        self.page_layout.setStretch(1, 3)
+        self.page_layout.setStretch(2, 0)
+        self.page_layout.setStretch(3, 4)
 
         self.header_card = self._create_card(self.page_layout, object_name="HeroCard")
         header_layout = QVBoxLayout(self.header_card)
@@ -740,7 +744,7 @@ class MainWindow(QWidget):
             "InputCardOrange",
         )
 
-        self.page_layout.addWidget(self.input_container)
+        self.page_layout.addWidget(self.input_container, 1)
         self.input_grid.addWidget(self.order_card, 0, 0)
         self.input_grid.addWidget(self.tracking_card, 0, 1)
         self.input_grid.setColumnStretch(0, 1)
@@ -859,7 +863,7 @@ class MainWindow(QWidget):
         self.setFixedSize(fixed_width, fixed_height)
 
     def _sync_responsive_metrics(self):
-        """窗口变化时整体等比例缩放，并保持各板块高度稳定。"""
+        """窗口变化时整体等比例缩放。"""
         viewport = self.scroll_area.viewport().size()
         if not viewport.width() or not viewport.height():
             return
@@ -875,6 +879,24 @@ class MainWindow(QWidget):
         header_height = max(92, int(118 * scale))
         input_editor_height = max(108, int(176 * scale))
         log_editor_height = max(176, int(300 * scale))
+
+        # 窗口放大时，让富余高度优先分给日志区，再分给输入区。
+        spare_height = viewport.height() - (
+            page_margin_y * 2
+            + page_spacing * 3
+            + header_height
+            + max(92, int(108 * scale))
+            + input_editor_height
+            + button_height
+            + max(64, int(74 * scale))
+            + log_editor_height
+        )
+        if spare_height > 24:
+            log_growth = min(spare_height, 140)
+            log_editor_height += log_growth
+            spare_height -= log_growth
+        if spare_height > 16:
+            input_editor_height += min(spare_height // 2, 72)
 
         # 同步字体，避免按钮和标题在窗口缩小时保持大字号导致截断。
         self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
@@ -902,11 +924,11 @@ class MainWindow(QWidget):
         self.page_layout.setSpacing(page_spacing)
         self.input_grid.setHorizontalSpacing(max(10, int(16 * scale)))
         self.input_grid.setVerticalSpacing(max(8, int(12 * scale)))
-        self.header_card.setFixedHeight(header_height)
+        self.header_card.setMinimumHeight(header_height)
         self.submit_button.setFixedHeight(button_height)
-        self.order_edit.setFixedHeight(input_editor_height)
-        self.tracking_edit.setFixedHeight(input_editor_height)
-        self.log_view.setFixedHeight(log_editor_height)
+        self.order_edit.setMinimumHeight(input_editor_height)
+        self.tracking_edit.setMinimumHeight(input_editor_height)
+        self.log_view.setMinimumHeight(log_editor_height)
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
