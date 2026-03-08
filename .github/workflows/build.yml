@@ -2,27 +2,27 @@ name: Build Desktop Apps
 
 on:
   workflow_dispatch:
+    inputs:
+      build_macos:
+        description: Build macOS app
+        required: true
+        default: true
+        type: boolean
+      build_windows:
+        description: Build Windows app
+        required: true
+        default: false
+        type: boolean
   push:
     branches:
       - main
   pull_request:
 
 jobs:
-  build:
-    name: Build ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            label: macOS
-            artifact_name: tls-shipinhao-macos
-            artifact_path: dist/tls-shipinhao-macos.zip
-          - os: windows-latest
-            label: Windows
-            artifact_name: tls-shipinhao-windows
-            artifact_path: dist/TLS-shipinhao.exe
+  build-macos:
+    name: Build macOS
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos }}
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -39,7 +39,6 @@ jobs:
           path: |
             ~/.cache/pip
             ~/Library/Caches/pip
-            ~\AppData\Local\pip\Cache
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
@@ -54,17 +53,10 @@ jobs:
         shell: bash
 
       - name: Build macOS app
-        if: runner.os == 'macOS'
         run: python scripts/build.py macos
         shell: bash
 
-      - name: Build Windows app
-        if: runner.os == 'Windows'
-        run: python scripts/build.py windows
-        shell: pwsh
-
       - name: Package macOS app bundle
-        if: runner.os == 'macOS'
         run: |
           rm -f dist/tls-shipinhao-macos.zip
           ditto -c -k --sequesterRsrc --keepParent dist/TLS-shipinhao.app dist/tls-shipinhao-macos.zip
@@ -73,7 +65,50 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: tls-shipinhao-macos
+          path: dist/tls-shipinhao-macos.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_windows }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) {
+            python -m pip install -r requirements.txt
+          }
+          python -m pip install pyinstaller
+        shell: pwsh
+
+      - name: Build Windows app
+        run: python scripts/build.py windows
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tls-shipinhao-windows
+          path: dist/TLS-shipinhao.exe
           if-no-files-found: error
           retention-days: 14
