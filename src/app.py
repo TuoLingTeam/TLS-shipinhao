@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 
-MAX_BATCH_SIZE = 10
+MAX_BATCH_SIZE = 100
 REQUEST_TIMEOUT = 30
 WINDOW_TITLE = "驼铃视频小店中差评处理"
 DESIGN_WIDTH = 1240
@@ -91,13 +91,6 @@ CARRIER_NAME_ALIASES = {
     "圆通速递": ("圆通速递", "圆通", "yto"),
     "中通快递": ("中通快递", "中通", "zto"),
     "申通快递": ("申通快递", "申通", "sto"),
-    "韵达速递": ("韵达速递", "韵达", "yunda", "yd"),
-    "顺丰速运": ("顺丰速运", "顺丰", "sf"),
-    "极兔速递": ("极兔速递", "极兔", "j&t", "jt"),
-    "京东快递": ("京东快递", "京东", "jd"),
-    "邮政EMS": ("邮政ems", "ems", "中国邮政", "邮政"),
-    "德邦快递": ("德邦快递", "德邦"),
-    "菜鸟速递": ("菜鸟速递", "菜鸟"),
 }
 
 
@@ -336,7 +329,7 @@ def normalize_carrier_name(name):
 
 
 def detect_carrier_candidates(tracking_number):
-    """根据单号识别可能的物流公司。"""
+    """根据单号识别可能的物流公司，仅保留圆通/中通/申通。"""
     tracking = re.sub(r"\s+", "", str(tracking_number)).upper()
     candidates = []
 
@@ -350,18 +343,6 @@ def detect_carrier_candidates(tracking_number):
         add("中通快递")
     if tracking.startswith("STO") or tracking.startswith("ST"):
         add("申通快递")
-    if tracking.startswith("YD") or tracking.startswith("YD"):
-        add("韵达速递")
-    if tracking.startswith("SF"):
-        add("顺丰速运")
-    if tracking.startswith("JT") or tracking.startswith("JT"):
-        add("极兔速递")
-    if tracking.startswith("JD"):
-        add("京东快递")
-    if tracking.startswith("EMS") or tracking.startswith("EY") or tracking.startswith("YZ"):
-        add("邮政EMS")
-    if tracking.startswith("DB"):
-        add("德邦快递")
     return candidates
 
 
@@ -542,10 +523,6 @@ def build_delivery_candidates(order_id, tracking_number, delivery_product_info, 
 
     for company_name in detect_carrier_candidates(tracking_number):
         for option in registry.get(company_name, []):
-            add_candidate(option.get("deliveryId"), option.get("deliveryName"))
-
-    for option_list in registry.values():
-        for option in option_list:
             add_candidate(option.get("deliveryId"), option.get("deliveryName"))
 
     return candidates
@@ -1050,8 +1027,8 @@ class MainWindow(QWidget):
             "padding: 8px 10px;"
         )
 
-        self.order_edit = BatchInputEdit("每行一个订单号，最多 10 条。")
-        self.tracking_edit = BatchInputEdit("每行一个物流单号，最多 10 条。")
+        self.order_edit = BatchInputEdit("每行一个订单号，最多 100 条。")
+        self.tracking_edit = BatchInputEdit("每行一个物流单号，最多 100 条。")
 
         self.order_edit.textChanged.connect(self.refresh_input_metrics)
         self.tracking_edit.textChanged.connect(self.refresh_input_metrics)
@@ -1060,7 +1037,7 @@ class MainWindow(QWidget):
 
         self.order_card = self._create_input_card(
             "填写订单号",
-            "支持空格、英文逗号、中文逗号、换行分隔；系统会自动整理成一行一个。",
+            "支持英文逗号、中文逗号、换行分隔；会自动整理成一行一个。",
             self.order_count_badge,
             self.order_edit,
             APP_COLORS["blue"],
@@ -1068,7 +1045,7 @@ class MainWindow(QWidget):
         )
         self.tracking_card = self._create_input_card(
             "填写物流单号",
-            "支持空格、英文逗号、中文逗号、换行分隔；系统会自动整理成一行一个。",
+            "支持英文逗号、中文逗号、换行分隔；会自动整理成一行一个。",
             self.tracking_count_badge,
             self.tracking_edit,
             APP_COLORS["orange"],
@@ -1188,7 +1165,7 @@ class MainWindow(QWidget):
         """创建配置目录卡片。"""
         card = QFrame()
         card.setObjectName("ConfigCard")
-        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(0)
@@ -1215,7 +1192,7 @@ class MainWindow(QWidget):
         path_label.setObjectName("ConfigPath")
         path_label.setWordWrap(True)
         path_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        path_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        path_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         body_layout.addWidget(path_label)
         self.config_path_label = path_label
 
@@ -1299,6 +1276,12 @@ class MainWindow(QWidget):
         self.tracking_edit.setFixedHeight(input_editor_height)
         self.log_view.setMinimumHeight(log_editor_height)
         self.config_button.setFixedHeight(max(40, int(44 * scale)))
+
+        config_non_path_height = self.config_card.sizeHint().height() - self.config_path_label.sizeHint().height()
+        config_target_height = self.order_card.sizeHint().height()
+        config_path_height = max(72, config_target_height - config_non_path_height)
+        self.config_path_label.setFixedHeight(config_path_height)
+        self.config_card.setFixedHeight(config_target_height)
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
