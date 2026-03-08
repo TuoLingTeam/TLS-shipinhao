@@ -643,14 +643,14 @@ class MainWindow(QWidget):
         header_body = QWidget()
         header_body.setObjectName("HeaderBody")
         header_box = QHBoxLayout(header_body)
-        header_box.setContentsMargins(28, 24, 28, 24)
-        header_box.setSpacing(18)
+        header_box.setContentsMargins(22, 18, 22, 18)
+        header_box.setSpacing(14)
 
         title_wrap = QWidget()
         title_wrap.setObjectName("TitleWrap")
         title_box = QVBoxLayout(title_wrap)
         title_box.setContentsMargins(0, 0, 0, 0)
-        title_box.setSpacing(10)
+        title_box.setSpacing(6)
 
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
@@ -686,8 +686,8 @@ class MainWindow(QWidget):
         self.input_container.setObjectName("InputContainer")
         self.input_grid = QGridLayout(self.input_container)
         self.input_grid.setContentsMargins(0, 0, 0, 0)
-        self.input_grid.setHorizontalSpacing(20)
-        self.input_grid.setVerticalSpacing(16)
+        self.input_grid.setHorizontalSpacing(16)
+        self.input_grid.setVerticalSpacing(12)
 
         self.order_count_badge = QLabel()
         self.order_count_badge.setAlignment(Qt.AlignCenter)
@@ -748,7 +748,7 @@ class MainWindow(QWidget):
         self.submit_button.setObjectName("PrimaryButton")
         self.submit_button.setCursor(Qt.PointingHandCursor)
         self.submit_button.setFont(build_font(17, bold=True))
-        self.submit_button.setMinimumHeight(60)
+        self.submit_button.setMinimumHeight(56)
         self.submit_button.clicked.connect(self.on_submit)
         self.page_layout.addWidget(self.submit_button)
 
@@ -760,14 +760,14 @@ class MainWindow(QWidget):
         log_body = QWidget()
         log_body.setObjectName("LogBody")
         log_box = QVBoxLayout(log_body)
-        log_box.setContentsMargins(18, 16, 18, 16)
-        log_box.setSpacing(12)
+        log_box.setContentsMargins(16, 14, 16, 14)
+        log_box.setSpacing(10)
 
         log_header = QWidget()
         log_header.setObjectName("LogHeader")
         log_header_box = QHBoxLayout(log_header)
         log_header_box.setContentsMargins(0, 0, 0, 0)
-        log_header_box.setSpacing(12)
+        log_header_box.setSpacing(10)
 
         log_title = QLabel("执行日志")
         log_title.setObjectName("LogTitle")
@@ -813,14 +813,14 @@ class MainWindow(QWidget):
         body = QWidget()
         body.setObjectName("InputCardBody")
         body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(18, 16, 18, 16)
-        body_layout.setSpacing(12)
+        body_layout.setContentsMargins(16, 14, 16, 14)
+        body_layout.setSpacing(10)
 
         header = QWidget()
         header.setObjectName("CardHeader")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(12)
+        header_layout.setSpacing(10)
 
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
@@ -837,7 +837,7 @@ class MainWindow(QWidget):
         body_layout.addWidget(hint_label)
         card.hint_label = hint_label
 
-        body_layout.addWidget(editor, 1)
+        body_layout.addWidget(editor)
         card_layout.addWidget(body)
         return card
 
@@ -863,13 +863,13 @@ class MainWindow(QWidget):
         height_scale = viewport.height() / DESIGN_HEIGHT
         scale = max(0.72, min(1.0, width_scale, height_scale))
 
-        page_margin_x = max(14, int(24 * scale))
-        page_margin_y = max(12, int(22 * scale))
-        page_spacing = max(8, int(16 * scale))
-        button_height = max(48, int(60 * scale))
-        header_height = max(104, int(138 * scale))
-        input_editor_height = max(118, int(220 * scale))
-        log_editor_height = max(185, int(340 * scale))
+        page_margin_x = max(12, int(18 * scale))
+        page_margin_y = max(10, int(16 * scale))
+        page_spacing = max(6, int(12 * scale))
+        button_height = max(46, int(54 * scale))
+        header_height = max(92, int(118 * scale))
+        input_editor_height = max(108, int(176 * scale))
+        log_editor_height = max(176, int(300 * scale))
 
         # 同步字体，避免按钮和标题在窗口缩小时保持大字号导致截断。
         self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
@@ -890,8 +890,8 @@ class MainWindow(QWidget):
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
-        self.input_grid.setHorizontalSpacing(max(12, int(20 * scale)))
-        self.input_grid.setVerticalSpacing(max(10, int(16 * scale)))
+        self.input_grid.setHorizontalSpacing(max(10, int(16 * scale)))
+        self.input_grid.setVerticalSpacing(max(8, int(12 * scale)))
         self.header_card.setFixedHeight(header_height)
         self.submit_button.setFixedHeight(button_height)
         self.order_edit.setFixedHeight(input_editor_height)
