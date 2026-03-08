@@ -30,10 +30,10 @@ REQUEST_TIMEOUT = 30
 WINDOW_TITLE = "驼铃视频小店中差评处理"
 DESIGN_WIDTH = 1240
 DESIGN_HEIGHT = 980
-DEFAULT_WINDOW_WIDTH = 1080
-DEFAULT_WINDOW_HEIGHT = 853
-MIN_WINDOW_WIDTH = 940
-MIN_WINDOW_HEIGHT = 742
+DEFAULT_WINDOW_WIDTH = 1880
+DEFAULT_WINDOW_HEIGHT = 1668
+MIN_WINDOW_WIDTH = 1880
+MIN_WINDOW_HEIGHT = 1668
 
 APP_COLORS = {
     "bg": "#F4F7FB",
@@ -449,8 +449,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setObjectName("AppRoot")
-        self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
-        self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+        self.setFixedSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
         self.setStyleSheet(
             f"""
             QWidget#AppRoot {{
@@ -835,16 +834,8 @@ class MainWindow(QWidget):
         return card
 
     def _fit_window_to_screen(self):
-        """按屏幕可用区域修正初始尺寸，避免首次打开时底部被裁切。"""
-        screen = self.screen() or QApplication.primaryScreen()
-        if screen is None:
-            return
-
-        available = screen.availableGeometry()
-        target_width = min(DEFAULT_WINDOW_WIDTH, max(MIN_WINDOW_WIDTH, available.width() - 72))
-        target_height = min(DEFAULT_WINDOW_HEIGHT, max(MIN_WINDOW_HEIGHT, available.height() - 72))
-        self.setMinimumSize(min(MIN_WINDOW_WIDTH, target_width), min(MIN_WINDOW_HEIGHT, target_height))
-        self.resize(target_width, target_height)
+        """将窗口锁定为固定尺寸。"""
+        self.setFixedSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
 
     def _sync_responsive_metrics(self):
         """窗口变化时整体等比例缩放，并保持各板块高度稳定。"""
