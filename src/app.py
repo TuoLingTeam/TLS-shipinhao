@@ -506,8 +506,8 @@ def get_delivery_company_registry(session, seed_order_ids=None):
 
 
 def build_delivery_candidates(order_id, tracking_number, delivery_product_info, session):
-    """构建当前单号可能对应的 deliveryId 候选列表。"""
-    registry = get_delivery_company_registry(session, seed_order_ids=[order_id])
+    """构建当前单号的 deliveryId 候选列表。"""
+    del order_id, session
     candidates = []
     seen_keys = set()
 
@@ -520,12 +520,9 @@ def build_delivery_candidates(order_id, tracking_number, delivery_product_info, 
         seen_keys.add(key)
         candidates.append({"deliveryId": str(delivery_id), "deliveryName": str(delivery_name or "")})
 
+    tracking_prefix = str(tracking_number).strip()[:2]
+    add_candidate(tracking_prefix, delivery_product_info.get("deliveryName"))
     add_candidate(delivery_product_info.get("deliveryId"), delivery_product_info.get("deliveryName"))
-
-    for company_name in detect_carrier_candidates(tracking_number):
-        for option in registry.get(company_name, []):
-            add_candidate(option.get("deliveryId"), option.get("deliveryName"))
-
     return candidates
 
 
