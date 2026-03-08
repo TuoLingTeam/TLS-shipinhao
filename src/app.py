@@ -13,6 +13,7 @@ from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -1070,7 +1072,7 @@ class MainWindow(QWidget):
         self.tracking_edit.normalized.connect(self.refresh_input_metrics)
 
         self.order_card = self._create_input_card(
-            "填写订单号",
+            "第一步：填写订单号",
             "支持英文逗号、中文逗号、换行分隔；会自动整理成一行一个。",
             self.order_count_badge,
             self.order_edit,
@@ -1078,7 +1080,7 @@ class MainWindow(QWidget):
             "InputCardBlue",
         )
         self.tracking_card = self._create_input_card(
-            "填写物流单号",
+            "第二步：填写物流单号",
             "支持英文逗号、中文逗号、换行分隔；会自动整理成一行一个。",
             self.tracking_count_badge,
             self.tracking_edit,
@@ -1100,7 +1102,7 @@ class MainWindow(QWidget):
         self.action_layout.setContentsMargins(0, 0, 0, 0)
         self.action_layout.setSpacing(12)
 
-        self.pause_button = QPushButton("暂停处理")
+        self.pause_button = QPushButton("暂停批量处理")
         self.pause_button.setObjectName("PauseButton")
         self.pause_button.setCursor(Qt.PointingHandCursor)
         self.pause_button.setFont(build_font(16, bold=True))
@@ -1108,7 +1110,7 @@ class MainWindow(QWidget):
         self.pause_button.clicked.connect(self.on_pause_clicked)
         self.action_layout.addWidget(self.pause_button, 1)
 
-        self.start_button = QPushButton("点击开始批量处理")
+        self.start_button = QPushButton("开始批量处理")
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.setCursor(Qt.PointingHandCursor)
         self.start_button.setFont(build_font(17, bold=True))
@@ -1210,33 +1212,7 @@ class MainWindow(QWidget):
         return card
 
     def _create_config_card(self):
-        """创建配置目录卡片。"""
-        card = QFrame()
-        card.setObjectName("ConfigCard")
-        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-
-        body = QWidget()
-        body.setObjectName("InputCardBody")
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(16, 14, 16, 14)
-        body_layout.setSpacing(10)
-
-        header = QWidget()
-        header.setObjectName("CardHeader")
-        header.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(10)
-
-        title_label = QLabel("配置目录")
-        title_label.setObjectName("SectionTitle")
-        title_label.setFont(build_font(15, bold=True))
-        header_layout.addWidget(title_label)
-        self.config_title_label = title_label
-
+        """创建配置目录卡片，复用输入卡片骨架以确保三列对齐。"""
         badge_placeholder = QLabel("目录")
         badge_placeholder.setAlignment(Qt.AlignCenter)
         badge_placeholder.setMinimumWidth(72)
@@ -1249,22 +1225,19 @@ class MainWindow(QWidget):
             "padding: 8px 10px;"
         )
         self.config_badge = badge_placeholder
-        header_layout.addWidget(badge_placeholder, 0, Qt.AlignRight)
-        body_layout.addWidget(header)
 
-        hint_label = QLabel("选择 cookie.txt 与 biz_magic.txt 所在目录，程序会自动记住。")
-        hint_label.setObjectName("SectionHint")
-        hint_label.setWordWrap(True)
-        hint_label.setFont(build_font(10))
-        body_layout.addWidget(hint_label)
-        self.config_hint_label = hint_label
+        shell = QWidget()
+        shell.setObjectName("InputShell")
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(10)
 
         path_label = QLabel()
         path_label.setObjectName("ConfigPath")
         path_label.setWordWrap(True)
         path_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         path_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        body_layout.addWidget(path_label, 1)
+        shell_layout.addWidget(path_label, 1)
         self.config_path_label = path_label
 
         button = QPushButton("选择配置目录")
@@ -1272,10 +1245,19 @@ class MainWindow(QWidget):
         button.setCursor(Qt.PointingHandCursor)
         button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         button.clicked.connect(self.choose_config_dir)
-        body_layout.addWidget(button)
+        shell_layout.addWidget(button)
         self.config_button = button
 
-        card_layout.addWidget(body)
+        card = self._create_input_card(
+            "第三步：选择配置目录",
+            "选择 cookie.txt 与 biz_magic.txt 所在目录；会自动记住。",
+            self.config_badge,
+            shell,
+            APP_COLORS["blue"],
+            "ConfigCard",
+        )
+        self.config_title_label = card.title_label
+        self.config_hint_label = card.hint_label
         return card
 
     def _calculate_editor_height(self, editor, visible_lines=10):
@@ -1401,43 +1383,135 @@ class MainWindow(QWidget):
         """统一提示弹窗视觉。"""
         dialog.setStyleSheet(
             """
-            QMessageBox {
-                background: #0F172A;
+            QDialog#AppMessageDialog {
+                background: #0A1C36;
+                border: 1px solid #1E3A8A;
+                border-radius: 14px;
             }
-            QMessageBox QLabel {
+            QLabel#MessageTitle {
+                color: #F8FAFC;
+                font-size: 18px;
+                font-weight: 700;
+            }
+            QLabel#MessageText {
                 color: #E2E8F0;
                 font-size: 15px;
-                min-width: 320px;
+                line-height: 1.45;
             }
-            QMessageBox QPushButton {
-                background: #1E3A8A;
+            QLabel#MessageInfo {
+                color: #BFD0E5;
+                font-size: 13px;
+                line-height: 1.45;
+            }
+            QPushButton#MessagePrimary {
+                background: #1D4ED8;
                 color: #F8FAFC;
                 border: 1px solid #3B82F6;
                 border-radius: 10px;
-                padding: 10px 18px;
-                min-width: 96px;
+                padding: 9px 18px;
+                min-width: 112px;
                 font-weight: 700;
             }
-            QMessageBox QPushButton:hover {
-                background: #1D4ED8;
+            QPushButton#MessagePrimary:hover {
+                background: #2563EB;
             }
-            QMessageBox QPushButton:pressed {
+            QPushButton#MessagePrimary:pressed {
                 background: #1E40AF;
+            }
+            QPushButton#MessageSecondary {
+                background: rgba(148, 163, 184, 0.18);
+                color: #E2E8F0;
+                border: 1px solid #64748B;
+                border-radius: 10px;
+                padding: 9px 18px;
+                min-width: 112px;
+                font-weight: 600;
+            }
+            QPushButton#MessageSecondary:hover {
+                background: rgba(148, 163, 184, 0.28);
+            }
+            QPushButton#MessageSecondary:pressed {
+                background: rgba(100, 116, 139, 0.35);
             }
             """
         )
         return dialog
 
+    def _message_icon_pixmap(self, level):
+        """根据消息级别返回标准图标。"""
+        icon_map = {
+            QMessageBox.Information: QStyle.SP_MessageBoxInformation,
+            QMessageBox.Warning: QStyle.SP_MessageBoxWarning,
+            QMessageBox.Critical: QStyle.SP_MessageBoxCritical,
+            QMessageBox.Question: QStyle.SP_MessageBoxQuestion,
+        }
+        icon_type = icon_map.get(level, QStyle.SP_MessageBoxInformation)
+        return self.style().standardIcon(icon_type).pixmap(46, 46)
+
+    def _build_message_dialog(self, level, title, text, informative_text=""):
+        """构建统一布局的提示弹窗，确保图标/文本/按钮对齐。"""
+        dialog = QDialog(self)
+        dialog.setObjectName("AppMessageDialog")
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        dialog.setMinimumWidth(560)
+
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(22, 18, 22, 18)
+        root.setSpacing(16)
+
+        body = QHBoxLayout()
+        body.setSpacing(14)
+
+        icon_label = QLabel()
+        icon_label.setPixmap(self._message_icon_pixmap(level))
+        icon_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        icon_label.setFixedWidth(56)
+        body.addWidget(icon_label, 0, Qt.AlignTop)
+
+        text_wrap = QWidget()
+        text_layout = QVBoxLayout(text_wrap)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(8)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("MessageTitle")
+        title_label.setWordWrap(True)
+        text_layout.addWidget(title_label)
+
+        text_label = QLabel(text)
+        text_label.setObjectName("MessageText")
+        text_label.setWordWrap(True)
+        text_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        text_layout.addWidget(text_label)
+
+        if informative_text:
+            info_label = QLabel(informative_text)
+            info_label.setObjectName("MessageInfo")
+            info_label.setWordWrap(True)
+            info_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+            text_layout.addWidget(info_label)
+
+        body.addWidget(text_wrap, 1)
+        root.addLayout(body, 1)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(10)
+        actions.addStretch(1)
+
+        confirm = QPushButton("确定")
+        confirm.setObjectName("MessagePrimary")
+        confirm.clicked.connect(dialog.accept)
+        actions.addWidget(confirm)
+
+        root.addLayout(actions)
+        self._style_message_box(dialog)
+        return dialog
+
     def show_message(self, level, title, text, informative_text=""):
         """显示统一样式的提示弹窗。"""
-        dialog = QMessageBox(self)
-        dialog.setIcon(level)
-        dialog.setWindowTitle(title)
-        dialog.setText(text)
-        if informative_text:
-            dialog.setInformativeText(informative_text)
-        dialog.setStandardButtons(QMessageBox.Ok)
-        self._style_message_box(dialog)
+        dialog = self._build_message_dialog(level, title, text, informative_text)
         dialog.exec()
 
     def refresh_action_buttons(self):
@@ -1448,8 +1522,8 @@ class MainWindow(QWidget):
         self.config_button.setDisabled(running)
         self.pause_button.setDisabled((not running) or self.is_paused)
         self.start_button.setDisabled(running and not self.is_paused)
-        self.start_button.setText("继续批量处理" if self.is_paused else "点击开始批量处理")
-        self.pause_button.setText("已暂停" if self.is_paused else "暂停处理")
+        self.start_button.setText("继续批量处理" if self.is_paused else "开始批量处理")
+        self.pause_button.setText("已暂停" if self.is_paused else "暂停批量处理")
 
     def set_submit_running(self, is_running):
         """切换按钮和输入框状态。"""
@@ -1520,22 +1594,74 @@ class MainWindow(QWidget):
 
     def show_missing_config_error(self, searched_dirs):
         """提示缺少配置文件，并允许用户直接选择目录。"""
-        dialog = QMessageBox(self)
-        dialog.setIcon(QMessageBox.Warning)
-        dialog.setWindowTitle("缺少配置文件")
-        dialog.setText("未找到配置文件 cookie.txt 或 biz_magic.txt。")
-        dialog.setInformativeText(
-            "程序会按以下顺序查找配置目录：\n"
+        info_text = (
+            "程序会按以下顺序查找配置目录:\n"
             "1. .app 同级目录\n"
             "2. 你手动选择并记住的目录\n"
             "3. 主目录固定配置目录 ~/.tls-shipinhao\n\n"
-            f"本次已检查：\n{searched_dirs}"
+            f"本次已检查:\n{searched_dirs}"
         )
-        choose_button = dialog.addButton("选择配置目录", QMessageBox.AcceptRole)
-        dialog.addButton("关闭", QMessageBox.RejectRole)
+        dialog = QDialog(self)
+        dialog.setObjectName("AppMessageDialog")
+        dialog.setWindowTitle("缺少配置文件")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(620)
+
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(22, 18, 22, 18)
+        root.setSpacing(16)
+
+        body = QHBoxLayout()
+        body.setSpacing(14)
+
+        icon_label = QLabel()
+        icon_label.setPixmap(self._message_icon_pixmap(QMessageBox.Warning))
+        icon_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        icon_label.setFixedWidth(56)
+        body.addWidget(icon_label, 0, Qt.AlignTop)
+
+        text_wrap = QWidget()
+        text_layout = QVBoxLayout(text_wrap)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(8)
+
+        title_label = QLabel("缺少配置文件")
+        title_label.setObjectName("MessageTitle")
+        title_label.setWordWrap(True)
+        text_layout.addWidget(title_label)
+
+        text_label = QLabel("未找到配置文件 cookie.txt 或 biz_magic.txt。")
+        text_label.setObjectName("MessageText")
+        text_label.setWordWrap(True)
+        text_layout.addWidget(text_label)
+
+        info_label = QLabel(info_text)
+        info_label.setObjectName("MessageInfo")
+        info_label.setWordWrap(True)
+        info_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        text_layout.addWidget(info_label)
+
+        body.addWidget(text_wrap, 1)
+        root.addLayout(body, 1)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(10)
+        actions.addStretch(1)
+
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("MessageSecondary")
+        close_button.clicked.connect(dialog.reject)
+        actions.addWidget(close_button)
+
+        choose_button = QPushButton("选择配置目录")
+        choose_button.setObjectName("MessagePrimary")
+        choose_button.clicked.connect(dialog.accept)
+        actions.addWidget(choose_button)
+
+        root.addLayout(actions)
         self._style_message_box(dialog)
-        dialog.exec()
-        if dialog.clickedButton() is choose_button:
+        if dialog.exec() == QDialog.Accepted:
             self.choose_config_dir()
 
     def on_start_clicked(self):
