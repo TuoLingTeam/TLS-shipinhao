@@ -693,6 +693,7 @@ class MainWindow(QWidget):
         self.order_count_badge.setAlignment(Qt.AlignCenter)
         self.order_count_badge.setMinimumWidth(72)
         self.order_count_badge.setFont(build_font(10, bold=True))
+        self.order_count_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self.order_count_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue']};"
@@ -705,6 +706,7 @@ class MainWindow(QWidget):
         self.tracking_count_badge.setAlignment(Qt.AlignCenter)
         self.tracking_count_badge.setMinimumWidth(72)
         self.tracking_count_badge.setFont(build_font(10, bold=True))
+        self.tracking_count_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self.tracking_count_badge.setStyleSheet(
             f"background: {APP_COLORS['orange_soft']};"
             f"color: {APP_COLORS['orange']};"
@@ -818,6 +820,7 @@ class MainWindow(QWidget):
 
         header = QWidget()
         header.setObjectName("CardHeader")
+        header.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(10)
@@ -825,6 +828,7 @@ class MainWindow(QWidget):
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
         title_label.setFont(build_font(15, bold=True))
+        title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         card.title_label = title_label
         header_layout.addWidget(title_label)
         header_layout.addWidget(badge, 0, Qt.AlignRight)
@@ -834,10 +838,11 @@ class MainWindow(QWidget):
         hint_label.setObjectName("SectionHint")
         hint_label.setWordWrap(False)
         hint_label.setFont(build_font(10))
+        hint_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         body_layout.addWidget(hint_label)
         card.hint_label = hint_label
 
-        body_layout.addWidget(editor)
+        body_layout.addWidget(editor, 1)
         card_layout.addWidget(body)
         return card
 
@@ -887,6 +892,11 @@ class MainWindow(QWidget):
         self.order_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
         self.tracking_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
         self.log_view.setFont(build_fixed_font(max(9, int(11 * scale))))
+
+        badge_height = max(36, int(40 * scale))
+        self.author_badge.setFixedHeight(badge_height)
+        self.order_count_badge.setFixedHeight(badge_height)
+        self.tracking_count_badge.setFixedHeight(badge_height)
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
