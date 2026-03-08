@@ -1,1 +1,0 @@
-../../Resources/charset_normalizer/__main__.py
