@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import threading
 
 import requests
 from PySide6.QtCore import QObject, Qt, QThread, Signal
@@ -670,6 +671,16 @@ class BatchWorker(QObject):
         super().__init__()
         self.order_ids = order_ids
         self.tracking_numbers = tracking_numbers
+        self._resume_event = threading.Event()
+        self._resume_event.set()
+
+    def pause(self):
+        """暂停后续任务。"""
+        self._resume_event.clear()
+
+    def resume(self):
+        """恢复任务。"""
+        self._resume_event.set()
 
     def run(self):
         """后台线程执行入口。"""
@@ -690,6 +701,7 @@ class BatchWorker(QObject):
                 for index, (order_id, tracking_number) in enumerate(
                     zip(self.order_ids, self.tracking_numbers), start=1
                 ):
+                    self._resume_event.wait()
                     self.step_started.emit(index, total_count, order_id)
                     try:
                         old_waybill = update_single_order(order_id, tracking_number, session)
@@ -726,6 +738,7 @@ class MainWindow(QWidget):
         super().__init__()
         self.worker_thread = None
         self.worker = None
+        self.is_paused = False
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setObjectName("AppRoot")
@@ -853,6 +866,29 @@ class MainWindow(QWidget):
                 color: #94A3B8;
                 border: 1px solid #CBD5E1;
             }}
+            QPushButton#PauseButton {{
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #334155,
+                    stop: 1 #1E293B
+                );
+                color: #E2E8F0;
+                border: 1px solid #475569;
+                border-radius: 16px;
+                padding: 16px 18px;
+                font-weight: 700;
+            }}
+            QPushButton#PauseButton:hover {{
+                background: #243243;
+            }}
+            QPushButton#PauseButton:pressed {{
+                background: #17212E;
+            }}
+            QPushButton#PauseButton:disabled {{
+                background: #E2E8F0;
+                color: #94A3B8;
+                border: 1px solid #CBD5E1;
+            }}
             QLabel#HeroTitle {{
                 color: {APP_COLORS["heading"]};
             }}
@@ -925,6 +961,7 @@ class MainWindow(QWidget):
         self._fit_window_to_screen()
         self.refresh_input_metrics()
         self._sync_responsive_metrics()
+        self.refresh_action_buttons()
 
     def _build_ui(self):
         """构建界面。"""
@@ -1057,17 +1094,31 @@ class MainWindow(QWidget):
         self.input_grid.addWidget(self.order_card, 0, 0)
         self.input_grid.addWidget(self.tracking_card, 0, 1)
         self.input_grid.addWidget(self.config_card, 0, 2)
-        self.input_grid.setColumnStretch(0, 5)
-        self.input_grid.setColumnStretch(1, 5)
-        self.input_grid.setColumnStretch(2, 4)
+        self.input_grid.setColumnStretch(0, 1)
+        self.input_grid.setColumnStretch(1, 1)
+        self.input_grid.setColumnStretch(2, 1)
 
-        self.submit_button = QPushButton("点击开始批量处理")
-        self.submit_button.setObjectName("PrimaryButton")
-        self.submit_button.setCursor(Qt.PointingHandCursor)
-        self.submit_button.setFont(build_font(17, bold=True))
-        self.submit_button.setMinimumHeight(56)
-        self.submit_button.clicked.connect(self.on_submit)
-        self.page_layout.addWidget(self.submit_button)
+        self.action_row = QWidget()
+        self.action_layout = QHBoxLayout(self.action_row)
+        self.action_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_layout.setSpacing(12)
+
+        self.pause_button = QPushButton("暂停处理")
+        self.pause_button.setObjectName("PauseButton")
+        self.pause_button.setCursor(Qt.PointingHandCursor)
+        self.pause_button.setFont(build_font(16, bold=True))
+        self.pause_button.setMinimumHeight(56)
+        self.pause_button.clicked.connect(self.on_pause_clicked)
+        self.action_layout.addWidget(self.pause_button, 1)
+
+        self.start_button = QPushButton("点击开始批量处理")
+        self.start_button.setObjectName("PrimaryButton")
+        self.start_button.setCursor(Qt.PointingHandCursor)
+        self.start_button.setFont(build_font(17, bold=True))
+        self.start_button.setMinimumHeight(56)
+        self.start_button.clicked.connect(self.on_start_clicked)
+        self.action_layout.addWidget(self.start_button, 1)
+        self.page_layout.addWidget(self.action_row)
 
         self.log_card = self._create_card(self.page_layout, object_name="LogCard")
         log_layout = QVBoxLayout(self.log_card)
@@ -1171,15 +1222,38 @@ class MainWindow(QWidget):
         card_layout.setSpacing(0)
 
         body = QWidget()
+        body.setObjectName("InputCardBody")
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(16, 14, 16, 14)
         body_layout.setSpacing(10)
 
+        header = QWidget()
+        header.setObjectName("CardHeader")
+        header.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(10)
+
         title_label = QLabel("配置目录")
         title_label.setObjectName("SectionTitle")
         title_label.setFont(build_font(15, bold=True))
-        body_layout.addWidget(title_label)
+        header_layout.addWidget(title_label)
         self.config_title_label = title_label
+
+        badge_placeholder = QLabel("目录")
+        badge_placeholder.setAlignment(Qt.AlignCenter)
+        badge_placeholder.setMinimumWidth(72)
+        badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        badge_placeholder.setStyleSheet(
+            "background: #E2E8F0;"
+            "color: #475569;"
+            "border: 1px solid #CBD5E1;"
+            "border-radius: 10px;"
+            "padding: 8px 10px;"
+        )
+        self.config_badge = badge_placeholder
+        header_layout.addWidget(badge_placeholder, 0, Qt.AlignRight)
+        body_layout.addWidget(header)
 
         hint_label = QLabel("选择 cookie.txt 与 biz_magic.txt 所在目录，程序会自动记住。")
         hint_label.setObjectName("SectionHint")
@@ -1193,7 +1267,7 @@ class MainWindow(QWidget):
         path_label.setWordWrap(True)
         path_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         path_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        body_layout.addWidget(path_label)
+        body_layout.addWidget(path_label, 1)
         self.config_path_label = path_label
 
         button = QPushButton("选择配置目录")
@@ -1254,12 +1328,14 @@ class MainWindow(QWidget):
         self.order_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
         self.tracking_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
         self.config_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
+        self.config_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
         self.config_hint_label.setFont(build_font(max(9, int(10 * scale))))
         self.config_path_label.setFont(build_font(max(9, int(10 * scale))))
         self.config_button.setFont(build_font(max(10, int(11 * scale)), bold=True))
         self.log_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
         self.log_hint_label.setFont(build_font(max(9, int(10 * scale))))
-        self.submit_button.setFont(build_font(max(14, int(17 * scale)), bold=True))
+        self.start_button.setFont(build_font(max(14, int(17 * scale)), bold=True))
+        self.pause_button.setFont(build_font(max(13, int(15 * scale)), bold=True))
         self.order_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
         self.tracking_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
         self.log_view.setFont(build_fixed_font(max(9, int(11 * scale))))
@@ -1270,18 +1346,26 @@ class MainWindow(QWidget):
         self.author_badge.setFixedHeight(badge_height)
         self.order_count_badge.setFixedHeight(badge_height)
         self.tracking_count_badge.setFixedHeight(badge_height)
-        self.submit_button.setFixedHeight(button_height)
+        self.config_badge.setFixedHeight(badge_height)
+        self.start_button.setFixedHeight(button_height)
+        self.pause_button.setFixedHeight(button_height)
         self.header_card.setMinimumHeight(header_height)
         self.order_edit.setFixedHeight(input_editor_height)
         self.tracking_edit.setFixedHeight(input_editor_height)
         self.log_view.setMinimumHeight(log_editor_height)
         self.config_button.setFixedHeight(max(40, int(44 * scale)))
 
+        card_target_height = max(
+            self.order_card.sizeHint().height(),
+            self.tracking_card.sizeHint().height(),
+            self.config_card.sizeHint().height(),
+        )
         config_non_path_height = self.config_card.sizeHint().height() - self.config_path_label.sizeHint().height()
-        config_target_height = self.order_card.sizeHint().height()
-        config_path_height = max(72, config_target_height - config_non_path_height)
+        config_path_height = max(72, card_target_height - config_non_path_height)
         self.config_path_label.setFixedHeight(config_path_height)
-        self.config_card.setFixedHeight(config_target_height)
+        self.order_card.setFixedHeight(card_target_height)
+        self.tracking_card.setFixedHeight(card_target_height)
+        self.config_card.setFixedHeight(card_target_height)
 
         self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
         self.page_layout.setSpacing(page_spacing)
@@ -1316,12 +1400,65 @@ class MainWindow(QWidget):
         """清空执行日志。"""
         self.log_view.clear()
 
+    def _style_message_box(self, dialog):
+        """统一提示弹窗视觉。"""
+        dialog.setStyleSheet(
+            """
+            QMessageBox {
+                background: #0F172A;
+            }
+            QMessageBox QLabel {
+                color: #E2E8F0;
+                font-size: 15px;
+                min-width: 320px;
+            }
+            QMessageBox QPushButton {
+                background: #1E3A8A;
+                color: #F8FAFC;
+                border: 1px solid #3B82F6;
+                border-radius: 10px;
+                padding: 10px 18px;
+                min-width: 96px;
+                font-weight: 700;
+            }
+            QMessageBox QPushButton:hover {
+                background: #1D4ED8;
+            }
+            QMessageBox QPushButton:pressed {
+                background: #1E40AF;
+            }
+            """
+        )
+        return dialog
+
+    def show_message(self, level, title, text, informative_text=""):
+        """显示统一样式的提示弹窗。"""
+        dialog = QMessageBox(self)
+        dialog.setIcon(level)
+        dialog.setWindowTitle(title)
+        dialog.setText(text)
+        if informative_text:
+            dialog.setInformativeText(informative_text)
+        dialog.setStandardButtons(QMessageBox.Ok)
+        self._style_message_box(dialog)
+        dialog.exec()
+
+    def refresh_action_buttons(self):
+        """同步开始/暂停按钮状态。"""
+        running = self.worker is not None
+        self.order_edit.setReadOnly(running)
+        self.tracking_edit.setReadOnly(running)
+        self.config_button.setDisabled(running)
+        self.pause_button.setDisabled((not running) or self.is_paused)
+        self.start_button.setDisabled(running and not self.is_paused)
+        self.start_button.setText("继续批量处理" if self.is_paused else "点击开始批量处理")
+        self.pause_button.setText("已暂停" if self.is_paused else "暂停处理")
+
     def set_submit_running(self, is_running):
         """切换按钮和输入框状态。"""
-        self.order_edit.setReadOnly(is_running)
-        self.tracking_edit.setReadOnly(is_running)
-        self.submit_button.setDisabled(is_running)
-        self.submit_button.setText("执行中..." if is_running else "点击开始批量处理")
+        if not is_running:
+            self.is_paused = False
+        self.refresh_action_buttons()
 
     def refresh_config_path_label(self):
         """刷新配置目录卡片文案。"""
@@ -1367,8 +1504,8 @@ class MainWindow(QWidget):
             missing_files.append(MAGIC_FILE_NAME)
 
         if missing_files:
-            QMessageBox.warning(
-                self,
+            self.show_message(
+                QMessageBox.Warning,
                 "目录不完整",
                 "所选目录缺少以下文件：\n"
                 + "\n".join(missing_files)
@@ -1378,7 +1515,11 @@ class MainWindow(QWidget):
 
         save_user_config_dir(selected_dir)
         self.refresh_config_path_label()
-        QMessageBox.information(self, "配置目录已更新", f"后续将优先使用：\n{selected_dir}")
+        self.show_message(
+            QMessageBox.Information,
+            "配置目录已更新",
+            f"后续将优先使用：\n{selected_dir}",
+        )
 
     def show_missing_config_error(self, searched_dirs):
         """提示缺少配置文件，并允许用户直接选择目录。"""
@@ -1395,24 +1536,35 @@ class MainWindow(QWidget):
         )
         choose_button = dialog.addButton("选择配置目录", QMessageBox.AcceptRole)
         dialog.addButton("关闭", QMessageBox.RejectRole)
+        self._style_message_box(dialog)
         dialog.exec()
         if dialog.clickedButton() is choose_button:
             self.choose_config_dir()
 
-    def on_submit(self):
-        """开始批量处理。"""
+    def on_start_clicked(self):
+        """开始或继续批量处理。"""
+        if self.worker is not None and self.is_paused:
+            self.worker.resume()
+            self.is_paused = False
+            self.refresh_action_buttons()
+            self.append_result_log("已继续执行剩余任务。")
+            return
+
+        if self.worker is not None:
+            return
+
         self.normalize_inputs()
 
         order_ids = parse_batch_input(self.order_edit.toPlainText())
         tracking_numbers = parse_batch_input(self.tracking_edit.toPlainText())
 
         if not order_ids or not tracking_numbers:
-            QMessageBox.information(self, "提示", "请输入订单号和新物流单号。")
+            self.show_message(QMessageBox.Information, "提示", "请输入订单号和新物流单号。")
             return
 
         if len(order_ids) != len(tracking_numbers):
-            QMessageBox.critical(
-                self,
+            self.show_message(
+                QMessageBox.Critical,
                 "数量不匹配",
                 f"订单号共 {len(order_ids)} 个，新物流单号共 {len(tracking_numbers)} 个。\n"
                 "请确保一一对应后再执行。",
@@ -1420,8 +1572,8 @@ class MainWindow(QWidget):
             return
 
         if len(order_ids) > MAX_BATCH_SIZE:
-            QMessageBox.critical(
-                self,
+            self.show_message(
+                QMessageBox.Critical,
                 "超出数量限制",
                 f"一次最多处理 {MAX_BATCH_SIZE} 条，请拆分后再执行。",
             )
@@ -1450,11 +1602,23 @@ class MainWindow(QWidget):
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
         self.worker_thread.finished.connect(self._clear_worker_refs)
         self.worker_thread.start()
+        self.refresh_action_buttons()
+
+    def on_pause_clicked(self):
+        """暂停后续批量任务。"""
+        if self.worker is None or self.is_paused:
+            return
+        self.worker.pause()
+        self.is_paused = True
+        self.refresh_action_buttons()
+        self.append_result_log("已暂停处理，当前单完成后将停止继续执行。")
 
     def _clear_worker_refs(self):
         """清理线程引用。"""
         self.worker = None
         self.worker_thread = None
+        self.is_paused = False
+        self.refresh_action_buttons()
 
     def _on_worker_started(self, total_count):
         """记录任务开始。"""
@@ -1493,9 +1657,9 @@ class MainWindow(QWidget):
         self.append_result_log(summary)
 
         if failure_count > 0:
-            QMessageBox.warning(self, "批量执行完成", summary)
+            self.show_message(QMessageBox.Warning, "批量执行完成", summary)
         else:
-            QMessageBox.information(self, "批量执行完成", summary)
+            self.show_message(QMessageBox.Information, "批量执行完成", summary)
 
 
 def main():
