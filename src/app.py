@@ -78,6 +78,27 @@ COOKIE_FILE_NAME = "cookie.txt"
 MAGIC_FILE_NAME = "biz_magic.txt"
 USER_CONFIG_POINTER = "selected_config_dir.txt"
 _CONFIG_DIR_CACHE = None
+_DELIVERY_COMPANY_CACHE = None
+
+ORDER_DETAIL_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail"
+ORDER_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"
+ORDER_DELIVERY_UPDATE_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateOrderDeliveryInfo"
+DELIVERY_REGISTRY_MAX_PAGES = 5
+DELIVERY_REGISTRY_PAGE_SIZE = 30
+DELIVERY_MISMATCH_MESSAGE = "快递单号与所选物流商不匹配"
+
+CARRIER_NAME_ALIASES = {
+    "圆通速递": ("圆通速递", "圆通", "yto"),
+    "中通快递": ("中通快递", "中通", "zto"),
+    "申通快递": ("申通快递", "申通", "sto"),
+    "韵达速递": ("韵达速递", "韵达", "yunda", "yd"),
+    "顺丰速运": ("顺丰速运", "顺丰", "sf"),
+    "极兔速递": ("极兔速递", "极兔", "j&t", "jt"),
+    "京东快递": ("京东快递", "京东", "jd"),
+    "邮政EMS": ("邮政ems", "ems", "中国邮政", "邮政"),
+    "德邦快递": ("德邦快递", "德邦"),
+    "菜鸟速递": ("菜鸟速递", "菜鸟"),
+}
 
 
 class ConfigNotFoundError(FileNotFoundError):
@@ -301,14 +322,81 @@ def create_session():
     return session
 
 
-def fetch_delivery_product_info(order_id, session):
-    """查询单个订单详情并返回物流产品信息。"""
-    url = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail"
+def normalize_carrier_name(name):
+    """归一化物流公司名称，便于识别和映射。"""
+    if not name:
+        return ""
+    compact_name = re.sub(r"\s+", "", str(name)).lower()
+    for canonical_name, aliases in CARRIER_NAME_ALIASES.items():
+        for alias in aliases:
+            alias_compact = re.sub(r"\s+", "", alias).lower()
+            if alias_compact and alias_compact in compact_name:
+                return canonical_name
+    return str(name).strip()
+
+
+def detect_carrier_candidates(tracking_number):
+    """根据单号识别可能的物流公司。"""
+    tracking = re.sub(r"\s+", "", str(tracking_number)).upper()
+    candidates = []
+
+    def add(name):
+        if name and name not in candidates:
+            candidates.append(name)
+
+    if tracking.startswith("YT") or re.match(r"^7690\d{8,}$", tracking):
+        add("圆通速递")
+    if tracking.startswith("ZTO") or tracking.startswith("ZT"):
+        add("中通快递")
+    if tracking.startswith("STO") or tracking.startswith("ST"):
+        add("申通快递")
+    if tracking.startswith("YD") or tracking.startswith("YD"):
+        add("韵达速递")
+    if tracking.startswith("SF"):
+        add("顺丰速运")
+    if tracking.startswith("JT") or tracking.startswith("JT"):
+        add("极兔速递")
+    if tracking.startswith("JD"):
+        add("京东快递")
+    if tracking.startswith("EMS") or tracking.startswith("EY") or tracking.startswith("YZ"):
+        add("邮政EMS")
+    if tracking.startswith("DB"):
+        add("德邦快递")
+    return candidates
+
+
+def add_delivery_company_mapping(registry, delivery_id, delivery_name):
+    """向映射表中登记物流公司与 deliveryId。"""
+    if delivery_id in (None, "") or not delivery_name:
+        return
+    canonical_name = normalize_carrier_name(delivery_name)
+    company_list = registry.setdefault(canonical_name, [])
+    delivery_id_str = str(delivery_id)
+    if any(item["deliveryId"] == delivery_id_str for item in company_list):
+        return
+    company_list.append({"deliveryId": delivery_id_str, "deliveryName": str(delivery_name)})
+
+
+def collect_delivery_company_mappings(payload, registry):
+    """递归扫描接口返回中的物流公司信息。"""
+    if isinstance(payload, dict):
+        add_delivery_company_mapping(registry, payload.get("deliveryId"), payload.get("deliveryName"))
+        for value in payload.values():
+            collect_delivery_company_mappings(value, registry)
+        return
+
+    if isinstance(payload, list):
+        for item in payload:
+            collect_delivery_company_mappings(item, registry)
+
+
+def fetch_order_detail_payload(order_id, session):
+    """拉取完整订单详情响应。"""
     params = {"token": "", "lang": "zh_CN"}
     data = json.dumps({"id": str(order_id)}, separators=(",", ":"))
 
     try:
-        response = session.post(url, params=params, data=data, timeout=REQUEST_TIMEOUT)
+        response = session.post(ORDER_DETAIL_URL, params=params, data=data, timeout=REQUEST_TIMEOUT)
     except requests.RequestException as exc:
         raise RuntimeError(f"获取订单详情失败：{exc}") from exc
 
@@ -330,6 +418,13 @@ def fetch_delivery_product_info(order_id, session):
             f"获取订单详情失败：{get_payload_error(detail_payload, '订单详情接口返回失败。')}"
         )
 
+    return detail_payload
+
+
+def fetch_delivery_product_info(order_id, session):
+    """查询单个订单详情并返回物流产品信息。"""
+    detail_payload = fetch_order_detail_payload(order_id, session)
+
     delivery_product_list = (
         detail_payload.get("expressInfo", {}).get("deliveryProductInfo") or []
     )
@@ -348,26 +443,138 @@ def fetch_delivery_product_info(order_id, session):
     return delivery_product_info
 
 
-def update_delivery_info(order_id, tracking_number, delivery_product_info, session):
+def fetch_order_search_payload(session, page_num, page_size=DELIVERY_REGISTRY_PAGE_SIZE):
+    """拉取订单列表，用于构建物流公司映射。"""
+    payload = {
+        "isSearch": False,
+        "pageSize": page_size,
+        "pageNum": page_num,
+        "orderStatus": 100,
+        "overTime": 0,
+        "pengingShipOneDay": 0,
+        "pengingShipSixHour": 0,
+        "expediteDelivery": 0,
+        "stockoutPunishAlert": 0,
+        "waybillStatus": 0,
+        "onAftersaleOrderExist": 0,
+    }
+    try:
+        response = session.post(
+            ORDER_SEARCH_URL,
+            params={"token": "", "lang": "zh_CN"},
+            json=payload,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"获取订单列表失败：{exc}") from exc
+
+    if response.status_code != 200:
+        raise RuntimeError(f"获取订单列表失败：{get_response_error(response)}")
+
+    try:
+        result = response.json()
+    except ValueError as exc:
+        raise RuntimeError("获取订单列表失败：接口返回了非 JSON 响应。") from exc
+
+    if result.get("code") not in (None, 0):
+        raise RuntimeError(f"获取订单列表失败：{get_payload_error(result, '订单列表接口返回失败。')}")
+
+    return result
+
+
+def build_delivery_company_registry(session, seed_order_ids=None):
+    """从真实订单数据中构建 deliveryName -> deliveryId 映射。"""
+    registry = {}
+    for order_id in seed_order_ids or []:
+        try:
+            detail_payload = fetch_order_detail_payload(order_id, session)
+        except Exception:
+            continue
+        collect_delivery_company_mappings(detail_payload, registry)
+
+    for page_num in range(1, DELIVERY_REGISTRY_MAX_PAGES + 1):
+        try:
+            order_payload = fetch_order_search_payload(session, page_num)
+        except Exception:
+            break
+        collect_delivery_company_mappings(order_payload, registry)
+        order_list = order_payload.get("orderList") or order_payload.get("list") or []
+        if not order_list:
+            break
+
+    return registry
+
+
+def get_delivery_company_registry(session, seed_order_ids=None):
+    """获取并缓存物流公司映射表。"""
+    global _DELIVERY_COMPANY_CACHE
+    if _DELIVERY_COMPANY_CACHE is None:
+        _DELIVERY_COMPANY_CACHE = build_delivery_company_registry(session, seed_order_ids)
+        return _DELIVERY_COMPANY_CACHE
+
+    if seed_order_ids:
+        seed_registry = build_delivery_company_registry(session, seed_order_ids)
+        for company_name, options in seed_registry.items():
+            existing = _DELIVERY_COMPANY_CACHE.setdefault(company_name, [])
+            existing_ids = {item["deliveryId"] for item in existing}
+            for option in options:
+                if option["deliveryId"] not in existing_ids:
+                    existing.append(option)
+    return _DELIVERY_COMPANY_CACHE
+
+
+def build_delivery_candidates(order_id, tracking_number, delivery_product_info, session):
+    """构建当前单号可能对应的 deliveryId 候选列表。"""
+    registry = get_delivery_company_registry(session, seed_order_ids=[order_id])
+    candidates = []
+    seen_keys = set()
+
+    def add_candidate(delivery_id, delivery_name):
+        if delivery_id in (None, ""):
+            return
+        key = (str(delivery_id), str(delivery_name or ""))
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        candidates.append({"deliveryId": str(delivery_id), "deliveryName": str(delivery_name or "")})
+
+    add_candidate(delivery_product_info.get("deliveryId"), delivery_product_info.get("deliveryName"))
+
+    for company_name in detect_carrier_candidates(tracking_number):
+        for option in registry.get(company_name, []):
+            add_candidate(option.get("deliveryId"), option.get("deliveryName"))
+
+    for option_list in registry.values():
+        for option in option_list:
+            add_candidate(option.get("deliveryId"), option.get("deliveryName"))
+
+    return candidates
+
+
+def update_delivery_info(order_id, tracking_number, delivery_product_info, session, delivery_override=None):
     """提交单个订单的物流更新。"""
-    url = (
-        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/"
-        "ship/cgi/updateOrderDeliveryInfo"
-    )
     params = {"token": "", "lang": "zh_CN"}
+    selected_delivery_id = (
+        delivery_override.get("deliveryId") if delivery_override else delivery_product_info.get("deliveryId")
+    )
+    selected_delivery_name = (
+        delivery_override.get("deliveryName") if delivery_override else delivery_product_info.get("deliveryName")
+    )
 
     delivery_item = {
         "waybillId": str(tracking_number),
-        "deliveryId": delivery_product_info.get("deliveryId"),
+        "deliveryId": selected_delivery_id,
         "productInfos": normalize_product_infos(delivery_product_info),
         "isAllProduct": delivery_product_info.get("isAllProduct", False),
         "deliverType": delivery_product_info.get("deliverType", 1),
         "waybillStatus": delivery_product_info.get("waybillStatus", 2),
     }
-    for optional_key in ("deliveryName", "deliveryTime"):
-        optional_value = delivery_product_info.get(optional_key)
-        if optional_value not in (None, ""):
-            delivery_item[optional_key] = optional_value
+    if selected_delivery_name not in (None, ""):
+        delivery_item["deliveryName"] = selected_delivery_name
+    if delivery_override is None:
+        delivery_time = delivery_product_info.get("deliveryTime")
+        if delivery_time not in (None, ""):
+            delivery_item["deliveryTime"] = delivery_time
 
     payload = json.dumps(
         {
@@ -381,7 +588,7 @@ def update_delivery_info(order_id, tracking_number, delivery_product_info, sessi
     )
 
     try:
-        response = session.post(url, params=params, data=payload, timeout=REQUEST_TIMEOUT)
+        response = session.post(ORDER_DELIVERY_UPDATE_URL, params=params, data=payload, timeout=REQUEST_TIMEOUT)
     except requests.RequestException as exc:
         raise RuntimeError(f"更新物流信息失败：{exc}") from exc
 
@@ -406,8 +613,25 @@ def update_single_order(order_id, tracking_number, session):
     """顺序执行单个订单更新。"""
     delivery_product_info = fetch_delivery_product_info(order_id, session)
     old_waybill = delivery_product_info.get("waybillId", "")
-    update_delivery_info(order_id, tracking_number, delivery_product_info, session)
-    return old_waybill
+    last_error = None
+
+    for delivery_option in build_delivery_candidates(order_id, tracking_number, delivery_product_info, session):
+        try:
+            override = None
+            current_delivery_id = str(delivery_product_info.get("deliveryId") or "")
+            if delivery_option.get("deliveryId") != current_delivery_id:
+                override = delivery_option
+            update_delivery_info(order_id, tracking_number, delivery_product_info, session, override)
+            return old_waybill
+        except RuntimeError as exc:
+            last_error = exc
+            if DELIVERY_MISMATCH_MESSAGE in str(exc):
+                continue
+            raise
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("更新物流信息失败：未识别到可用的物流公司映射。")
 
 
 def build_font(size, bold=False):
