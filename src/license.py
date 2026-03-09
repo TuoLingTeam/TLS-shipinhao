@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""TLS-shipinhao 的本地离线授权模块。"""
+"""TLS-shipinhao 授权模块（在线激活 + 本地缓存）。"""
 
 import base64
 import hashlib
@@ -13,6 +13,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -161,23 +163,59 @@ def _license_path() -> str:
 
 
 def activate_license(key: str) -> dict:
-    """激活许可证（校验卡密 + 绑定设备 + 写入 license.json）。"""
+    """激活许可证（在线验证 + 设备绑定 + 写入 license.json）。
+
+    流程：
+    1. 本地校验卡密格式（快速失败）
+    2. 调用后端 API 验证卡密并绑定设备
+    3. 后端通过后写入本地 license.json
+    """
+    from .constants import LICENSE_ACTIVATE_URL, LICENSE_API_TIMEOUT
+
+    # 1. 本地快速校验格式
     valid, plan_days = validate_key(key)
     if not valid:
         raise ValueError("卡密无效：格式错误或签名不匹配")
     if plan_days <= 0:
         raise ValueError("卡密无效：有效期异常")
 
-    now = datetime.now(timezone.utc)
-    expires = now + timedelta(days=plan_days)
     device_id = get_device_id()
+    raw_fingerprint = _collect_raw_fingerprint()
 
+    # 2. 调用后端 API
+    try:
+        resp = requests.post(
+            LICENSE_ACTIVATE_URL,
+            json={
+                "key": key.strip().upper(),
+                "device_id": device_id,
+                "device_fingerprint": raw_fingerprint,
+            },
+            timeout=LICENSE_API_TIMEOUT,
+        )
+    except requests.ConnectionError:
+        raise ValueError("激活失败：无法连接服务器，请检查网络后重试。")
+    except requests.Timeout:
+        raise ValueError("激活失败：服务器响应超时，请稍后重试。")
+    except requests.RequestException as exc:
+        raise ValueError(f"激活失败：网络错误 - {exc}")
+
+    try:
+        result = resp.json()
+    except ValueError:
+        raise ValueError(f"激活失败：服务器返回了非 JSON 响应（HTTP {resp.status_code}）")
+
+    if not result.get("success"):
+        message = result.get("message", "未知错误")
+        raise ValueError(f"激活失败：{message}")
+
+    # 3. 后端验证通过，写入本地 license.json
     info = {
         "key": key.strip().upper(),
-        "activated_at": now.isoformat(timespec="seconds"),
-        "expires_at": expires.isoformat(timespec="seconds"),
+        "activated_at": result.get("activated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        "expires_at": result.get("expires_at", ""),
         "device_id": device_id,
-        "plan_days": plan_days,
+        "plan_days": result.get("plan_days", plan_days),
     }
 
     path = _license_path()
@@ -185,7 +223,7 @@ def activate_license(key: str) -> dict:
     with open(path, "w", encoding="utf-8") as file:
         json.dump(info, file, ensure_ascii=False, indent=2)
 
-    logger.info("License activated: expires=%s, device=%s", expires.isoformat(), device_id)
+    logger.info("License activated via API: expires=%s, device=%s", info["expires_at"], device_id)
     return info
 
 
