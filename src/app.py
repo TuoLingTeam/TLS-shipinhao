@@ -35,10 +35,10 @@ WINDOW_TITLE = "驼铃视频小店中差评处理"
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
 DESIGN_WIDTH = 1240
 DESIGN_HEIGHT = 980
-DEFAULT_WINDOW_WIDTH = 1880
-DEFAULT_WINDOW_HEIGHT = 1668
-MIN_WINDOW_WIDTH = 1880
-MIN_WINDOW_HEIGHT = 1668
+MAC_DEFAULT_WINDOW_WIDTH = 1880
+MAC_DEFAULT_WINDOW_HEIGHT = 1668
+WINDOWS_DEFAULT_WINDOW_WIDTH = 1520
+WINDOWS_DEFAULT_WINDOW_HEIGHT = 980
 
 APP_COLORS = {
     "bg": "#E9EFF6",
@@ -94,6 +94,13 @@ class ConfigNotFoundError(FileNotFoundError):
     def __init__(self, searched_dirs):
         self.searched_dirs = searched_dirs
         super().__init__("未找到配置文件。")
+
+
+def get_platform_default_window_size():
+    """按平台返回默认窗口尺寸。"""
+    if sys.platform.startswith("win"):
+        return WINDOWS_DEFAULT_WINDOW_WIDTH, WINDOWS_DEFAULT_WINDOW_HEIGHT
+    return MAC_DEFAULT_WINDOW_WIDTH, MAC_DEFAULT_WINDOW_HEIGHT
 
 
 def get_app_dir():
@@ -601,14 +608,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setObjectName("AppRoot")
-        screen = self.screen() or QApplication.primaryScreen()
-        scale = max(1.0, screen.devicePixelRatio()) if screen is not None else 1.0
-        available = screen.availableGeometry() if screen is not None else None
-        fixed_width = int(round(DEFAULT_WINDOW_WIDTH / scale))
-        fixed_height = int(round(DEFAULT_WINDOW_HEIGHT / scale))
-        if available is not None:
-            fixed_width = min(fixed_width, available.width())
-            fixed_height = min(fixed_height, available.height())
+        fixed_width, fixed_height = self._resolve_fixed_window_size()
         self.setFixedSize(fixed_width, fixed_height)
         self.setStyleSheet(
             f"""
@@ -1179,15 +1179,21 @@ class MainWindow(QWidget):
 
     def _fit_window_to_screen(self):
         """按屏幕缩放比例锁定固定窗口尺寸。"""
+        fixed_width, fixed_height = self._resolve_fixed_window_size()
+        self.setFixedSize(fixed_width, fixed_height)
+
+    def _resolve_fixed_window_size(self):
+        """结合平台默认值与屏幕信息，计算最终窗口固定尺寸。"""
+        default_width, default_height = get_platform_default_window_size()
         screen = self.screen() or QApplication.primaryScreen()
         scale = max(1.0, screen.devicePixelRatio()) if screen is not None else 1.0
         available = screen.availableGeometry() if screen is not None else None
-        fixed_width = int(round(DEFAULT_WINDOW_WIDTH / scale))
-        fixed_height = int(round(DEFAULT_WINDOW_HEIGHT / scale))
+        fixed_width = int(round(default_width / scale))
+        fixed_height = int(round(default_height / scale))
         if available is not None:
             fixed_width = min(fixed_width, available.width())
             fixed_height = min(fixed_height, available.height())
-        self.setFixedSize(fixed_width, fixed_height)
+        return fixed_width, fixed_height
 
     def _sync_responsive_metrics(self):
         """窗口变化时同步紧凑布局尺寸。"""
