@@ -87,6 +87,8 @@ APP_COLORS = {
 CONFIG_DIR_NAME = ".tls-shipinhao"
 COOKIE_FILE_NAME = "cookie.txt"
 MAGIC_FILE_NAME = "biz_magic.txt"
+COOKIE_FILE_STEM = "cookie"
+MAGIC_FILE_STEM = "biz_magic"
 USER_CONFIG_POINTER = "selected_config_dir.txt"
 _CONFIG_DIR_CACHE = None
 
@@ -166,20 +168,83 @@ def get_config_search_dirs():
     return search_dirs
 
 
+def _strip_txt_suffixes(filename):
+    """去掉文件名末尾连续 .txt 后缀（兼容 Windows 双后缀场景）。"""
+    normalized = (filename or "").strip().lower()
+    while normalized.endswith(".txt"):
+        normalized = normalized[:-4]
+    return normalized
+
+
+def _classify_config_file_name(filename):
+    """识别配置文件类型：cookie 或 biz_magic。"""
+    stem = _strip_txt_suffixes(filename)
+    if stem == COOKIE_FILE_STEM:
+        return "cookie"
+    if stem == MAGIC_FILE_STEM:
+        return "magic"
+    return None
+
+
+def _config_file_priority(filename, file_type):
+    """配置文件命名优先级：标准名 > 无后缀名 > 其它可识别变体。"""
+    normalized = (filename or "").strip().lower()
+    if file_type == "cookie":
+        if normalized == COOKIE_FILE_NAME:
+            return 30
+        if normalized == COOKIE_FILE_STEM:
+            return 20
+        return 10
+    if normalized == MAGIC_FILE_NAME:
+        return 30
+    if normalized == MAGIC_FILE_STEM:
+        return 20
+    return 10
+
+
+def resolve_config_files_in_dir(config_dir):
+    """在目录中解析 cookie 与 biz_magic 实际文件路径。"""
+    if not config_dir or not os.path.isdir(config_dir):
+        return None
+
+    resolved = {}
+    try:
+        filenames = os.listdir(config_dir)
+    except OSError:
+        return None
+
+    for filename in filenames:
+        full_path = os.path.join(config_dir, filename)
+        if not os.path.isfile(full_path):
+            continue
+
+        file_type = _classify_config_file_name(filename)
+        if not file_type:
+            continue
+
+        current_path = resolved.get(file_type)
+        if current_path is None:
+            resolved[file_type] = full_path
+            continue
+
+        current_name = os.path.basename(current_path)
+        if _config_file_priority(filename, file_type) > _config_file_priority(current_name, file_type):
+            resolved[file_type] = full_path
+
+    if "cookie" in resolved and "magic" in resolved:
+        return resolved["cookie"], resolved["magic"]
+    return None
+
+
 def resolve_config_dir():
     """解析实际可用的配置目录。"""
     global _CONFIG_DIR_CACHE
-    if _CONFIG_DIR_CACHE:
-        cookie_path = os.path.join(_CONFIG_DIR_CACHE, COOKIE_FILE_NAME)
-        magic_path = os.path.join(_CONFIG_DIR_CACHE, MAGIC_FILE_NAME)
-        if os.path.exists(cookie_path) and os.path.exists(magic_path):
-            return _CONFIG_DIR_CACHE
+    if _CONFIG_DIR_CACHE and resolve_config_files_in_dir(_CONFIG_DIR_CACHE):
+        return _CONFIG_DIR_CACHE
 
     search_dirs = get_config_search_dirs()
     for config_dir in search_dirs:
-        cookie_path = os.path.join(config_dir, COOKIE_FILE_NAME)
-        magic_path = os.path.join(config_dir, MAGIC_FILE_NAME)
-        if os.path.exists(cookie_path) and os.path.exists(magic_path):
+        if resolve_config_files_in_dir(config_dir):
             _CONFIG_DIR_CACHE = config_dir
             return config_dir
 
@@ -187,9 +252,14 @@ def resolve_config_dir():
 
 
 def getCookie():
-    """从 cookie.txt 文件读取 Cookie 信息。"""
-    path = os.path.join(resolve_config_dir(), COOKIE_FILE_NAME)
-    with open(path, "r", encoding="utf-8") as file:
+    """读取 Cookie 配置（兼容 cookie/cookie.txt/cookie.txt.txt）。"""
+    config_dir = resolve_config_dir()
+    file_paths = resolve_config_files_in_dir(config_dir)
+    if not file_paths:
+        raise ConfigNotFoundError(get_config_search_dirs())
+    cookie_path, _ = file_paths
+
+    with open(cookie_path, "r", encoding="utf-8") as file:
         content = file.read().strip()
 
     pairs = content.split(";")
@@ -203,9 +273,14 @@ def getCookie():
 
 
 def getMagic():
-    """从 biz_magic.txt 文件读取 magic 值。"""
-    path = os.path.join(resolve_config_dir(), MAGIC_FILE_NAME)
-    with open(path, "r", encoding="utf-8") as file:
+    """读取 magic 配置（兼容 biz_magic/biz_magic.txt/biz_magic.txt.txt）。"""
+    config_dir = resolve_config_dir()
+    file_paths = resolve_config_files_in_dir(config_dir)
+    if not file_paths:
+        raise ConfigNotFoundError(get_config_search_dirs())
+    _, magic_path = file_paths
+
+    with open(magic_path, "r", encoding="utf-8") as file:
         return file.read().strip()
 
 
@@ -1335,7 +1410,7 @@ class MainWindow(QWidget):
 
         card = self._create_input_card(
             "第三步：选择配置目录",
-            "选择 cookie.txt 与 biz_magic.txt 所在目录。",
+            "选择 cookie/biz_magic 所在目录（支持 .txt / 无后缀 / 双 .txt）。",
             self.config_badge,
             shell,
             APP_COLORS["blue"],
@@ -1654,13 +1729,13 @@ class MainWindow(QWidget):
             text = (
                 "当前已生效目录：\n"
                 f"{resolved_dir}\n\n"
-                "程序会优先读取这里的 cookie.txt 与 biz_magic.txt。"
+                "程序会优先读取这里的 cookie/biz_magic 配置（支持 .txt / 无后缀 / 双 .txt）。"
             )
         elif saved_dir:
             text = (
                 "已记录目录：\n"
                 f"{saved_dir}\n\n"
-                "但这里暂未同时找到 cookie.txt 与 biz_magic.txt。"
+                "但这里暂未同时找到 cookie 与 biz_magic 配置文件。"
             )
         else:
             text = (
@@ -1677,13 +1752,23 @@ class MainWindow(QWidget):
         if not selected_dir:
             return
 
-        cookie_path = os.path.join(selected_dir, COOKIE_FILE_NAME)
-        magic_path = os.path.join(selected_dir, MAGIC_FILE_NAME)
+        resolved_files = resolve_config_files_in_dir(selected_dir)
         missing_files = []
-        if not os.path.exists(cookie_path):
-            missing_files.append(COOKIE_FILE_NAME)
-        if not os.path.exists(magic_path):
-            missing_files.append(MAGIC_FILE_NAME)
+        if not resolved_files:
+            try:
+                present_types = {
+                    _classify_config_file_name(name) for name in os.listdir(selected_dir)
+                } - {None}
+            except OSError:
+                present_types = set()
+
+            if "cookie" not in present_types:
+                missing_files.append("cookie(.txt)")
+            if "magic" not in present_types:
+                missing_files.append("biz_magic(.txt)")
+            if not missing_files:
+                missing_files.append("cookie(.txt)")
+                missing_files.append("biz_magic(.txt)")
 
         if missing_files:
             self.show_message(
@@ -1691,7 +1776,7 @@ class MainWindow(QWidget):
                 "目录不完整",
                 "所选目录缺少以下文件：\n"
                 + "\n".join(missing_files)
-                + "\n\n请选择同时包含 cookie.txt 与 biz_magic.txt 的目录。",
+                + "\n\n请选择同时包含 cookie 与 biz_magic 的目录（支持 .txt / 无后缀 / 双 .txt）。",
             )
             return
 
@@ -1715,7 +1800,7 @@ class MainWindow(QWidget):
         dialog, actions = self._create_message_dialog_base(
             QMessageBox.Warning,
             "缺少配置文件",
-            "未找到配置文件 cookie.txt 或 biz_magic.txt。",
+            "未找到配置文件 cookie/biz_magic（含 .txt 变体）。",
             info_text,
             min_width=620,
         )
