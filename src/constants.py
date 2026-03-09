@@ -83,7 +83,7 @@ DELIVERY_MISMATCH_MESSAGE = "快递单号与所选物流商不匹配"
 # ---------------------------------------------------------------------------
 # 卡密验证后端 API
 # ---------------------------------------------------------------------------
-LICENSE_API_BASE_URL = "https://tls-shipinhao-license-api.<YOUR_SUBDOMAIN>.workers.dev"
+LICENSE_API_BASE_URL = "https://api.199908.top"
 LICENSE_ACTIVATE_URL = f"{LICENSE_API_BASE_URL}/api/activate"
 LICENSE_VERIFY_URL = f"{LICENSE_API_BASE_URL}/api/verify"
 LICENSE_API_TIMEOUT = 15

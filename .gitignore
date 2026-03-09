@@ -58,3 +58,6 @@ htmlcov/
 
 # Selenium
 *.crdownload
+
+# Node.js
+node_modules/
