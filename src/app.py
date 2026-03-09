@@ -157,15 +157,11 @@ def save_user_config_dir(config_dir):
 
 
 def get_config_search_dirs():
-    """按优先级返回配置目录搜索链路。"""
-    search_dirs = []
-    for candidate in (get_app_dir(), _CONFIG_DIR_CACHE or get_saved_user_config_dir(), get_home_config_dir()):
-        if not candidate:
-            continue
-        normalized = os.path.abspath(candidate)
-        if normalized not in search_dirs:
-            search_dirs.append(normalized)
-    return search_dirs
+    """仅返回用户手动选择过的配置目录。"""
+    selected_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir()
+    if not selected_dir:
+        return []
+    return [os.path.abspath(selected_dir)]
 
 
 def _strip_txt_suffixes(filename):
@@ -237,18 +233,25 @@ def resolve_config_files_in_dir(config_dir):
 
 
 def resolve_config_dir():
-    """解析实际可用的配置目录。"""
+    """解析实际可用的配置目录（仅用户手选目录）。"""
     global _CONFIG_DIR_CACHE
     if _CONFIG_DIR_CACHE and is_config_dir_ready(_CONFIG_DIR_CACHE):
         return _CONFIG_DIR_CACHE
 
     search_dirs = get_config_search_dirs()
+    if not search_dirs:
+        raise ConfigNotFoundError(["未选择配置目录，请先点击“选择配置目录”。"])
+
     for config_dir in search_dirs:
         if is_config_dir_ready(config_dir):
             _CONFIG_DIR_CACHE = config_dir
             return config_dir
-
-    raise ConfigNotFoundError(search_dirs)
+    raise ConfigNotFoundError(
+        [
+            f"当前选择目录：{search_dirs[0]}",
+            "该目录下未找到可用配置（需 cookie，且包含 biz_magic 或配套 biz_magic 文件）。",
+        ]
+    )
 
 
 def parse_cookie_content(content):
@@ -1188,7 +1191,7 @@ class MainWindow(QWidget):
         title_box.addWidget(title_label)
 
         self.title_description_label = QLabel(
-            "批量处理中差评、品质退款订单。"
+            "软件实现自动化批量处理中差评、品质退款订单的功能。"
         )
         self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(False)
@@ -1469,7 +1472,7 @@ class MainWindow(QWidget):
 
         card = self._create_input_card(
             "第三步：选择配置目录",
-            "选择 cookie 所在目录（兼容 .txt / 无后缀 / 双 .txt）。",
+            "必须手动选择 cookie 所在目录（支持 .txt / 无后缀 / 双 .txt）。",
             self.config_badge,
             shell,
             APP_COLORS["blue"],
@@ -1788,7 +1791,7 @@ class MainWindow(QWidget):
             text = (
                 "当前已生效目录：\n"
                 f"{resolved_dir}\n\n"
-                "程序会读取这里的 cookie 文件，并自动从中提取 biz_magic。"
+                "程序会使用这里的 cookie 文件。"
             )
         elif saved_dir:
             text = (
@@ -1799,14 +1802,13 @@ class MainWindow(QWidget):
         else:
             text = (
                 "当前未指定目录。\n\n"
-                "程序会依次在 .app 同级目录、你手动选择的目录、"
-                "主目录固定配置目录 ~/.tls-shipinhao 中查找。"
+                "请点击下方按钮手动选择配置目录。"
             )
         self.config_path_label.setText(text)
 
     def choose_config_dir(self):
         """选择配置文件所在目录并记住。"""
-        start_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir() or get_app_dir()
+        start_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir() or os.path.expanduser("~")
         selected_dir = QFileDialog.getExistingDirectory(self, "选择配置目录", start_dir)
         if not selected_dir:
             return
@@ -1853,17 +1855,15 @@ class MainWindow(QWidget):
 
     def show_missing_config_error(self, searched_dirs):
         """提示缺少配置文件，并允许用户直接选择目录。"""
-        info_text = (
-            "程序会按以下顺序查找配置目录:\n"
-            "1. .app 同级目录\n"
-            "2. 你手动选择并记住的目录\n"
-            "3. 主目录固定配置目录 ~/.tls-shipinhao\n\n"
-            f"本次已检查:\n{searched_dirs}"
-        )
+        if isinstance(searched_dirs, str):
+            details = searched_dirs
+        else:
+            details = "\n".join(str(item) for item in searched_dirs)
+        info_text = f"错误详情:\n{details}"
         dialog, actions = self._create_message_dialog_base(
             QMessageBox.Warning,
             "缺少配置文件",
-            "未找到可用的 cookie 配置文件（或 cookie 中缺少 biz_magic）。",
+            "当前未找到可用配置目录，请先手动选择目录。",
             info_text,
             min_width=620,
         )
@@ -1975,7 +1975,7 @@ class MainWindow(QWidget):
 
         self.clear_result_log()
         self.append_result_log(
-            f"开始执行：共 {len(order_ids)} 条。输入支持空格、英文逗号、中文逗号或换行分隔。"
+            f"开始执行：共 {len(order_ids)} 条。"
         )
         self.set_submit_running(True)
 

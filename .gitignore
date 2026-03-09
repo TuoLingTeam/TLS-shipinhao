@@ -12,6 +12,7 @@ env/
 ENV/
 *.egg-info/
 build/
+.pyinstaller/
 
 # Downloaded files
 downloaded_invoices/*.pdf
