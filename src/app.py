@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -28,10 +29,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+try:
+    from .license import activate_license, check_stored_license, get_license_info
+except ImportError:  # pragma: no cover
+    from license import activate_license, check_stored_license, get_license_info
+
 
 MAX_BATCH_SIZE = 100
 REQUEST_TIMEOUT = 30
 WINDOW_TITLE = "驼铃视频小店中差评处理"
+AUTHOR_WECHAT = "TLS-801"
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
 DESIGN_WIDTH = 1240
 DESIGN_HEIGHT = 980
@@ -597,14 +604,183 @@ class BatchWorker(QObject):
             self.finished.emit(success_count, failure_count, total_count, False)
 
 
+def get_license_reason_text(reason):
+    """将许可证状态码映射为可读提示。"""
+    reason_map = {
+        "expired": "当前授权已到期，请输入新卡密继续使用。",
+        "device_mismatch": "当前设备与授权设备不一致，请重新激活。",
+        "invalid": "本地授权文件异常，请重新输入卡密激活。",
+        "not_found": "尚未激活，请输入卡密开始使用。",
+    }
+    return reason_map.get(reason, "授权状态未知，请重新输入卡密激活。")
+
+
+class LicenseDialog(QDialog):
+    """离线卡密激活弹窗。"""
+
+    def __init__(self, parent=None, reason="not_found"):
+        super().__init__(parent)
+        self.activated = False
+        self.reason = reason
+        self._build_ui()
+
+    def _build_ui(self):
+        self.setWindowTitle("卡密激活")
+        self.setModal(True)
+        self.setObjectName("LicenseDialog")
+        self.setMinimumWidth(560)
+        self.setStyleSheet(
+            """
+            QDialog#LicenseDialog {
+                background: #0A1C36;
+                border: 1px solid #1E3A8A;
+                border-radius: 14px;
+            }
+            QLabel#LicenseTitle {
+                color: #F8FAFC;
+                font-size: 19px;
+                font-weight: 700;
+            }
+            QLabel#LicenseDesc {
+                color: #CFE0F5;
+                font-size: 14px;
+                line-height: 1.45;
+            }
+            QLabel#LicenseHint {
+                color: #22D3EE;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QLineEdit#LicenseInput {
+                background: #0F2748;
+                color: #F8FAFC;
+                border: 1px solid #3B82F6;
+                border-radius: 10px;
+                padding: 10px 12px;
+                font-size: 15px;
+            }
+            QLineEdit#LicenseInput:focus {
+                border: 2px solid #60A5FA;
+            }
+            QLabel#LicenseMessage {
+                font-size: 13px;
+            }
+            QPushButton#LicensePrimary {
+                background: #1D4ED8;
+                color: #F8FAFC;
+                border: 1px solid #3B82F6;
+                border-radius: 10px;
+                padding: 9px 18px;
+                min-width: 110px;
+                font-weight: 700;
+            }
+            QPushButton#LicensePrimary:hover {
+                background: #2563EB;
+            }
+            QPushButton#LicenseSecondary {
+                background: rgba(148, 163, 184, 0.18);
+                color: #EAF2FC;
+                border: 1px solid #64748B;
+                border-radius: 10px;
+                padding: 9px 18px;
+                min-width: 110px;
+                font-weight: 600;
+            }
+            QPushButton#LicenseSecondary:hover {
+                background: rgba(148, 163, 184, 0.28);
+            }
+            """
+        )
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(22, 18, 22, 18)
+        root.setSpacing(14)
+
+        title = QLabel("请输入卡密激活软件")
+        title.setObjectName("LicenseTitle")
+        root.addWidget(title)
+
+        desc = QLabel(get_license_reason_text(self.reason))
+        desc.setObjectName("LicenseDesc")
+        desc.setWordWrap(True)
+        root.addWidget(desc)
+
+        self.wechat_label = QLabel(f"联系作者微信：{AUTHOR_WECHAT}（点击复制）")
+        self.wechat_label.setObjectName("LicenseHint")
+        self.wechat_label.setCursor(Qt.PointingHandCursor)
+        self.wechat_label.mousePressEvent = self._copy_wechat
+        root.addWidget(self.wechat_label)
+
+        self.key_input = QLineEdit()
+        self.key_input.setObjectName("LicenseInput")
+        self.key_input.setPlaceholderText("例如：TLS-XXXX-XXXX-XXXX-XXXX")
+        self.key_input.returnPressed.connect(self._on_activate_clicked)
+        root.addWidget(self.key_input)
+
+        self.message_label = QLabel("")
+        self.message_label.setObjectName("LicenseMessage")
+        self.message_label.setWordWrap(True)
+        self.message_label.setStyleSheet("color: #FCA5A5;")
+        root.addWidget(self.message_label)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(10)
+        action_row.addStretch(1)
+        root.addLayout(action_row)
+
+        cancel_button = QPushButton("取消")
+        cancel_button.setObjectName("LicenseSecondary")
+        cancel_button.clicked.connect(self.reject)
+        action_row.addWidget(cancel_button)
+
+        activate_button = QPushButton("激活")
+        activate_button.setObjectName("LicensePrimary")
+        activate_button.clicked.connect(self._on_activate_clicked)
+        action_row.addWidget(activate_button)
+
+        self.key_input.setFocus()
+
+    def _copy_wechat(self, _event):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(AUTHOR_WECHAT)
+        self.message_label.setText(f"已复制作者微信：{AUTHOR_WECHAT}")
+        self.message_label.setStyleSheet("color: #86EFAC;")
+
+    def _on_activate_clicked(self):
+        key = self.key_input.text().strip()
+        if not key:
+            self.message_label.setText("请输入卡密。")
+            self.message_label.setStyleSheet("color: #FCA5A5;")
+            return
+        try:
+            info = activate_license(key)
+        except ValueError as exc:
+            self.message_label.setText(str(exc))
+            self.message_label.setStyleSheet("color: #FCA5A5;")
+            return
+        except Exception as exc:  # noqa: BLE001
+            self.message_label.setText(f"激活失败：{exc}")
+            self.message_label.setStyleSheet("color: #FCA5A5;")
+            return
+
+        self.activated = True
+        expires = str(info.get("expires_at", ""))[:19]
+        self.message_label.setText(f"激活成功，有效期至：{expires}")
+        self.message_label.setStyleSheet("color: #86EFAC;")
+        self.accept()
+
+
 class MainWindow(QWidget):
     """主窗口。"""
 
-    def __init__(self):
+    def __init__(self, licensed=True, license_reason="ok"):
         super().__init__()
         self.worker_thread = None
         self.worker = None
         self.is_paused = False
+        self._licensed = licensed
+        self._license_reason = license_reason
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setObjectName("AppRoot")
@@ -892,7 +1068,7 @@ class MainWindow(QWidget):
         badge_layout.setContentsMargins(0, 0, 0, 0)
         badge_layout.setSpacing(10)
 
-        self.author_badge = QLabel("作者微信：TLS-801")
+        self.author_badge = QLabel(f"作者微信：{AUTHOR_WECHAT}")
         self.author_badge.setAlignment(Qt.AlignCenter)
         self.author_badge.setFont(build_font(12, bold=True))
         self.author_badge.setStyleSheet(
@@ -1548,6 +1724,39 @@ class MainWindow(QWidget):
         if dialog.exec() == QDialog.Accepted:
             self.choose_config_dir()
 
+    def _refresh_license_state(self):
+        """刷新本地授权状态。"""
+        info, reason = check_stored_license()
+        self._licensed = reason == "ok"
+        self._license_reason = reason
+        return info, reason
+
+    def _prompt_license_activation(self, reason=None):
+        """弹出激活窗口，返回是否激活成功。"""
+        if reason is None:
+            _, reason = self._refresh_license_state()
+        dialog = LicenseDialog(self, reason=reason)
+        result = dialog.exec()
+        if result == QDialog.Accepted and dialog.activated:
+            self._licensed = True
+            self._license_reason = "ok"
+            return True
+        self._licensed = False
+        self._license_reason = reason
+        return False
+
+    def prompt_license_on_startup(self):
+        """启动后提示激活（仅在未激活时弹出）。"""
+        info, reason = self._refresh_license_state()
+        if reason == "ok":
+            expires = str((info or {}).get("expires_at", ""))[:10]
+            if expires:
+                self.append_result_log(f"授权有效期至：{expires}")
+            return True
+
+        self.append_result_log("当前未激活，执行前需先输入卡密。")
+        return self._prompt_license_activation(reason)
+
     def on_start_clicked(self):
         """开始或继续批量处理。"""
         if self.worker is not None and self.is_paused:
@@ -1558,6 +1767,15 @@ class MainWindow(QWidget):
             return
 
         if self.worker is not None:
+            return
+
+        _, reason = self._refresh_license_state()
+        if reason != "ok" and not self._prompt_license_activation(reason):
+            self.show_message(
+                QMessageBox.Warning,
+                "未激活",
+                "软件尚未激活，无法执行批量处理。\n请先输入有效卡密完成激活。",
+            )
             return
 
         self.normalize_inputs()
@@ -1673,8 +1891,11 @@ def main():
     """程序入口。"""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    window = MainWindow()
+    _, reason = check_stored_license()
+    window = MainWindow(licensed=(reason == "ok"), license_reason=reason)
     window.show()
+    if reason != "ok":
+        window.prompt_license_on_startup()
     sys.exit(app.exec())
 
 
