@@ -2,28 +2,18 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 授权模块（在线激活 + 本地缓存）。"""
 
-import base64
 import hashlib
-import hmac
 import json
 import logging
 import os
-import struct
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 import requests
 
 logger = logging.getLogger(__name__)
-
-# 本地离线验签密钥（仅在本项目内使用）
-_SECRET = b"TLS-shipinhao-2026-LicenseKey-HMAC"
-
-PLAN_DAYS = 30
-_KEY_PREFIX = "TLS-"
-_PAYLOAD_LEN = 10  # 2 (days) + 2 (salt) + 6 (hmac truncated)
 
 _CONFIG_DIR_NAME = ".tls-shipinhao"
 _LICENSE_FILE_NAME = "license.json"
@@ -116,44 +106,6 @@ def _fallback_fingerprint() -> str:
 
 
 # ---------------------------------------------------------------------------
-# 卡密生成与校验
-# ---------------------------------------------------------------------------
-
-
-def generate_key() -> str:
-    """生成一个固定有效期卡密，格式 TLS-XXXX-XXXX-XXXX-XXXX。"""
-    days_bytes = struct.pack(">H", PLAN_DAYS)
-    salt = os.urandom(2)
-    sig = hmac.new(_SECRET, days_bytes + salt, hashlib.sha256).digest()[:6]
-    payload = days_bytes + salt + sig
-    encoded = base64.b32encode(payload).decode("ascii").rstrip("=")
-    return _KEY_PREFIX + "-".join(encoded[i:i + 4] for i in range(0, len(encoded), 4))
-
-
-def validate_key(key: str) -> Tuple[bool, int]:
-    """校验卡密并返回 (是否有效, 有效期天数)。"""
-    try:
-        body = key.strip().upper()
-        if body.startswith(_KEY_PREFIX):
-            body = body[len(_KEY_PREFIX) :]
-        raw = body.replace("-", "")
-        padding = (8 - len(raw) % 8) % 8
-        decoded = base64.b32decode(raw + "=" * padding)
-        if len(decoded) != _PAYLOAD_LEN:
-            return False, 0
-
-        days_bytes = decoded[:2]
-        salt = decoded[2:4]
-        sig_stored = decoded[4:10]
-        sig_expected = hmac.new(_SECRET, days_bytes + salt, hashlib.sha256).digest()[:6]
-        if not hmac.compare_digest(sig_stored, sig_expected):
-            return False, 0
-        return True, struct.unpack(">H", days_bytes)[0]
-    except Exception:
-        return False, 0
-
-
-# ---------------------------------------------------------------------------
 # 许可证存储
 # ---------------------------------------------------------------------------
 
@@ -166,28 +118,24 @@ def activate_license(key: str) -> dict:
     """激活许可证（在线验证 + 设备绑定 + 写入 license.json）。
 
     流程：
-    1. 本地校验卡密格式（快速失败）
-    2. 调用后端 API 验证卡密并绑定设备
-    3. 后端通过后写入本地 license.json
+    1. 调用后端 API 验证卡密并绑定设备
+    2. 后端通过后写入本地 license.json
     """
     from .constants import LICENSE_ACTIVATE_URL, LICENSE_API_TIMEOUT
 
-    # 1. 本地快速校验格式
-    valid, plan_days = validate_key(key)
-    if not valid:
-        raise ValueError("卡密无效：格式错误或签名不匹配")
-    if plan_days <= 0:
-        raise ValueError("卡密无效：有效期异常")
+    key = key.strip()
+    if not key:
+        raise ValueError("请输入卡密")
 
     device_id = get_device_id()
     raw_fingerprint = _collect_raw_fingerprint()
 
-    # 2. 调用后端 API
+    # 1. 调用后端 API 验证卡密并绑定设备
     try:
         resp = requests.post(
             LICENSE_ACTIVATE_URL,
             json={
-                "key": key.strip().upper(),
+                "key": key.upper(),
                 "device_id": device_id,
                 "device_fingerprint": raw_fingerprint,
             },
@@ -209,13 +157,13 @@ def activate_license(key: str) -> dict:
         message = result.get("message", "未知错误")
         raise ValueError(f"激活失败：{message}")
 
-    # 3. 后端验证通过，写入本地 license.json
+    # 2. 后端验证通过，写入本地 license.json
     info = {
-        "key": key.strip().upper(),
+        "key": key.upper(),
         "activated_at": result.get("activated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
         "expires_at": result.get("expires_at", ""),
         "device_id": device_id,
-        "plan_days": result.get("plan_days", plan_days),
+        "plan_days": result.get("plan_days", 0),
     }
 
     path = _license_path()
@@ -228,7 +176,12 @@ def activate_license(key: str) -> dict:
 
 
 def check_stored_license() -> Tuple[Optional[dict], str]:
-    """校验本地许可证，返回 (info, reason)。"""
+    """校验许可证，返回 (info, reason)。
+
+    优先通过后端 /api/verify 在线校验，网络不可用时回退到本地缓存校验。
+    """
+    from .constants import LICENSE_API_TIMEOUT, LICENSE_VERIFY_URL
+
     path = _license_path()
     if not os.path.isfile(path):
         return None, "not_found"
@@ -240,10 +193,32 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
         return None, "invalid"
 
     key = info.get("key", "")
-    valid, _ = validate_key(key)
-    if not valid:
+    device_id = info.get("device_id", "")
+    if not key or not device_id:
         return None, "invalid"
 
+    # 在线校验（优先）
+    try:
+        resp = requests.post(
+            LICENSE_VERIFY_URL,
+            json={"key": key, "device_id": device_id},
+            timeout=LICENSE_API_TIMEOUT,
+        )
+        result = resp.json()
+        if result.get("success"):
+            return info, "ok"
+        # 后端明确返回失败
+        message = result.get("message", "")
+        if "过期" in message or result.get("expired"):
+            return info, "expired"
+        if "设备" in message:
+            return info, "device_mismatch"
+        return info, "invalid"
+    except (requests.RequestException, ValueError):
+        # 网络不可用，回退到本地缓存校验
+        logger.debug("在线校验失败，回退到本地缓存校验")
+
+    # 离线回退：仅检查本地缓存中的过期时间和设备
     try:
         expires_at = datetime.fromisoformat(info["expires_at"])
     except Exception:
@@ -255,9 +230,8 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
     if datetime.now(timezone.utc) > expires_at:
         return info, "expired"
 
-    stored_device = info.get("device_id", "")
     current_device = get_device_id()
-    if stored_device != current_device:
+    if device_id != current_device:
         return info, "device_mismatch"
 
     return info, "ok"
