@@ -7,12 +7,12 @@ on:
       build_macos:
         description: Build macOS app
         required: true
-        default: true
+        default: false
         type: boolean
       build_windows:
         description: Build Windows app
         required: true
-        default: false
+        default: true
         type: boolean
   # 日常分支活动默认只跑 macOS，避免不必要消耗。
   push:

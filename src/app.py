@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 MAX_BATCH_SIZE = 100
 REQUEST_TIMEOUT = 30
 WINDOW_TITLE = "驼铃视频小店中差评处理"
+TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
 DESIGN_WIDTH = 1240
 DESIGN_HEIGHT = 980
 DEFAULT_WINDOW_WIDTH = 1880
@@ -886,6 +887,11 @@ class MainWindow(QWidget):
 
         header_box.addWidget(title_wrap, 1)
 
+        badge_wrap = QWidget()
+        badge_layout = QHBoxLayout(badge_wrap)
+        badge_layout.setContentsMargins(0, 0, 0, 0)
+        badge_layout.setSpacing(10)
+
         self.author_badge = QLabel("作者微信：TLS-801")
         self.author_badge.setAlignment(Qt.AlignCenter)
         self.author_badge.setFont(build_font(12, bold=True))
@@ -897,7 +903,29 @@ class MainWindow(QWidget):
             "padding: 12px 18px;"
         )
         self.author_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        header_box.addWidget(self.author_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
+        badge_layout.addWidget(self.author_badge, 0, Qt.AlignVCenter)
+
+        self.tutorial_badge = QLabel()
+        self.tutorial_badge.setAlignment(Qt.AlignCenter)
+        self.tutorial_badge.setTextFormat(Qt.RichText)
+        self.tutorial_badge.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.tutorial_badge.setOpenExternalLinks(True)
+        self.tutorial_badge.setCursor(Qt.PointingHandCursor)
+        self.tutorial_badge.setFont(build_font(12, bold=True))
+        self.tutorial_badge.setText(
+            f'<a href="{TUTORIAL_URL}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
+        )
+        self.tutorial_badge.setStyleSheet(
+            f"background: {APP_COLORS['blue_soft']};"
+            f"color: {APP_COLORS['blue_deep']};"
+            "border: 1px solid #9FC0F0;"
+            "border-radius: 14px;"
+            "padding: 12px 18px;"
+        )
+        self.tutorial_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        badge_layout.addWidget(self.tutorial_badge, 0, Qt.AlignVCenter)
+
+        header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
         header_layout.addWidget(header_body)
 
     def _create_count_badge(self, text_color, bg_color, border_color):
@@ -1181,6 +1209,7 @@ class MainWindow(QWidget):
         self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
         self.title_description_label.setFont(build_font(max(10, int(12 * scale))))
         self.author_badge.setFont(build_font(max(11, int(12 * scale)), bold=True))
+        self.tutorial_badge.setFont(build_font(max(11, int(12 * scale)), bold=True))
         self.order_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
         self.tracking_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
         self.order_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
@@ -1202,9 +1231,13 @@ class MainWindow(QWidget):
 
         badge_height = max(36, int(40 * scale))
         author_badge_height = max(44, int(50 * scale))
+        author_badge_width = max(180, int(210 * scale))
         input_editor_height = self._calculate_editor_height(self.order_edit, 10)
 
         self.author_badge.setFixedHeight(author_badge_height)
+        self.author_badge.setFixedWidth(author_badge_width)
+        self.tutorial_badge.setFixedHeight(author_badge_height)
+        self.tutorial_badge.setFixedWidth(author_badge_width)
         self.order_count_badge.setFixedHeight(badge_height)
         self.tracking_count_badge.setFixedHeight(badge_height)
         self.config_badge.setFixedHeight(badge_height)
