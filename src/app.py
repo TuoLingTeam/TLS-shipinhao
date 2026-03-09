@@ -203,7 +203,7 @@ def _config_file_priority(filename, file_type):
 
 
 def resolve_config_files_in_dir(config_dir):
-    """在目录中解析 cookie 与 biz_magic 实际文件路径。"""
+    """在目录中解析配置文件路径（cookie 必需，biz_magic 可选）。"""
     if not config_dir or not os.path.isdir(config_dir):
         return None
 
@@ -231,24 +231,84 @@ def resolve_config_files_in_dir(config_dir):
         if _config_file_priority(filename, file_type) > _config_file_priority(current_name, file_type):
             resolved[file_type] = full_path
 
-    if "cookie" in resolved and "magic" in resolved:
-        return resolved["cookie"], resolved["magic"]
-    return None
+    if "cookie" not in resolved:
+        return None
+    return {"cookie": resolved["cookie"], "magic": resolved.get("magic")}
 
 
 def resolve_config_dir():
     """解析实际可用的配置目录。"""
     global _CONFIG_DIR_CACHE
-    if _CONFIG_DIR_CACHE and resolve_config_files_in_dir(_CONFIG_DIR_CACHE):
+    if _CONFIG_DIR_CACHE and is_config_dir_ready(_CONFIG_DIR_CACHE):
         return _CONFIG_DIR_CACHE
 
     search_dirs = get_config_search_dirs()
     for config_dir in search_dirs:
-        if resolve_config_files_in_dir(config_dir):
+        if is_config_dir_ready(config_dir):
             _CONFIG_DIR_CACHE = config_dir
             return config_dir
 
     raise ConfigNotFoundError(search_dirs)
+
+
+def parse_cookie_content(content):
+    """将 cookie 原文解析为字典。"""
+    pairs = content.split(";")
+    data = {}
+    for pair in pairs:
+        if "=" in pair:
+            key, value = pair.strip().split("=", 1)
+            data[key.strip()] = value.strip()
+    return data
+
+
+def read_cookie_data(cookie_path):
+    """读取 cookie 文件并解析成字典。"""
+    with open(cookie_path, "r", encoding="utf-8") as file:
+        content = file.read().strip()
+    return parse_cookie_content(content)
+
+
+def read_magic_file(magic_path):
+    """读取独立 biz_magic 文件。"""
+    with open(magic_path, "r", encoding="utf-8") as file:
+        return file.read().strip()
+
+
+def extract_biz_magic_from_cookie(cookie_data):
+    """从 cookie 字典中提取 biz_magic（大小写不敏感）。"""
+    direct = cookie_data.get("biz_magic")
+    if direct:
+        return str(direct).strip()
+
+    for key, value in cookie_data.items():
+        if str(key).strip().lower() == "biz_magic" and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def is_config_dir_ready(config_dir):
+    """判断目录是否可用：有 cookie，且能拿到 biz_magic（来自 cookie 或独立文件）。"""
+    file_paths = resolve_config_files_in_dir(config_dir)
+    if not file_paths:
+        return False
+
+    try:
+        cookie_data = read_cookie_data(file_paths["cookie"])
+    except Exception:  # noqa: BLE001
+        return False
+
+    if extract_biz_magic_from_cookie(cookie_data):
+        return True
+
+    magic_path = file_paths.get("magic")
+    if not magic_path:
+        return False
+
+    try:
+        return bool(read_magic_file(magic_path))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def getCookie():
@@ -257,31 +317,30 @@ def getCookie():
     file_paths = resolve_config_files_in_dir(config_dir)
     if not file_paths:
         raise ConfigNotFoundError(get_config_search_dirs())
-    cookie_path, _ = file_paths
-
-    with open(cookie_path, "r", encoding="utf-8") as file:
-        content = file.read().strip()
-
-    pairs = content.split(";")
-    data = {}
-    for pair in pairs:
-        if "=" in pair:
-            key, value = pair.strip().split("=", 1)
-            data[key.strip()] = value.strip()
-
-    return data
+    cookie_path = file_paths["cookie"]
+    return read_cookie_data(cookie_path)
 
 
-def getMagic():
-    """读取 magic 配置（兼容 biz_magic/biz_magic.txt/biz_magic.txt.txt）。"""
+def getMagic(cookie_data=None):
+    """读取 magic：优先从 cookie 中提取，失败时回退到独立文件。"""
+    if cookie_data is None:
+        cookie_data = getCookie()
+
+    magic = extract_biz_magic_from_cookie(cookie_data)
+    if magic:
+        return magic
+
     config_dir = resolve_config_dir()
     file_paths = resolve_config_files_in_dir(config_dir)
     if not file_paths:
         raise ConfigNotFoundError(get_config_search_dirs())
-    _, magic_path = file_paths
+    magic_path = file_paths.get("magic")
+    if magic_path:
+        fallback = read_magic_file(magic_path)
+        if fallback:
+            return fallback
 
-    with open(magic_path, "r", encoding="utf-8") as file:
-        return file.read().strip()
+    raise RuntimeError("未在 cookie 中找到 biz_magic，且目录中不存在可用的 biz_magic 配置文件。")
 
 
 def build_headers(magic):
@@ -391,7 +450,7 @@ def normalize_batch_text(raw_text):
 def create_session():
     """创建复用连接的会话。"""
     cookies = getCookie()
-    magic = getMagic()
+    magic = getMagic(cookies)
     session = requests.Session()
     session.headers.update(build_headers(magic))
     session.cookies.update(cookies)
@@ -1410,7 +1469,7 @@ class MainWindow(QWidget):
 
         card = self._create_input_card(
             "第三步：选择配置目录",
-            "选择 cookie/biz_magic 所在目录（支持 .txt / 无后缀 / 双 .txt）。",
+            "选择 cookie 所在目录（兼容 .txt / 无后缀 / 双 .txt）。",
             self.config_badge,
             shell,
             APP_COLORS["blue"],
@@ -1729,13 +1788,13 @@ class MainWindow(QWidget):
             text = (
                 "当前已生效目录：\n"
                 f"{resolved_dir}\n\n"
-                "程序会优先读取这里的 cookie/biz_magic 配置（支持 .txt / 无后缀 / 双 .txt）。"
+                "程序会读取这里的 cookie 文件，并自动从中提取 biz_magic。"
             )
         elif saved_dir:
             text = (
                 "已记录目录：\n"
                 f"{saved_dir}\n\n"
-                "但这里暂未同时找到 cookie 与 biz_magic 配置文件。"
+                "但这里暂未找到可用的 cookie 配置文件。"
             )
         else:
             text = (
@@ -1754,21 +1813,25 @@ class MainWindow(QWidget):
 
         resolved_files = resolve_config_files_in_dir(selected_dir)
         missing_files = []
-        if not resolved_files:
+        if not resolved_files or "cookie" not in resolved_files:
+            missing_files.append("cookie(.txt)")
+        else:
             try:
-                present_types = {
-                    _classify_config_file_name(name) for name in os.listdir(selected_dir)
-                } - {None}
-            except OSError:
-                present_types = set()
-
-            if "cookie" not in present_types:
-                missing_files.append("cookie(.txt)")
-            if "magic" not in present_types:
-                missing_files.append("biz_magic(.txt)")
-            if not missing_files:
-                missing_files.append("cookie(.txt)")
-                missing_files.append("biz_magic(.txt)")
+                cookie_data = read_cookie_data(resolved_files["cookie"])
+            except Exception:  # noqa: BLE001
+                missing_files.append("cookie(.txt) 内容不可读")
+            else:
+                magic_from_cookie = extract_biz_magic_from_cookie(cookie_data)
+                magic_file_path = resolved_files.get("magic")
+                if not magic_from_cookie:
+                    if not magic_file_path:
+                        missing_files.append("cookie 中 biz_magic 键")
+                    else:
+                        try:
+                            if not read_magic_file(magic_file_path):
+                                missing_files.append("biz_magic(.txt) 内容为空")
+                        except Exception:  # noqa: BLE001
+                            missing_files.append("biz_magic(.txt) 内容不可读")
 
         if missing_files:
             self.show_message(
@@ -1776,7 +1839,7 @@ class MainWindow(QWidget):
                 "目录不完整",
                 "所选目录缺少以下文件：\n"
                 + "\n".join(missing_files)
-                + "\n\n请选择同时包含 cookie 与 biz_magic 的目录（支持 .txt / 无后缀 / 双 .txt）。",
+                + "\n\n请确保 cookie 可用（且包含 biz_magic），或在同目录提供 biz_magic(.txt) 文件作为备用。",
             )
             return
 
@@ -1800,7 +1863,7 @@ class MainWindow(QWidget):
         dialog, actions = self._create_message_dialog_base(
             QMessageBox.Warning,
             "缺少配置文件",
-            "未找到配置文件 cookie/biz_magic（含 .txt 变体）。",
+            "未找到可用的 cookie 配置文件（或 cookie 中缺少 biz_magic）。",
             info_text,
             min_width=620,
         )
