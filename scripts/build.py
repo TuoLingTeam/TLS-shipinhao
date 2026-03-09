@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""统一构建入口。"""
+"""桌面应用统一构建入口。
+
+设计目标：
+1. 本地单命令构建（自动切换到项目 .venv）。
+2. 明确禁止本地跨平台打包（mac 上不能直接产出 exe）。
+3. 构建流程拆分清晰，便于 CI 与本地共用。
+"""
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+# Windows 终端默认编码对中文输出不友好，统一切成 UTF-8。
 if platform.system() == "Windows":
     import io
 
@@ -17,79 +25,98 @@ if platform.system() == "Windows":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 
+# =========================
+# 基础常量
+# =========================
 APP_NAME = "TLS-shipinhao"
 BUNDLE_ID = "com.tuoling.tls-shipinhao"
+SYSTEM_MACOS = "Darwin"
+SYSTEM_WINDOWS = "Windows"
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 SPEC_FILE = PROJECT_ROOT / f"{APP_NAME}.spec"
+
 MAIN_FILE = PROJECT_ROOT / "main.py"
 COOKIE_FILE = PROJECT_ROOT / "cookie.txt"
 MAGIC_FILE = PROJECT_ROOT / "biz_magic.txt"
 SOURCE_ICON_FILE = PROJECT_ROOT / "src" / "favicon.png"
 MACOS_ICON_FILE = BUILD_DIR / "app_icon.icns"
 WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
+
+# 构建时需要的最小依赖集合（避免漏装导致中断）。
 BUILD_REQUIREMENTS = ["PySide6_Essentials", "shiboken6", "requests", "pyinstaller", "Pillow"]
+PROBE_IMPORTS = (
+    "import requests, shiboken6, PyInstaller; "
+    "from PIL import Image; "
+    "from PySide6.QtCore import QObject; "
+    "from PySide6.QtGui import QFont; "
+    "from PySide6.QtWidgets import QApplication"
+)
+
+# PyInstaller 需要保留的隐藏导入。
 HIDDEN_IMPORTS = ["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PIL.Image"]
-EXCLUDED_MODULES = [
-    "bs4",
-    "beautifulsoup4",
-    "pymongo",
-    "openpyxl",
-    "PySide6.Qt3DAnimation",
-    "PySide6.Qt3DCore",
-    "PySide6.Qt3DExtras",
-    "PySide6.Qt3DInput",
-    "PySide6.Qt3DLogic",
-    "PySide6.QtBluetooth",
-    "PySide6.QtCharts",
-    "PySide6.QtConcurrent",
-    "PySide6.QtDataVisualization",
-    "PySide6.QtDBus",
-    "PySide6.QtDesigner",
-    "PySide6.QtGraphs",
-    "PySide6.QtGraphsWidgets",
-    "PySide6.QtHelp",
-    "PySide6.QtHttpServer",
-    "PySide6.QtLocation",
-    "PySide6.QtMultimedia",
-    "PySide6.QtMultimediaWidgets",
-    "PySide6.QtNetworkAuth",
-    "PySide6.QtNfc",
-    "PySide6.QtOpenGL",
-    "PySide6.QtOpenGLWidgets",
-    "PySide6.QtPdf",
-    "PySide6.QtPdfWidgets",
-    "PySide6.QtPositioning",
-    "PySide6.QtPrintSupport",
-    "PySide6.QtQml",
-    "PySide6.QtQuick",
-    "PySide6.QtQuick3D",
-    "PySide6.QtQuickControls2",
-    "PySide6.QtQuickTest",
-    "PySide6.QtQuickWidgets",
-    "PySide6.QtRemoteObjects",
-    "PySide6.QtScxml",
-    "PySide6.QtSensors",
-    "PySide6.QtSerialBus",
-    "PySide6.QtSerialPort",
-    "PySide6.QtSpatialAudio",
-    "PySide6.QtSql",
-    "PySide6.QtStateMachine",
-    "PySide6.QtSvg",
-    "PySide6.QtSvgWidgets",
-    "PySide6.QtTest",
-    "PySide6.QtTextToSpeech",
-    "PySide6.QtUiTools",
-    "PySide6.QtWebChannel",
-    "PySide6.QtWebEngineCore",
-    "PySide6.QtWebEngineQuick",
-    "PySide6.QtWebEngineWidgets",
-    "PySide6.QtWebSockets",
-    "PySide6.QtWebView",
-    "PySide6.QtXml",
-]
-QT_PRUNE_DIRS = [
+
+# 业务不使用的 Qt 模块，显式排除可显著减小体积。
+QT_OPTIONAL_MODULES = (
+    "Qt3DAnimation",
+    "Qt3DCore",
+    "Qt3DExtras",
+    "Qt3DInput",
+    "Qt3DLogic",
+    "QtBluetooth",
+    "QtCharts",
+    "QtConcurrent",
+    "QtDataVisualization",
+    "QtDBus",
+    "QtDesigner",
+    "QtGraphs",
+    "QtGraphsWidgets",
+    "QtHelp",
+    "QtHttpServer",
+    "QtLocation",
+    "QtMultimedia",
+    "QtMultimediaWidgets",
+    "QtNetworkAuth",
+    "QtNfc",
+    "QtOpenGL",
+    "QtOpenGLWidgets",
+    "QtPdf",
+    "QtPdfWidgets",
+    "QtPositioning",
+    "QtPrintSupport",
+    "QtQml",
+    "QtQuick",
+    "QtQuick3D",
+    "QtQuickControls2",
+    "QtQuickTest",
+    "QtQuickWidgets",
+    "QtRemoteObjects",
+    "QtScxml",
+    "QtSensors",
+    "QtSerialBus",
+    "QtSerialPort",
+    "QtSpatialAudio",
+    "QtSql",
+    "QtStateMachine",
+    "QtSvg",
+    "QtSvgWidgets",
+    "QtTest",
+    "QtTextToSpeech",
+    "QtUiTools",
+    "QtWebChannel",
+    "QtWebEngineCore",
+    "QtWebEngineQuick",
+    "QtWebEngineWidgets",
+    "QtWebSockets",
+    "QtWebView",
+    "QtXml",
+)
+EXCLUDED_MODULES = ["bs4", "beautifulsoup4", "pymongo", "openpyxl", *[f"PySide6.{m}" for m in QT_OPTIONAL_MODULES]]
+
+# macOS 包体裁剪配置（删除可选资源，不影响运行）。
+QT_PRUNE_DIRS = (
     Path("Qt") / "qml",
     Path("Qt") / "translations",
     Path("Qt") / "metatypes",
@@ -99,8 +126,28 @@ QT_PRUNE_DIRS = [
     Path("scripts"),
     Path("support"),
     Path("glue"),
-]
-QT_PRUNE_FILES = [
+)
+QT_PRUNE_PLUGIN_DIRS = (
+    "designer",
+    "gamepads",
+    "geometryloaders",
+    "geoservices",
+    "networkinformation",
+    "position",
+    "qmltooling",
+    "renderers",
+    "renderplugins",
+    "sceneparsers",
+    "sensorgestures",
+    "sqldrivers",
+    "texttospeech",
+    "tls",
+    "wayland-decoration-client",
+    "wayland-graphics-integration-client",
+    "wayland-shell-integration",
+    "webview",
+)
+QT_PRUNE_FILES = (
     "Assistant.app",
     "Designer.app",
     "Linguist.app",
@@ -116,36 +163,48 @@ QT_PRUNE_FILES = [
     "qmlls",
     "qsb",
     "svgtoqml",
-]
-RESOURCE_PRUNE_GLOBS = ["*.dist-info", "*.pyi"]
+)
+RESOURCE_PRUNE_GLOBS = ("*.dist-info", "*.pyi")
+
+
+# =========================
+# 通用工具函数
+# =========================
+def run(cmd: list[str], *, cwd: Path | None = None) -> None:
+    """执行命令，失败即抛异常。"""
+    subprocess.run(cmd, cwd=str(cwd or PROJECT_ROOT), check=True)
 
 
 def project_python() -> str:
-    if platform.system() == "Windows":
+    """优先返回项目 .venv 的 Python，避免污染系统环境。"""
+    if platform.system() == SYSTEM_WINDOWS:
         candidate = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
     else:
         candidate = PROJECT_ROOT / ".venv" / "bin" / "python"
     return str(candidate) if candidate.exists() else sys.executable
 
 
-def run(cmd: list[str], *, cwd: Path | None = None) -> None:
-    subprocess.run(cmd, cwd=str(cwd or PROJECT_ROOT), check=True)
+def ensure_running_with_project_python() -> None:
+    """当前解释器不是项目 .venv 时，自动重启到项目解释器。"""
+    target_python = Path(project_python()).resolve()
+    current_python = Path(sys.executable).resolve()
+    if target_python == current_python:
+        return
+    print(f"切换到项目解释器: {target_python}")
+    os.execv(str(target_python), [str(target_python), *sys.argv])
 
 
 def ensure_build_dependencies(python_bin: str) -> None:
-    probe = [
-        python_bin,
-        "-c",
-        "import requests, shiboken6, PyInstaller; from PIL import Image; from PySide6.QtCore import QObject; from PySide6.QtGui import QFont; from PySide6.QtWidgets import QApplication",
-    ]
+    """检查并自动安装打包依赖。"""
     try:
-        run(probe)
+        run([python_bin, "-c", PROBE_IMPORTS])
     except subprocess.CalledProcessError:
         print("安装构建依赖...")
         run([python_bin, "-m", "pip", "install", "-q", *BUILD_REQUIREMENTS])
 
 
 def clean_build_artifacts() -> None:
+    """清理历史产物，保证每次构建可复现。"""
     print("清理旧构建产物...")
     shutil.rmtree(BUILD_DIR, ignore_errors=True)
     if SPEC_FILE.exists():
@@ -161,62 +220,16 @@ def clean_build_artifacts() -> None:
     DIST_DIR.mkdir(exist_ok=True)
 
 
-def prepare_icon(fmt: str, sizes: list[tuple[int, int]], output_path: Path) -> Path | None:
-    if not SOURCE_ICON_FILE.exists():
-        print(f"Warning: icon source not found: {SOURCE_ICON_FILE}")
-        return None
-
-    from PIL import Image
-
-    BUILD_DIR.mkdir(exist_ok=True)
-    try:
-        image = Image.open(SOURCE_ICON_FILE).convert("RGBA")
-        image.save(output_path, format=fmt, sizes=sizes)
-        print(f"使用图标: {output_path}")
-        return output_path
-    except Exception as exc:  # noqa: BLE001
-        print(f"Warning: failed to generate icon from favicon.png: {exc}")
-        return None
-
-
-def resolve_icon_file() -> Path | None:
-    if platform.system() == "Darwin":
-        return prepare_icon(
-            "ICNS",
-            [(16, 16), (32, 32), (64, 64), (128, 128), (256, 256), (512, 512), (1024, 1024)],
-            MACOS_ICON_FILE,
-        )
-    if platform.system() == "Windows":
-        return prepare_icon(
-            "ICO",
-            [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
-            WINDOWS_ICON_FILE,
-        )
-    return None
-
-
-def pyinstaller_command(python_bin: str) -> list[str]:
-    cmd = [python_bin, "-m", "PyInstaller", "--clean", "--noconfirm"]
-    icon_file = resolve_icon_file()
-    if icon_file:
-        cmd.extend(["--icon", str(icon_file)])
-    for mod in HIDDEN_IMPORTS:
-        cmd.extend(["--hidden-import", mod])
-    for mod in EXCLUDED_MODULES:
-        cmd.extend(["--exclude-module", mod])
-    if platform.system() != "Windows":
-        cmd.append("--strip")
-    return cmd
-
-
-def copy_runtime_files(destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    for source in (COOKIE_FILE, MAGIC_FILE):
-        if source.exists():
-            shutil.copy2(source, destination / source.name)
+def cleanup_temp_files() -> None:
+    """构建完成后清理中间文件。"""
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR, ignore_errors=True)
+    if SPEC_FILE.exists():
+        SPEC_FILE.unlink()
 
 
 def remove_path(path: Path) -> bool:
+    """删除文件/目录（兼容符号链接），返回是否实际删除。"""
     if not path.exists() and not path.is_symlink():
         return False
     if path.is_dir() and not path.is_symlink():
@@ -226,74 +239,114 @@ def remove_path(path: Path) -> bool:
     return True
 
 
+def copy_runtime_files(destination: Path) -> None:
+    """复制运行时配置文件（cookie/biz_magic）。"""
+    destination.mkdir(parents=True, exist_ok=True)
+    for source in (COOKIE_FILE, MAGIC_FILE):
+        if source.exists():
+            shutil.copy2(source, destination / source.name)
+
+
+# =========================
+# 图标与 PyInstaller 参数
+# =========================
+def prepare_icon(system: str) -> Path | None:
+    """根据目标系统生成图标文件。"""
+    if not SOURCE_ICON_FILE.exists():
+        print(f"警告: 图标源文件不存在: {SOURCE_ICON_FILE}")
+        return None
+
+    # 仅在需要时导入，减少无关场景依赖。
+    from PIL import Image
+
+    if system == SYSTEM_MACOS:
+        fmt = "ICNS"
+        output_path = MACOS_ICON_FILE
+        sizes = [(16, 16), (32, 32), (64, 64), (128, 128), (256, 256), (512, 512), (1024, 1024)]
+    elif system == SYSTEM_WINDOWS:
+        fmt = "ICO"
+        output_path = WINDOWS_ICON_FILE
+        sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    else:
+        return None
+
+    BUILD_DIR.mkdir(exist_ok=True)
+    try:
+        image = Image.open(SOURCE_ICON_FILE).convert("RGBA")
+        image.save(output_path, format=fmt, sizes=sizes)
+        print(f"使用图标: {output_path}")
+        return output_path
+    except Exception as exc:  # noqa: BLE001
+        print(f"警告: 生成图标失败: {exc}")
+        return None
+
+
+def build_pyinstaller_base_cmd(python_bin: str, system: str) -> list[str]:
+    """组装 PyInstaller 公共参数。"""
+    cmd = [python_bin, "-m", "PyInstaller", "--clean", "--noconfirm"]
+
+    icon_file = prepare_icon(system)
+    if icon_file:
+        cmd.extend(["--icon", str(icon_file)])
+
+    for module in HIDDEN_IMPORTS:
+        cmd.extend(["--hidden-import", module])
+    for module in EXCLUDED_MODULES:
+        cmd.extend(["--exclude-module", module])
+
+    # macOS/Linux 下可 strip 降体积；Windows 不使用该参数。
+    if system != SYSTEM_WINDOWS:
+        cmd.append("--strip")
+
+    return cmd
+
+
+# =========================
+# 平台构建逻辑
+# =========================
 def prune_macos_bundle(app_bundle: Path) -> None:
-    removed = []
-    pyside_roots = [
+    """裁剪 macOS bundle 中的可选资源，减小体积。"""
+    removed_count = 0
+    pyside_roots = (
         app_bundle / "Contents" / "Frameworks" / "PySide6",
         app_bundle / "Contents" / "Resources" / "PySide6",
-    ]
+    )
 
     for root in pyside_roots:
         if not root.exists():
             continue
 
         for rel_path in QT_PRUNE_DIRS:
-            target = root / rel_path
-            if remove_path(target):
-                removed.append(target)
+            if remove_path(root / rel_path):
+                removed_count += 1
 
-        qt_plugins_root = root / "Qt" / "plugins"
-        for plugin_dir in [
-            "designer",
-            "gamepads",
-            "geometryloaders",
-            "geoservices",
-            "networkinformation",
-            "position",
-            "qmltooling",
-            "renderers",
-            "renderplugins",
-            "sceneparsers",
-            "sensorgestures",
-            "sqldrivers",
-            "texttospeech",
-            "tls",
-            "wayland-decoration-client",
-            "wayland-graphics-integration-client",
-            "wayland-shell-integration",
-            "webview",
-        ]:
-            target = qt_plugins_root / plugin_dir
-            if remove_path(target):
-                removed.append(target)
+        plugin_root = root / "Qt" / "plugins"
+        for name in QT_PRUNE_PLUGIN_DIRS:
+            if remove_path(plugin_root / name):
+                removed_count += 1
 
         for name in QT_PRUNE_FILES:
-            target = root / name
-            if remove_path(target):
-                removed.append(target)
+            if remove_path(root / name):
+                removed_count += 1
 
         for pattern in RESOURCE_PRUNE_GLOBS:
             for target in root.glob(pattern):
                 if remove_path(target):
-                    removed.append(target)
+                    removed_count += 1
 
-    resource_root = app_bundle / "Contents" / "Resources"
-    for target in resource_root.glob("*.dist-info"):
-        if remove_path(target):
-            removed.append(target)
+    for parent in (app_bundle / "Contents" / "Resources", app_bundle / "Contents" / "Frameworks"):
+        for target in parent.glob("*.dist-info"):
+            if remove_path(target):
+                removed_count += 1
 
-    framework_root = app_bundle / "Contents" / "Frameworks"
-    for target in framework_root.glob("*.dist-info"):
-        if remove_path(target):
-            removed.append(target)
-
-    if removed:
-        print(f"已裁剪 macOS bundle 中的 {len(removed)} 个非运行时资源。")
+    if removed_count:
+        print(f"已裁剪 macOS bundle 中的 {removed_count} 个非运行时资源。")
 
 
 def build_macos(python_bin: str) -> Path:
+    """构建 macOS .app。"""
     print("开始打包 macOS 应用...")
-    cmd = pyinstaller_command(python_bin)
+    cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_MACOS)
     cmd.extend(
         [
             "--windowed",
@@ -311,11 +364,7 @@ def build_macos(python_bin: str) -> Path:
         raise FileNotFoundError(f"未找到 macOS 构建产物: {app_bundle}")
 
     prune_macos_bundle(app_bundle)
-
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR, ignore_errors=True)
-    if SPEC_FILE.exists():
-        SPEC_FILE.unlink()
+    cleanup_temp_files()
 
     print(f"打包完成。\n应用位置: {app_bundle}")
     print("使用前：将 cookie.txt 和 biz_magic.txt 放在与 .app 同目录（dist/）即可。")
@@ -323,58 +372,70 @@ def build_macos(python_bin: str) -> Path:
 
 
 def build_windows(python_bin: str) -> Path:
-    print("Building Windows package...")
-    cmd = pyinstaller_command(python_bin)
-    cmd.extend(
-        [
-            "--onefile",
-            "--windowed",
-            "--name",
-            APP_NAME,
-            str(MAIN_FILE),
-        ]
-    )
+    """构建 Windows .exe。"""
+    print("开始打包 Windows 应用...")
+    cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_WINDOWS)
+    cmd.extend(["--onefile", "--windowed", "--name", APP_NAME, str(MAIN_FILE)])
     run(cmd)
 
     exe_file = DIST_DIR / f"{APP_NAME}.exe"
     if not exe_file.exists():
         raise FileNotFoundError(f"未找到 Windows 构建产物: {exe_file}")
 
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR, ignore_errors=True)
-    if SPEC_FILE.exists():
-        SPEC_FILE.unlink()
-
+    cleanup_temp_files()
     copy_runtime_files(DIST_DIR)
-    print(f"Build complete.\nExecutable: {exe_file}")
-    print("cookie.txt and biz_magic.txt will be copied automatically when they exist in the project root.")
+
+    print(f"打包完成。\n可执行文件: {exe_file}")
+    print("如果项目根目录存在 cookie.txt/biz_magic.txt，会自动复制到 dist。")
     return exe_file
 
 
+# =========================
+# 参数与流程编排
+# =========================
+def parse_target(argv: list[str]) -> str | None:
+    """解析命令行目标平台。"""
+    if len(argv) <= 1:
+        return None
+
+    arg = argv[1].lower()
+    if arg in {"mac", "macos", "darwin"}:
+        return SYSTEM_MACOS
+    if arg in {"win", "windows"}:
+        return SYSTEM_WINDOWS
+    raise SystemExit(f"不支持的构建目标: {argv[1]}")
+
+
 def build(target: str | None = None) -> Path:
+    """统一构建入口。"""
     python_bin = project_python()
-    system = target or platform.system()
+    current_system = platform.system()
+    system = target or current_system
+
+    # 本地禁止跨平台打包，避免“构建了半天才发现产物不存在”。
+    if target and target != current_system:
+        raise SystemExit(
+            "不支持跨平台本地打包："
+            f"当前系统是 {current_system}，目标是 {target}。\n"
+            "请在对应系统上构建，或使用 GitHub Actions 的对应 Runner：\n"
+            "- Windows 包：windows-latest\n"
+            "- macOS 包：macos-latest"
+        )
 
     ensure_build_dependencies(python_bin)
     clean_build_artifacts()
 
-    if system == "Darwin":
+    if system == SYSTEM_MACOS:
         return build_macos(python_bin)
-    if system == "Windows":
+    if system == SYSTEM_WINDOWS:
         return build_windows(python_bin)
     raise SystemExit(f"不支持的系统: {system}")
 
 
 def main() -> None:
-    target = None
-    if len(sys.argv) > 1:
-        arg = sys.argv[1].lower()
-        if arg in {"mac", "macos", "darwin"}:
-            target = "Darwin"
-        elif arg in {"win", "windows"}:
-            target = "Windows"
-        else:
-            raise SystemExit(f"不支持的构建目标: {sys.argv[1]}")
+    """脚本主入口。"""
+    ensure_running_with_project_python()
+    target = parse_target(sys.argv)
 
     try:
         artifact = build(target)
