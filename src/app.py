@@ -40,40 +40,40 @@ MIN_WINDOW_WIDTH = 1880
 MIN_WINDOW_HEIGHT = 1668
 
 APP_COLORS = {
-    "bg": "#F4F7FB",
-    "bg_panel": "#E8EEF6",
+    "bg": "#E9EFF6",
+    "bg_panel": "#DCE6F2",
     "surface": "#FFFFFF",
-    "surface_soft": "#F7FAFD",
-    "border": "#D7E0EA",
-    "border_strong": "#B7C7DA",
-    "text": "#1E293B",
-    "heading": "#0F172A",
-    "muted": "#526277",
-    "muted_soft": "#7C8CA3",
-    "blue": "#1D4ED8",
-    "blue_deep": "#1E3A8A",
-    "blue_soft": "#DDEAFE",
-    "blue_tint": "#DCE8F7",
-    "hero_tint": "#C9D9EE",
-    "hero_tint_deep": "#B5CAE6",
-    "hero_border": "#9FB7D6",
-    "orange": "#C96B12",
-    "orange_deep": "#A9550A",
-    "orange_soft": "#F8E1C3",
-    "orange_tint": "#F4E5D2",
-    "orange_tint_deep": "#EAD4BA",
-    "orange_border": "#DAB995",
-    "green": "#16A34A",
+    "surface_soft": "#F5F8FC",
+    "border": "#B8C6D9",
+    "border_strong": "#90A5BF",
+    "text": "#1A2A3E",
+    "heading": "#0B1B32",
+    "muted": "#4A5F79",
+    "muted_soft": "#7A8FA9",
+    "blue": "#0F5BD6",
+    "blue_deep": "#0C3C8F",
+    "blue_soft": "#D5E7FF",
+    "blue_tint": "#CADDF7",
+    "hero_tint": "#B7CCE6",
+    "hero_tint_deep": "#9FBADF",
+    "hero_border": "#7F9FC7",
+    "orange": "#D97706",
+    "orange_deep": "#A84E05",
+    "orange_soft": "#FBE5C8",
+    "orange_tint": "#F6DEC0",
+    "orange_tint_deep": "#EDCC9D",
+    "orange_border": "#D9A86E",
+    "green": "#15803D",
     "green_soft": "#DCFCE7",
-    "red": "#DC2626",
+    "red": "#B91C1C",
     "red_soft": "#FEE2E2",
-    "input_bg": "#FFFFFF",
-    "input_border": "#C5D0DC",
-    "input_border_focus": "#60A5FA",
-    "log_bg": "#10243F",
-    "log_surface": "#0B1A2F",
-    "log_fg": "#E8EEF8",
-    "log_muted": "#AFC1D9",
+    "input_bg": "#FDFEFF",
+    "input_border": "#AFC0D6",
+    "input_border_focus": "#2B78F6",
+    "log_bg": "#06254A",
+    "log_surface": "#041D39",
+    "log_fg": "#F0F6FF",
+    "log_muted": "#B7CBE4",
 }
 
 CONFIG_DIR_NAME = ".tls-shipinhao"
@@ -789,9 +789,9 @@ class MainWindow(QWidget):
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
                     stop: 0 {APP_COLORS["blue_tint"]},
-                    stop: 1 #D3E1F2
+                    stop: 1 #B9D2F0
                 );
-                border: 1px solid #B8CAE2;
+                border: 1px solid #9EB7D7;
                 border-radius: 20px;
             }}
             QFrame#InputCardOrange {{
@@ -806,15 +806,15 @@ class MainWindow(QWidget):
             QFrame#ConfigCard {{
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 #E9EEF6,
-                    stop: 1 #DCE6F3
+                    stop: 0 #E2EAF5,
+                    stop: 1 #CEDBEC
                 );
-                border: 1px solid #C2CFDF;
+                border: 1px solid #AEBFD6;
                 border-radius: 20px;
             }}
             QFrame#LogCard {{
                 background: {APP_COLORS["log_bg"]};
-                border: 1px solid #183252;
+                border: 1px solid #205187;
                 border-radius: 20px;
             }}
             QFrame#InputShell {{
@@ -836,7 +836,7 @@ class MainWindow(QWidget):
             QPlainTextEdit#LogEdit {{
                 background: {APP_COLORS["log_surface"]};
                 color: {APP_COLORS["log_fg"]};
-                border: 1px solid #25476E;
+                border: 1px solid #2D5D94;
                 border-radius: 16px;
                 padding: 14px;
                 selection-background-color: {APP_COLORS["blue"]};
@@ -848,13 +848,13 @@ class MainWindow(QWidget):
                     stop: 1 {APP_COLORS["orange_deep"]}
                 );
                 color: white;
-                border: 1px solid #92400E;
+                border: 1px solid #8A3D03;
                 border-radius: 16px;
                 padding: 16px 20px;
                 font-weight: 700;
             }}
             QPushButton#PrimaryButton:hover {{
-                background: #B85F0E;
+                background: #C86805;
             }}
             QPushButton#PrimaryButton:pressed {{
                 padding-top: 17px;
@@ -863,30 +863,30 @@ class MainWindow(QWidget):
             QPushButton#PrimaryButton:disabled {{
                 background: #F1F5F9;
                 color: #94A3B8;
-                border: 1px solid #CBD5E1;
+                border: 1px solid #ADC0D8;
             }}
             QPushButton#PauseButton {{
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 #334155,
-                    stop: 1 #1E293B
+                    stop: 0 #2E4662,
+                    stop: 1 #1A2C44
                 );
-                color: #E2E8F0;
-                border: 1px solid #475569;
+                color: #EAF2FC;
+                border: 1px solid #5A7598;
                 border-radius: 16px;
                 padding: 16px 18px;
                 font-weight: 700;
             }}
             QPushButton#PauseButton:hover {{
-                background: #243243;
+                background: #203651;
             }}
             QPushButton#PauseButton:pressed {{
-                background: #17212E;
+                background: #182B42;
             }}
             QPushButton#PauseButton:disabled {{
-                background: #E2E8F0;
+                background: #D7E2F0;
                 color: #94A3B8;
-                border: 1px solid #CBD5E1;
+                border: 1px solid #ADC0D8;
             }}
             QLabel#HeroTitle {{
                 color: {APP_COLORS["heading"]};
@@ -908,43 +908,43 @@ class MainWindow(QWidget):
             }}
             QLabel#ConfigPath {{
                 color: {APP_COLORS["muted"]};
-                background: rgba(255, 255, 255, 0.55);
-                border: 1px solid #C9D4E3;
+                background: rgba(255, 255, 255, 0.82);
+                border: 1px solid #AEC0D8;
                 border-radius: 12px;
                 padding: 10px 12px;
             }}
             QPushButton#SecondaryButton {{
                 background: #FFFFFF;
                 color: {APP_COLORS["blue_deep"]};
-                border: 1px solid #B7C7DA;
+                border: 1px solid #96ACCA;
                 border-radius: 12px;
                 padding: 10px 14px;
                 font-weight: 700;
             }}
             QPushButton#SecondaryButton:hover {{
-                background: #F8FBFF;
+                background: #EEF4FF;
                 border-color: #9FB5D1;
             }}
             QPushButton#SecondaryButton:pressed {{
-                background: #EEF4FB;
+                background: #E4EDFA;
             }}
             QScrollArea {{
                 border: none;
                 background: transparent;
             }}
             QScrollBar:vertical {{
-                background: #E8EEF5;
+                background: #D8E2EE;
                 width: 12px;
                 margin: 8px 4px 8px 0;
                 border-radius: 6px;
             }}
             QScrollBar::handle:vertical {{
-                background: #AABCD3;
+                background: #8EA5C1;
                 min-height: 36px;
                 border-radius: 6px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: #8FA7C5;
+                background: #738FB2;
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
@@ -982,6 +982,7 @@ class MainWindow(QWidget):
         self.page_layout = QVBoxLayout(self.page_widget)
         self.page_layout.setContentsMargins(24, 22, 24, 22)
         self.page_layout.setSpacing(16)
+        self.page_layout.setAlignment(Qt.AlignTop)
 
         self.header_card = self._create_card(self.page_layout, object_name="HeroCard")
         header_layout = QVBoxLayout(self.header_card)
@@ -1022,7 +1023,7 @@ class MainWindow(QWidget):
         self.author_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue_deep']};"
-            "border: 1px solid #C8DAF4;"
+            "border: 1px solid #9FC0F0;"
             "border-radius: 14px;"
             "padding: 12px 18px;"
         )
@@ -1032,6 +1033,7 @@ class MainWindow(QWidget):
 
         self.input_container = QWidget()
         self.input_container.setObjectName("InputContainer")
+        self.input_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.input_grid = QGridLayout(self.input_container)
         self.input_grid.setContentsMargins(0, 0, 0, 0)
         self.input_grid.setHorizontalSpacing(16)
@@ -1045,7 +1047,7 @@ class MainWindow(QWidget):
         self.order_count_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue']};"
-            "border: 1px solid #C8DAF4;"
+            "border: 1px solid #9FC0F0;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )
@@ -1058,7 +1060,7 @@ class MainWindow(QWidget):
         self.tracking_count_badge.setStyleSheet(
             f"background: {APP_COLORS['orange_soft']};"
             f"color: {APP_COLORS['orange']};"
-            "border: 1px solid #F2D1A4;"
+            "border: 1px solid #E4B57E;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )
@@ -1089,15 +1091,16 @@ class MainWindow(QWidget):
         )
         self.config_card = self._create_config_card()
 
-        self.page_layout.addWidget(self.input_container)
-        self.input_grid.addWidget(self.order_card, 0, 0)
-        self.input_grid.addWidget(self.tracking_card, 0, 1)
-        self.input_grid.addWidget(self.config_card, 0, 2)
+        self.page_layout.addWidget(self.input_container, 0, Qt.AlignTop)
+        self.input_grid.addWidget(self.order_card, 0, 0, Qt.AlignTop)
+        self.input_grid.addWidget(self.tracking_card, 0, 1, Qt.AlignTop)
+        self.input_grid.addWidget(self.config_card, 0, 2, Qt.AlignTop)
         self.input_grid.setColumnStretch(0, 1)
         self.input_grid.setColumnStretch(1, 1)
         self.input_grid.setColumnStretch(2, 1)
 
         self.action_row = QWidget()
+        self.action_row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.action_layout = QHBoxLayout(self.action_row)
         self.action_layout.setContentsMargins(0, 0, 0, 0)
         self.action_layout.setSpacing(12)
@@ -1119,7 +1122,7 @@ class MainWindow(QWidget):
         self.action_layout.addWidget(self.start_button, 1)
         self.page_layout.addWidget(self.action_row)
 
-        self.log_card = self._create_card(self.page_layout, object_name="LogCard")
+        self.log_card = self._create_card(self.page_layout, stretch=1, object_name="LogCard")
         log_layout = QVBoxLayout(self.log_card)
         log_layout.setContentsMargins(0, 0, 0, 0)
         log_layout.setSpacing(0)
@@ -1152,6 +1155,7 @@ class MainWindow(QWidget):
 
         self.log_view = QPlainTextEdit()
         self.log_view.setObjectName("LogEdit")
+        self.log_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.log_view.setReadOnly(True)
         self.log_view.setFont(build_fixed_font(11))
         self.log_view.setMinimumHeight(300)
@@ -1218,9 +1222,9 @@ class MainWindow(QWidget):
         badge_placeholder.setMinimumWidth(72)
         badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_placeholder.setStyleSheet(
-            "background: #E2E8F0;"
-            "color: #475569;"
-            "border: 1px solid #CBD5E1;"
+            "background: #D7E2F0;"
+            "color: #375271;"
+            "border: 1px solid #ADC0D8;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )
@@ -1265,7 +1269,7 @@ class MainWindow(QWidget):
         line_height = editor.fontMetrics().lineSpacing()
         document_margin = int(editor.document().documentMargin() * 2)
         frame = editor.frameWidth() * 2
-        padding = 30
+        padding = 18
         return line_height * visible_lines + document_margin + frame + padding
 
     def _fit_window_to_screen(self):
@@ -1338,10 +1342,9 @@ class MainWindow(QWidget):
         card_target_height = max(
             self.order_card.sizeHint().height(),
             self.tracking_card.sizeHint().height(),
-            self.config_card.sizeHint().height(),
         )
         config_non_path_height = self.config_card.sizeHint().height() - self.config_path_label.sizeHint().height()
-        config_path_height = max(72, card_target_height - config_non_path_height)
+        config_path_height = max(56, card_target_height - config_non_path_height)
         self.config_path_label.setFixedHeight(config_path_height)
         self.order_card.setFixedHeight(card_target_height)
         self.tracking_card.setFixedHeight(card_target_height)
@@ -1395,7 +1398,7 @@ class MainWindow(QWidget):
                 font-weight: 700;
             }
             QLabel#MessageText {
-                color: #E2E8F0;
+                color: #EAF2FC;
                 font-size: 15px;
                 line-height: 1.45;
             }
@@ -1421,7 +1424,7 @@ class MainWindow(QWidget):
             }
             QPushButton#MessageSecondary {
                 background: rgba(148, 163, 184, 0.18);
-                color: #E2E8F0;
+                color: #EAF2FC;
                 border: 1px solid #64748B;
                 border-radius: 10px;
                 padding: 9px 18px;
