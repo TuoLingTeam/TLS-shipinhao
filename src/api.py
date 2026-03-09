@@ -5,7 +5,7 @@ import json
 
 import requests
 
-from .config import ConfigNotFoundError, getCookie, getMagic
+from .config import ConfigNotFoundError, get_cookie, get_magic
 from .constants import (
     DELIVERY_MISMATCH_MESSAGE,
     ORDER_DELIVERY_UPDATE_URL,
@@ -106,8 +106,8 @@ def normalize_product_infos(delivery_product_info):
 
 def create_session():
     """创建复用连接的会话。"""
-    cookies = getCookie()
-    magic = getMagic(cookies)
+    cookies = get_cookie()
+    magic = get_magic(cookies)
     session = requests.Session()
     session.headers.update(build_headers(magic))
     session.cookies.update(cookies)

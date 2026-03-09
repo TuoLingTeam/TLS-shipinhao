@@ -20,12 +20,16 @@ class BatchWorker(QObject):
     missing_config = Signal(str)
     finished = Signal(int, int, int, bool)
 
+    # 暂停状态下 wait() 的轮询间隔（秒），用于响应 stop 请求
+    _WAIT_POLL_INTERVAL = 0.5
+
     def __init__(self, order_ids, tracking_numbers):
         super().__init__()
         self.order_ids = order_ids
         self.tracking_numbers = tracking_numbers
         self._resume_event = threading.Event()
         self._resume_event.set()
+        self._stopped = False
 
     def pause(self):
         """暂停后续任务。"""
@@ -34,6 +38,19 @@ class BatchWorker(QObject):
     def resume(self):
         """恢复任务。"""
         self._resume_event.set()
+
+    def stop(self):
+        """请求终止任务（安全退出）。"""
+        self._stopped = True
+        # 同时唤醒暂停中的 wait，使线程能够退出
+        self._resume_event.set()
+
+    def _wait_for_resume(self):
+        """等待恢复信号，支持 stop 中断。返回 True 表示可继续，False 表示应退出。"""
+        while not self._resume_event.wait(timeout=self._WAIT_POLL_INTERVAL):
+            if self._stopped:
+                return False
+        return not self._stopped
 
     def run(self):
         """后台线程执行入口。"""
@@ -54,7 +71,8 @@ class BatchWorker(QObject):
                 for index, (order_id, tracking_number) in enumerate(
                     zip(self.order_ids, self.tracking_numbers), start=1
                 ):
-                    self._resume_event.wait()
+                    if not self._wait_for_resume():
+                        break
                     self.step_started.emit(index, total_count, order_id)
                     try:
                         old_waybill = update_single_order(order_id, tracking_number, session)
@@ -81,4 +99,4 @@ class BatchWorker(QObject):
             failure_count += total_count - success_count - failure_count
             self.fatal_error.emit(str(exc))
         finally:
-            self.finished.emit(success_count, failure_count, total_count, False)
+            self.finished.emit(success_count, failure_count, total_count, self._stopped)

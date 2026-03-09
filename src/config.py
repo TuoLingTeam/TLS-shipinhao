@@ -3,6 +3,7 @@
 
 import os
 import re
+import sys
 
 from .constants import (
     CONFIG_DIR_NAME,
@@ -12,8 +13,6 @@ from .constants import (
     MAGIC_FILE_STEM,
     USER_CONFIG_POINTER,
 )
-
-import sys
 
 # ---------------------------------------------------------------------------
 # 配置目录缓存
@@ -251,7 +250,7 @@ def is_config_dir_ready(config_dir):
         return False
 
 
-def getCookie():
+def get_cookie():
     """读取 Cookie 配置（兼容 cookie/cookie.txt/cookie.txt.txt）。"""
     config_dir = resolve_config_dir()
     file_paths = resolve_config_files_in_dir(config_dir)
@@ -261,10 +260,10 @@ def getCookie():
     return read_cookie_data(cookie_path)
 
 
-def getMagic(cookie_data=None):
+def get_magic(cookie_data=None):
     """读取 magic：优先从 cookie 中提取，失败时回退到独立文件。"""
     if cookie_data is None:
-        cookie_data = getCookie()
+        cookie_data = get_cookie()
 
     magic = extract_biz_magic_from_cookie(cookie_data)
     if magic:
@@ -291,9 +290,9 @@ def getMagic(cookie_data=None):
 def parse_batch_input(raw_text):
     """解析批量输入，支持空格、英文逗号、中文逗号和换行。"""
     return [
-        item.strip()
+        stripped
         for item in re.split(r"[\s,，]+", raw_text.strip())
-        if item.strip()
+        if (stripped := item.strip())
     ]
 
 

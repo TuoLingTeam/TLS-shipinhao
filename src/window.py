@@ -674,6 +674,11 @@ class MainWindow(QWidget):
             fixed_height = min(fixed_height, available.height())
         return fixed_width, fixed_height
 
+    @staticmethod
+    def _scaled(design, minimum, scale):
+        """按缩放比计算值，不低于下限。"""
+        return max(minimum, int(design * scale))
+
     def _sync_responsive_metrics(self):
         """窗口变化时同步紧凑布局尺寸。"""
         viewport = self.scroll_area.viewport().size()
@@ -682,73 +687,74 @@ class MainWindow(QWidget):
 
         width_scale = viewport.width() / DESIGN_WIDTH
         height_scale = viewport.height() / DESIGN_HEIGHT
-        scale = max(0.78, min(1.0, width_scale, height_scale))
+        s = max(0.78, min(1.0, width_scale, height_scale))
+        sc = self._scaled
 
-        page_margin_x = max(12, int(18 * scale))
-        page_margin_y = max(10, int(16 * scale))
-        page_spacing = max(8, int(14 * scale))
-        button_height = max(48, int(56 * scale))
-        header_height = max(100, int(120 * scale))
-        log_editor_height = max(190, int(300 * scale))
+        # -- 字体：(widget, design_size, min_size, bold, fixed) --
+        _font_rules = [
+            (self.hero_title_label,           22, 18, True,  False),
+            (self.title_description_label,    12, 10, False, False),
+            (self.author_badge,               12, 11, True,  False),
+            (self.tutorial_badge,             12, 11, True,  False),
+            (self.order_count_badge,          10,  9, True,  False),
+            (self.tracking_count_badge,       10,  9, True,  False),
+            (self.order_card.title_label,     15, 13, True,  False),
+            (self.tracking_card.title_label,  15, 13, True,  False),
+            (self.order_card.hint_label,      10,  9, False, False),
+            (self.tracking_card.hint_label,   10,  9, False, False),
+            (self.config_title_label,         15, 13, True,  False),
+            (self.config_badge,               10,  9, True,  False),
+            (self.config_hint_label,          10,  9, False, False),
+            (self.config_path_label,          10,  9, False, False),
+            (self.config_button,              11, 10, True,  False),
+            (self.log_title_label,            15, 13, True,  False),
+            (self.log_hint_label,             10,  9, False, False),
+            (self.start_button,               17, 14, True,  False),
+            (self.pause_button,               15, 13, True,  False),
+            (self.order_edit,                 13, 11, False, True),
+            (self.tracking_edit,              13, 11, False, True),
+            (self.log_view,                   11,  9, False, True),
+        ]
+        for widget, design, minimum, bold, fixed in _font_rules:
+            size = sc(design, minimum, s)
+            widget.setFont(build_fixed_font(size) if fixed else build_font(size, bold=bold))
 
-        self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
-        self.title_description_label.setFont(build_font(max(10, int(12 * scale))))
-        self.author_badge.setFont(build_font(max(11, int(12 * scale)), bold=True))
-        self.tutorial_badge.setFont(build_font(max(11, int(12 * scale)), bold=True))
-        self.order_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
-        self.tracking_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
-        self.order_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
-        self.tracking_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
-        self.order_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
-        self.tracking_card.hint_label.setFont(build_font(max(9, int(10 * scale))))
-        self.config_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
-        self.config_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
-        self.config_hint_label.setFont(build_font(max(9, int(10 * scale))))
-        self.config_path_label.setFont(build_font(max(9, int(10 * scale))))
-        self.config_button.setFont(build_font(max(10, int(11 * scale)), bold=True))
-        self.log_title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
-        self.log_hint_label.setFont(build_font(max(9, int(10 * scale))))
-        self.start_button.setFont(build_font(max(14, int(17 * scale)), bold=True))
-        self.pause_button.setFont(build_font(max(13, int(15 * scale)), bold=True))
-        self.order_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
-        self.tracking_edit.setFont(build_fixed_font(max(11, int(13 * scale))))
-        self.log_view.setFont(build_fixed_font(max(9, int(11 * scale))))
+        # -- 尺寸 --
+        badge_h = sc(40, 36, s)
+        author_h = sc(50, 44, s)
+        author_w = sc(210, 180, s)
+        button_h = sc(56, 48, s)
+        header_h = sc(120, 100, s)
+        log_h = sc(300, 190, s)
+        input_h = self._calculate_editor_height(self.order_edit, 10)
 
-        badge_height = max(36, int(40 * scale))
-        author_badge_height = max(44, int(50 * scale))
-        author_badge_width = max(180, int(210 * scale))
-        input_editor_height = self._calculate_editor_height(self.order_edit, 10)
+        self.author_badge.setFixedSize(author_w, author_h)
+        self.tutorial_badge.setFixedSize(author_w, author_h)
+        for badge in (self.order_count_badge, self.tracking_count_badge, self.config_badge):
+            badge.setFixedHeight(badge_h)
+        self.start_button.setFixedHeight(button_h)
+        self.pause_button.setFixedHeight(button_h)
+        self.header_card.setMinimumHeight(header_h)
+        self.order_edit.setFixedHeight(input_h)
+        self.tracking_edit.setFixedHeight(input_h)
+        self.log_view.setMinimumHeight(log_h)
+        self.config_button.setFixedHeight(sc(44, 40, s))
 
-        self.author_badge.setFixedHeight(author_badge_height)
-        self.author_badge.setFixedWidth(author_badge_width)
-        self.tutorial_badge.setFixedHeight(author_badge_height)
-        self.tutorial_badge.setFixedWidth(author_badge_width)
-        self.order_count_badge.setFixedHeight(badge_height)
-        self.tracking_count_badge.setFixedHeight(badge_height)
-        self.config_badge.setFixedHeight(badge_height)
-        self.start_button.setFixedHeight(button_height)
-        self.pause_button.setFixedHeight(button_height)
-        self.header_card.setMinimumHeight(header_height)
-        self.order_edit.setFixedHeight(input_editor_height)
-        self.tracking_edit.setFixedHeight(input_editor_height)
-        self.log_view.setMinimumHeight(log_editor_height)
-        self.config_button.setFixedHeight(max(40, int(44 * scale)))
-
+        # -- 三列卡片等高对齐 --
         card_target_height = max(
             self.order_card.sizeHint().height(),
             self.tracking_card.sizeHint().height(),
         )
         config_non_path_height = self.config_card.sizeHint().height() - self.config_path_label.sizeHint().height()
-        config_path_height = max(56, card_target_height - config_non_path_height)
-        self.config_path_label.setFixedHeight(config_path_height)
-        self.order_card.setFixedHeight(card_target_height)
-        self.tracking_card.setFixedHeight(card_target_height)
-        self.config_card.setFixedHeight(card_target_height)
+        self.config_path_label.setFixedHeight(max(56, card_target_height - config_non_path_height))
+        for card in (self.order_card, self.tracking_card, self.config_card):
+            card.setFixedHeight(card_target_height)
 
-        self.page_layout.setContentsMargins(page_margin_x, page_margin_y, page_margin_x, page_margin_y)
-        self.page_layout.setSpacing(page_spacing)
-        self.input_grid.setHorizontalSpacing(max(10, int(14 * scale)))
-        self.input_grid.setVerticalSpacing(max(8, int(10 * scale)))
+        # -- 间距 --
+        self.page_layout.setContentsMargins(sc(18, 12, s), sc(16, 10, s), sc(18, 12, s), sc(16, 10, s))
+        self.page_layout.setSpacing(sc(14, 8, s))
+        self.input_grid.setHorizontalSpacing(sc(14, 10, s))
+        self.input_grid.setVerticalSpacing(sc(10, 8, s))
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
@@ -1197,6 +1203,17 @@ class MainWindow(QWidget):
         self.worker_thread = None
         self.is_paused = False
         self.refresh_action_buttons()
+
+    def closeEvent(self, event):
+        """窗口关闭时安全终止后台线程。"""
+        if self.worker is not None:
+            self.worker.stop()
+        if self.worker_thread is not None and self.worker_thread.isRunning():
+            self.worker_thread.quit()
+            if not self.worker_thread.wait(3000):
+                self.worker_thread.terminate()
+                self.worker_thread.wait(1000)
+        super().closeEvent(event)
 
     def _on_worker_started(self, total_count):
         """记录任务开始。"""

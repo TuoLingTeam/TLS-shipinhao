@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 自定义控件与字体工具。"""
 
+from functools import lru_cache
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
@@ -28,16 +30,18 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=64)
 def build_font(size, bold=False):
-    """获取通用字体。"""
+    """获取通用字体（带缓存，避免重复创建）。"""
     font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
     font.setPointSize(size)
     font.setBold(bold)
     return font
 
 
+@lru_cache(maxsize=32)
 def build_fixed_font(size):
-    """获取等宽字体。"""
+    """获取等宽字体（带缓存，避免重复创建）。"""
     font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
     font.setPointSize(size)
     return font
