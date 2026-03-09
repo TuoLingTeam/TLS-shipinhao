@@ -1007,7 +1007,7 @@ class MainWindow(QWidget):
         title_box.addWidget(title_label)
 
         self.title_description_label = QLabel(
-            "批量填写订单号与物流单号，系统会自动整理并按顺序逐条执行更新。"
+            "批量处理中差评、品质退款订单。"
         )
         self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(False)
@@ -1018,13 +1018,13 @@ class MainWindow(QWidget):
 
         self.author_badge = QLabel("作者微信：TLS-801")
         self.author_badge.setAlignment(Qt.AlignCenter)
-        self.author_badge.setFont(build_font(10, bold=True))
+        self.author_badge.setFont(build_font(12, bold=True))
         self.author_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue_deep']};"
             "border: 1px solid #C8DAF4;"
-            "border-radius: 12px;"
-            "padding: 10px 14px;"
+            "border-radius: 14px;"
+            "padding: 12px 18px;"
         )
         self.author_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         header_box.addWidget(self.author_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
@@ -1073,7 +1073,7 @@ class MainWindow(QWidget):
 
         self.order_card = self._create_input_card(
             "第一步：填写订单号",
-            "支持英文逗号、中文逗号、换行分隔；会自动整理成一行一个。",
+            "多个订单号请用英文逗号、换行分隔。",
             self.order_count_badge,
             self.order_edit,
             APP_COLORS["blue"],
@@ -1081,7 +1081,7 @@ class MainWindow(QWidget):
         )
         self.tracking_card = self._create_input_card(
             "第二步：填写物流单号",
-            "支持英文逗号、中文逗号、换行分隔；会自动整理成一行一个。",
+            "多个物流单号请用英文逗号、换行分隔。",
             self.tracking_count_badge,
             self.tracking_edit,
             APP_COLORS["orange"],
@@ -1250,7 +1250,7 @@ class MainWindow(QWidget):
 
         card = self._create_input_card(
             "第三步：选择配置目录",
-            "选择 cookie.txt 与 biz_magic.txt 所在目录；会自动记住。",
+            "选择 cookie.txt 与 biz_magic.txt 所在目录。",
             self.config_badge,
             shell,
             APP_COLORS["blue"],
@@ -1299,7 +1299,7 @@ class MainWindow(QWidget):
 
         self.hero_title_label.setFont(build_font(max(18, int(22 * scale)), bold=True))
         self.title_description_label.setFont(build_font(max(10, int(12 * scale))))
-        self.author_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
+        self.author_badge.setFont(build_font(max(11, int(12 * scale)), bold=True))
         self.order_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
         self.tracking_count_badge.setFont(build_font(max(9, int(10 * scale)), bold=True))
         self.order_card.title_label.setFont(build_font(max(13, int(15 * scale)), bold=True))
@@ -1320,9 +1320,10 @@ class MainWindow(QWidget):
         self.log_view.setFont(build_fixed_font(max(9, int(11 * scale))))
 
         badge_height = max(36, int(40 * scale))
+        author_badge_height = max(44, int(50 * scale))
         input_editor_height = self._calculate_editor_height(self.order_edit, 10)
 
-        self.author_badge.setFixedHeight(badge_height)
+        self.author_badge.setFixedHeight(author_badge_height)
         self.order_count_badge.setFixedHeight(badge_height)
         self.tracking_count_badge.setFixedHeight(badge_height)
         self.config_badge.setFixedHeight(badge_height)
