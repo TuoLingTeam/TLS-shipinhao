@@ -33,6 +33,7 @@ screenshot.png
 .kiro/
 .codex/
 .cursor/
+.windsurf/
 *.swp
 *.swo
 *~

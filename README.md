@@ -11,7 +11,14 @@ TLS-shipinhao/
 ├── main.py               # 根入口，仅负责启动 src.app.main
 ├── src/
 │   ├── __init__.py
-│   └── app.py            # 主要界面与业务逻辑
+│   ├── app.py            # 程序入口（main 函数）
+│   ├── constants.py      # 全局常量（窗口尺寸、颜色、URL、配置名等）
+│   ├── config.py         # 配置文件管理（cookie/biz_magic 读取、目录解析）
+│   ├── api.py            # 微信小商店 API 交互（订单查询、物流更新）
+│   ├── worker.py         # BatchWorker 后台批量任务执行器
+│   ├── widgets.py        # 自定义控件（BatchInputEdit、LicenseDialog、字体工具）
+│   ├── window.py         # MainWindow 主窗口（UI 构建、事件处理、授权管理）
+│   └── license.py        # 离线授权管理（卡密激活、设备绑定）
 ├── scripts/
 │   └── build.py          # 统一构建入口
 ├── build_mac.sh          # macOS 打包脚本
@@ -20,6 +27,14 @@ TLS-shipinhao/
 ├── README.md
 ├── dist/                 # 打包产物
 └── logs/                 # 运行日志
+```
+
+### 模块依赖关系
+
+```text
+constants ← config ← api ← worker
+                                ↘
+widgets + worker ← window ← app（入口）
 ```
 
 ## 功能特性
