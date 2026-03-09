@@ -375,7 +375,7 @@ async function doGenerate() {
   if (!res.success) { showMsg("genMsg", res.message, true); return; }
   showMsg("genMsg", "成功生成 " + res.keys.length + " 个卡密", false);
   const out = document.getElementById("keysOutput");
-  out.textContent = res.keys.join("\n");
+  out.textContent = res.keys.join("\\n");
   out.classList.remove("hidden");
   document.getElementById("copyBtn").style.display = "inline-block";
   loadList();
@@ -428,7 +428,7 @@ function renderList(res) {
 function stat(n, label) {
   return '<div class="stat-item"><div class="stat-num">' + n + '</div><div class="stat-label">' + label + '</div></div>';
 }
-function fmt(s) { return s ? s.replace(/T/, ' ').replace(/\+00:00$/, '') : '-'; }
+function fmt(s) { return s ? s.replace(/T/, ' ').replace(/\\+00:00$/, '') : '-'; }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function showMsg(id, msg, err) {
   document.getElementById(id).innerHTML = '<div class="msg ' + (err ? 'msg-err' : 'msg-ok') + '">' + esc(msg) + '</div>';
