@@ -670,8 +670,11 @@ class MainWindow(QWidget):
         fixed_width = int(round(default_width / scale))
         fixed_height = int(round(default_height / scale))
         if available is not None:
-            fixed_width = min(fixed_width, available.width())
-            fixed_height = min(fixed_height, available.height())
+            # 限制不超过可用屏幕面积的 92%，避免小屏笔记本上窗口贴满边缘
+            max_w = int(available.width() * 0.92)
+            max_h = int(available.height() * 0.92)
+            fixed_width = min(fixed_width, max_w)
+            fixed_height = min(fixed_height, max_h)
         return fixed_width, fixed_height
 
     @staticmethod
