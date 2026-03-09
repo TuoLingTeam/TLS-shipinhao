@@ -782,7 +782,7 @@ class MainWindow(QWidget):
         self._licensed = licensed
         self._license_reason = license_reason
 
-        self.setWindowTitle(WINDOW_TITLE)
+        self._sync_window_title_with_license(self._license_reason)
         self.setObjectName("AppRoot")
         fixed_width, fixed_height = self._resolve_fixed_window_size()
         self.setFixedSize(fixed_width, fixed_height)
@@ -1729,26 +1729,47 @@ class MainWindow(QWidget):
         info, reason = check_stored_license()
         self._licensed = reason == "ok"
         self._license_reason = reason
+        self._sync_window_title_with_license(reason)
         return info, reason
+
+    def _sync_window_title_with_license(self, license_reason=None):
+        """同步窗口标题中的授权状态。"""
+        reason = self._license_reason if license_reason is None else license_reason
+        status = "已激活" if reason == "ok" else "未激活"
+        self.setWindowTitle(f"{WINDOW_TITLE}（{status}）")
 
     def _prompt_license_activation(self, reason=None):
         """弹出激活窗口，返回是否激活成功。"""
         if reason is None:
             _, reason = self._refresh_license_state()
+        self.append_result_log(f"授权状态：{get_license_reason_text(reason)}")
+        self.append_result_log("正在打开卡密激活窗口...")
+
         dialog = LicenseDialog(self, reason=reason)
         result = dialog.exec()
         if result == QDialog.Accepted and dialog.activated:
-            self._licensed = True
-            self._license_reason = "ok"
-            return True
-        self._licensed = False
-        self._license_reason = reason
+            info, refreshed_reason = self._refresh_license_state()
+            if refreshed_reason == "ok":
+                self.append_result_log("卡密激活成功，已解锁批量处理功能。")
+                expires = str((info or {}).get("expires_at", ""))[:10]
+                if expires:
+                    self.append_result_log(f"授权有效期至：{expires}")
+                return True
+
+            self.append_result_log("卡密激活结果校验失败，请重试。")
+            self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
+            return False
+
+        _, refreshed_reason = self._refresh_license_state()
+        self.append_result_log("卡密激活未完成。")
+        self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
         return False
 
     def prompt_license_on_startup(self):
         """启动后提示激活（仅在未激活时弹出）。"""
         info, reason = self._refresh_license_state()
         if reason == "ok":
+            self.append_result_log("授权状态：已激活。")
             expires = str((info or {}).get("expires_at", ""))[:10]
             if expires:
                 self.append_result_log(f"授权有效期至：{expires}")
