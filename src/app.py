@@ -81,20 +81,10 @@ COOKIE_FILE_NAME = "cookie.txt"
 MAGIC_FILE_NAME = "biz_magic.txt"
 USER_CONFIG_POINTER = "selected_config_dir.txt"
 _CONFIG_DIR_CACHE = None
-_DELIVERY_COMPANY_CACHE = None
 
 ORDER_DETAIL_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail"
-ORDER_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"
 ORDER_DELIVERY_UPDATE_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateOrderDeliveryInfo"
-DELIVERY_REGISTRY_MAX_PAGES = 5
-DELIVERY_REGISTRY_PAGE_SIZE = 30
 DELIVERY_MISMATCH_MESSAGE = "快递单号与所选物流商不匹配"
-
-CARRIER_NAME_ALIASES = {
-    "圆通速递": ("圆通速递", "圆通", "yto"),
-    "中通快递": ("中通快递", "中通", "zto"),
-    "申通快递": ("申通快递", "申通", "sto"),
-}
 
 
 class ConfigNotFoundError(FileNotFoundError):
@@ -318,62 +308,6 @@ def create_session():
     return session
 
 
-def normalize_carrier_name(name):
-    """归一化物流公司名称，便于识别和映射。"""
-    if not name:
-        return ""
-    compact_name = re.sub(r"\s+", "", str(name)).lower()
-    for canonical_name, aliases in CARRIER_NAME_ALIASES.items():
-        for alias in aliases:
-            alias_compact = re.sub(r"\s+", "", alias).lower()
-            if alias_compact and alias_compact in compact_name:
-                return canonical_name
-    return str(name).strip()
-
-
-def detect_carrier_candidates(tracking_number):
-    """根据单号识别可能的物流公司，仅保留圆通/中通/申通。"""
-    tracking = re.sub(r"\s+", "", str(tracking_number)).upper()
-    candidates = []
-
-    def add(name):
-        if name and name not in candidates:
-            candidates.append(name)
-
-    if tracking.startswith("YT") or re.match(r"^7690\d{8,}$", tracking):
-        add("圆通速递")
-    if tracking.startswith("ZTO") or tracking.startswith("ZT"):
-        add("中通快递")
-    if tracking.startswith("STO") or tracking.startswith("ST"):
-        add("申通快递")
-    return candidates
-
-
-def add_delivery_company_mapping(registry, delivery_id, delivery_name):
-    """向映射表中登记物流公司与 deliveryId。"""
-    if delivery_id in (None, "") or not delivery_name:
-        return
-    canonical_name = normalize_carrier_name(delivery_name)
-    company_list = registry.setdefault(canonical_name, [])
-    delivery_id_str = str(delivery_id)
-    if any(item["deliveryId"] == delivery_id_str for item in company_list):
-        return
-    company_list.append({"deliveryId": delivery_id_str, "deliveryName": str(delivery_name)})
-
-
-def collect_delivery_company_mappings(payload, registry):
-    """递归扫描接口返回中的物流公司信息。"""
-    if isinstance(payload, dict):
-        add_delivery_company_mapping(registry, payload.get("deliveryId"), payload.get("deliveryName"))
-        for value in payload.values():
-            collect_delivery_company_mappings(value, registry)
-        return
-
-    if isinstance(payload, list):
-        for item in payload:
-            collect_delivery_company_mappings(item, registry)
-
-
 def fetch_order_detail_payload(order_id, session):
     """拉取完整订单详情响应。"""
     params = {"token": "", "lang": "zh_CN"}
@@ -427,88 +361,13 @@ def fetch_delivery_product_info(order_id, session):
     return delivery_product_info
 
 
-def fetch_order_search_payload(session, page_num, page_size=DELIVERY_REGISTRY_PAGE_SIZE):
-    """拉取订单列表，用于构建物流公司映射。"""
-    payload = {
-        "isSearch": False,
-        "pageSize": page_size,
-        "pageNum": page_num,
-        "orderStatus": 100,
-        "overTime": 0,
-        "pengingShipOneDay": 0,
-        "pengingShipSixHour": 0,
-        "expediteDelivery": 0,
-        "stockoutPunishAlert": 0,
-        "waybillStatus": 0,
-        "onAftersaleOrderExist": 0,
-    }
-    try:
-        response = session.post(
-            ORDER_SEARCH_URL,
-            params={"token": "", "lang": "zh_CN"},
-            json=payload,
-            timeout=REQUEST_TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"获取订单列表失败：{exc}") from exc
-
-    if response.status_code != 200:
-        raise RuntimeError(f"获取订单列表失败：{get_response_error(response)}")
-
-    try:
-        result = response.json()
-    except ValueError as exc:
-        raise RuntimeError("获取订单列表失败：接口返回了非 JSON 响应。") from exc
-
-    if result.get("code") not in (None, 0):
-        raise RuntimeError(f"获取订单列表失败：{get_payload_error(result, '订单列表接口返回失败。')}")
-
-    return result
-
-
-def build_delivery_company_registry(session, seed_order_ids=None):
-    """从真实订单数据中构建 deliveryName -> deliveryId 映射。"""
-    registry = {}
-    for order_id in seed_order_ids or []:
-        try:
-            detail_payload = fetch_order_detail_payload(order_id, session)
-        except Exception:
-            continue
-        collect_delivery_company_mappings(detail_payload, registry)
-
-    for page_num in range(1, DELIVERY_REGISTRY_MAX_PAGES + 1):
-        try:
-            order_payload = fetch_order_search_payload(session, page_num)
-        except Exception:
-            break
-        collect_delivery_company_mappings(order_payload, registry)
-        order_list = order_payload.get("orderList") or order_payload.get("list") or []
-        if not order_list:
-            break
-
-    return registry
-
-
-def get_delivery_company_registry(session, seed_order_ids=None):
-    """获取并缓存物流公司映射表。"""
-    global _DELIVERY_COMPANY_CACHE
-    if _DELIVERY_COMPANY_CACHE is None:
-        _DELIVERY_COMPANY_CACHE = build_delivery_company_registry(session, seed_order_ids)
-        return _DELIVERY_COMPANY_CACHE
-
-    if seed_order_ids:
-        seed_registry = build_delivery_company_registry(session, seed_order_ids)
-        for company_name, options in seed_registry.items():
-            existing = _DELIVERY_COMPANY_CACHE.setdefault(company_name, [])
-            existing_ids = {item["deliveryId"] for item in existing}
-            for option in options:
-                if option["deliveryId"] not in existing_ids:
-                    existing.append(option)
-    return _DELIVERY_COMPANY_CACHE
-
-
 def build_delivery_candidates(order_id, tracking_number, delivery_product_info, session):
-    """构建当前单号的 deliveryId 候选列表。"""
+    """构建当前单号的 deliveryId 候选列表。
+
+    当前策略与既有程序保持一致：
+    1. 优先使用新物流单号前两位作为 deliveryId（主路径）。
+    2. 失败后回退到订单原始 deliveryId（兜底）。
+    """
     del order_id, session
     candidates = []
     seen_keys = set()
@@ -963,7 +822,15 @@ class MainWindow(QWidget):
         self.refresh_action_buttons()
 
     def _build_ui(self):
-        """构建界面。"""
+        """构建主界面骨架。"""
+        self._build_root_container()
+        self._build_header_card()
+        self._build_input_section()
+        self._build_action_section()
+        self._build_log_section()
+
+    def _build_root_container(self):
+        """创建根容器与可滚动页面。"""
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
@@ -984,6 +851,8 @@ class MainWindow(QWidget):
         self.page_layout.setSpacing(16)
         self.page_layout.setAlignment(Qt.AlignTop)
 
+    def _build_header_card(self):
+        """创建顶部标题卡片。"""
         self.header_card = self._create_card(self.page_layout, object_name="HeroCard")
         header_layout = QVBoxLayout(self.header_card)
         header_layout.setContentsMargins(0, 0, 0, 0)
@@ -1031,6 +900,24 @@ class MainWindow(QWidget):
         header_box.addWidget(self.author_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
         header_layout.addWidget(header_body)
 
+    def _create_count_badge(self, text_color, bg_color, border_color):
+        """创建输入数量徽标。"""
+        badge = QLabel()
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setMinimumWidth(72)
+        badge.setFont(build_font(10, bold=True))
+        badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        badge.setStyleSheet(
+            f"background: {bg_color};"
+            f"color: {text_color};"
+            f"border: 1px solid {border_color};"
+            "border-radius: 10px;"
+            "padding: 8px 10px;"
+        )
+        return badge
+
+    def _build_input_section(self):
+        """创建三列输入区域（订单号、物流单号、配置目录）。"""
         self.input_container = QWidget()
         self.input_container.setObjectName("InputContainer")
         self.input_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
@@ -1039,30 +926,16 @@ class MainWindow(QWidget):
         self.input_grid.setHorizontalSpacing(16)
         self.input_grid.setVerticalSpacing(12)
 
-        self.order_count_badge = QLabel()
-        self.order_count_badge.setAlignment(Qt.AlignCenter)
-        self.order_count_badge.setMinimumWidth(72)
-        self.order_count_badge.setFont(build_font(10, bold=True))
-        self.order_count_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.order_count_badge.setStyleSheet(
-            f"background: {APP_COLORS['blue_soft']};"
-            f"color: {APP_COLORS['blue']};"
-            "border: 1px solid #9FC0F0;"
-            "border-radius: 10px;"
-            "padding: 8px 10px;"
+        self.order_count_badge = self._create_count_badge(
+            text_color=APP_COLORS["blue"],
+            bg_color=APP_COLORS["blue_soft"],
+            border_color="#9FC0F0",
         )
 
-        self.tracking_count_badge = QLabel()
-        self.tracking_count_badge.setAlignment(Qt.AlignCenter)
-        self.tracking_count_badge.setMinimumWidth(72)
-        self.tracking_count_badge.setFont(build_font(10, bold=True))
-        self.tracking_count_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.tracking_count_badge.setStyleSheet(
-            f"background: {APP_COLORS['orange_soft']};"
-            f"color: {APP_COLORS['orange']};"
-            "border: 1px solid #E4B57E;"
-            "border-radius: 10px;"
-            "padding: 8px 10px;"
+        self.tracking_count_badge = self._create_count_badge(
+            text_color=APP_COLORS["orange"],
+            bg_color=APP_COLORS["orange_soft"],
+            border_color="#E4B57E",
         )
 
         self.order_edit = BatchInputEdit("每行一个订单号，最多 100 条。")
@@ -1099,6 +972,8 @@ class MainWindow(QWidget):
         self.input_grid.setColumnStretch(1, 1)
         self.input_grid.setColumnStretch(2, 1)
 
+    def _build_action_section(self):
+        """创建开始/暂停操作区。"""
         self.action_row = QWidget()
         self.action_row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.action_layout = QHBoxLayout(self.action_row)
@@ -1122,6 +997,8 @@ class MainWindow(QWidget):
         self.action_layout.addWidget(self.start_button, 1)
         self.page_layout.addWidget(self.action_row)
 
+    def _build_log_section(self):
+        """创建日志展示区。"""
         self.log_card = self._create_card(self.page_layout, stretch=1, object_name="LogCard")
         log_layout = QVBoxLayout(self.log_card)
         log_layout.setContentsMargins(0, 0, 0, 0)
@@ -1452,13 +1329,13 @@ class MainWindow(QWidget):
         icon_type = icon_map.get(level, QStyle.SP_MessageBoxInformation)
         return self.style().standardIcon(icon_type).pixmap(46, 46)
 
-    def _build_message_dialog(self, level, title, text, informative_text=""):
-        """构建统一布局的提示弹窗，确保图标/文本/按钮对齐。"""
+    def _create_message_dialog_base(self, level, title, text, informative_text="", *, min_width=560):
+        """构建统一样式弹窗骨架，返回 (dialog, actions_layout)。"""
         dialog = QDialog(self)
         dialog.setObjectName("AppMessageDialog")
         dialog.setWindowTitle(title)
         dialog.setModal(True)
-        dialog.setMinimumWidth(560)
+        dialog.setMinimumWidth(min_width)
 
         root = QVBoxLayout(dialog)
         root.setContentsMargins(22, 18, 22, 18)
@@ -1503,14 +1380,29 @@ class MainWindow(QWidget):
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(10)
         actions.addStretch(1)
-
-        confirm = QPushButton("确定")
-        confirm.setObjectName("MessagePrimary")
-        confirm.clicked.connect(dialog.accept)
-        actions.addWidget(confirm)
-
         root.addLayout(actions)
+
         self._style_message_box(dialog)
+        return dialog, actions
+
+    def _add_message_action(self, actions_layout, text, object_name, callback):
+        """向弹窗动作栏添加按钮。"""
+        button = QPushButton(text)
+        button.setObjectName(object_name)
+        button.clicked.connect(callback)
+        actions_layout.addWidget(button)
+        return button
+
+    def _build_message_dialog(self, level, title, text, informative_text=""):
+        """构建普通提示弹窗（单确定按钮）。"""
+        dialog, actions = self._create_message_dialog_base(
+            level,
+            title,
+            text,
+            informative_text,
+            min_width=560,
+        )
+        self._add_message_action(actions, "确定", "MessagePrimary", dialog.accept)
         return dialog
 
     def show_message(self, level, title, text, informative_text=""):
@@ -1605,66 +1497,15 @@ class MainWindow(QWidget):
             "3. 主目录固定配置目录 ~/.tls-shipinhao\n\n"
             f"本次已检查:\n{searched_dirs}"
         )
-        dialog = QDialog(self)
-        dialog.setObjectName("AppMessageDialog")
-        dialog.setWindowTitle("缺少配置文件")
-        dialog.setModal(True)
-        dialog.setMinimumWidth(620)
-
-        root = QVBoxLayout(dialog)
-        root.setContentsMargins(22, 18, 22, 18)
-        root.setSpacing(16)
-
-        body = QHBoxLayout()
-        body.setSpacing(14)
-
-        icon_label = QLabel()
-        icon_label.setPixmap(self._message_icon_pixmap(QMessageBox.Warning))
-        icon_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        icon_label.setFixedWidth(56)
-        body.addWidget(icon_label, 0, Qt.AlignTop)
-
-        text_wrap = QWidget()
-        text_layout = QVBoxLayout(text_wrap)
-        text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(8)
-
-        title_label = QLabel("缺少配置文件")
-        title_label.setObjectName("MessageTitle")
-        title_label.setWordWrap(True)
-        text_layout.addWidget(title_label)
-
-        text_label = QLabel("未找到配置文件 cookie.txt 或 biz_magic.txt。")
-        text_label.setObjectName("MessageText")
-        text_label.setWordWrap(True)
-        text_layout.addWidget(text_label)
-
-        info_label = QLabel(info_text)
-        info_label.setObjectName("MessageInfo")
-        info_label.setWordWrap(True)
-        info_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        text_layout.addWidget(info_label)
-
-        body.addWidget(text_wrap, 1)
-        root.addLayout(body, 1)
-
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setSpacing(10)
-        actions.addStretch(1)
-
-        close_button = QPushButton("关闭")
-        close_button.setObjectName("MessageSecondary")
-        close_button.clicked.connect(dialog.reject)
-        actions.addWidget(close_button)
-
-        choose_button = QPushButton("选择配置目录")
-        choose_button.setObjectName("MessagePrimary")
-        choose_button.clicked.connect(dialog.accept)
-        actions.addWidget(choose_button)
-
-        root.addLayout(actions)
-        self._style_message_box(dialog)
+        dialog, actions = self._create_message_dialog_base(
+            QMessageBox.Warning,
+            "缺少配置文件",
+            "未找到配置文件 cookie.txt 或 biz_magic.txt。",
+            info_text,
+            min_width=620,
+        )
+        self._add_message_action(actions, "关闭", "MessageSecondary", dialog.reject)
+        self._add_message_action(actions, "选择配置目录", "MessagePrimary", dialog.accept)
         if dialog.exec() == QDialog.Accepted:
             self.choose_config_dir()
 
