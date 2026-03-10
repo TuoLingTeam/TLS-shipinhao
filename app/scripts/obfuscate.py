@@ -51,11 +51,11 @@ RESOURCE_SUFFIXES = {".png", ".ico", ".icns", ".jpg", ".jpeg", ".gif", ".svg"}
 # 清理
 # =========================
 def clean_dist() -> None:
-    """清理旧的分发目录。"""
+    """Clean old distribution directory."""
     if DIST_SRC.exists():
         shutil.rmtree(DIST_SRC)
     DIST_SRC.mkdir(parents=True)
-    print(f"已清理输出目录: {DIST_SRC}")
+    print(f"Cleaned output directory: {DIST_SRC}")
 
 
 # =========================
@@ -80,14 +80,14 @@ def copy_resources() -> None:
         shutil.copy2(req, DIST_SRC / "requirements.txt")
         count += 1
 
-    print(f"已复制 {count} 个资源文件")
+    print(f"Copied {count} resource files")
 
 
 # =========================
 # Cython 编译
 # =========================
 def ensure_cython() -> None:
-    """确保 Cython 和 setuptools 已安装。"""
+    """Ensure Cython and setuptools are installed."""
     python_bin = _project_python()
     try:
         subprocess.run(
@@ -95,7 +95,7 @@ def ensure_cython() -> None:
             capture_output=True, check=True,
         )
     except subprocess.CalledProcessError:
-        print("安装 Cython + setuptools...")
+        print("Installing Cython + setuptools...")
         subprocess.run(
             [python_bin, "-m", "pip", "install", "Cython", "setuptools"],
             check=True,
@@ -113,14 +113,14 @@ def compile_with_cython() -> None:
         if f.endswith(".py") and f != "__init__.py"
     ]
     if not py_files:
-        print("没有找到需要编译的 .py 文件")
+        print("No .py files found for compilation")
         return
 
-    print(f"待编译文件: {len(py_files)} 个")
+    print(f"Files to compile: {len(py_files)}")
     for f in py_files:
         print(f"  {f}")
 
-    # 生成临时 setup.py
+    # Generate temporary setup.py
     setup_content = textwrap.dedent(f"""\
         from setuptools import setup
         from Cython.Build import cythonize
@@ -141,7 +141,7 @@ def compile_with_cython() -> None:
     try:
         setup_file.write_text(setup_content, encoding="utf-8")
 
-        print("\n开始 Cython 编译...")
+        print("\nStarting Cython compilation...")
         subprocess.run(
             [
                 python_bin, str(setup_file),
@@ -152,7 +152,7 @@ def compile_with_cython() -> None:
             cwd=str(APP_ROOT),
             check=True,
         )
-        print("Cython 编译完成")
+        print("Cython compilation completed")
     finally:
         # 清理临时文件
         setup_file.unlink(missing_ok=True)
@@ -180,10 +180,10 @@ def compile_with_cython() -> None:
 # 修复导入问题
 # =========================
 def fix_cython_imports() -> None:
-    """修复 Cython 编译后的导入问题。"""
-    print("修复 Cython 导入问题...")
+    """Fix Cython import issues."""
+    print("Fixing Cython import issues...")
     
-    # 读取原始 app.py 内容
+    # Read original app.py content
     app_py_src = SRC_DIR / "app.py"
     if not app_py_src.exists():
         return
@@ -225,15 +225,15 @@ def fix_cython_imports() -> None:
         if content != original_content:
             dist_py_file = DIST_SRC / "src" / py_file.name
             dist_py_file.write_text(content, encoding="utf-8")
-            print(f"  修复了 {py_file.name} 的导入")
+            print(f"  Fixed imports in {py_file.name}")
 
 
 # =========================
 # 验证
 # =========================
 def show_tree() -> None:
-    """显示分发目录结构。"""
-    print("\n分发目录结构:")
+    """Show distribution directory structure."""
+    print("\nDistribution directory structure:")
     for root, dirs, files in os.walk(DIST_SRC):
         dirs.sort()
         level = len(Path(root).relative_to(DIST_SRC).parts)
@@ -249,15 +249,15 @@ def show_tree() -> None:
 # =========================
 def main() -> None:
     print("=" * 50)
-    print("TLS-shipinhao 代码编译工具 (Cython)")
+    print("TLS-shipinhao Code Compilation Tool (Cython)")
     print("=" * 50)
-    print(f"源码目录: {APP_ROOT}")
-    print(f"输出目录: {DIST_SRC}")
+    print(f"Source directory: {APP_ROOT}")
+    print(f"Output directory: {DIST_SRC}")
     print()
 
     if "--clean" in sys.argv:
         clean_dist()
-        print("清理完成。")
+        print("Cleanup completed.")
         return
 
     clean_dist()
@@ -265,8 +265,8 @@ def main() -> None:
     compile_with_cython()
     show_tree()
 
-    print(f"\n分发目录已生成: {DIST_SRC}")
-    print("可使用 build.py --dist 从编译后的源码构建打包产物。")
+    print(f"\nDistribution directory generated: {DIST_SRC}")
+    print("You can use build.py --dist to build from the compiled source code.")
 
 
 if __name__ == "__main__":
