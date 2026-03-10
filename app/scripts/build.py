@@ -41,7 +41,6 @@ DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
 MAIN_FILE = APP_ROOT / "main.py"
 COOKIE_FILE = REPO_ROOT / "cookie.txt"
-MAGIC_FILE = REPO_ROOT / "biz_magic.txt"
 SOURCE_ICON_FILE = APP_ROOT / "src" / "favicon.png"
 MACOS_ICON_FILE = BUILD_DIR / "app_icon.icns"
 WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
@@ -250,11 +249,10 @@ def remove_path(path: Path) -> bool:
 
 
 def copy_runtime_files(destination: Path) -> None:
-    """复制运行时配置文件（cookie/biz_magic）。"""
+    """复制运行时配置文件（cookie）。"""
     destination.mkdir(parents=True, exist_ok=True)
-    for source in (COOKIE_FILE, MAGIC_FILE):
-        if source.exists():
-            shutil.copy2(source, destination / source.name)
+    if COOKIE_FILE.exists():
+        shutil.copy2(COOKIE_FILE, destination / COOKIE_FILE.name)
 
 
 # =========================

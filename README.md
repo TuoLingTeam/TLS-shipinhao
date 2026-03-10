@@ -58,10 +58,9 @@ pip install -r app/requirements.txt
 
 运行前需要准备两个配置文件：
 
-1. `cookie.txt` - 存放微信小商店的 Cookie 信息
-2. `biz_magic.txt` - 存放 biz_magic 认证信息
+1. `cookie.txt` - 存放微信小商店的 Cookie 信息（包含 biz_magic 认证信息）
 
-开发模式默认从项目根目录读取这两个文件；打包后默认从 `.app` 或 `exe` 同级目录读取。
+开发模式默认从项目根目录读取配置文件；打包后默认从 `.app` 或 `exe` 同级目录读取。
 
 ## 运行方式
 
@@ -78,7 +77,7 @@ python app/main.py
 
 ## 注意事项
 
-- 确保 `cookie.txt` 和 `biz_magic.txt` 文件存在且内容有效
+- 确保 `cookie.txt` 文件存在且内容有效（包含 biz_magic 值）
 - Cookie 信息需要定期更新
 - 建议在虚拟环境内运行和打包
 
@@ -113,4 +112,4 @@ chmod +x build_mac.sh
 ./build_mac.sh
 ```
 
-应用输出在 `dist/TLS-shipinhao.app`。使用前将 `cookie.txt` 和 `biz_magic.txt` 放在 `dist/` 目录，与 `.app` 同级即可。
+应用输出在 `dist/TLS-shipinhao.app`。使用前将 `cookie.txt` 放在 `dist/` 目录，与 `.app` 同级即可。

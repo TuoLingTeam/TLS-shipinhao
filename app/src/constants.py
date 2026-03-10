@@ -68,9 +68,7 @@ APP_COLORS = {
 # ---------------------------------------------------------------------------
 CONFIG_DIR_NAME = ".tls-shipinhao"
 COOKIE_FILE_NAME = "cookie.txt"
-MAGIC_FILE_NAME = "biz_magic.txt"
 COOKIE_FILE_STEM = "cookie"
-MAGIC_FILE_STEM = "biz_magic"
 USER_CONFIG_POINTER = "selected_config_dir.txt"
 
 # ---------------------------------------------------------------------------

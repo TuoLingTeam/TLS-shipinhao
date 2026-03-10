@@ -9,8 +9,6 @@ from .constants import (
     CONFIG_DIR_NAME,
     COOKIE_FILE_NAME,
     COOKIE_FILE_STEM,
-    MAGIC_FILE_NAME,
-    MAGIC_FILE_STEM,
     USER_CONFIG_POINTER,
 )
 
@@ -104,12 +102,10 @@ def _strip_txt_suffixes(filename):
 
 
 def _classify_config_file_name(filename):
-    """识别配置文件类型：cookie 或 biz_magic。"""
+    """识别配置文件类型：只支持 cookie。"""
     stem = _strip_txt_suffixes(filename)
     if stem == COOKIE_FILE_STEM:
         return "cookie"
-    if stem == MAGIC_FILE_STEM:
-        return "magic"
     return None
 
 
@@ -122,10 +118,6 @@ def _config_file_priority(filename, file_type):
         if normalized == COOKIE_FILE_STEM:
             return 20
         return 10
-    if normalized == MAGIC_FILE_NAME:
-        return 30
-    if normalized == MAGIC_FILE_STEM:
-        return 20
     return 10
 
 
@@ -135,7 +127,7 @@ def _config_file_priority(filename, file_type):
 
 
 def resolve_config_files_in_dir(config_dir):
-    """在目录中解析配置文件路径（cookie 必需，biz_magic 可选）。"""
+    """在目录中解析配置文件路径（只需要 cookie）。"""
     if not config_dir or not os.path.isdir(config_dir):
         return None
 
@@ -165,7 +157,7 @@ def resolve_config_files_in_dir(config_dir):
 
     if "cookie" not in resolved:
         return None
-    return {"cookie": resolved["cookie"], "magic": resolved.get("magic")}
+    return {"cookie": resolved["cookie"]}
 
 
 def parse_cookie_content(content):
@@ -184,12 +176,6 @@ def read_cookie_data(cookie_path):
     with open(cookie_path, "r", encoding="utf-8") as file:
         content = file.read().strip()
     return parse_cookie_content(content)
-
-
-def read_magic_file(magic_path):
-    """读取独立 biz_magic 文件。"""
-    with open(magic_path, "r", encoding="utf-8") as file:
-        return file.read().strip()
 
 
 def extract_biz_magic_from_cookie(cookie_data):
