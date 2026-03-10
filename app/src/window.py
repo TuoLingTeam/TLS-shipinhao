@@ -59,12 +59,11 @@ from .license import check_stored_license
 class MainWindow(QWidget):
     """主窗口。"""
 
-    def __init__(self, licensed=True, license_reason="ok"):
+    def __init__(self, license_reason="ok"):
         super().__init__()
         self.worker_thread = None
         self.worker = None
         self.is_paused = False
-        self._licensed = licensed
         self._license_reason = license_reason
 
         self._sync_window_title_with_license(self._license_reason)
@@ -1038,7 +1037,6 @@ class MainWindow(QWidget):
     def _refresh_license_state(self):
         """刷新本地授权状态。"""
         info, reason = check_stored_license()
-        self._licensed = reason == "ok"
         self._license_reason = reason
         self._sync_window_title_with_license(reason)
         return info, reason

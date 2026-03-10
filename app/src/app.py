@@ -15,7 +15,7 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     _, reason = check_stored_license()
-    window = MainWindow(licensed=(reason == "ok"), license_reason=reason)
+    window = MainWindow(license_reason=reason)
     window.show()
     if reason != "ok":
         window.prompt_license_on_startup()

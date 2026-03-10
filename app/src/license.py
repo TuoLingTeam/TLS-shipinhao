@@ -3,6 +3,7 @@
 """TLS-shipinhao 授权模块（在线激活 + 本地缓存）。"""
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -18,13 +19,12 @@ from .constants import CONFIG_DIR_NAME
 logger = logging.getLogger(__name__)
 
 _LICENSE_FILE_NAME = "license.json"
+# 本地缓存签名密钥（与设备指纹组合使用，提高篡改门槛）
+_HMAC_SECRET = b"TLS-sph-2024-integrity-guard"
 
 
 def _resolve_data_root() -> str:
-    """解析授权数据目录。"""
-    custom = os.environ.get("TLS_APP_DATA_ROOT")
-    if custom:
-        return os.path.abspath(os.path.expanduser(custom))
+    """解析授权数据目录（固定为用户主目录下）。"""
     return os.path.join(os.path.expanduser("~"), CONFIG_DIR_NAME)
 
 
@@ -115,6 +115,54 @@ def _license_path() -> str:
     return os.path.join(_resolve_data_root(), _LICENSE_FILE_NAME)
 
 
+def _compute_signature(key: str, expires_at: str, device_id: str) -> str:
+    """计算 license 关键字段的 HMAC-SHA256 签名。"""
+    payload = f"{key}|{expires_at}|{device_id}".encode("utf-8")
+    secret = _HMAC_SECRET + device_id.encode("utf-8")
+    return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+
+def _verify_signature(info: dict) -> bool:
+    """验证 license.json 中的 HMAC 签名是否完整。"""
+    stored_sig = info.get("signature", "")
+    if not stored_sig:
+        return False
+    expected = _compute_signature(
+        info.get("key", ""),
+        info.get("expires_at", ""),
+        info.get("device_id", ""),
+    )
+    return hmac.compare_digest(stored_sig, expected)
+
+
+def _save_license_file(info: dict) -> None:
+    """将 license 信息（含签名）写入本地文件。"""
+    info["signature"] = _compute_signature(
+        info.get("key", ""),
+        info.get("expires_at", ""),
+        info.get("device_id", ""),
+    )
+    path = _license_path()
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(info, file, ensure_ascii=False, indent=2)
+
+
+def _invalidate_license_file() -> None:
+    """将本地 license 文件标记为无效（清除签名）。"""
+    path = _license_path()
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            info = json.load(file)
+        info.pop("signature", None)
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(info, file, ensure_ascii=False, indent=2)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def activate_license(key: str) -> dict:
     """激活许可证（在线验证 + 设备绑定 + 写入 license.json）。
 
@@ -158,7 +206,7 @@ def activate_license(key: str) -> dict:
         message = result.get("message", "未知错误")
         raise ValueError(f"激活失败：{message}")
 
-    # 2. 后端验证通过，写入本地 license.json
+    # 2. 后端验证通过，写入本地 license.json（含 HMAC 签名）
     info = {
         "key": key.upper(),
         "activated_at": result.get("activated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
@@ -166,11 +214,7 @@ def activate_license(key: str) -> dict:
         "device_id": device_id,
         "plan_days": result.get("plan_days", 0),
     }
-
-    path = _license_path()
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w", encoding="utf-8") as file:
-        json.dump(info, file, ensure_ascii=False, indent=2)
+    _save_license_file(info)
 
     logger.info("License activated via API: expires=%s, device=%s", info["expires_at"], device_id)
     return info
@@ -208,7 +252,8 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
         result = resp.json()
         if result.get("success"):
             return info, "ok"
-        # 后端明确返回失败
+        # 后端明确返回失败，同时失效本地缓存防止离线绕过
+        _invalidate_license_file()
         message = result.get("message", "")
         if "过期" in message or result.get("expired"):
             return info, "expired"
@@ -219,7 +264,11 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
         # 网络不可用，回退到本地缓存校验
         logger.debug("在线校验失败，回退到本地缓存校验")
 
-    # 离线回退：仅检查本地缓存中的过期时间和设备
+    # 离线回退：先验证本地文件的 HMAC 签名完整性
+    if not _verify_signature(info):
+        logger.warning("本地 license 文件签名校验失败，疑似被篡改")
+        return None, "invalid"
+
     try:
         expires_at = datetime.fromisoformat(info["expires_at"])
     except Exception:
