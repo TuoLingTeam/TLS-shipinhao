@@ -13,9 +13,10 @@ from typing import Optional, Tuple
 
 import requests
 
+from .constants import CONFIG_DIR_NAME
+
 logger = logging.getLogger(__name__)
 
-_CONFIG_DIR_NAME = ".tls-shipinhao"
 _LICENSE_FILE_NAME = "license.json"
 
 
@@ -24,7 +25,7 @@ def _resolve_data_root() -> str:
     custom = os.environ.get("TLS_APP_DATA_ROOT")
     if custom:
         return os.path.abspath(os.path.expanduser(custom))
-    return os.path.join(os.path.expanduser("~"), _CONFIG_DIR_NAME)
+    return os.path.join(os.path.expanduser("~"), CONFIG_DIR_NAME)
 
 
 # ---------------------------------------------------------------------------

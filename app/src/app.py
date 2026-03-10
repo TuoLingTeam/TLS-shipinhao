@@ -7,10 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from .window import MainWindow
 
-try:
-    from .license import check_stored_license
-except ImportError:  # pragma: no cover
-    from license import check_stored_license
+from .license import check_stored_license
 
 
 def main():

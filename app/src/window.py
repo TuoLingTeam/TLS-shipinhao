@@ -53,10 +53,7 @@ from .widgets import (
 )
 from .worker import BatchWorker
 
-try:
-    from .license import check_stored_license
-except ImportError:  # pragma: no cover
-    from license import check_stored_license
+from .license import check_stored_license
 
 
 class MainWindow(QWidget):
@@ -216,9 +213,6 @@ class MainWindow(QWidget):
             }}
             QLabel#SectionTitle {{
                 color: {c["heading"]};
-            }}
-            QLabel#SectionHint {{
-                color: {c["muted"]};
             }}
             QLabel#LogTitle {{
                 color: {c["log_fg"]};
@@ -433,14 +427,12 @@ class MainWindow(QWidget):
             "第一步：填写订单号",
             self.order_count_badge,
             self.order_edit,
-            APP_COLORS["blue"],
             "InputCardBlue",
         )
         self.tracking_card = self._create_input_card(
             "第二步：填写物流单号",
             self.tracking_count_badge,
             self.tracking_edit,
-            APP_COLORS["blue"],
             "InputCardBlue2",
         )
         self.config_card = self._create_config_card()
@@ -536,7 +528,7 @@ class MainWindow(QWidget):
             parent_layout.addWidget(card)
         return card
 
-    def _create_input_card(self, title, badge, editor, accent, object_name):
+    def _create_input_card(self, title, badge, editor, object_name):
         """创建输入卡片。"""
         card = QFrame()
         card.setObjectName(object_name)
@@ -622,7 +614,6 @@ class MainWindow(QWidget):
             "第三步：选择配置目录",
             self.config_badge,
             shell,
-            APP_COLORS["blue"],
             "ConfigCard",
         )
         self.config_title_label = card.title_label

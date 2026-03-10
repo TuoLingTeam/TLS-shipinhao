@@ -213,19 +213,17 @@ def clean_build_artifacts() -> None:
     """清理历史产物，保证每次构建可复现。"""
     print("清理旧构建产物...")
     shutil.rmtree(BUILD_DIR, ignore_errors=True)
-    for app_name in (MAIN_APP_NAME,):
-        spec_file = REPO_ROOT / f"{app_name}.spec"
-        if spec_file.exists():
-            spec_file.unlink()
 
-    for app_name in (MAIN_APP_NAME,):
-        shutil.rmtree(DIST_DIR / app_name, ignore_errors=True)
-        shutil.rmtree(DIST_DIR / f"{app_name}.app", ignore_errors=True)
+    spec_file = REPO_ROOT / f"{MAIN_APP_NAME}.spec"
+    if spec_file.exists():
+        spec_file.unlink()
 
-    for app_name in (MAIN_APP_NAME,):
-        for legacy_file in (DIST_DIR / f"{app_name}.exe", DIST_DIR / app_name):
-            if legacy_file.exists() and legacy_file.is_file():
-                legacy_file.unlink()
+    shutil.rmtree(DIST_DIR / MAIN_APP_NAME, ignore_errors=True)
+    shutil.rmtree(DIST_DIR / f"{MAIN_APP_NAME}.app", ignore_errors=True)
+
+    for legacy_file in (DIST_DIR / f"{MAIN_APP_NAME}.exe", DIST_DIR / MAIN_APP_NAME):
+        if legacy_file.exists() and legacy_file.is_file():
+            legacy_file.unlink()
 
     DIST_DIR.mkdir(exist_ok=True)
 

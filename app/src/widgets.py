@@ -19,10 +19,7 @@ from PySide6.QtWidgets import (
 from .config import normalize_batch_text
 from .constants import AUTHOR_WECHAT
 
-try:
-    from .license import activate_license
-except ImportError:  # pragma: no cover
-    from license import activate_license
+from .license import activate_license
 
 
 # ---------------------------------------------------------------------------
