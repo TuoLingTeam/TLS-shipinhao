@@ -327,14 +327,14 @@ class MainWindow(QWidget):
         title_box.setContentsMargins(0, 0, 0, 0)
         title_box.setSpacing(6)
 
-        title_label = QLabel("\u9a7c\u94c3\u89c6\u9891\u5c0f\u5e97\u4e2d\u5dee\u8bc4\u5904\u7406")
+        title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(22, bold=True))
         self.hero_title_label = title_label
         title_box.addWidget(title_label)
 
         self.title_description_label = QLabel(
-            "\u8f6f\u4ef6\u5b9e\u73b0\u81ea\u52a8\u5316\u6279\u91cf\u5904\u7406\u4e2d\u5dee\u8bc4\u3001\u54c1\u8d28\u9000\u6b3e\u8ba2\u5355\u7684\u529f\u80fd\u3002"
+            "软件实现自动化批量处理中差评、品质退款订单的功能。"
         )
         self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(False)
@@ -348,7 +348,7 @@ class MainWindow(QWidget):
         badge_layout.setContentsMargins(0, 0, 0, 0)
         badge_layout.setSpacing(10)
 
-        self.author_badge = QLabel(f"\u4f5c\u8005\u5fae\u4fe1\uff1a{AUTHOR_WECHAT}")
+        self.author_badge = QLabel(f"作者微信：{AUTHOR_WECHAT}")
         self.author_badge.setAlignment(Qt.AlignCenter)
         self.author_badge.setFont(build_font(12, bold=True))
         self.author_badge.setStyleSheet(
@@ -369,7 +369,7 @@ class MainWindow(QWidget):
         self.tutorial_badge.setCursor(Qt.PointingHandCursor)
         self.tutorial_badge.setFont(build_font(12, bold=True))
         self.tutorial_badge.setText(
-            f'<a href="{TUTORIAL_URL}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">\u67e5\u770b\u4f7f\u7528\u6559\u7a0b</a>'
+            f'<a href="{TUTORIAL_URL}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
         )
         self.tutorial_badge.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
@@ -421,8 +421,8 @@ class MainWindow(QWidget):
             border_color="#9FC0F0",
         )
 
-        self.order_edit = BatchInputEdit("\u6bcf\u884c\u4e00\u4e2a\u8ba2\u5355\u53f7\uff0c\u6700\u591a 100 \u6761\u3002")
-        self.tracking_edit = BatchInputEdit("\u6bcf\u884c\u4e00\u4e2a\u7269\u6d41\u5355\u53f7\uff0c\u6700\u591a 100 \u6761\u3002")
+        self.order_edit = BatchInputEdit("每行一个订单号，最多 100 条。")
+        self.tracking_edit = BatchInputEdit("每行一个物流单号，最多 100 条。")
 
         self.order_edit.textChanged.connect(self.refresh_input_metrics)
         self.tracking_edit.textChanged.connect(self.refresh_input_metrics)
@@ -430,16 +430,16 @@ class MainWindow(QWidget):
         self.tracking_edit.normalized.connect(self.refresh_input_metrics)
 
         self.order_card = self._create_input_card(
-            "\u7b2c\u4e00\u6b65\uff1a\u586b\u5199\u8ba2\u5355\u53f7",
-            "\u591a\u4e2a\u8ba2\u5355\u53f7\u8bf7\u7528\u82f1\u6587\u9017\u53f7\u3001\u6362\u884c\u5206\u9694\u3002",
+            "第一步：填写订单号",
+            "多个订单号请用英文逗号、换行分隔。",
             self.order_count_badge,
             self.order_edit,
             APP_COLORS["blue"],
             "InputCardBlue",
         )
         self.tracking_card = self._create_input_card(
-            "\u7b2c\u4e8c\u6b65\uff1a\u586b\u5199\u7269\u6d41\u5355\u53f7",
-            "\u591a\u4e2a\u7269\u6d41\u5355\u53f7\u8bf7\u7528\u82f1\u6587\u9017\u53f7\u3001\u6362\u884c\u5206\u9694\u3002",
+            "第二步：填写物流单号",
+            "多个物流单号请用英文逗号、换行分隔。",
             self.tracking_count_badge,
             self.tracking_edit,
             APP_COLORS["blue"],
@@ -463,7 +463,7 @@ class MainWindow(QWidget):
         self.action_layout.setContentsMargins(0, 0, 0, 0)
         self.action_layout.setSpacing(12)
 
-        self.pause_button = QPushButton("\u6682\u505c\u6279\u91cf\u5904\u7406")
+        self.pause_button = QPushButton("暂停批量处理")
         self.pause_button.setObjectName("PauseButton")
         self.pause_button.setCursor(Qt.PointingHandCursor)
         self.pause_button.setFont(build_font(16, bold=True))
@@ -471,7 +471,7 @@ class MainWindow(QWidget):
         self.pause_button.clicked.connect(self.on_pause_clicked)
         self.action_layout.addWidget(self.pause_button, 1)
 
-        self.start_button = QPushButton("\u5f00\u59cb\u6279\u91cf\u5904\u7406")
+        self.start_button = QPushButton("开始批量处理")
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.setCursor(Qt.PointingHandCursor)
         self.start_button.setFont(build_font(17, bold=True))
@@ -499,13 +499,13 @@ class MainWindow(QWidget):
         log_header_box.setContentsMargins(0, 0, 0, 0)
         log_header_box.setSpacing(10)
 
-        log_title = QLabel("\u6267\u884c\u65e5\u5fd7")
+        log_title = QLabel("执行日志")
         log_title.setObjectName("LogTitle")
         log_title.setFont(build_font(15, bold=True))
         self.log_title_label = log_title
         log_header_box.addWidget(log_title)
 
-        self.log_hint_label = QLabel("\u6700\u8fd1\u6267\u884c\u8bb0\u5f55\u4f1a\u6309\u65f6\u95f4\u987a\u5e8f\u6eda\u52a8\u663e\u793a\u3002")
+        self.log_hint_label = QLabel("最近执行记录会按时间顺序滚动显示。")
         self.log_hint_label.setObjectName("LogHint")
         self.log_hint_label.setWordWrap(False)
         self.log_hint_label.setFont(build_font(10))
@@ -581,7 +581,7 @@ class MainWindow(QWidget):
 
     def _create_config_card(self):
         """创建配置目录卡片，复用输入卡片骨架以确保三列对齐。"""
-        badge_placeholder = QLabel("\u76ee\u5f55")
+        badge_placeholder = QLabel("目录")
         badge_placeholder.setAlignment(Qt.AlignCenter)
         badge_placeholder.setMinimumWidth(72)
         badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
@@ -608,7 +608,7 @@ class MainWindow(QWidget):
         shell_layout.addWidget(path_label, 1)
         self.config_path_label = path_label
 
-        button = QPushButton("\u9009\u62e9\u914d\u7f6e\u76ee\u5f55")
+        button = QPushButton("选择配置目录")
         button.setObjectName("SecondaryButton")
         button.setCursor(Qt.PointingHandCursor)
         button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
@@ -617,8 +617,8 @@ class MainWindow(QWidget):
         self.config_button = button
 
         card = self._create_input_card(
-            "\u7b2c\u4e09\u6b65\uff1a\u9009\u62e9\u914d\u7f6e\u76ee\u5f55",
-            "\u5fc5\u987b\u624b\u52a8\u9009\u62e9 cookie \u6240\u5728\u76ee\u5f55\uff08\u652f\u6301 .txt / \u65e0\u540e\u7f00 / \u53cc .txt\uff09\u3002",
+            "第三步：选择配置目录",
+            "必须手动选择 cookie 所在目录（支持 .txt / 无后缀 / 双 .txt）。",
             self.config_badge,
             shell,
             APP_COLORS["blue"],
@@ -917,7 +917,7 @@ class MainWindow(QWidget):
         dialog, actions = self._create_message_dialog_base(
             level, title, text, informative_text, min_width=560,
         )
-        self._add_message_action(actions, "\u786e\u5b9a", "MessagePrimary", dialog.accept)
+        self._add_message_action(actions, "确定", "MessagePrimary", dialog.accept)
         return dialog
 
     def show_message(self, level, title, text, informative_text=""):
@@ -937,8 +937,8 @@ class MainWindow(QWidget):
         self.config_button.setDisabled(running)
         self.pause_button.setDisabled((not running) or self.is_paused)
         self.start_button.setDisabled(running and not self.is_paused)
-        self.start_button.setText("\u7ee7\u7eed\u6279\u91cf\u5904\u7406" if self.is_paused else "\u5f00\u59cb\u6279\u91cf\u5904\u7406")
-        self.pause_button.setText("\u5df2\u6682\u505c" if self.is_paused else "\u6682\u505c\u6279\u91cf\u5904\u7406")
+        self.start_button.setText("继续批量处理" if self.is_paused else "开始批量处理")
+        self.pause_button.setText("已暂停" if self.is_paused else "暂停批量处理")
 
     def set_submit_running(self, is_running):
         """切换按钮和输入框状态。"""
@@ -960,27 +960,27 @@ class MainWindow(QWidget):
 
         if resolved_dir:
             text = (
-                "\u5f53\u524d\u5df2\u751f\u6548\u76ee\u5f55\uff1a\n"
+                "当前已生效目录：\n"
                 f"{resolved_dir}\n\n"
-                "\u7a0b\u5e8f\u4f1a\u4f7f\u7528\u8fd9\u91cc\u7684 cookie \u6587\u4ef6\u3002"
+                "程序会使用这里的 cookie 文件。"
             )
         elif saved_dir:
             text = (
-                "\u5df2\u8bb0\u5f55\u76ee\u5f55\uff1a\n"
+                "已记录目录：\n"
                 f"{saved_dir}\n\n"
-                "\u4f46\u8fd9\u91cc\u6682\u672a\u627e\u5230\u53ef\u7528\u7684 cookie \u914d\u7f6e\u6587\u4ef6\u3002"
+                "但这里暂未找到可用的 cookie 配置文件。"
             )
         else:
             text = (
-                "\u5f53\u524d\u672a\u6307\u5b9a\u76ee\u5f55\u3002\n\n"
-                "\u8bf7\u70b9\u51fb\u4e0b\u65b9\u6309\u94ae\u624b\u52a8\u9009\u62e9\u914d\u7f6e\u76ee\u5f55\u3002"
+                "当前未指定目录。\n\n"
+                "请点击下方按钮手动选择配置目录。"
             )
         self.config_path_label.setText(text)
 
     def choose_config_dir(self):
         """选择配置文件所在目录并记住。"""
         start_dir = get_config_dir_cache() or get_saved_user_config_dir() or os.path.expanduser("~")
-        selected_dir = QFileDialog.getExistingDirectory(self, "\u9009\u62e9\u914d\u7f6e\u76ee\u5f55", start_dir)
+        selected_dir = QFileDialog.getExistingDirectory(self, "选择配置目录", start_dir)
         if not selected_dir:
             return
 
@@ -992,27 +992,27 @@ class MainWindow(QWidget):
             try:
                 cookie_data = read_cookie_data(resolved_files["cookie"])
             except Exception:  # noqa: BLE001
-                missing_files.append("cookie(.txt) \u5185\u5bb9\u4e0d\u53ef\u8bfb")
+                missing_files.append("cookie(.txt) 内容不可读")
             else:
                 magic_from_cookie = extract_biz_magic_from_cookie(cookie_data)
                 magic_file_path = resolved_files.get("magic")
                 if not magic_from_cookie:
                     if not magic_file_path:
-                        missing_files.append("cookie \u4e2d biz_magic \u952e")
+                        missing_files.append("cookie 中 biz_magic 键")
                     else:
                         try:
                             if not read_magic_file(magic_file_path):
-                                missing_files.append("biz_magic(.txt) \u5185\u5bb9\u4e3a\u7a7a")
+                                missing_files.append("biz_magic(.txt) 内容为空")
                         except Exception:  # noqa: BLE001
-                            missing_files.append("biz_magic(.txt) \u5185\u5bb9\u4e0d\u53ef\u8bfb")
+                            missing_files.append("biz_magic(.txt) 内容不可读")
 
         if missing_files:
             self.show_message(
                 QMessageBox.Warning,
-                "\u76ee\u5f55\u4e0d\u5b8c\u6574",
-                "\u6240\u9009\u76ee\u5f55\u7f3a\u5c11\u4ee5\u4e0b\u6587\u4ef6\uff1a\n"
+                "目录不完整",
+                "所选目录缺少以下文件：\n"
                 + "\n".join(missing_files)
-                + "\n\n\u8bf7\u786e\u4fdd cookie \u53ef\u7528\uff08\u4e14\u5305\u542b biz_magic\uff09\uff0c\u6216\u5728\u540c\u76ee\u5f55\u63d0\u4f9b biz_magic(.txt) \u6587\u4ef6\u4f5c\u4e3a\u5907\u7528\u3002",
+                + "\n\n请确保 cookie 可用（且包含 biz_magic），或在同目录提供 biz_magic(.txt) 文件作为备用。",
             )
             return
 
@@ -1020,8 +1020,8 @@ class MainWindow(QWidget):
         self.refresh_config_path_label()
         self.show_message(
             QMessageBox.Information,
-            "\u914d\u7f6e\u76ee\u5f55\u5df2\u66f4\u65b0",
-            f"\u540e\u7eed\u5c06\u4f18\u5148\u4f7f\u7528\uff1a\n{selected_dir}",
+            "配置目录已更新",
+            f"后续将优先使用：\n{selected_dir}",
         )
 
     def show_missing_config_error(self, searched_dirs):
@@ -1030,16 +1030,16 @@ class MainWindow(QWidget):
             details = searched_dirs
         else:
             details = "\n".join(str(item) for item in searched_dirs)
-        info_text = f"\u9519\u8bef\u8be6\u60c5:\n{details}"
+        info_text = f"错误详情:\n{details}"
         dialog, actions = self._create_message_dialog_base(
             QMessageBox.Warning,
-            "\u7f3a\u5c11\u914d\u7f6e\u6587\u4ef6",
-            "\u5f53\u524d\u672a\u627e\u5230\u53ef\u7528\u914d\u7f6e\u76ee\u5f55\uff0c\u8bf7\u5148\u624b\u52a8\u9009\u62e9\u76ee\u5f55\u3002",
+            "缺少配置文件",
+            "当前未找到可用配置目录，请先手动选择目录。",
             info_text,
             min_width=620,
         )
-        self._add_message_action(actions, "\u5173\u95ed", "MessageSecondary", dialog.reject)
-        self._add_message_action(actions, "\u9009\u62e9\u914d\u7f6e\u76ee\u5f55", "MessagePrimary", dialog.accept)
+        self._add_message_action(actions, "关闭", "MessageSecondary", dialog.reject)
+        self._add_message_action(actions, "选择配置目录", "MessagePrimary", dialog.accept)
         if dialog.exec() == QDialog.Accepted:
             self.choose_config_dir()
 
@@ -1058,47 +1058,47 @@ class MainWindow(QWidget):
     def _sync_window_title_with_license(self, license_reason=None):
         """同步窗口标题中的授权状态。"""
         reason = self._license_reason if license_reason is None else license_reason
-        status = "\u5df2\u6fc0\u6d3b" if reason == "ok" else "\u672a\u6fc0\u6d3b"
-        self.setWindowTitle(f"{WINDOW_TITLE}\uff08{status}\uff09")
+        status = "已激活" if reason == "ok" else "未激活"
+        self.setWindowTitle(f"{WINDOW_TITLE}（{status}）")
 
     def _prompt_license_activation(self, reason=None):
         """弹出激活窗口，返回是否激活成功。"""
         if reason is None:
             _, reason = self._refresh_license_state()
-        self.append_result_log(f"\u6388\u6743\u72b6\u6001\uff1a{get_license_reason_text(reason)}")
-        self.append_result_log("\u6b63\u5728\u6253\u5f00\u5361\u5bc6\u6fc0\u6d3b\u7a97\u53e3...")
+        self.append_result_log(f"授权状态：{get_license_reason_text(reason)}")
+        self.append_result_log("正在打开卡密激活窗口...")
 
         dialog = LicenseDialog(self, reason=reason)
         result = dialog.exec()
         if result == QDialog.Accepted and dialog.activated:
             info, refreshed_reason = self._refresh_license_state()
             if refreshed_reason == "ok":
-                self.append_result_log("\u5361\u5bc6\u6fc0\u6d3b\u6210\u529f\uff0c\u5df2\u89e3\u9501\u6279\u91cf\u5904\u7406\u529f\u80fd\u3002")
+                self.append_result_log("卡密激活成功，已解锁批量处理功能。")
                 expires = str((info or {}).get("expires_at", ""))[:10]
                 if expires:
-                    self.append_result_log(f"\u6388\u6743\u6709\u6548\u671f\u81f3\uff1a{expires}")
+                    self.append_result_log(f"授权有效期至：{expires}")
                 return True
 
-            self.append_result_log("\u5361\u5bc6\u6fc0\u6d3b\u7ed3\u679c\u6821\u9a8c\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002")
-            self.append_result_log(f"\u5f53\u524d\u72b6\u6001\uff1a{get_license_reason_text(refreshed_reason)}")
+            self.append_result_log("卡密激活结果校验失败，请重试。")
+            self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
             return False
 
         _, refreshed_reason = self._refresh_license_state()
-        self.append_result_log("\u5361\u5bc6\u6fc0\u6d3b\u672a\u5b8c\u6210\u3002")
-        self.append_result_log(f"\u5f53\u524d\u72b6\u6001\uff1a{get_license_reason_text(refreshed_reason)}")
+        self.append_result_log("卡密激活未完成。")
+        self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
         return False
 
     def prompt_license_on_startup(self):
         """启动后提示激活（仅在未激活时弹出）。"""
         info, reason = self._refresh_license_state()
         if reason == "ok":
-            self.append_result_log("\u6388\u6743\u72b6\u6001\uff1a\u5df2\u6fc0\u6d3b\u3002")
+            self.append_result_log("授权状态：已激活。")
             expires = str((info or {}).get("expires_at", ""))[:10]
             if expires:
-                self.append_result_log(f"\u6388\u6743\u6709\u6548\u671f\u81f3\uff1a{expires}")
+                self.append_result_log(f"授权有效期至：{expires}")
             return True
 
-        self.append_result_log("\u5f53\u524d\u672a\u6fc0\u6d3b\uff0c\u6267\u884c\u524d\u9700\u5148\u8f93\u5165\u5361\u5bc6\u3002")
+        self.append_result_log("当前未激活，执行前需先输入卡密。")
         return self._prompt_license_activation(reason)
 
     # -----------------------------------------------------------------------
@@ -1111,7 +1111,7 @@ class MainWindow(QWidget):
             self.worker.resume()
             self.is_paused = False
             self.refresh_action_buttons()
-            self.append_result_log("\u5df2\u7ee7\u7eed\u6267\u884c\u5269\u4f59\u4efb\u52a1\u3002")
+            self.append_result_log("已继续执行剩余任务。")
             return
 
         if self.worker is not None:
@@ -1121,8 +1121,8 @@ class MainWindow(QWidget):
         if reason != "ok" and not self._prompt_license_activation(reason):
             self.show_message(
                 QMessageBox.Warning,
-                "\u672a\u6fc0\u6d3b",
-                "\u8f6f\u4ef6\u5c1a\u672a\u6fc0\u6d3b\uff0c\u65e0\u6cd5\u6267\u884c\u6279\u91cf\u5904\u7406\u3002\n\u8bf7\u5148\u8f93\u5165\u6709\u6548\u5361\u5bc6\u5b8c\u6210\u6fc0\u6d3b\u3002",
+                "未激活",
+                "软件尚未激活，无法执行批量处理。\n请先输入有效卡密完成激活。",
             )
             return
 
@@ -1132,28 +1132,28 @@ class MainWindow(QWidget):
         tracking_numbers = parse_batch_input(self.tracking_edit.toPlainText())
 
         if not order_ids or not tracking_numbers:
-            self.show_message(QMessageBox.Information, "\u63d0\u793a", "\u8bf7\u8f93\u5165\u8ba2\u5355\u53f7\u548c\u65b0\u7269\u6d41\u5355\u53f7\u3002")
+            self.show_message(QMessageBox.Information, "提示", "请输入订单号和新物流单号。")
             return
 
         if len(order_ids) != len(tracking_numbers):
             self.show_message(
                 QMessageBox.Critical,
-                "\u6570\u91cf\u4e0d\u5339\u914d",
-                f"\u8ba2\u5355\u53f7\u5171 {len(order_ids)} \u4e2a\uff0c\u65b0\u7269\u6d41\u5355\u53f7\u5171 {len(tracking_numbers)} \u4e2a\u3002\n"
-                "\u8bf7\u786e\u4fdd\u4e00\u4e00\u5bf9\u5e94\u540e\u518d\u6267\u884c\u3002",
+                "数量不匹配",
+                f"订单号共 {len(order_ids)} 个，新物流单号共 {len(tracking_numbers)} 个。\n"
+                "请确保一一对应后再执行。",
             )
             return
 
         if len(order_ids) > MAX_BATCH_SIZE:
             self.show_message(
                 QMessageBox.Critical,
-                "\u8d85\u51fa\u6570\u91cf\u9650\u5236",
-                f"\u4e00\u6b21\u6700\u591a\u5904\u7406 {MAX_BATCH_SIZE} \u6761\uff0c\u8bf7\u62c6\u5206\u540e\u518d\u6267\u884c\u3002",
+                "超出数量限制",
+                f"一次最多处理 {MAX_BATCH_SIZE} 条，请拆分后再执行。",
             )
             return
 
         self.clear_result_log()
-        self.append_result_log(f"\u5f00\u59cb\u6267\u884c\uff1a\u5171 {len(order_ids)} \u6761\u3002")
+        self.append_result_log(f"开始执行：共 {len(order_ids)} 条。")
         self.set_submit_running(True)
 
         self.worker_thread = QThread(self)
@@ -1182,7 +1182,7 @@ class MainWindow(QWidget):
         self.worker.pause()
         self.is_paused = True
         self.refresh_action_buttons()
-        self.append_result_log("\u5df2\u6682\u505c\u5904\u7406\uff0c\u5f53\u524d\u5355\u5b8c\u6210\u540e\u5c06\u505c\u6b62\u7ee7\u7eed\u6267\u884c\u3002")
+        self.append_result_log("已暂停处理，当前单完成后将停止继续执行。")
 
     def _clear_worker_refs(self):
         """清理线程引用。"""
@@ -1204,27 +1204,27 @@ class MainWindow(QWidget):
 
     def _on_worker_started(self, total_count):
         """记录任务开始。"""
-        self.append_result_log(f"\u4efb\u52a1\u5df2\u521b\u5efa\uff1a\u5171 {total_count} \u6761\uff0c\u51c6\u5907\u987a\u5e8f\u6267\u884c\u3002")
+        self.append_result_log(f"任务已创建：共 {total_count} 条，准备顺序执行。")
 
     def _on_worker_step_started(self, index, total_count, order_id):
         """记录单条开始。"""
-        self.append_result_log(f"[{index}/{total_count}] \u5f00\u59cb\u5904\u7406\u8ba2\u5355 {order_id}")
+        self.append_result_log(f"[{index}/{total_count}] 开始处理订单 {order_id}")
 
     def _on_worker_step_succeeded(self, index, total_count, order_id, tracking_number, old_waybill):
         """记录单条成功。"""
         self.append_result_log(
-            f"[{index}/{total_count}] \u8ba2\u5355 {order_id} \u6210\u529f\uff1a{old_waybill} -> {tracking_number}"
+            f"[{index}/{total_count}] 订单 {order_id} 成功：{old_waybill} -> {tracking_number}"
         )
 
     def _on_worker_step_failed(self, index, total_count, order_id, tracking_number, error_message):
         """记录单条失败。"""
         self.append_result_log(
-            f"[{index}/{total_count}] \u8ba2\u5355 {order_id} -> {tracking_number} \u5931\u8d25\uff1a{error_message}"
+            f"[{index}/{total_count}] 订单 {order_id} -> {tracking_number} 失败：{error_message}"
         )
 
     def _on_worker_fatal_error(self, error_message):
         """记录批量中断。"""
-        self.append_result_log(f"\u6279\u91cf\u6267\u884c\u4e2d\u65ad\uff1a{error_message}")
+        self.append_result_log(f"批量执行中断：{error_message}")
 
     def _on_worker_finished(self, success_count, failure_count, total_count, aborted):
         """恢复界面并汇总结果。"""
@@ -1234,11 +1234,11 @@ class MainWindow(QWidget):
             return
 
         summary = (
-            f"\u6279\u91cf\u6267\u884c\u5b8c\u6210\uff1a\u5171 {total_count} \u6761\uff0c\u6210\u529f {success_count} \u6761\uff0c\u5931\u8d25 {failure_count} \u6761\u3002"
+            f"批量执行完成：共 {total_count} 条，成功 {success_count} 条，失败 {failure_count} 条。"
         )
         self.append_result_log(summary)
 
         if failure_count > 0:
-            self.show_message(QMessageBox.Warning, "\u6279\u91cf\u6267\u884c\u5b8c\u6210", summary)
+            self.show_message(QMessageBox.Warning, "批量执行完成", summary)
         else:
-            self.show_message(QMessageBox.Information, "\u6279\u91cf\u6267\u884c\u5b8c\u6210", summary)
+            self.show_message(QMessageBox.Information, "批量执行完成", summary)
