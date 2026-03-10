@@ -30,7 +30,6 @@ if platform.system() == "Windows":
 # 基础常量
 # =========================
 MAIN_APP_NAME = "TLS-shipinhao"
-KEYGEN_APP_NAME = "TLS-shipinhao-keygen"
 BUNDLE_ID = "com.tuoling.tls-shipinhao"
 SYSTEM_MACOS = "Darwin"
 SYSTEM_WINDOWS = "Windows"
@@ -40,7 +39,6 @@ REPO_ROOT = APP_ROOT.parent                             # 仓库根目录
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
 MAIN_FILE = APP_ROOT / "main.py"
-KEYGEN_FILE = APP_ROOT / "scripts" / "keygen_gui.py"
 COOKIE_FILE = REPO_ROOT / "cookie.txt"
 MAGIC_FILE = REPO_ROOT / "biz_magic.txt"
 SOURCE_ICON_FILE = APP_ROOT / "src" / "favicon.png"
@@ -119,7 +117,6 @@ QT_OPTIONAL_MODULES = (
 EXCLUDED_MODULES = ["bs4", "beautifulsoup4", "pymongo", "openpyxl", *[f"PySide6.{m}" for m in QT_OPTIONAL_MODULES]]
 
 PROFILE_MAIN = "main"
-PROFILE_KEYGEN = "keygen"
 
 # macOS 包体裁剪配置（删除可选资源，不影响运行）。
 QT_PRUNE_DIRS = (
@@ -216,16 +213,16 @@ def clean_build_artifacts() -> None:
     """清理历史产物，保证每次构建可复现。"""
     print("清理旧构建产物...")
     shutil.rmtree(BUILD_DIR, ignore_errors=True)
-    for app_name in (MAIN_APP_NAME, KEYGEN_APP_NAME):
+    for app_name in (MAIN_APP_NAME,):
         spec_file = REPO_ROOT / f"{app_name}.spec"
         if spec_file.exists():
             spec_file.unlink()
 
-    for app_name in (MAIN_APP_NAME, KEYGEN_APP_NAME):
+    for app_name in (MAIN_APP_NAME,):
         shutil.rmtree(DIST_DIR / app_name, ignore_errors=True)
         shutil.rmtree(DIST_DIR / f"{app_name}.app", ignore_errors=True)
 
-    for app_name in (MAIN_APP_NAME, KEYGEN_APP_NAME):
+    for app_name in (MAIN_APP_NAME,):
         for legacy_file in (DIST_DIR / f"{app_name}.exe", DIST_DIR / app_name):
             if legacy_file.exists() and legacy_file.is_file():
                 legacy_file.unlink()
@@ -316,7 +313,7 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str) -> li
     if icon_file:
         cmd.extend(["--icon", str(icon_file)])
 
-    # 主程序使用 PySide6，需显式补齐/裁剪导入；keygen 使用 Tk，无需这些参数。
+    # 主程序使用 PySide6，需显式补齐/裁剪导入。
     if profile == PROFILE_MAIN:
         for module in HIDDEN_IMPORTS:
             cmd.extend(["--hidden-import", module])
@@ -442,9 +439,6 @@ def parse_args(argv: list[str]) -> tuple[str | None, str]:
         if arg in {"main", "app"}:
             profile = PROFILE_MAIN
             continue
-        if arg in {"keygen", "license", "card", "admin"}:
-            profile = PROFILE_KEYGEN
-            continue
         raise SystemExit(f"不支持的参数: {raw_arg}")
 
     return target, profile
@@ -454,8 +448,6 @@ def resolve_profile(profile: str) -> tuple[str, Path]:
     """根据构建档位返回 (应用名称, 入口文件)。"""
     if profile == PROFILE_MAIN:
         return MAIN_APP_NAME, MAIN_FILE
-    if profile == PROFILE_KEYGEN:
-        return KEYGEN_APP_NAME, KEYGEN_FILE
     raise SystemExit(f"不支持的构建档位: {profile}")
 
 
