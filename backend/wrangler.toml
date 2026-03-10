@@ -5,7 +5,7 @@ workers_dev = false
 
 # 自定义域名路由（绕开 workers.dev DNS 污染）
 routes = [
-  { pattern = "api.199908.top/*", zone_name = "199908.top" }
+  { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }
 ]
 
 # 环境变量（部署后通过 wrangler secret put 设置）
