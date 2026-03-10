@@ -41,7 +41,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/Library/Caches/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('app/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -49,14 +49,14 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            python -m pip install -r requirements.txt
+          if [ -f app/requirements.txt ]; then
+            python -m pip install -r app/requirements.txt
           fi
           python -m pip install pyinstaller
 
       - name: Build macOS app
         shell: bash
-        run: python scripts/build.py macos
+        run: python app/scripts/build.py macos
 
       - name: Package macOS app bundle
         shell: bash
@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('app/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -98,14 +98,14 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          if (Test-Path requirements.txt) {
-            python -m pip install -r requirements.txt
+          if (Test-Path app/requirements.txt) {
+            python -m pip install -r app/requirements.txt
           }
           python -m pip install pyinstaller
 
       - name: Build Windows app
         shell: pwsh
-        run: python scripts/build.py windows
+        run: python app/scripts/build.py windows
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

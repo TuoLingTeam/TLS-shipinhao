@@ -8,25 +8,25 @@
 
 ```text
 TLS-shipinhao/
-├── main.py               # 根入口，仅负责启动 src.app.main
-├── src/
-│   ├── __init__.py
-│   ├── app.py            # 程序入口（main 函数）
-│   ├── constants.py      # 全局常量（窗口尺寸、颜色、URL、配置名等）
-│   ├── config.py         # 配置文件管理（cookie/biz_magic 读取、目录解析）
-│   ├── api.py            # 微信小商店 API 交互（订单查询、物流更新）
-│   ├── worker.py         # BatchWorker 后台批量任务执行器
-│   ├── widgets.py        # 自定义控件（BatchInputEdit、LicenseDialog、字体工具）
-│   ├── window.py         # MainWindow 主窗口（UI 构建、事件处理、授权管理）
-│   └── license.py        # 离线授权管理（卡密激活、设备绑定）
-├── scripts/
-│   └── build.py          # 统一构建入口
-├── build_mac.sh          # macOS 打包脚本
-├── build_windows.bat     # Windows 打包脚本
-├── requirements.txt
-├── README.md
-├── dist/                 # 打包产物
-└── logs/                 # 运行日志
+├── app/                      # 客户端应用
+│   ├── main.py               # 入口，启动 src.app.main
+│   ├── requirements.txt      # Python 依赖
+│   ├── src/
+│   │   ├── __init__.py
+│   │   ├── app.py            # 程序入口（main 函数）
+│   │   ├── constants.py      # 全局常量（窗口尺寸、颜色、URL、配置名等）
+│   │   ├── config.py         # 配置文件管理（cookie/biz_magic 读取、目录解析）
+│   │   ├── api.py            # 微信小商店 API 交互（订单查询、物流更新）
+│   │   ├── worker.py         # BatchWorker 后台批量任务执行器
+│   │   ├── widgets.py        # 自定义控件（BatchInputEdit、LicenseDialog、字体工具）
+│   │   ├── window.py         # MainWindow 主窗口（UI 构建、事件处理、授权管理）
+│   │   └── license.py        # 在线授权管理（卡密激活、设备绑定）
+│   └── scripts/
+│       └── build.py          # 统一构建入口
+├── backend/                  # Cloudflare Workers 后端（卡密验证 + 管理页面）
+├── .github/workflows/        # CI/CD 构建流水线
+├── dist/                     # 打包产物
+└── README.md
 ```
 
 ### 模块依赖关系
@@ -51,7 +51,7 @@ widgets + worker ← window ← app（入口）
 ## 依赖安装
 
 ```bash
-pip install -r requirements.txt
+pip install -r app/requirements.txt
 ```
 
 ## 配置文件
@@ -66,7 +66,7 @@ pip install -r requirements.txt
 ## 运行方式
 
 ```bash
-python main.py
+python app/main.py
 ```
 
 ## 使用说明
@@ -87,7 +87,7 @@ python main.py
 ### 统一入口
 
 ```bash
-python scripts/build.py
+python app/scripts/build.py
 ```
 
 该脚本会根据当前系统自动调用：

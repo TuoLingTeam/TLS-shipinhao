@@ -35,17 +35,18 @@ BUNDLE_ID = "com.tuoling.tls-shipinhao"
 SYSTEM_MACOS = "Darwin"
 SYSTEM_WINDOWS = "Windows"
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DIST_DIR = PROJECT_ROOT / "dist"
-BUILD_DIR = PROJECT_ROOT / "build"
-MAIN_FILE = PROJECT_ROOT / "main.py"
-KEYGEN_FILE = PROJECT_ROOT / "scripts" / "keygen_gui.py"
-COOKIE_FILE = PROJECT_ROOT / "cookie.txt"
-MAGIC_FILE = PROJECT_ROOT / "biz_magic.txt"
-SOURCE_ICON_FILE = PROJECT_ROOT / "src" / "favicon.png"
+APP_ROOT = Path(__file__).resolve().parent.parent      # app/
+REPO_ROOT = APP_ROOT.parent                             # 仓库根目录
+DIST_DIR = REPO_ROOT / "dist"
+BUILD_DIR = REPO_ROOT / "build"
+MAIN_FILE = APP_ROOT / "main.py"
+KEYGEN_FILE = APP_ROOT / "scripts" / "keygen_gui.py"
+COOKIE_FILE = REPO_ROOT / "cookie.txt"
+MAGIC_FILE = REPO_ROOT / "biz_magic.txt"
+SOURCE_ICON_FILE = APP_ROOT / "src" / "favicon.png"
 MACOS_ICON_FILE = BUILD_DIR / "app_icon.icns"
 WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
-PYINSTALLER_CACHE_DIR = PROJECT_ROOT / ".pyinstaller"
+PYINSTALLER_CACHE_DIR = REPO_ROOT / ".pyinstaller"
 
 # 构建时需要的最小依赖集合（避免漏装导致中断）。
 BUILD_REQUIREMENTS = ["PySide6_Essentials", "shiboken6", "requests", "pyinstaller", "Pillow"]
@@ -180,15 +181,15 @@ def run(cmd: list[str], *, cwd: Path | None = None) -> None:
     env = os.environ.copy()
     PYINSTALLER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     env["PYINSTALLER_CONFIG_DIR"] = str(PYINSTALLER_CACHE_DIR)
-    subprocess.run(cmd, cwd=str(cwd or PROJECT_ROOT), check=True, env=env)
+    subprocess.run(cmd, cwd=str(cwd or REPO_ROOT), check=True, env=env)
 
 
 def project_python() -> str:
     """优先返回项目 .venv 的 Python，避免污染系统环境。"""
     if platform.system() == SYSTEM_WINDOWS:
-        candidate = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+        candidate = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
     else:
-        candidate = PROJECT_ROOT / ".venv" / "bin" / "python"
+        candidate = REPO_ROOT / ".venv" / "bin" / "python"
     return str(candidate) if candidate.exists() else sys.executable
 
 
@@ -216,7 +217,7 @@ def clean_build_artifacts() -> None:
     print("清理旧构建产物...")
     shutil.rmtree(BUILD_DIR, ignore_errors=True)
     for app_name in (MAIN_APP_NAME, KEYGEN_APP_NAME):
-        spec_file = PROJECT_ROOT / f"{app_name}.spec"
+        spec_file = REPO_ROOT / f"{app_name}.spec"
         if spec_file.exists():
             spec_file.unlink()
 
@@ -236,7 +237,7 @@ def cleanup_temp_files(app_name: str) -> None:
     """构建完成后清理中间文件。"""
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR, ignore_errors=True)
-    spec_file = PROJECT_ROOT / f"{app_name}.spec"
+    spec_file = REPO_ROOT / f"{app_name}.spec"
     if spec_file.exists():
         spec_file.unlink()
 
