@@ -14,6 +14,11 @@ on:
         required: true
         default: true
         type: boolean
+      use_obfuscation:
+        description: Use code obfuscation (Cython)
+        required: true
+        default: true
+        type: boolean
   # 日常分支活动默认只跑 macOS。
   push:
     branches:
@@ -52,11 +57,21 @@ jobs:
           if [ -f app/requirements.txt ]; then
             python -m pip install -r app/requirements.txt
           fi
-          python -m pip install pyinstaller
+          python -m pip install pyinstaller cython setuptools
+
+      - name: Obfuscate code (if enabled)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.use_obfuscation }}
+        shell: bash
+        run: python app/scripts/obfuscate.py
 
       - name: Build macOS app
         shell: bash
-        run: python app/scripts/build.py macos
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.use_obfuscation }}" == "true" ]]; then
+            python app/scripts/build.py macos --dist
+          else
+            python app/scripts/build.py macos
+          fi
 
       - name: Package macOS app bundle
         shell: bash
@@ -101,11 +116,21 @@ jobs:
           if (Test-Path app/requirements.txt) {
             python -m pip install -r app/requirements.txt
           }
-          python -m pip install pyinstaller
+          python -m pip install pyinstaller cython setuptools
+
+      - name: Obfuscate code (if enabled)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.use_obfuscation }}
+        shell: pwsh
+        run: python app/scripts/obfuscate.py
 
       - name: Build Windows app
         shell: pwsh
-        run: python app/scripts/build.py windows
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.use_obfuscation }}" -eq "true") {
+            python app/scripts/build.py windows --dist
+          } else {
+            python app/scripts/build.py windows
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
