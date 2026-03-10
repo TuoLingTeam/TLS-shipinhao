@@ -46,19 +46,13 @@ jobs:
           }
           python -m pip install pyinstaller cython setuptools
 
-      - name: Obfuscate code (if enabled)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.use_obfuscation }}
+      - name: Obfuscate code
         shell: pwsh
         run: python app/scripts/obfuscate.py
 
       - name: Build Windows app
         shell: pwsh
-        run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.use_obfuscation }}" -eq "true") {
-            python app/scripts/build.py windows --dist
-          } else {
-            python app/scripts/build.py windows
-          }
+        run: python app/scripts/build.py windows --dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
