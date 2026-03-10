@@ -394,7 +394,7 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str) 
 
     print(f"打包完成。\n应用位置: {app_bundle}")
     if profile == PROFILE_MAIN:
-        print("使用前：将 cookie.txt 和 biz_magic.txt 放在与 .app 同目录（dist/）即可。")
+        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 和 biz_magic.txt 的路径。")
     return app_bundle
 
 
@@ -415,7 +415,7 @@ def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str
 
     print(f"打包完成。\n可执行文件: {exe_file}")
     if profile == PROFILE_MAIN:
-        print("如果项目根目录存在 cookie.txt/biz_magic.txt，会自动复制到 dist。")
+        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 和 biz_magic.txt 的路径。")
     return exe_file
 
 

@@ -171,6 +171,61 @@ def compile_with_cython() -> None:
 
     # 复制 main.py 入口（PyInstaller 需要 .py 入口文件）
     shutil.copy2(MAIN_FILE, DIST_SRC / "main.py")
+    
+    # 修复 Cython 编译后的导入问题
+    fix_cython_imports()
+
+
+# =========================
+# 修复导入问题
+# =========================
+def fix_cython_imports() -> None:
+    """修复 Cython 编译后的导入问题。"""
+    print("修复 Cython 导入问题...")
+    
+    # 读取原始 app.py 内容
+    app_py_src = SRC_DIR / "app.py"
+    if not app_py_src.exists():
+        return
+        
+    app_content = app_py_src.read_text(encoding="utf-8")
+    
+    # 将相对导入改为绝对导入
+    fixed_content = app_content.replace("from .window import", "from src.window import")
+    fixed_content = fixed_content.replace("from .license import", "from src.license import")
+    fixed_content = fixed_content.replace("from .config import", "from src.config import")
+    fixed_content = fixed_content.replace("from .constants import", "from src.constants import")
+    fixed_content = fixed_content.replace("from .widgets import", "from src.widgets import")
+    fixed_content = fixed_content.replace("from .api import", "from src.api import")
+    fixed_content = fixed_content.replace("from .worker import", "from src.worker import")
+    
+    # 写入修复后的 app.py
+    app_py_dist = DIST_SRC / "src" / "app.py"
+    app_py_dist.write_text(fixed_content, encoding="utf-8")
+    
+    # 检查其他文件的相对导入并修复
+    for py_file in SRC_DIR.glob("*.py"):
+        if py_file.name in ["__init__.py"]:
+            continue
+            
+        content = py_file.read_text(encoding="utf-8")
+        original_content = content
+        
+        # 修复相对导入
+        content = content.replace("from . import", "from src import")
+        content = content.replace("from .window import", "from src.window import")
+        content = content.replace("from .license import", "from src.license import")
+        content = content.replace("from .config import", "from src.config import")
+        content = content.replace("from .constants import", "from src.constants import")
+        content = content.replace("from .widgets import", "from src.widgets import")
+        content = content.replace("from .api import", "from src.api import")
+        content = content.replace("from .worker import", "from src.worker import")
+        content = content.replace("from .app import", "from src.app import")
+        
+        if content != original_content:
+            dist_py_file = DIST_SRC / "src" / py_file.name
+            dist_py_file.write_text(content, encoding="utf-8")
+            print(f"  修复了 {py_file.name} 的导入")
 
 
 # =========================
