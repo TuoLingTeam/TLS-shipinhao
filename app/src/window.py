@@ -121,31 +121,15 @@ class MainWindow(QWidget):
                 border: 1px solid {c["hero_border"]};
                 border-radius: 22px;
             }}
-            QFrame#InputCardBlue {{
+            QFrame#InputCardBlue,
+            QFrame#InputCardBlue2,
+            QFrame#ConfigCard {{
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
                     stop: 0 {c["blue_tint"]},
                     stop: 1 #B9D2F0
                 );
                 border: 1px solid #9EB7D7;
-                border-radius: 20px;
-            }}
-            QFrame#InputCardBlue2 {{
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 #C2D6F3,
-                    stop: 1 #AECBE8
-                );
-                border: 1px solid #92B0CE;
-                border-radius: 20px;
-            }}
-            QFrame#ConfigCard {{
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 #BAD0EF,
-                    stop: 1 #A4C3E2
-                );
-                border: 1px solid #8AAAC8;
                 border-radius: 20px;
             }}
             QFrame#LogCard {{
@@ -432,9 +416,9 @@ class MainWindow(QWidget):
             border_color="#9FC0F0",
         )
         self.tracking_count_badge = self._create_count_badge(
-            text_color=APP_COLORS["blue_deep"],
-            bg_color="#C5DAFF",
-            border_color="#8BAED8",
+            text_color=APP_COLORS["blue"],
+            bg_color=APP_COLORS["blue_soft"],
+            border_color="#9FC0F0",
         )
 
         self.order_edit = BatchInputEdit("\u6bcf\u884c\u4e00\u4e2a\u8ba2\u5355\u53f7\uff0c\u6700\u591a 100 \u6761\u3002")
@@ -602,9 +586,9 @@ class MainWindow(QWidget):
         badge_placeholder.setMinimumWidth(72)
         badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_placeholder.setStyleSheet(
-            "background: #B8D4F0;"
-            "color: #0C3C8F;"
-            "border: 1px solid #7FA8D0;"
+            f"background: {APP_COLORS['blue_soft']};"
+            f"color: {APP_COLORS['blue']};"
+            "border: 1px solid #9FC0F0;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )
