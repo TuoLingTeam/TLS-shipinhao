@@ -170,15 +170,15 @@ class MainWindow(QWidget):
                 color: white;
                 border: 1px solid #8A3D03;
                 border-radius: 16px;
-                padding: 16px 20px;
+                padding: 12px 18px;
                 font-weight: 700;
             }}
             QPushButton#PrimaryButton:hover {{
                 background: #C86805;
             }}
             QPushButton#PrimaryButton:pressed {{
-                padding-top: 17px;
-                padding-bottom: 15px;
+                padding-top: 13px;
+                padding-bottom: 11px;
             }}
             QPushButton#PrimaryButton:disabled {{
                 background: #F1F5F9;
@@ -194,7 +194,7 @@ class MainWindow(QWidget):
                 color: #EAF2FC;
                 border: 1px solid #5A7598;
                 border-radius: 16px;
-                padding: 16px 18px;
+                padding: 12px 18px;
                 font-weight: 700;
             }}
             QPushButton#PauseButton:hover {{
@@ -305,7 +305,7 @@ class MainWindow(QWidget):
 
         self.page_layout = QVBoxLayout(self.page_widget)
         self.page_layout.setContentsMargins(24, 22, 24, 22)
-        self.page_layout.setSpacing(16)
+        self.page_layout.setSpacing(22)
         self.page_layout.setAlignment(Qt.AlignTop)
 
     def _build_header_card(self):
@@ -318,14 +318,14 @@ class MainWindow(QWidget):
         header_body = QWidget()
         header_body.setObjectName("HeaderBody")
         header_box = QHBoxLayout(header_body)
-        header_box.setContentsMargins(22, 18, 22, 18)
+        header_box.setContentsMargins(22, 14, 22, 14)
         header_box.setSpacing(14)
 
         title_wrap = QWidget()
         title_wrap.setObjectName("TitleWrap")
         title_box = QVBoxLayout(title_wrap)
         title_box.setContentsMargins(0, 0, 0, 0)
-        title_box.setSpacing(6)
+        title_box.setSpacing(0)
 
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
@@ -356,7 +356,7 @@ class MainWindow(QWidget):
             f"color: {APP_COLORS['blue_deep']};"
             "border: 1px solid #9FC0F0;"
             "border-radius: 14px;"
-            "padding: 12px 18px;"
+            "padding: 10px 14px;"
         )
         self.author_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_layout.addWidget(self.author_badge, 0, Qt.AlignVCenter)
@@ -376,7 +376,7 @@ class MainWindow(QWidget):
             f"color: {APP_COLORS['blue_deep']};"
             "border: 1px solid #9FC0F0;"
             "border-radius: 14px;"
-            "padding: 12px 18px;"
+            "padding: 10px 14px;"
         )
         self.tutorial_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_layout.addWidget(self.tutorial_badge, 0, Qt.AlignVCenter)
@@ -388,15 +388,15 @@ class MainWindow(QWidget):
         """创建输入数量徽标。"""
         badge = QLabel()
         badge.setAlignment(Qt.AlignCenter)
-        badge.setMinimumWidth(72)
+        badge.setMinimumWidth(60)
         badge.setFont(build_font(10, bold=True))
         badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge.setStyleSheet(
             f"background: {bg_color};"
             f"color: {text_color};"
             f"border: 1px solid {border_color};"
-            "border-radius: 10px;"
-            "padding: 8px 10px;"
+            "border-radius: 8px;"
+            "padding: 4px 8px;"
         )
         return badge
 
@@ -421,8 +421,8 @@ class MainWindow(QWidget):
             border_color="#9FC0F0",
         )
 
-        self.order_edit = BatchInputEdit("每行一个订单号，最多 100 条。")
-        self.tracking_edit = BatchInputEdit("每行一个物流单号，最多 100 条。")
+        self.order_edit = BatchInputEdit("多个请用英文逗号、换行分隔，最多100 条")
+        self.tracking_edit = BatchInputEdit("多个请用英文逗号、换行分隔，最多100 条")
 
         self.order_edit.textChanged.connect(self.refresh_input_metrics)
         self.tracking_edit.textChanged.connect(self.refresh_input_metrics)
@@ -431,7 +431,6 @@ class MainWindow(QWidget):
 
         self.order_card = self._create_input_card(
             "第一步：填写订单号",
-            "多个订单号请用英文逗号、换行分隔。",
             self.order_count_badge,
             self.order_edit,
             APP_COLORS["blue"],
@@ -439,7 +438,6 @@ class MainWindow(QWidget):
         )
         self.tracking_card = self._create_input_card(
             "第二步：填写物流单号",
-            "多个物流单号请用英文逗号、换行分隔。",
             self.tracking_count_badge,
             self.tracking_edit,
             APP_COLORS["blue"],
@@ -451,9 +449,9 @@ class MainWindow(QWidget):
         self.input_grid.addWidget(self.order_card, 0, 0, Qt.AlignTop)
         self.input_grid.addWidget(self.tracking_card, 0, 1, Qt.AlignTop)
         self.input_grid.addWidget(self.config_card, 0, 2, Qt.AlignTop)
-        self.input_grid.setColumnStretch(0, 1)
-        self.input_grid.setColumnStretch(1, 1)
-        self.input_grid.setColumnStretch(2, 1)
+        self.input_grid.setColumnStretch(0, 2)
+        self.input_grid.setColumnStretch(1, 2)
+        self.input_grid.setColumnStretch(2, 2)
 
     def _build_action_section(self):
         """创建开始/暂停操作区。"""
@@ -466,16 +464,16 @@ class MainWindow(QWidget):
         self.pause_button = QPushButton("暂停批量处理")
         self.pause_button.setObjectName("PauseButton")
         self.pause_button.setCursor(Qt.PointingHandCursor)
-        self.pause_button.setFont(build_font(16, bold=True))
-        self.pause_button.setMinimumHeight(56)
+        self.pause_button.setFont(build_font(15, bold=True))
+        self.pause_button.setMinimumHeight(48)
         self.pause_button.clicked.connect(self.on_pause_clicked)
         self.action_layout.addWidget(self.pause_button, 1)
 
         self.start_button = QPushButton("开始批量处理")
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.setCursor(Qt.PointingHandCursor)
-        self.start_button.setFont(build_font(17, bold=True))
-        self.start_button.setMinimumHeight(56)
+        self.start_button.setFont(build_font(16, bold=True))
+        self.start_button.setMinimumHeight(48)
         self.start_button.clicked.connect(self.on_start_clicked)
         self.action_layout.addWidget(self.start_button, 1)
         self.page_layout.addWidget(self.action_row)
@@ -505,12 +503,13 @@ class MainWindow(QWidget):
         self.log_title_label = log_title
         log_header_box.addWidget(log_title)
 
-        self.log_hint_label = QLabel("最近执行记录会按时间顺序滚动显示。")
+        self.log_hint_label = QLabel("（最近执行记录会按时间顺序滚动显示）")
         self.log_hint_label.setObjectName("LogHint")
         self.log_hint_label.setWordWrap(False)
         self.log_hint_label.setFont(build_font(10))
-        self.log_hint_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        log_header_box.addWidget(self.log_hint_label, 1)
+        self.log_hint_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        log_header_box.addWidget(self.log_hint_label, 0)
+        log_header_box.addStretch(1)
         log_box.addWidget(log_header)
 
         self.log_view = QPlainTextEdit()
@@ -537,7 +536,7 @@ class MainWindow(QWidget):
             parent_layout.addWidget(card)
         return card
 
-    def _create_input_card(self, title, hint, badge, editor, accent, object_name):
+    def _create_input_card(self, title, badge, editor, accent, object_name):
         """创建输入卡片。"""
         card = QFrame()
         card.setObjectName(object_name)
@@ -556,24 +555,27 @@ class MainWindow(QWidget):
         header.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(10)
+        header_layout.setSpacing(0)
+
+        # 标题+badge 绑定为一组，整体居中
+        title_group = QWidget()
+        title_group.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        title_group_layout = QHBoxLayout(title_group)
+        title_group_layout.setContentsMargins(0, 0, 0, 0)
+        title_group_layout.setSpacing(8)
 
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
         title_label.setFont(build_font(15, bold=True))
-        title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        title_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         card.title_label = title_label
-        header_layout.addWidget(title_label)
-        header_layout.addWidget(badge, 0, Qt.AlignRight)
-        body_layout.addWidget(header)
+        title_group_layout.addWidget(title_label)
+        title_group_layout.addWidget(badge)
 
-        hint_label = QLabel(hint)
-        hint_label.setObjectName("SectionHint")
-        hint_label.setWordWrap(False)
-        hint_label.setFont(build_font(10))
-        hint_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        body_layout.addWidget(hint_label)
-        card.hint_label = hint_label
+        header_layout.addStretch(1)
+        header_layout.addWidget(title_group, 0, Qt.AlignCenter)
+        header_layout.addStretch(1)
+        body_layout.addWidget(header)
 
         body_layout.addWidget(editor)
         card_layout.addWidget(body)
@@ -583,14 +585,14 @@ class MainWindow(QWidget):
         """创建配置目录卡片，复用输入卡片骨架以确保三列对齐。"""
         badge_placeholder = QLabel("目录")
         badge_placeholder.setAlignment(Qt.AlignCenter)
-        badge_placeholder.setMinimumWidth(72)
+        badge_placeholder.setMinimumWidth(60)
         badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_placeholder.setStyleSheet(
             f"background: {APP_COLORS['blue_soft']};"
             f"color: {APP_COLORS['blue']};"
             "border: 1px solid #9FC0F0;"
-            "border-radius: 10px;"
-            "padding: 8px 10px;"
+            "border-radius: 8px;"
+            "padding: 4px 8px;"
         )
         self.config_badge = badge_placeholder
 
@@ -598,7 +600,7 @@ class MainWindow(QWidget):
         shell.setObjectName("InputShell")
         shell_layout = QVBoxLayout(shell)
         shell_layout.setContentsMargins(0, 0, 0, 0)
-        shell_layout.setSpacing(10)
+        shell_layout.setSpacing(6)
 
         path_label = QLabel()
         path_label.setObjectName("ConfigPath")
@@ -618,14 +620,12 @@ class MainWindow(QWidget):
 
         card = self._create_input_card(
             "第三步：选择配置目录",
-            "必须手动选择 cookie 所在目录（支持 .txt / 无后缀 / 双 .txt）。",
             self.config_badge,
             shell,
             APP_COLORS["blue"],
             "ConfigCard",
         )
         self.config_title_label = card.title_label
-        self.config_hint_label = card.hint_label
         return card
 
     # -----------------------------------------------------------------------
@@ -687,17 +687,14 @@ class MainWindow(QWidget):
             (self.tracking_count_badge,       10,  9, True,  False),
             (self.order_card.title_label,     15, 13, True,  False),
             (self.tracking_card.title_label,  15, 13, True,  False),
-            (self.order_card.hint_label,      10,  9, False, False),
-            (self.tracking_card.hint_label,   10,  9, False, False),
             (self.config_title_label,         15, 13, True,  False),
             (self.config_badge,               10,  9, True,  False),
-            (self.config_hint_label,          10,  9, False, False),
-            (self.config_path_label,          10,  9, False, False),
+            (self.config_path_label,          13, 11, False, False),
             (self.config_button,              11, 10, True,  False),
             (self.log_title_label,            15, 13, True,  False),
             (self.log_hint_label,             10,  9, False, False),
-            (self.start_button,               17, 14, True,  False),
-            (self.pause_button,               15, 13, True,  False),
+            (self.start_button,               16, 13, True,  False),
+            (self.pause_button,               15, 12, True,  False),
             (self.order_edit,                 13, 11, False, True),
             (self.tracking_edit,              13, 11, False, True),
             (self.log_view,                   11,  9, False, True),
@@ -707,10 +704,10 @@ class MainWindow(QWidget):
             widget.setFont(build_fixed_font(size) if fixed else build_font(size, bold=bold))
 
         # -- 尺寸 --
-        badge_h = sc(40, 36, s)
+        badge_h = sc(30, 26, s)
         author_h = sc(50, 44, s)
-        author_w = sc(210, 180, s)
-        button_h = sc(56, 48, s)
+        author_w = sc(170, 150, s)
+        button_h = sc(48, 42, s)
         header_h = sc(120, 100, s)
         log_h = sc(300, 190, s)
         input_h = self._calculate_editor_height(self.order_edit, 10)
@@ -738,10 +735,10 @@ class MainWindow(QWidget):
             card.setFixedHeight(card_target_height)
 
         # -- 间距 --
-        self.page_layout.setContentsMargins(sc(18, 12, s), sc(16, 10, s), sc(18, 12, s), sc(16, 10, s))
-        self.page_layout.setSpacing(sc(14, 8, s))
-        self.input_grid.setHorizontalSpacing(sc(14, 10, s))
-        self.input_grid.setVerticalSpacing(sc(10, 8, s))
+        self.page_layout.setContentsMargins(sc(24, 14, s), sc(22, 12, s), sc(24, 14, s), sc(22, 12, s))
+        self.page_layout.setSpacing(sc(22, 12, s))
+        self.input_grid.setHorizontalSpacing(sc(18, 11, s))
+        self.input_grid.setVerticalSpacing(sc(14, 10, s))
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
