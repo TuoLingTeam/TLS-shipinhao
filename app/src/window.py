@@ -130,22 +130,22 @@ class MainWindow(QWidget):
                 border: 1px solid #9EB7D7;
                 border-radius: 20px;
             }}
-            QFrame#InputCardOrange {{
+            QFrame#InputCardBlue2 {{
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 {c["orange_tint"]},
-                    stop: 1 {c["orange_tint_deep"]}
+                    stop: 0 #C2D6F3,
+                    stop: 1 #AECBE8
                 );
-                border: 1px solid {c["orange_border"]};
+                border: 1px solid #92B0CE;
                 border-radius: 20px;
             }}
             QFrame#ConfigCard {{
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 #E2EAF5,
-                    stop: 1 #CEDBEC
+                    stop: 0 #BAD0EF,
+                    stop: 1 #A4C3E2
                 );
-                border: 1px solid #AEBFD6;
+                border: 1px solid #8AAAC8;
                 border-radius: 20px;
             }}
             QFrame#LogCard {{
@@ -432,9 +432,9 @@ class MainWindow(QWidget):
             border_color="#9FC0F0",
         )
         self.tracking_count_badge = self._create_count_badge(
-            text_color=APP_COLORS["orange"],
-            bg_color=APP_COLORS["orange_soft"],
-            border_color="#E4B57E",
+            text_color=APP_COLORS["blue_deep"],
+            bg_color="#C5DAFF",
+            border_color="#8BAED8",
         )
 
         self.order_edit = BatchInputEdit("\u6bcf\u884c\u4e00\u4e2a\u8ba2\u5355\u53f7\uff0c\u6700\u591a 100 \u6761\u3002")
@@ -458,8 +458,8 @@ class MainWindow(QWidget):
             "\u591a\u4e2a\u7269\u6d41\u5355\u53f7\u8bf7\u7528\u82f1\u6587\u9017\u53f7\u3001\u6362\u884c\u5206\u9694\u3002",
             self.tracking_count_badge,
             self.tracking_edit,
-            APP_COLORS["orange"],
-            "InputCardOrange",
+            APP_COLORS["blue"],
+            "InputCardBlue2",
         )
         self.config_card = self._create_config_card()
 
@@ -602,9 +602,9 @@ class MainWindow(QWidget):
         badge_placeholder.setMinimumWidth(72)
         badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_placeholder.setStyleSheet(
-            "background: #D7E2F0;"
-            "color: #375271;"
-            "border: 1px solid #ADC0D8;"
+            "background: #B8D4F0;"
+            "color: #0C3C8F;"
+            "border: 1px solid #7FA8D0;"
             "border-radius: 10px;"
             "padding: 8px 10px;"
         )

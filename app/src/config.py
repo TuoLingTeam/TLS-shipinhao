@@ -185,7 +185,7 @@ def resolve_config_dir():
     raise ConfigNotFoundError(
         [
             f"当前选择目录：{search_dirs[0]}",
-            "该目录下未找到可用配置（需 cookie，且包含 biz_magic 或配套 biz_magic 文件）。",
+            "该目录下未找到可用配置（需 cookie.txt 文件）。",
         ]
     )
 
