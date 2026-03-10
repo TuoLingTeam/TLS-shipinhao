@@ -83,36 +83,51 @@ th{color:#94a3b8;font-weight:600;position:sticky;top:0;background:#1e293b}
 <script>
 let SECRET = "";
 const API = location.origin;
-async function api(path, body) {
-  const res = await fetch(API + path, {
+
+function api(path, body) {
+  return fetch(API + path, {
     method: "POST", 
     headers: { "Content-Type": "application/json", "X-Admin-Secret": SECRET }, 
     body: JSON.stringify(body)
-  });
-  return res.json();
+  }).then(res => res.json());
 }
-async function doLogin() {
+
+function doLogin() {
   SECRET = document.getElementById("adminSecret").value;
-  if (!SECRET) { showMsg("loginMsg", "请输入管理密钥", true); return; }
-  const res = await api("/api/admin/list", {});
-  if (!res.success) { showMsg("loginMsg", "密钥错误", true); SECRET = ""; return; }
-  document.getElementById("loginView").classList.add("hidden");
-  document.getElementById("mainView").classList.remove("hidden");
-  renderList(res);
+  if (!SECRET) { 
+    showMsg("loginMsg", "请输入管理密钥", true); 
+    return; 
+  }
+  api("/api/admin/list", {}).then(res => {
+    if (!res.success) { 
+      showMsg("loginMsg", "密钥错误", true); 
+      SECRET = ""; 
+      return; 
+    }
+    document.getElementById("loginView").classList.add("hidden");
+    document.getElementById("mainView").classList.remove("hidden");
+    renderList(res);
+  });
 }
-async function doGenerate() {
+
+function doGenerate() {
   const count = parseInt(document.getElementById("genCount").value) || 5;
   const plan_days = parseInt(document.getElementById("genDays").value) || 30;
   const note = document.getElementById("genNote").value;
-  const res = await api("/api/admin/generate", { count, plan_days, note });
-  if (!res.success) { showMsg("genMsg", res.message, true); return; }
-  showMsg("genMsg", "成功生成 " + res.keys.length + " 个卡密", false);
-  const out = document.getElementById("keysOutput");
-  out.textContent = res.keys.join("\n");
-  out.classList.remove("hidden");
-  document.getElementById("copyBtn").style.display = "inline-block";
-  loadList();
+  api("/api/admin/generate", { count, plan_days, note }).then(res => {
+    if (!res.success) { 
+      showMsg("genMsg", res.message, true); 
+      return; 
+    }
+    showMsg("genMsg", "成功生成 " + res.keys.length + " 个卡密", false);
+    const out = document.getElementById("keysOutput");
+    out.textContent = res.keys.join("\n");
+    out.classList.remove("hidden");
+    document.getElementById("copyBtn").style.display = "inline-block";
+    loadList();
+  });
 }
+
 function copyKeys() {
   const text = document.getElementById("keysOutput").textContent;
   navigator.clipboard.writeText(text).then(() => {
@@ -121,16 +136,24 @@ function copyKeys() {
     setTimeout(() => btn.textContent = "复制全部", 1500);
   });
 }
-async function doRevoke(key) {
+
+function doRevoke(key) {
   if (!confirm('确定要吊销卡密 ' + key + ' 吗？此操作不可逆！')) return;
-  const res = await api('/api/admin/revoke', { key });
-  if (!res.success) { alert(res.message); return; }
-  loadList();
+  api('/api/admin/revoke', { key }).then(res => {
+    if (!res.success) { 
+      alert(res.message); 
+      return; 
+    }
+    loadList();
+  });
 }
-async function loadList() {
-  const res = await api("/api/admin/list", {});
-  if (res.success) renderList(res);
+
+function loadList() {
+  api("/api/admin/list", {}).then(res => {
+    if (res.success) renderList(res);
+  });
 }
+
 function renderList(res) {
   const sa = document.getElementById("statsArea");
   const total = (res.stats || []).reduce((s, r) => s + r.cnt, 0);
@@ -140,6 +163,7 @@ function renderList(res) {
   sa.innerHTML = [
     stat(total, "总计"), stat(unused, "未使用"), stat(activated, "已激活"), stat(revoked, "已吊销")
   ].join("");
+  
   const tbody = document.getElementById("keysList");
   tbody.innerHTML = (res.keys || []).map(r => {
     const st = r.status === "activated" ? '<span class="badge badge-green">已激活</span>'
@@ -163,16 +187,29 @@ function renderList(res) {
       + '</tr>';
   }).join("");
 }
+
 function stat(n, label) {
   return '<div class="stat-item"><div class="stat-num">' + n + '</div><div class="stat-label">' + label + '</div></div>';
 }
-function fmt(s) { return s ? s.replace(/T/, ' ').replace(/\\+00:00$/, '') : '-'; }
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function fmt(s) { 
+  return s ? s.replace(/T/, ' ').replace(/\+00:00$/, '') : '-'; 
+}
+
+function esc(s) { 
+  const d = document.createElement('div'); 
+  d.textContent = s; 
+  return d.innerHTML; 
+}
+
 function showMsg(id, msg, err) {
   document.getElementById(id).innerHTML = '<div class="msg ' + (err ? 'msg-err' : 'msg-ok') + '">' + esc(msg) + '</div>';
   setTimeout(() => document.getElementById(id).innerHTML = "", 4000);
 }
-document.getElementById("adminSecret").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+document.getElementById("adminSecret").addEventListener("keydown", e => { 
+  if (e.key === "Enter") doLogin(); 
+});
 </script>
 </body>
 </html>
