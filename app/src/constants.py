@@ -12,8 +12,8 @@ REQUEST_TIMEOUT = 30
 # ---------------------------------------------------------------------------
 # 窗口 & 品牌
 # ---------------------------------------------------------------------------
-WINDOW_TITLE = "驼铃视频小店中差评处理"
-AUTHOR_WECHAT = "TLS-801"
+WINDOW_TITLE = "小店售后维护系统"
+AUTHOR_WECHAT = ""
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
 
 DESIGN_WIDTH = 1240

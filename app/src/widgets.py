@@ -189,11 +189,14 @@ class LicenseDialog(QDialog):
         desc.setWordWrap(True)
         root.addWidget(desc)
 
-        self.wechat_label = QLabel(f"联系作者微信：{AUTHOR_WECHAT}（点击复制）")
-        self.wechat_label.setObjectName("LicenseHint")
-        self.wechat_label.setCursor(Qt.PointingHandCursor)
-        self.wechat_label.mousePressEvent = self._copy_wechat
-        root.addWidget(self.wechat_label)
+        if AUTHOR_WECHAT:
+            self.wechat_label = QLabel(f"联系作者微信：{AUTHOR_WECHAT}（点击复制）")
+            self.wechat_label.setObjectName("LicenseHint")
+            self.wechat_label.setCursor(Qt.PointingHandCursor)
+            self.wechat_label.mousePressEvent = self._copy_wechat
+            root.addWidget(self.wechat_label)
+        else:
+            self.wechat_label = None
 
         self.key_input = QLineEdit()
         self.key_input.setObjectName("LicenseInput")
@@ -226,6 +229,8 @@ class LicenseDialog(QDialog):
         self.key_input.setFocus()
 
     def _copy_wechat(self, _event):
+        if not AUTHOR_WECHAT:
+            return
         clipboard = QApplication.clipboard()
         clipboard.setText(AUTHOR_WECHAT)
         self.message_label.setText(f"已复制作者微信：{AUTHOR_WECHAT}")
