@@ -1,0 +1,5 @@
+requests
+PySide6_Essentials
+shiboken6
+pyinstaller
+Pillow

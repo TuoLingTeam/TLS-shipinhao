@@ -3,7 +3,6 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 *$py.class
-*.so
 .Python
 .venv/
 .venv-mac-build/
@@ -40,9 +39,6 @@ screenshot.png
 
 # PyInstaller
 *.spec
-
-# 混淆分发目录
-app-dist/
 
 # Build logs
 logs_*/

@@ -59,6 +59,27 @@ PROBE_IMPORTS = (
 # PyInstaller 需要保留的隐藏导入。
 HIDDEN_IMPORTS = ["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PIL.Image"]
 
+# Cython 编译后的模块（使用混淆源时需要）
+CYTHON_MODULES = [
+    "src.api",
+    "src.app", 
+    "src.config",
+    "src.constants",
+    "src.license",
+    "src.widgets",
+    "src.window",
+    "src.worker",
+]
+
+# Cython 模块依赖的标准库（使用混淆源时需要）
+CYTHON_STDLIB_DEPS = [
+    "hmac",
+    "hashlib",
+    "json",
+    "threading",
+    "requests",
+]
+
 # 业务不使用的 Qt 模块，显式排除可显著减小体积。
 QT_OPTIONAL_MODULES = (
     "Qt3DAnimation",
@@ -302,7 +323,7 @@ def prepare_icon(system: str, python_bin: str) -> Path | None:
         return None
 
 
-def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str) -> list[str]:
+def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_dist: bool = False) -> list[str]:
     """组装 PyInstaller 公共参数。"""
     cmd = [python_bin, "-m", "PyInstaller", "--clean", "--noconfirm"]
 
@@ -314,6 +335,14 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str) -> li
     if profile == PROFILE_MAIN:
         for module in HIDDEN_IMPORTS:
             cmd.extend(["--hidden-import", module])
+        
+        # 使用混淆源时，需要显式声明所有 Cython 编译的模块及其标准库依赖
+        if use_dist:
+            for module in CYTHON_MODULES:
+                cmd.extend(["--hidden-import", module])
+            for module in CYTHON_STDLIB_DEPS:
+                cmd.extend(["--hidden-import", module])
+        
         for module in EXCLUDED_MODULES:
             cmd.extend(["--exclude-module", module])
 
@@ -366,10 +395,10 @@ def prune_macos_bundle(app_bundle: Path) -> None:
         print(f"已裁剪 macOS bundle 中的 {removed_count} 个非运行时资源。")
 
 
-def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str) -> Path:
+def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, use_dist: bool = False) -> Path:
     """构建 macOS .app。"""
     print(f"开始打包 macOS 应用: {app_name}")
-    cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_MACOS, profile)
+    cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_MACOS, profile, use_dist)
     cmd.extend(
         [
             "--windowed",
@@ -396,10 +425,10 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str) 
     return app_bundle
 
 
-def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str) -> Path:
+def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str, use_dist: bool = False) -> Path:
     """构建 Windows .exe。"""
     print(f"开始打包 Windows 应用: {app_name}")
-    cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_WINDOWS, profile)
+    cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_WINDOWS, profile, use_dist)
     cmd.extend(["--onefile", "--windowed", "--name", app_name, str(entry_file)])
     run(cmd)
 
@@ -486,9 +515,9 @@ def build(target: str | None = None, profile: str = PROFILE_MAIN, use_dist: bool
     clean_build_artifacts()
 
     if system == SYSTEM_MACOS:
-        return build_macos(python_bin, app_name, entry_file, profile)
+        return build_macos(python_bin, app_name, entry_file, profile, use_dist)
     if system == SYSTEM_WINDOWS:
-        return build_windows(python_bin, app_name, entry_file, profile)
+        return build_windows(python_bin, app_name, entry_file, profile, use_dist)
     raise SystemExit(f"不支持的系统: {system}")
 
 
