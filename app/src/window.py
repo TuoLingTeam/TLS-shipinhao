@@ -997,9 +997,7 @@ class MainWindow(QWidget):
             self.show_message(
                 QMessageBox.Warning,
                 "目录不完整",
-                "所选目录缺少以下文件：\n"
-                + "\n".join(missing_files)
-                + "\n\n请确保 cookie 可用（且包含 biz_magic），或在同目录提供 biz_magic(.txt) 文件作为备用。",
+                "所选目录缺少以下文件：" + "、".join(missing_files),
             )
             return
 
