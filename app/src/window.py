@@ -340,7 +340,7 @@ class MainWindow(QWidget):
         badge_layout.setContentsMargins(0, 0, 0, 0)
         badge_layout.setSpacing(10)
 
-        self.author_badge = QLabel(f"作者微信：{AUTHOR_WECHAT}")
+        self.author_badge = QLabel(f"微信：{AUTHOR_WECHAT}")
         self.author_badge.setAlignment(Qt.AlignCenter)
         self.author_badge.setFont(build_font(12, bold=True))
         self.author_badge.setStyleSheet(
