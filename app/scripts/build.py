@@ -36,6 +36,7 @@ SYSTEM_WINDOWS = "Windows"
 
 APP_ROOT = Path(__file__).resolve().parent.parent      # app/
 REPO_ROOT = APP_ROOT.parent                             # 仓库根目录
+APP_DIST = REPO_ROOT / "app-dist"                       # 混淆分发目录
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
 MAIN_FILE = APP_ROOT / "main.py"
@@ -421,10 +422,11 @@ def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str
 # =========================
 # 参数与流程编排
 # =========================
-def parse_args(argv: list[str]) -> tuple[str | None, str]:
-    """解析命令行参数，返回 (目标平台, 构建档位)。"""
+def parse_args(argv: list[str]) -> tuple[str | None, str, bool]:
+    """解析命令行参数，返回 (目标平台, 构建档位, 是否使用混淆源)。"""
     target = None
     profile = PROFILE_MAIN
+    use_dist = False
 
     for raw_arg in argv[1:]:
         arg = raw_arg.lower()
@@ -437,24 +439,37 @@ def parse_args(argv: list[str]) -> tuple[str | None, str]:
         if arg in {"main", "app"}:
             profile = PROFILE_MAIN
             continue
+        if arg in {"--dist", "dist"}:
+            use_dist = True
+            continue
         raise SystemExit(f"不支持的参数: {raw_arg}")
 
-    return target, profile
+    return target, profile, use_dist
 
 
-def resolve_profile(profile: str) -> tuple[str, Path]:
+def resolve_profile(profile: str, use_dist: bool = False) -> tuple[str, Path]:
     """根据构建档位返回 (应用名称, 入口文件)。"""
     if profile == PROFILE_MAIN:
+        if use_dist:
+            entry = APP_DIST / "main.py"
+            if not entry.exists():
+                raise SystemExit(
+                    f"混淆分发目录不存在: {APP_DIST}\n"
+                    "请先运行: python app/scripts/obfuscate.py"
+                )
+            return MAIN_APP_NAME, entry
         return MAIN_APP_NAME, MAIN_FILE
     raise SystemExit(f"不支持的构建档位: {profile}")
 
 
-def build(target: str | None = None, profile: str = PROFILE_MAIN) -> Path:
+def build(target: str | None = None, profile: str = PROFILE_MAIN, use_dist: bool = False) -> Path:
     """统一构建入口。"""
     python_bin = project_python()
     current_system = platform.system()
     system = target or current_system
-    app_name, entry_file = resolve_profile(profile)
+    app_name, entry_file = resolve_profile(profile, use_dist)
+    if use_dist:
+        print(f"使用混淆分发目录: {APP_DIST}")
 
     # 本地禁止跨平台打包，避免“构建了半天才发现产物不存在”。
     if target and target != current_system:
@@ -482,10 +497,10 @@ def build(target: str | None = None, profile: str = PROFILE_MAIN) -> Path:
 def main() -> None:
     """脚本主入口。"""
     ensure_running_with_project_python()
-    target, profile = parse_args(sys.argv)
+    target, profile, use_dist = parse_args(sys.argv)
 
     try:
-        artifact = build(target, profile)
+        artifact = build(target, profile, use_dist)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(exc.returncode) from exc
     except Exception as exc:  # noqa: BLE001

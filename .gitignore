@@ -41,6 +41,9 @@ screenshot.png
 # PyInstaller
 *.spec
 
+# 混淆分发目录
+app-dist/
+
 # Build logs
 logs_*/
 logs/
