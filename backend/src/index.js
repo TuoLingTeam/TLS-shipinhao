@@ -290,8 +290,224 @@ async function handleAdminRevoke(request, env) {
 // 管理页面 HTML
 // ---------------------------------------------------------------------------
 
+const ADMIN_HTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TLS-shipinhao 卡密管理</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;padding:24px}
+.container{max-width:960px;margin:0 auto}
+h1{font-size:1.5rem;margin-bottom:24px;color:#38bdf8}
+.card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155}
+.card h2{font-size:1.1rem;margin-bottom:16px;color:#94a3b8}
+label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid #475569;border-radius:8px;background:#0f172a;color:#e2e8f0;font-size:.9rem;margin-bottom:12px}
+input:focus,textarea:focus{outline:none;border-color:#38bdf8}
+.row{display:flex;gap:12px}
+.row>*{flex:1}
+btn,button,.btn{display:inline-block;padding:10px 20px;border:none;border-radius:8px;font-size:.9rem;cursor:pointer;font-weight:600}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+.login-box{max-width:400px;margin:80px auto}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #334155}
+th{color:#94a3b8;font-weight:600;position:sticky;top:0;background:#1e293b}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600}
+.badge-green{background:#064e3b;color:#34d399}
+.badge-gray{background:#374151;color:#9ca3af}
+.badge-red{background:#7f1d1d;color:#fca5a5}
+.keys-output{background:#0f172a;border:1px solid #475569;border-radius:8px;padding:12px;font-family:monospace;font-size:.85rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;margin-top:12px;color:#34d399}
+.stats{display:flex;gap:16px;margin-bottom:16px}
+.stat-item{background:#0f172a;border-radius:8px;padding:12px 16px;text-align:center;border:1px solid #334155}
+.stat-num{font-size:1.5rem;font-weight:700;color:#38bdf8}
+.stat-label{font-size:.75rem;color:#94a3b8}
+.table-wrap{max-height:500px;overflow-y:auto;border-radius:8px;border:1px solid #334155}
+.hidden{display:none}
+.msg{padding:10px;border-radius:8px;margin-bottom:12px;font-size:.85rem}
+.msg-err{background:#7f1d1d;color:#fca5a5}
+.msg-ok{background:#064e3b;color:#34d399}
+.copy-btn{background:#475569;color:#e2e8f0;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.75rem;margin-left:8px}
+.copy-btn:hover{background:#64748b}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔑 TLS-shipinhao 卡密管理</h1>
+  <div id="loginView" class="login-box">
+    <div class="card">
+      <h2>管理员登录</h2>
+      <div id="loginMsg"></div>
+      <label>管理密钥</label>
+      <input type="password" id="adminSecret" placeholder="请输入 ADMIN_SECRET">
+      <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登录</button>
+    </div>
+  </div>
+  <div id="mainView" class="hidden">
+    <div class="card">
+      <h2>批量生成卡密</h2>
+      <div id="genMsg"></div>
+      <div class="row">
+        <div><label>数量（1-50）</label><input type="number" id="genCount" value="5" min="1" max="50"></div>
+        <div><label>有效期（天）</label><input type="number" id="genDays" value="30" min="1"></div>
+      </div>
+      <label>备注</label>
+      <input type="text" id="genNote" placeholder="可选备注">
+      <button class="btn btn-primary" onclick="doGenerate()">生成卡密</button>
+      <button class="copy-btn" onclick="copyKeys()" id="copyBtn" style="display:none">复制全部</button>
+      <div id="keysOutput" class="keys-output hidden"></div>
+    </div>
+    <div class="card">
+      <h2>卡密总览</h2>
+      <div id="statsArea" class="stats"></div>
+      <button class="btn btn-primary btn-sm" onclick="loadList()" style="margin-bottom:16px">刷新列表</button>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>卡密</th><th>有效期</th><th>状态</th><th>备注</th><th>生成时间</th><th>设备ID</th><th>激活时间</th><th>过期时间</th><th>操作</th></tr></thead>
+          <tbody id="keysList"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let SECRET = "";
+const API = location.origin;
+
+function api(path, body) {
+  return fetch(API + path, {
+    method: "POST", 
+    headers: { "Content-Type": "application/json", "X-Admin-Secret": SECRET }, 
+    body: JSON.stringify(body)
+  }).then(res => res.json());
+}
+
+function doLogin() {
+  SECRET = document.getElementById("adminSecret").value;
+  if (!SECRET) { 
+    showMsg("loginMsg", "请输入管理密钥", true); 
+    return; 
+  }
+  api("/api/admin/list", {}).then(res => {
+    if (!res.success) { 
+      showMsg("loginMsg", "密钥错误", true); 
+      SECRET = ""; 
+      return; 
+    }
+    document.getElementById("loginView").classList.add("hidden");
+    document.getElementById("mainView").classList.remove("hidden");
+    renderList(res);
+  });
+}
+
+function doGenerate() {
+  const count = parseInt(document.getElementById("genCount").value) || 5;
+  const plan_days = parseInt(document.getElementById("genDays").value) || 30;
+  const note = document.getElementById("genNote").value;
+  api("/api/admin/generate", { count, plan_days, note }).then(res => {
+    if (!res.success) { 
+      showMsg("genMsg", res.message, true); 
+      return; 
+    }
+    showMsg("genMsg", "成功生成 " + res.keys.length + " 个卡密", false);
+    const out = document.getElementById("keysOutput");
+    out.textContent = res.keys.join("\\n");
+    out.classList.remove("hidden");
+    document.getElementById("copyBtn").style.display = "inline-block";
+    loadList();
+  });
+}
+
+function copyKeys() {
+  const text = document.getElementById("keysOutput").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "已复制!";
+    setTimeout(() => btn.textContent = "复制全部", 1500);
+  });
+}
+
+function doRevoke(key) {
+  if (!confirm('确定要吊销卡密 ' + key + ' 吗？此操作不可逆！')) return;
+  api('/api/admin/revoke', { key }).then(res => {
+    if (!res.success) { 
+      alert(res.message); 
+      return; 
+    }
+    loadList();
+  });
+}
+
+function loadList() {
+  api("/api/admin/list", {}).then(res => {
+    if (res.success) renderList(res);
+  });
+}
+
+function renderList(res) {
+  const sa = document.getElementById("statsArea");
+  const total = (res.stats || []).reduce((s, r) => s + r.cnt, 0);
+  const unused = (res.stats || []).find(r => r.status === "unused")?.cnt || 0;
+  const activated = (res.stats || []).find(r => r.status === "activated")?.cnt || 0;
+  const revoked = (res.stats || []).find(r => r.status === "revoked")?.cnt || 0;
+  sa.innerHTML = [
+    stat(total, "总计"), stat(unused, "未使用"), stat(activated, "已激活"), stat(revoked, "已吊销")
+  ].join("");
+  
+  const tbody = document.getElementById("keysList");
+  tbody.innerHTML = (res.keys || []).map(r => {
+    const st = r.status === "activated" ? '<span class="badge badge-green">已激活</span>'
+      : r.status === "revoked" ? '<span class="badge badge-red">已吊销</span>'
+      : '<span class="badge badge-gray">未使用</span>';
+    const expired = r.status !== "revoked" && r.expires_at && new Date() > new Date(r.expires_at);
+    const expBadge = expired ? ' <span class="badge badge-red">已过期</span>' : '';
+    const revokeBtn = r.status !== "revoked"
+      ? '<button class="copy-btn" style="background:#7f1d1d;color:#fca5a5" onclick="doRevoke(&quot;' + esc(r.license_key) + '&quot;)">吊销</button>'
+      : '-';
+    return '<tr>'
+      + '<td style="font-family:monospace;font-size:.78rem">' + esc(r.license_key) + '</td>'
+      + '<td>' + r.plan_days + '天</td>'
+      + '<td>' + st + expBadge + '</td>'
+      + '<td>' + esc(r.note || '') + '</td>'
+      + '<td>' + fmt(r.created_at) + '</td>'
+      + '<td style="font-size:.75rem">' + esc(r.device_id || '-') + '</td>'
+      + '<td>' + fmt(r.activated_at) + '</td>'
+      + '<td>' + fmt(r.expires_at) + '</td>'
+      + '<td>' + revokeBtn + '</td>'
+      + '</tr>';
+  }).join("");
+}
+
+function stat(n, label) {
+  return '<div class="stat-item"><div class="stat-num">' + n + '</div><div class="stat-label">' + label + '</div></div>';
+}
+
+function fmt(s) { 
+  return s ? s.replace(/T/, ' ').replace(/\\+00:00$/, '') : '-'; 
+}
+
+function esc(s) { 
+  const d = document.createElement('div'); 
+  d.textContent = s; 
+  return d.innerHTML; 
+}
+
+function showMsg(id, msg, err) {
+  document.getElementById(id).innerHTML = '<div class="msg ' + (err ? 'msg-err' : 'msg-ok') + '">' + esc(msg) + '</div>';
+  setTimeout(() => document.getElementById(id).innerHTML = "", 4000);
+}
+
+document.getElementById("adminSecret").addEventListener("keydown", e => { 
+  if (e.key === "Enter") doLogin(); 
+});
+</script>
+</body>
+</html>`;
+
 function serveAdminPage() {
-  return htmlResponse(adminHtml);
+  return htmlResponse(ADMIN_HTML);
 }
 
 // ---------------------------------------------------------------------------
