@@ -1,19 +1,15 @@
-name: Build Windows App
+name: Build Windows App (Obfuscated)
 
 on:
   # 手动触发构建Windows版本
   workflow_dispatch:
-    inputs:
-      use_obfuscation:
-        description: Use code obfuscation (Cython)
-        required: true
-        default: true
-        type: boolean
-  # 推送到main分支时自动构建Windows版本
+  # 只在推送到wuxinxi分支时自动构建Windows版本
   push:
     branches:
-      - main
+      - wuxinxi
   pull_request:
+    branches:
+      - wuxinxi
 
 jobs:
   build-windows:
@@ -41,23 +37,22 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          if (Test-Path app/requirements.txt) {
-            python -m pip install -r app/requirements.txt
+          if (Test-Path app-dist/requirements.txt) {
+            python -m pip install -r app-dist/requirements.txt
           }
-          python -m pip install pyinstaller cython setuptools
+          python -m pip install pyinstaller
 
-      - name: Obfuscate code
+      - name: Build Windows app from obfuscated code
         shell: pwsh
-        run: python app/scripts/obfuscate.py
-
-      - name: Build Windows app
-        shell: pwsh
-        run: python app/scripts/build.py windows --dist
+        run: |
+          # 直接从混淆目录构建，不需要重新混淆
+          cd app-dist
+          pyinstaller --onefile --windowed --name "TLS-shipinhao" --icon="../build/app_icon.ico" main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tls-shipinhao-windows
-          path: dist/TLS-shipinhao.exe
+          name: tls-shipinhao-windows-obfuscated
+          path: app-dist/dist/TLS-shipinhao.exe
           if-no-files-found: error
           retention-days: 14
