@@ -394,7 +394,7 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str) 
 
     print(f"打包完成。\n应用位置: {app_bundle}")
     if profile == PROFILE_MAIN:
-        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 和 biz_magic.txt 的路径。")
+        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 的路径。")
     return app_bundle
 
 
@@ -415,7 +415,7 @@ def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str
 
     print(f"打包完成。\n可执行文件: {exe_file}")
     if profile == PROFILE_MAIN:
-        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 和 biz_magic.txt 的路径。")
+        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 的路径。")
     return exe_file
 
 

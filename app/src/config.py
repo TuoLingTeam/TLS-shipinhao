@@ -205,25 +205,14 @@ def extract_biz_magic_from_cookie(cookie_data):
 
 
 def is_config_dir_ready(config_dir):
-    """判断目录是否可用：有 cookie，且能拿到 biz_magic（来自 cookie 或独立文件）。"""
+    """判断目录是否可用：有 cookie.txt 文件且包含 biz_magic 值。"""
     file_paths = resolve_config_files_in_dir(config_dir)
     if not file_paths:
         return False
 
     try:
         cookie_data = read_cookie_data(file_paths["cookie"])
-    except Exception:  # noqa: BLE001
-        return False
-
-    if extract_biz_magic_from_cookie(cookie_data):
-        return True
-
-    magic_path = file_paths.get("magic")
-    if not magic_path:
-        return False
-
-    try:
-        return bool(read_magic_file(magic_path))
+        return bool(extract_biz_magic_from_cookie(cookie_data))
     except Exception:  # noqa: BLE001
         return False
 
@@ -261,7 +250,7 @@ def get_cookie():
 
 
 def get_magic(cookie_data=None):
-    """读取 magic：优先从 cookie 中提取，失败时回退到独立文件。"""
+    """从 cookie 中提取 biz_magic 值。"""
     if cookie_data is None:
         cookie_data = get_cookie()
 
@@ -269,17 +258,7 @@ def get_magic(cookie_data=None):
     if magic:
         return magic
 
-    config_dir = resolve_config_dir()
-    file_paths = resolve_config_files_in_dir(config_dir)
-    if not file_paths:
-        raise ConfigNotFoundError(get_config_search_dirs())
-    magic_path = file_paths.get("magic")
-    if magic_path:
-        fallback = read_magic_file(magic_path)
-        if fallback:
-            return fallback
-
-    raise RuntimeError("未在 cookie 中找到 biz_magic，且目录中不存在可用的 biz_magic 配置文件。")
+    raise RuntimeError("未在 cookie 中找到 biz_magic 值。")
 
 
 # ---------------------------------------------------------------------------

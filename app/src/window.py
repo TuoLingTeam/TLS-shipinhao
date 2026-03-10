@@ -29,7 +29,6 @@ from .config import (
     get_saved_user_config_dir,
     parse_batch_input,
     read_cookie_data,
-    read_magic_file,
     resolve_config_dir,
     resolve_config_files_in_dir,
     save_user_config_dir,
@@ -955,7 +954,7 @@ class MainWindow(QWidget):
             text = (
                 "已记录目录：\n"
                 f"{saved_dir}\n\n"
-                "但这里暂未找到可用的 cookie 配置文件。"
+                "但是未找到可用的 cookie.txt 文件。"
             )
         else:
             text = (
@@ -982,16 +981,8 @@ class MainWindow(QWidget):
                 missing_files.append("cookie(.txt) 内容不可读")
             else:
                 magic_from_cookie = extract_biz_magic_from_cookie(cookie_data)
-                magic_file_path = resolved_files.get("magic")
                 if not magic_from_cookie:
-                    if not magic_file_path:
-                        missing_files.append("cookie 中 biz_magic 键")
-                    else:
-                        try:
-                            if not read_magic_file(magic_file_path):
-                                missing_files.append("biz_magic(.txt) 内容为空")
-                        except Exception:  # noqa: BLE001
-                            missing_files.append("biz_magic(.txt) 内容不可读")
+                    missing_files.append("cookie 中 biz_magic 键")
 
         if missing_files:
             self.show_message(
