@@ -144,8 +144,11 @@ function htmlResponse(html) {
 // ---------------------------------------------------------------------------
 
 function checkAdmin(request, env) {
-  const auth = request.headers.get("X-Admin-Secret") || "";
-  return auth === env.ADMIN_SECRET;
+  const enc = new TextEncoder();
+  const auth = enc.encode(request.headers.get("X-Admin-Secret") || "");
+  const secret = enc.encode(env.ADMIN_SECRET || "");
+  if (auth.length !== secret.length) return false;
+  return constantTimeEqual(auth, secret);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,20 +168,30 @@ async function handleActivate(request, env) {
   if (planDays <= 0) return errorResponse("卡密无效：有效期异常", 403);
 
   const normalizedKey = key.trim().toUpperCase();
+
+  // 检查卡密是否在 generated_keys 表中注册且未被吊销
+  const genRecord = await env.DB.prepare("SELECT * FROM generated_keys WHERE license_key = ?").bind(normalizedKey).first();
+  if (!genRecord) return errorResponse("卡密未注册：该卡密不在系统记录中", 403);
+  if (genRecord.status === "revoked") return errorResponse("该卡密已被吊销，无法使用", 403);
+
   const existing = await env.DB.prepare("SELECT * FROM activations WHERE license_key = ?").bind(normalizedKey).first();
   const now = nowISO();
-  const expires = expiresISO(planDays);
 
   if (existing) {
     if (existing.device_id !== device_id) {
       return errorResponse("该卡密已在其他设备激活，不允许更换设备。如需帮助请联系作者。", 403);
     }
+    // 同设备重复激活：保留原过期时间，仅更新指纹和时间戳
     await env.DB.prepare(
-      "UPDATE activations SET activated_at=?, expires_at=?, updated_at=?, device_fingerprint=? WHERE license_key=?"
-    ).bind(now, expires, now, device_fingerprint || "", normalizedKey).run();
-    return jsonResponse({ success: true, message: "重新激活成功", activated_at: now, expires_at: expires, plan_days: planDays });
+      "UPDATE activations SET updated_at=?, device_fingerprint=? WHERE license_key=?"
+    ).bind(now, device_fingerprint || "", normalizedKey).run();
+    return jsonResponse({
+      success: true, message: "重新激活成功",
+      activated_at: existing.activated_at, expires_at: existing.expires_at, plan_days: existing.plan_days,
+    });
   }
 
+  const expires = expiresISO(planDays);
   await env.DB.prepare(
     "INSERT INTO activations (license_key,device_id,device_fingerprint,plan_days,activated_at,expires_at,updated_at) VALUES (?,?,?,?,?,?,?)"
   ).bind(normalizedKey, device_id, device_fingerprint || "", planDays, now, expires, now).run();
@@ -197,6 +210,13 @@ async function handleVerify(request, env) {
   if (!key || !device_id) return errorResponse("缺少必填参数：key、device_id", 400);
 
   const normalizedKey = key.trim().toUpperCase();
+
+  // 检查卡密是否已被吊销
+  const genRecord = await env.DB.prepare("SELECT status FROM generated_keys WHERE license_key = ?").bind(normalizedKey).first();
+  if (genRecord && genRecord.status === "revoked") {
+    return jsonResponse({ success: false, message: "该卡密已被吊销", expired: true });
+  }
+
   const record = await env.DB.prepare("SELECT * FROM activations WHERE license_key=?").bind(normalizedKey).first();
   if (!record) return errorResponse("该卡密尚未激活", 404);
   if (record.device_id !== device_id) return errorResponse("设备不匹配：该卡密已绑定其他设备", 403);
@@ -247,6 +267,23 @@ async function handleAdminList(request, env) {
   ).all();
 
   return jsonResponse({ success: true, keys: generated.results || [], stats: stats.results || [] });
+}
+
+async function handleAdminRevoke(request, env) {
+  if (!checkAdmin(request, env)) return errorResponse("管理员密钥错误", 401);
+
+  let body;
+  try { body = await request.json(); } catch { return errorResponse("请求体 JSON 格式错误", 400); }
+
+  const key = (body.key || "").trim().toUpperCase();
+  if (!key) return errorResponse("缺少参数：key", 400);
+
+  const record = await env.DB.prepare("SELECT * FROM generated_keys WHERE license_key = ?").bind(key).first();
+  if (!record) return errorResponse("卡密不存在", 404);
+  if (record.status === "revoked") return errorResponse("该卡密已被吊销", 400);
+
+  await env.DB.prepare("UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?").bind(key).run();
+  return jsonResponse({ success: true, message: "卡密已吊销" });
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +375,7 @@ th{color:#94a3b8;font-weight:600;position:sticky;top:0;background:#1e293b}
       <button class="btn btn-primary btn-sm" onclick="loadList()" style="margin-bottom:16px">刷新列表</button>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>卡密</th><th>有效期</th><th>状态</th><th>备注</th><th>生成时间</th><th>设备ID</th><th>激活时间</th><th>过期时间</th></tr></thead>
+          <thead><tr><th>卡密</th><th>有效期</th><th>状态</th><th>备注</th><th>生成时间</th><th>设备ID</th><th>激活时间</th><th>过期时间</th><th>操作</th></tr></thead>
           <tbody id="keysList"></tbody>
         </table>
       </div>
@@ -390,6 +427,13 @@ function copyKeys() {
   });
 }
 
+async function doRevoke(key) {
+  if (!confirm('确定要吊销卡密 ' + key + ' 吗？此操作不可逆！')) return;
+  const res = await api('/api/admin/revoke', { key });
+  if (!res.success) { alert(res.message); return; }
+  loadList();
+}
+
 async function loadList() {
   const res = await api("/api/admin/list", {});
   if (res.success) renderList(res);
@@ -401,17 +445,22 @@ function renderList(res) {
   const total = (res.stats || []).reduce((s, r) => s + r.cnt, 0);
   const unused = (res.stats || []).find(r => r.status === "unused")?.cnt || 0;
   const activated = (res.stats || []).find(r => r.status === "activated")?.cnt || 0;
+  const revoked = (res.stats || []).find(r => r.status === "revoked")?.cnt || 0;
   sa.innerHTML = [
-    stat(total, "总计"), stat(unused, "未使用"), stat(activated, "已激活")
+    stat(total, "总计"), stat(unused, "未使用"), stat(activated, "已激活"), stat(revoked, "已吊销")
   ].join("");
 
   // 列表
   const tbody = document.getElementById("keysList");
   tbody.innerHTML = (res.keys || []).map(r => {
     const st = r.status === "activated" ? '<span class="badge badge-green">已激活</span>'
+      : r.status === "revoked" ? '<span class="badge badge-red">已吊销</span>'
       : '<span class="badge badge-gray">未使用</span>';
-    const expired = r.expires_at && new Date() > new Date(r.expires_at);
+    const expired = r.status !== "revoked" && r.expires_at && new Date() > new Date(r.expires_at);
     const expBadge = expired ? ' <span class="badge badge-red">已过期</span>' : '';
+    const revokeBtn = r.status !== "revoked"
+      ? '<button class="copy-btn" style="background:#7f1d1d;color:#fca5a5" onclick="doRevoke(\'' + esc(r.license_key) + '\')">吊销</button>'
+      : '-';
     return '<tr>'
       + '<td style="font-family:monospace;font-size:.78rem">' + esc(r.license_key) + '</td>'
       + '<td>' + r.plan_days + '天</td>'
@@ -421,6 +470,7 @@ function renderList(res) {
       + '<td style="font-size:.75rem">' + esc(r.device_id || '-') + '</td>'
       + '<td>' + fmt(r.activated_at) + '</td>'
       + '<td>' + fmt(r.expires_at) + '</td>'
+      + '<td>' + revokeBtn + '</td>'
       + '</tr>';
   }).join("");
 }
@@ -480,9 +530,16 @@ export default {
       case "/api/verify":
         return handleVerify(request, env);
       case "/api/admin/generate":
-        return handleAdminGenerate(request, env);
       case "/api/admin/list":
-        return handleAdminList(request, env);
+      case "/api/admin/revoke": {
+        let resp;
+        if (url.pathname === "/api/admin/generate") resp = await handleAdminGenerate(request, env);
+        else if (url.pathname === "/api/admin/list") resp = await handleAdminList(request, env);
+        else resp = await handleAdminRevoke(request, env);
+        // 管理员端点不开放 CORS，仅允许同源访问
+        resp.headers.delete("Access-Control-Allow-Origin");
+        return resp;
+      }
       default:
         return errorResponse("未知路由", 404);
     }
