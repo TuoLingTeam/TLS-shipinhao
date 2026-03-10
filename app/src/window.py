@@ -378,22 +378,6 @@ class MainWindow(QWidget):
         header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
         header_layout.addWidget(header_body)
 
-    def _create_count_badge(self, text_color, bg_color, border_color):
-        """创建输入数量徽标。"""
-        badge = QLabel()
-        badge.setAlignment(Qt.AlignCenter)
-        badge.setMinimumWidth(60)
-        badge.setFont(build_font(10, bold=True))
-        badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        badge.setStyleSheet(
-            f"background: {bg_color};"
-            f"color: {text_color};"
-            f"border: 1px solid {border_color};"
-            "border-radius: 8px;"
-            "padding: 4px 8px;"
-        )
-        return badge
-
     def _build_input_section(self):
         """创建三列输入区域（订单号、物流单号、配置目录）。"""
         self.input_container = QWidget()
@@ -527,6 +511,22 @@ class MainWindow(QWidget):
         else:
             parent_layout.addWidget(card)
         return card
+
+    def _create_count_badge(self, text_color, bg_color, border_color):
+        """创建输入数量徽标。"""
+        badge = QLabel()
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setMinimumWidth(60)
+        badge.setFont(build_font(10, bold=True))
+        badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        badge.setStyleSheet(
+            f"background: {bg_color};"
+            f"color: {text_color};"
+            f"border: 1px solid {border_color};"
+            "border-radius: 8px;"
+            "padding: 4px 8px;"
+        )
+        return badge
 
     def _create_input_card(self, title, badge, editor, object_name):
         """创建输入卡片。"""

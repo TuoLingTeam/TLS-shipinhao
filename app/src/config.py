@@ -168,28 +168,6 @@ def resolve_config_files_in_dir(config_dir):
     return {"cookie": resolved["cookie"], "magic": resolved.get("magic")}
 
 
-def resolve_config_dir():
-    """解析实际可用的配置目录（仅用户手选目录）。"""
-    global _CONFIG_DIR_CACHE
-    if _CONFIG_DIR_CACHE and is_config_dir_ready(_CONFIG_DIR_CACHE):
-        return _CONFIG_DIR_CACHE
-
-    search_dirs = get_config_search_dirs()
-    if not search_dirs:
-        raise ConfigNotFoundError(["未选择配置目录，请先点击「选择配置目录」。"])
-
-    for config_dir in search_dirs:
-        if is_config_dir_ready(config_dir):
-            _CONFIG_DIR_CACHE = config_dir
-            return config_dir
-    raise ConfigNotFoundError(
-        [
-            f"当前选择目录：{search_dirs[0]}",
-            "该目录下未找到可用配置（需 cookie.txt 文件）。",
-        ]
-    )
-
-
 def parse_cookie_content(content):
     """将 cookie 原文解析为字典。"""
     pairs = content.split(";")
@@ -248,6 +226,28 @@ def is_config_dir_ready(config_dir):
         return bool(read_magic_file(magic_path))
     except Exception:  # noqa: BLE001
         return False
+
+
+def resolve_config_dir():
+    """解析实际可用的配置目录（仅用户手选目录）。"""
+    global _CONFIG_DIR_CACHE
+    if _CONFIG_DIR_CACHE and is_config_dir_ready(_CONFIG_DIR_CACHE):
+        return _CONFIG_DIR_CACHE
+
+    search_dirs = get_config_search_dirs()
+    if not search_dirs:
+        raise ConfigNotFoundError(["未选择配置目录，请先点击「选择配置目录」。"])
+
+    for config_dir in search_dirs:
+        if is_config_dir_ready(config_dir):
+            _CONFIG_DIR_CACHE = config_dir
+            return config_dir
+    raise ConfigNotFoundError(
+        [
+            f"当前选择目录：{search_dirs[0]}",
+            "该目录下未找到可用配置（需 cookie.txt 文件）。",
+        ]
+    )
 
 
 def get_cookie():
