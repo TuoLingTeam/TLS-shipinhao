@@ -78,6 +78,11 @@ ORDER_DETAIL_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/d
 ORDER_DELIVERY_UPDATE_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateOrderDeliveryInfo"
 DELIVERY_MISMATCH_MESSAGE = "快递单号与所选物流商不匹配"
 
+# 中差评查找 API
+EVALUATION_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeevaluation/cgi/search"
+ORDER_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"
+DEFAULT_REVIEW_DAYS = 30
+
 # ---------------------------------------------------------------------------
 # 卡密验证后端 API
 # ---------------------------------------------------------------------------

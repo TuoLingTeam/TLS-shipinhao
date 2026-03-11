@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QStyle,
     QVBoxLayout,
     QWidget,
@@ -36,6 +37,7 @@ from .config import (
 from .constants import (
     APP_COLORS,
     AUTHOR_WECHAT,
+    DEFAULT_REVIEW_DAYS,
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     MAX_BATCH_SIZE,
@@ -51,6 +53,7 @@ from .widgets import (
     get_license_reason_text,
 )
 from .worker import BatchWorker
+from .review_worker import ReviewMatcherWorker
 
 from .license import check_stored_license
 
@@ -63,6 +66,8 @@ class MainWindow(QWidget):
         self.worker_thread = None
         self.worker = None
         self.is_paused = False
+        self.review_worker_thread = None
+        self.review_worker = None
         self._license_reason = license_reason
 
         self._sync_window_title_with_license(self._license_reason)
@@ -274,6 +279,7 @@ class MainWindow(QWidget):
         """构建主界面骨架。"""
         self._build_root_container()
         self._build_header_card()
+        self._build_review_finder_section()
         self._build_input_section()
         self._build_action_section()
         self._build_log_section()
@@ -375,6 +381,140 @@ class MainWindow(QWidget):
 
         header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
         header_layout.addWidget(header_body)
+
+    def _build_review_finder_section(self):
+        """创建中差评查找操作卡片。"""
+        c = APP_COLORS
+
+        self.review_card = QFrame()
+        self.review_card.setObjectName("ReviewCard")
+        self.review_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.review_card.setStyleSheet(
+            f"""QFrame#ReviewCard {{
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 {c['orange_tint']},
+                    stop: 1 {c['orange_tint_deep']}
+                );
+                border: 1px solid {c['orange_border']};
+                border-radius: 20px;
+            }}"""
+        )
+
+        card_layout = QVBoxLayout(self.review_card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+
+        body = QWidget()
+        body.setObjectName("ReviewCardBody")
+        body.setStyleSheet("QWidget#ReviewCardBody { background: transparent; }")
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(22, 14, 22, 14)
+        body_layout.setSpacing(14)
+
+        # 左侧：标题和说明
+        text_wrap = QWidget()
+        text_wrap.setStyleSheet("background: transparent;")
+        text_box = QVBoxLayout(text_wrap)
+        text_box.setContentsMargins(0, 0, 0, 0)
+        text_box.setSpacing(2)
+
+        self.review_title_label = QLabel("一键查找中差评订单")
+        self.review_title_label.setObjectName("ReviewTitle")
+        self.review_title_label.setFont(build_font(16, bold=True))
+        self.review_title_label.setStyleSheet(
+            f"color: {c['orange_deep']}; background: transparent;"
+        )
+        text_box.addWidget(self.review_title_label)
+
+        self.review_desc_label = QLabel(
+            "自动获取差评数据并匹配订单，匹配到的订单号将自动填入下方输入框"
+        )
+        self.review_desc_label.setObjectName("ReviewDesc")
+        self.review_desc_label.setFont(build_font(11))
+        self.review_desc_label.setWordWrap(True)
+        self.review_desc_label.setStyleSheet(
+            f"color: {c['muted']}; background: transparent;"
+        )
+        text_box.addWidget(self.review_desc_label)
+
+        body_layout.addWidget(text_wrap, 1)
+
+        # 右侧：天数选择 + 按钮
+        action_wrap = QWidget()
+        action_wrap.setStyleSheet("background: transparent;")
+        action_box = QHBoxLayout(action_wrap)
+        action_box.setContentsMargins(0, 0, 0, 0)
+        action_box.setSpacing(10)
+
+        days_label = QLabel("查询天数")
+        days_label.setFont(build_font(12, bold=True))
+        days_label.setStyleSheet(
+            f"color: {c['orange_deep']}; background: transparent;"
+        )
+        self.review_days_label = days_label
+        action_box.addWidget(days_label, 0, Qt.AlignVCenter)
+
+        self.review_days_spin = QSpinBox()
+        self.review_days_spin.setRange(1, 90)
+        self.review_days_spin.setValue(DEFAULT_REVIEW_DAYS)
+        self.review_days_spin.setSuffix(" 天")
+        self.review_days_spin.setFixedWidth(90)
+        self.review_days_spin.setFixedHeight(38)
+        self.review_days_spin.setStyleSheet(
+            f"""QSpinBox {{
+                background: rgba(255, 255, 255, 0.85);
+                color: {c['text']};
+                border: 1px solid {c['orange_border']};
+                border-radius: 10px;
+                padding: 4px 8px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                width: 18px;
+            }}"""
+        )
+        action_box.addWidget(self.review_days_spin, 0, Qt.AlignVCenter)
+
+        self.review_find_button = QPushButton("开始查找")
+        self.review_find_button.setObjectName("ReviewButton")
+        self.review_find_button.setCursor(Qt.PointingHandCursor)
+        self.review_find_button.setFont(build_font(14, bold=True))
+        self.review_find_button.setFixedHeight(44)
+        self.review_find_button.setMinimumWidth(130)
+        self.review_find_button.setStyleSheet(
+            f"""QPushButton#ReviewButton {{
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 {c['orange']},
+                    stop: 1 {c['orange_deep']}
+                );
+                color: white;
+                border: 1px solid #8A3D03;
+                border-radius: 14px;
+                padding: 8px 18px;
+                font-weight: 700;
+            }}
+            QPushButton#ReviewButton:hover {{
+                background: #C86805;
+            }}
+            QPushButton#ReviewButton:pressed {{
+                padding-top: 9px;
+                padding-bottom: 7px;
+            }}
+            QPushButton#ReviewButton:disabled {{
+                background: #E8D5C0;
+                color: #A0927F;
+                border: 1px solid #C9B89E;
+            }}"""
+        )
+        self.review_find_button.clicked.connect(self.on_review_find_clicked)
+        action_box.addWidget(self.review_find_button, 0, Qt.AlignVCenter)
+
+        body_layout.addWidget(action_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
+        card_layout.addWidget(body)
+        self.page_layout.addWidget(self.review_card)
 
     def _build_input_section(self):
         """创建三列输入区域（订单号、物流单号、配置目录）。"""
@@ -672,6 +812,10 @@ class MainWindow(QWidget):
             (self.title_description_label,    12, 10, False, False),
             (self.author_badge,               12, 11, True,  False),
             (self.tutorial_badge,             12, 11, True,  False),
+            (self.review_title_label,         16, 14, True,  False),
+            (self.review_desc_label,          11, 10, False, False),
+            (self.review_days_label,          12, 10, True,  False),
+            (self.review_find_button,         14, 12, True,  False),
             (self.order_count_badge,          10,  9, True,  False),
             (self.tracking_count_badge,       10,  9, True,  False),
             (self.order_card.title_label,     15, 13, True,  False),
@@ -1175,6 +1319,13 @@ class MainWindow(QWidget):
             if not self.worker_thread.wait(3000):
                 self.worker_thread.terminate()
                 self.worker_thread.wait(1000)
+        if self.review_worker is not None:
+            self.review_worker.stop()
+        if self.review_worker_thread is not None and self.review_worker_thread.isRunning():
+            self.review_worker_thread.quit()
+            if not self.review_worker_thread.wait(3000):
+                self.review_worker_thread.terminate()
+                self.review_worker_thread.wait(1000)
         super().closeEvent(event)
 
     def _on_worker_started(self, total_count):
@@ -1217,3 +1368,80 @@ class MainWindow(QWidget):
             self.show_message(QMessageBox.Warning, "批量执行完成", summary)
         else:
             self.show_message(QMessageBox.Information, "批量执行完成", summary)
+
+    # -----------------------------------------------------------------------
+    # 中差评查找
+    # -----------------------------------------------------------------------
+
+    def on_review_find_clicked(self):
+        """开始查找中差评订单。"""
+        if self.review_worker is not None:
+            return
+
+        _, reason = self._refresh_license_state()
+        if reason != "ok" and not self._prompt_license_activation(reason):
+            self.show_message(
+                QMessageBox.Warning,
+                "未激活",
+                "软件尚未激活，无法执行中差评查找。\n请先输入有效卡密完成激活。",
+            )
+            return
+
+        days = self.review_days_spin.value()
+
+        self.clear_result_log()
+        self.append_result_log(f"开始查找最近 {days} 天的中差评订单...")
+        self.review_find_button.setDisabled(True)
+        self.review_find_button.setText("正在查找...")
+
+        self.review_worker_thread = QThread(self)
+        self.review_worker = ReviewMatcherWorker(days=days)
+        self.review_worker.moveToThread(self.review_worker_thread)
+
+        self.review_worker_thread.started.connect(self.review_worker.run)
+        self.review_worker.progress.connect(self._on_review_progress)
+        self.review_worker.order_ids_ready.connect(self._on_review_order_ids)
+        self.review_worker.error.connect(self._on_review_error)
+        self.review_worker.missing_config.connect(self.show_missing_config_error)
+        self.review_worker.finished.connect(self._on_review_finished)
+        self.review_worker.finished.connect(self.review_worker_thread.quit)
+        self.review_worker_thread.finished.connect(self.review_worker.deleteLater)
+        self.review_worker_thread.finished.connect(self.review_worker_thread.deleteLater)
+        self.review_worker_thread.finished.connect(self._clear_review_worker_refs)
+        self.review_worker_thread.start()
+
+    def _on_review_progress(self, message):
+        """追加中差评查找进度日志。"""
+        self.append_result_log(message)
+
+    def _on_review_order_ids(self, order_ids):
+        """将匹配到的订单号回填到订单输入框。"""
+        if order_ids:
+            self.order_edit.setPlainText("\n".join(order_ids))
+            self.refresh_input_metrics()
+
+    def _on_review_error(self, message):
+        """处理中差评查找错误。"""
+        self.append_result_log(f"❌ 错误: {message}")
+        self.show_message(QMessageBox.Critical, "查找失败", message)
+
+    def _on_review_finished(self, matched_count, total_count):
+        """中差评查找完成。"""
+        self.review_find_button.setDisabled(False)
+        self.review_find_button.setText("开始查找")
+
+        if total_count > 0:
+            summary = (
+                f"中差评查找完成：共 {total_count} 条差评，"
+                f"匹配到 {matched_count} 个订单。"
+            )
+            self.append_result_log(summary)
+            if matched_count > 0:
+                self.show_message(QMessageBox.Information, "查找完成", summary)
+            else:
+                self.show_message(QMessageBox.Warning, "查找完成", summary)
+
+    def _clear_review_worker_refs(self):
+        """清理中差评查找线程引用。"""
+        self.review_worker = None
+        self.review_worker_thread = None
