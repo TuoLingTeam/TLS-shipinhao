@@ -2,9 +2,11 @@
 """TLS-shipinhao 中差评订单查找器（核心逻辑）。"""
 
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from typing import Any, Callable
 
 import requests
 
@@ -13,6 +15,10 @@ from .constants import (
     ORDER_SEARCH_URL,
     REQUEST_TIMEOUT,
 )
+
+ProgressCallback = Callable[[str], None]
+JsonDict = dict[str, Any]
+JsonList = list[JsonDict]
 
 
 class BadReviewOrderFinder:
@@ -23,9 +29,9 @@ class BadReviewOrderFinder:
     """
 
     def __init__(self, cookie: str, magic: str):
-        self.cookie = cookie
-        self.magic = magic
-        self._stopped = False
+        self.cookie: str = cookie
+        self.magic: str = magic
+        self._stopped: bool = False
 
     def stop(self):
         """请求终止（安全退出）。"""
@@ -35,7 +41,10 @@ class BadReviewOrderFinder:
     # HTTP 请求
     # -------------------------------------------------------------------
 
-    def _build_headers(self, referer="https://store.weixin.qq.com/shop/evaluate/home"):
+    def _build_headers(
+        self,
+        referer: str = "https://store.weixin.qq.com/shop/evaluate/home",
+    ) -> dict[str, str]:
         """构建 HTTP 请求头。"""
         return {
             "Accept": "application/json, text/plain, */*",
@@ -66,7 +75,11 @@ class BadReviewOrderFinder:
     # 获取差评
     # -------------------------------------------------------------------
 
-    def get_bad_evaluations(self, days=30, on_progress=None):
+    def get_bad_evaluations(
+        self,
+        days: int = 30,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonList:
         """获取差评数据。
 
         Args:
@@ -156,12 +169,12 @@ class BadReviewOrderFinder:
 
     def get_orders(
         self,
-        max_pages=None,
-        earliest_time=0,
-        create_time_start=0,
-        create_time_end=0,
-        on_progress=None,
-    ):
+        max_pages: int | None = None,
+        earliest_time: int = 0,
+        create_time_start: int = 0,
+        create_time_end: int = 0,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonList:
         """获取订单数据（单线程）。
 
         Args:
@@ -297,8 +310,11 @@ class BadReviewOrderFinder:
         return all_orders
 
     def get_orders_concurrent(
-        self, earliest_time=0, num_workers=3, on_progress=None
-    ):
+        self,
+        earliest_time: int = 0,
+        num_workers: int = 3,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonList:
         """多线程并行获取订单数据（基于 page 参数）。
 
         测试证实微信订单 API 实际上支持标准的 ``page`` 参数（忽略 nextKey）。
@@ -314,9 +330,6 @@ class BadReviewOrderFinder:
         Returns:
             去重后的订单列表。
         """
-        import threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
         if on_progress:
             on_progress(
                 f"启动 {num_workers} 个线程并行通过页码拉取订单..."
@@ -326,7 +339,7 @@ class BadReviewOrderFinder:
         page_lock = threading.Lock()
 
         # 共享状态
-        shared_state = {
+        shared_state: dict[str, Any] = {
             "all_orders": [],
             "next_page": 1,
             "stop_event": threading.Event(),
@@ -336,7 +349,7 @@ class BadReviewOrderFinder:
         # 预构防 429 请求头
         headers = self._build_headers("https://store.weixin.qq.com/shop/order/list")
 
-        def _worker_loop(worker_id):
+        def _worker_loop(worker_id: int) -> None:
             tag = f"[订单线程{worker_id}]"
             while not shared_state["stop_event"].is_set() and not self._stopped:
                 # 获取要拉取的页码
@@ -464,20 +477,14 @@ class BadReviewOrderFinder:
         # 启动线程池
         with ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix="order") as pool:
             futures = [pool.submit(_worker_loop, i + 1) for i in range(num_workers)]
-            for f in as_completed(futures):
+            for _ in as_completed(futures):
                 pass
 
         if shared_state["errors"]:
             raise RuntimeError("; ".join(shared_state["errors"]))
 
         # 按 orderId 去重
-        seen = set()
-        merged = []
-        for order in shared_state["all_orders"]:
-            oid = order.get("commonInfo", {}).get("orderId")
-            if oid and oid not in seen:
-                seen.add(oid)
-                merged.append(order)
+        merged = self._deduplicate_orders_by_id(shared_state["all_orders"])
 
         if on_progress:
             on_progress(
@@ -492,7 +499,7 @@ class BadReviewOrderFinder:
     # -------------------------------------------------------------------
 
     # 通用昵称前缀列表（以这些开头的均视为无效昵称，得 0 分）
-    _GENERIC_NICKNAME_PREFIXES = ("匿名", "微信用户", "默认昵称")
+    _GENERIC_NICKNAME_PREFIXES: tuple[str, ...] = ("匿名", "微信用户", "默认昵称")
 
     @classmethod
     def _is_generic_nickname(cls, name: str) -> bool:
@@ -502,7 +509,7 @@ class BadReviewOrderFinder:
         return any(name.startswith(prefix) for prefix in cls._GENERIC_NICKNAME_PREFIXES)
 
     @staticmethod
-    def normalize_nickname(nickname):
+    def normalize_nickname(nickname: str | None) -> str:
         """标准化昵称，移除 emoji 和特殊字符。"""
         if not nickname:
             return ""
@@ -520,11 +527,323 @@ class BadReviewOrderFinder:
 
         return result.strip()
 
+    @staticmethod
+    def _parse_confirm_receipt_timestamp(confirm_receipt_time: Any) -> int:
+        """解析 confirmReceiptTime（字符串秒级时间戳）为 int。"""
+        if confirm_receipt_time and str(confirm_receipt_time).isdigit():
+            return int(confirm_receipt_time)
+        return 0
+
+    @staticmethod
+    def _resolve_reference_time(order_data: JsonDict) -> int:
+        """根据收货信息计算评价参考时间。"""
+        if order_data["confirmReceiptTime"] > 0:
+            return order_data["confirmReceiptTime"]
+
+        if order_data["isWaybillReceived"] and order_data["waybillReceivedTime"] > 0:
+            return order_data["waybillReceivedTime"]
+
+        return 0
+
+    @staticmethod
+    def _is_sku_matched(sku_name: str, sale_param: str) -> bool:
+        """判断评价 SKU 与订单 saleParam 是否匹配。"""
+        if not sku_name or not sale_param:
+            return False
+
+        if sku_name in sale_param:
+            return True
+
+        sku_parts = [p for p in re.split(r"[，,、/\-_ |]+", sku_name) if p.strip()]
+        return bool(sku_parts and all(p in sale_param for p in sku_parts))
+
+    @staticmethod
+    def _match_strategy_by_score(score: int) -> str:
+        """根据匹配分数映射策略名称。"""
+        if score >= 80:
+            return "exact_match"
+        if score >= 50:
+            return "time_window"
+        if score >= 30:
+            return "buyer_feature"
+        return "fallback"
+
+    @staticmethod
+    def _deduplicate_orders_by_id(orders: JsonList) -> JsonList:
+        """按 orderId 去重并保持原顺序。"""
+        seen = set()
+        merged = []
+        for order in orders:
+            oid = order.get("commonInfo", {}).get("orderId")
+            if oid and oid not in seen:
+                seen.add(oid)
+                merged.append(order)
+        return merged
+
     # -------------------------------------------------------------------
     # 匹配算法
     # -------------------------------------------------------------------
 
-    def match_orders_with_evaluations(self, bad_evaluations, orders, on_progress=None):
+    def _build_product_sku_index(self, orders: JsonList) -> dict[str, JsonList]:
+        """构建 productId + skuId 的订单索引。"""
+        product_sku_index = {}
+
+        for order in orders:
+            order_id = order.get("commonInfo", {}).get("orderId")
+            buyer_nickname = order.get("buyerInfo", {}).get("nickName", "")
+            normalized_buyer_nickname = self.normalize_nickname(buyer_nickname)
+            create_time = order.get("commonInfo", {}).get("createTime", 0)
+
+            confirm_receipt_time = order.get("acceptInfo", {}).get("confirmReceiptTime", "")
+            confirm_receipt_timestamp = self._parse_confirm_receipt_timestamp(
+                confirm_receipt_time
+            )
+
+            auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {})
+            is_waybill_received = bool(auto_confirm_info.get("isWaybillReceived", False))
+            waybill_received_time = int(auto_confirm_info.get("waybillReceivedTime", 0) or 0)
+
+            order_status = order.get("commonInfo", {}).get("status", 0)
+            is_education_order = bool(
+                order.get("commonInfo", {}).get("isEducationOrder", False)
+            )
+            openid = order.get("commonInfo", {}).get("openid", "")
+
+            order_products = order.get("orderProductInfo", [])
+            for product in order_products:
+                product_id = product.get("productId")
+                sku_id = product.get("skuId")
+                sale_params = product.get("saleParam", [])
+                sale_param_str = "|".join(sale_params) if sale_params else ""
+
+                if not (product_id and sku_id):
+                    continue
+
+                order_data = {
+                    "orderId": order_id,
+                    "productId": product_id,
+                    "skuId": sku_id,
+                    "saleParam": sale_param_str,
+                    "buyerNickname": buyer_nickname,
+                    "normalizedNickname": normalized_buyer_nickname,
+                    "createTime": create_time,
+                    "confirmReceiptTime": confirm_receipt_timestamp,
+                    "isWaybillReceived": is_waybill_received,
+                    "waybillReceivedTime": waybill_received_time,
+                    "isEducationOrder": is_education_order,
+                    "orderStatus": order_status,
+                    "openid": openid,
+                    "orderData": order,
+                }
+
+                product_sku_key = f"{product_id}_{sku_id}"
+                if product_sku_key not in product_sku_index:
+                    product_sku_index[product_sku_key] = []
+                product_sku_index[product_sku_key].append(order_data)
+
+        return product_sku_index
+
+    def _extract_evaluation_context(self, evaluation: JsonDict) -> JsonDict:
+        """提取单条评价匹配所需字段。"""
+        eval_info = evaluation.get("evaluationInfo", {})
+        product_info = evaluation.get("productInfo", {})
+        operation_info = evaluation.get("operationInfo", {})
+
+        buyer_nickname = eval_info.get("buyer", {}).get("identity", {}).get("nickname", "")
+        eval_time = (
+            eval_info.get("firstEvaluationInfo", {})
+            .get("buyerEvaluationInfo", {})
+            .get("createTime", 0)
+        )
+
+        return {
+            "eval_info": eval_info,
+            "product_info": product_info,
+            "operation_info": operation_info,
+            "evaluation_id": evaluation.get("productEvaluationId"),
+            "product_id": product_info.get("productId"),
+            "sku_id": product_info.get("skuId"),
+            "sku_name": product_info.get("skuName", ""),
+            "buyer_nickname": buyer_nickname,
+            "normalized_buyer_nickname": self.normalize_nickname(buyer_nickname),
+            "eval_time": eval_time,
+        }
+
+    def _score_candidate_order(self, order_data, normalized_buyer_nickname, sku_name, eval_time):
+        """对单个候选订单评分，返回候选匹配结果或 None。"""
+        score = 0
+        reasons = []
+
+        # 优化1：[前置拦截 1]：确定 reference_time
+        # 已确认收货：直接使用 confirmReceiptTime
+        # 已送达未签收：以快递到达时间（waybillReceivedTime）兜底
+        # 两者都没有：无法评价，直接淘汰
+        reference_time = self._resolve_reference_time(order_data)
+        if reference_time <= 0:
+            return None
+
+        # 优化2：[前置拦截 2]：评价时间不能早于 reference_time（改用 < 允许同秒评价）
+        if eval_time <= 0 or reference_time <= 0 or eval_time < reference_time:
+            return None
+
+        # 优化3+9：[前置拦截 3]：时效超期拦截（提前至维度计算前，节省计算资源）
+        # 教育培训类商品首评时效 60 天，普通商品 30 天
+        max_eval_days = 60 if order_data["isEducationOrder"] else 30
+        time_diff_days = (eval_time - reference_time) / 86400
+        if time_diff_days > max_eval_days:
+            return None
+
+        # 优化7：=== 核心维度 1: 买家昵称匹配 (基础分 Max 60分) ===
+        # 通用名（以"匿名"、"微信用户"、"默认昵称"等前缀开头）视为无效，得 0 分
+        if self._is_generic_nickname(normalized_buyer_nickname):
+            reasons.append("买家昵称为匿名/通用(0分)")
+        else:
+            if normalized_buyer_nickname == order_data["normalizedNickname"]:
+                score += 60
+                reasons.append("买家昵称完全吻合(+60)")
+            elif (
+                len(normalized_buyer_nickname) >= 2
+                and len(order_data["normalizedNickname"]) >= 2
+            ):
+                if (
+                    normalized_buyer_nickname in order_data["normalizedNickname"]
+                    or order_data["normalizedNickname"] in normalized_buyer_nickname
+                ):
+                    score += 30
+                    reasons.append("买家昵称部分吻合(+30)")
+
+        # 优化4+8：=== 核心维度 2: 基础商品对应 (基础分 Max 30分) ===
+        # 空值防御：sku_name 或 saleParam 为空则无法判断规格，直接一票否决
+        if self._is_sku_matched(sku_name, order_data["saleParam"]):
+            score += 30
+            reasons.append("商品规格一致(+30)")
+        else:
+            return None  # 一票否决：规格对不上直接跳过这个订单
+
+        # === 核心维度 3: 订单完成状态 (基础分 Max 10分) ===
+        # orderStatus >= 100：订单已彻底完成（确认收货且交易结束）
+        # 60 <= orderStatus < 100：已发货或待评价阶段
+        # orderStatus < 60：未发货或已取消，不加分
+        if order_data["orderStatus"] >= 100:
+            score += 10
+            reasons.append("订单已彻底完成(+10)")
+        elif order_data["orderStatus"] >= 60:
+            score += 5
+            reasons.append("订单已发货或待评价(+5)")
+
+        # -----------------------------------------------------------------
+        # 至此，三个核心条件全部满足最高标准 (60+30+10 = 100)，
+        # 达到 100 分的基础及格线，能够自动填入 UI
+        # -----------------------------------------------------------------
+        if score < 40:
+            return None
+
+        return {
+            "order_data": order_data,
+            "score": score,
+            "reasons": reasons,
+            "time_diff": (
+                abs(eval_time - order_data["createTime"])
+                if eval_time > 0 and order_data["createTime"] > 0
+                else float("inf")
+            ),
+            "confirm_diff": (
+                abs(eval_time - reference_time)
+                if eval_time > 0 and reference_time > 0
+                else float("inf")
+            ),
+        }
+
+    @staticmethod
+    def _apply_multi_order_penalty(best_matches: JsonList) -> JsonList:
+        """多候选时按时效偏差扣分并做二次过滤。"""
+        if len(best_matches) <= 1:
+            return best_matches
+
+        for bm in best_matches:
+            diff_days = bm["confirm_diff"] / 86400
+            # 每晚评价1天扣除 2分（round 比 int 精度更符合语义）
+            penalty = round(diff_days * 2)
+            if penalty > 0:
+                bm["score"] -= penalty
+                bm["reasons"].append(f"同源多单时效偏差(-{penalty})")
+
+        # 扣分后二次过滤：仅保留分数仍 >= 40 的候选
+        filtered = [bm for bm in best_matches if bm["score"] >= 40]
+        if filtered:
+            return filtered
+
+        # 若全部跌破 40 分，保留原列表并取分数最高者（不丢弃唯一可能的结果）
+        return best_matches
+
+    @staticmethod
+    def _pick_best_match(best_matches: JsonList) -> JsonDict | None:
+        """按既定优先级选择最佳候选。"""
+        if not best_matches:
+            return None
+
+        best_matches.sort(
+            key=lambda x: (-x["score"], x["confirm_diff"], x["time_diff"])
+        )
+        return best_matches[0]
+
+    @staticmethod
+    def _build_match_result(
+        evaluation_context: JsonDict,
+        matched_order: JsonDict | None,
+        match_strategy: str | None,
+        match_score: int,
+    ) -> JsonDict:
+        """组装最终匹配结果结构。"""
+        eval_info = evaluation_context["eval_info"]
+        product_info = evaluation_context["product_info"]
+        operation_info = evaluation_context["operation_info"]
+        eval_time = evaluation_context["eval_time"]
+
+        return {
+            "evaluationId": evaluation_context["evaluation_id"],
+            "orderId": matched_order["orderId"] if matched_order else None,
+            "productId": evaluation_context["product_id"],
+            "skuId": evaluation_context["sku_id"],
+            "skuName": evaluation_context["sku_name"],
+            "saleParam": matched_order["saleParam"] if matched_order else "",
+            "buyerNickname": evaluation_context["buyer_nickname"],
+            "orderBuyerNickname": matched_order["buyerNickname"] if matched_order else "",
+            "matchStrategy": match_strategy if matched_order else None,
+            "matchScore": match_score if matched_order else 0,
+            "timeDiffHours": (
+                (eval_time - matched_order["createTime"]) / 3600
+                if matched_order and eval_time > 0 and matched_order["createTime"] > 0
+                else None
+            ),
+            "confirmDiffHours": (
+                (eval_time - matched_order["confirmReceiptTime"]) / 3600
+                if matched_order and eval_time > 0 and matched_order["confirmReceiptTime"] > 0
+                else None
+            ),
+            "attitudeName": operation_info.get("attitudeName", ""),
+            "evaluationContent": (
+                eval_info.get("firstEvaluationInfo", {})
+                .get("buyerEvaluationInfo", {})
+                .get("content", "")
+            ),
+            "defaultContent": (
+                eval_info.get("firstEvaluationInfo", {})
+                .get("buyerEvaluationInfo", {})
+                .get("defaultContent", "")
+            ),
+            "evaluationStar": eval_info.get("evaluationStar", 0),
+            "productName": product_info.get("spuName", ""),
+            "canReplyExpireTime": operation_info.get("canReplyExpireTime", 0),
+            "matched": matched_order is not None,
+        }
+
+    def match_orders_with_evaluations(
+        self,
+        bad_evaluations: JsonList,
+        orders: JsonList,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonList:
         """使用多属性评分算法匹配差评到订单。
 
         匹配策略: 商品匹配 + 时间窗口匹配 + 买家特征匹配。
@@ -540,65 +859,11 @@ class BadReviewOrderFinder:
         if on_progress:
             on_progress("正在构建索引...")
 
-        # 构建多层索引 —— 按 productId + skuId 分组
-        product_sku_index = {}
-
-        for order in orders:
-            order_id = order.get("commonInfo", {}).get("orderId")
-            buyer_nickname = order.get("buyerInfo", {}).get("nickName", "")
-            normalized_buyer_nickname = self.normalize_nickname(buyer_nickname)
-            create_time = order.get("commonInfo", {}).get("createTime", 0)
-
-            # confirmReceiptTime 单位：秒（字符串格式，需转 int）
-            confirm_receipt_time = order.get("acceptInfo", {}).get("confirmReceiptTime", "")
-            confirm_receipt_timestamp = 0
-            if confirm_receipt_time and str(confirm_receipt_time).isdigit():
-                confirm_receipt_timestamp = int(confirm_receipt_time)
-
-            # 优化1：已送达信息（快递到达但买家未手动确认收货时的兜底 reference_time）
-            auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {})
-            is_waybill_received = bool(auto_confirm_info.get("isWaybillReceived", False))
-            waybill_received_time = int(auto_confirm_info.get("waybillReceivedTime", 0) or 0)
-
-            order_status = order.get("commonInfo", {}).get("status", 0)
-            # 优化3：isEducationOrder：教育培训类商品首评时效 60 天，普通商品 30 天
-            is_education_order = bool(order.get("commonInfo", {}).get("isEducationOrder", False))
-            openid = order.get("commonInfo", {}).get("openid", "")
-
-            order_products = order.get("orderProductInfo", [])
-            for product in order_products:
-                product_id = product.get("productId")
-                sku_id = product.get("skuId")
-                sale_params = product.get("saleParam", [])
-                sale_param_str = "|".join(sale_params) if sale_params else ""
-
-                if product_id and sku_id:
-                    order_data = {
-                        "orderId": order_id,
-                        "productId": product_id,
-                        "skuId": sku_id,
-                        "saleParam": sale_param_str,
-                        "buyerNickname": buyer_nickname,
-                        "normalizedNickname": normalized_buyer_nickname,
-                        "createTime": create_time,
-                        "confirmReceiptTime": confirm_receipt_timestamp,
-                        "isWaybillReceived": is_waybill_received,
-                        "waybillReceivedTime": waybill_received_time,
-                        "isEducationOrder": is_education_order,
-                        "orderStatus": order_status,
-                        "openid": openid,
-                        "orderData": order,
-                    }
-
-                    product_sku_key = f"{product_id}_{sku_id}"
-                    if product_sku_key not in product_sku_index:
-                        product_sku_index[product_sku_key] = []
-                    product_sku_index[product_sku_key].append(order_data)
+        product_sku_index = self._build_product_sku_index(orders)
 
         if on_progress:
             on_progress(f"索引构建完成: {len(product_sku_index)} 个商品+SKU 组合")
 
-        # 匹配评价
         results = []
         matched_count = 0
         total = len(bad_evaluations)
@@ -607,31 +872,19 @@ class BadReviewOrderFinder:
             if self._stopped:
                 break
 
-            eval_info = evaluation.get("evaluationInfo", {})
-            product_info = evaluation.get("productInfo", {})
-            operation_info = evaluation.get("operationInfo", {})
-
-            evaluation_id = evaluation.get("productEvaluationId")
-            product_id = product_info.get("productId")
-            sku_id = product_info.get("skuId")
-            sku_name = product_info.get("skuName", "")
-
-            buyer_nickname = (
-                eval_info.get("buyer", {}).get("identity", {}).get("nickname", "")
-            )
-            normalized_buyer_nickname = self.normalize_nickname(buyer_nickname)
-            eval_time = (
-                eval_info.get("firstEvaluationInfo", {})
-                .get("buyerEvaluationInfo", {})
-                .get("createTime", 0)
-            )
+            evaluation_context = self._extract_evaluation_context(evaluation)
 
             if on_progress:
-                on_progress(f"[{i}/{total}] 匹配评价: {buyer_nickname}")
+                on_progress(
+                    f"[{i}/{total}] 匹配评价: {evaluation_context['buyer_nickname']}"
+                )
 
             matched_order = None
             match_strategy = None
             match_score = 0
+
+            product_id = evaluation_context["product_id"]
+            sku_id = evaluation_context["sku_id"]
 
             if product_id and sku_id:
                 product_sku_key = f"{product_id}_{sku_id}"
@@ -641,140 +894,22 @@ class BadReviewOrderFinder:
                     best_matches = []
 
                     for order_data in candidate_orders:
-                        score = 0
-                        reasons = []
-
-                        # ==========================================================
-                        # 权重重构：核心三大维度决定入围资格 (满分 100)
-                        # 副维度（时间差等）仅用作加分项与同分排序依据 (>100分)
-                        # ==========================================================
-
-                        # 优化1：[前置拦截 1]：确定 reference_time
-                        # 已确认收货：直接使用 confirmReceiptTime
-                        # 已送达未签收：以快递到达时间（waybillReceivedTime）兜底
-                        # 两者都没有：无法评价，直接淘汰
-                        if order_data["confirmReceiptTime"] <= 0:
-                            if not order_data["isWaybillReceived"] or order_data["waybillReceivedTime"] <= 0:
-                                continue
-                            reference_time = order_data["waybillReceivedTime"]
-                        else:
-                            reference_time = order_data["confirmReceiptTime"]
-
-                        # 优化2：[前置拦截 2]：评价时间不能早于 reference_time（改用 < 允许同秒评价）
-                        if eval_time <= 0 or reference_time <= 0 or eval_time < reference_time:
-                            continue
-
-                        # 优化3+9：[前置拦截 3]：时效超期拦截（提前至维度计算前，节省计算资源）
-                        # 教育培训类商品首评时效 60 天，普通商品 30 天
-                        max_eval_days = 60 if order_data["isEducationOrder"] else 30
-                        time_diff_days = (eval_time - reference_time) / 86400
-                        if time_diff_days > max_eval_days:
-                            continue
-
-                        # 优化7：=== 核心维度 1: 买家昵称匹配 (基础分 Max 60分) ===
-                        # 通用名（以"匿名"、"微信用户"、"默认昵称"等前缀开头）视为无效，得 0 分
-                        if self._is_generic_nickname(normalized_buyer_nickname):
-                            reasons.append("买家昵称为匿名/通用(0分)")
-                        else:
-                            if normalized_buyer_nickname == order_data["normalizedNickname"]:
-                                score += 60
-                                reasons.append("买家昵称完全吻合(+60)")
-                            elif (len(normalized_buyer_nickname) >= 2 and len(order_data["normalizedNickname"]) >= 2):
-                                if (normalized_buyer_nickname in order_data["normalizedNickname"] or
-                                        order_data["normalizedNickname"] in normalized_buyer_nickname):
-                                    score += 30
-                                    reasons.append("买家昵称部分吻合(+30)")
-
-                        # 优化4+8：=== 核心维度 2: 基础商品对应 (基础分 Max 30分) ===
-                        # 空值防御：sku_name 或 saleParam 为空则无法判断规格，直接一票否决
-                        if not sku_name or not order_data["saleParam"]:
-                            continue
-
-                        matched_sku = False
-                        if sku_name in order_data["saleParam"]:
-                            matched_sku = True
-                        else:
-                            # 多分隔符拆分：支持 ，,、/-_|空格 等常见格式，拆分后忽略首尾空格
-                            sku_parts = [
-                                p for p in re.split(r"[，,、/\-_ |]+", sku_name) if p.strip()
-                            ]
-                            if sku_parts and all(p in order_data["saleParam"] for p in sku_parts):
-                                matched_sku = True
-
-                        if matched_sku:
-                            score += 30
-                            reasons.append("商品规格一致(+30)")
-                        else:
-                            continue  # 一票否决：规格对不上直接跳过这个订单
-
-                        # === 核心维度 3: 订单完成状态 (基础分 Max 10分) ===
-                        # orderStatus >= 100：订单已彻底完成（确认收货且交易结束）
-                        # 60 <= orderStatus < 100：已发货或待评价阶段
-                        # orderStatus < 60：未发货或已取消，不加分
-                        if order_data["orderStatus"] >= 100:
-                            score += 10
-                            reasons.append("订单已彻底完成(+10)")
-                        elif order_data["orderStatus"] >= 60:
-                            score += 5
-                            reasons.append("订单已发货或待评价(+5)")
-
-                        # -----------------------------------------------------------------
-                        # 至此，三个核心条件全部满足最高标准 (60+30+10 = 100)，
-                        # 达到 100 分的基础及格线，能够自动填入 UI
-                        # -----------------------------------------------------------------
-
-                        if score >= 40:
-                            best_matches.append({
-                                "order_data": order_data,
-                                "score": score,
-                                "reasons": reasons,
-                                "time_diff": (
-                                    abs(eval_time - order_data["createTime"])
-                                    if eval_time > 0 and order_data["createTime"] > 0
-                                    else float("inf")
-                                ),
-                                "confirm_diff": (
-                                    abs(eval_time - reference_time)
-                                    if eval_time > 0 and reference_time > 0
-                                    else float("inf")
-                                ),
-                            })
-
-                    # 优化10+5：当存在多个候选订单时，在"辅助维度"实施时间差减分逻辑
-                    if len(best_matches) > 1:
-                        for bm in best_matches:
-                            diff_days = bm["confirm_diff"] / 86400
-                            # 每晚评价1天扣除 2分（round 比 int 精度更符合语义）
-                            penalty = round(diff_days * 2)
-                            if penalty > 0:
-                                bm["score"] -= penalty
-                                bm["reasons"].append(f"同源多单时效偏差(-{penalty})")
-
-                        # 扣分后二次过滤：仅保留分数仍 >= 40 的候选
-                        filtered = [bm for bm in best_matches if bm["score"] >= 40]
-                        if filtered:
-                            best_matches = filtered
-                        # 若全部跌破 40 分，保留原列表并取分数最高者（不丢弃唯一可能的结果）
-
-                    # 选择最佳匹配
-                    if best_matches:
-                        best_matches.sort(
-                            key=lambda x: (-x["score"], x["confirm_diff"], x["time_diff"])
+                        candidate = self._score_candidate_order(
+                            order_data,
+                            evaluation_context["normalized_buyer_nickname"],
+                            evaluation_context["sku_name"],
+                            evaluation_context["eval_time"],
                         )
-                        best_match = best_matches[0]
+                        if candidate:
+                            best_matches.append(candidate)
 
+                    best_matches = self._apply_multi_order_penalty(best_matches)
+                    best_match = self._pick_best_match(best_matches)
+
+                    if best_match:
                         matched_order = best_match["order_data"]
                         match_score = best_match["score"]
-
-                        if match_score >= 80:
-                            match_strategy = "exact_match"
-                        elif match_score >= 50:
-                            match_strategy = "time_window"
-                        elif match_score >= 30:
-                            match_strategy = "buyer_feature"
-                        else:
-                            match_strategy = "fallback"
-
+                        match_strategy = self._match_strategy_by_score(match_score)
                         matched_count += 1
 
                         if on_progress:
@@ -784,47 +919,15 @@ class BadReviewOrderFinder:
                             )
 
             if not matched_order and on_progress:
-                on_progress(f"  ❌ 未找到匹配订单")
+                on_progress("  ❌ 未找到匹配订单")
 
-            # 构建结果
-            result = {
-                "evaluationId": evaluation_id,
-                "orderId": matched_order["orderId"] if matched_order else None,
-                "productId": product_id,
-                "skuId": sku_id,
-                "skuName": sku_name,
-                "saleParam": matched_order["saleParam"] if matched_order else "",
-                "buyerNickname": buyer_nickname,
-                "orderBuyerNickname": matched_order["buyerNickname"] if matched_order else "",
-                "matchStrategy": match_strategy if matched_order else None,
-                "matchScore": match_score if matched_order else 0,
-                "timeDiffHours": (
-                    (eval_time - matched_order["createTime"]) / 3600
-                    if matched_order and eval_time > 0 and matched_order["createTime"] > 0
-                    else None
-                ),
-                "confirmDiffHours": (
-                    (eval_time - matched_order["confirmReceiptTime"]) / 3600
-                    if matched_order and eval_time > 0 and matched_order["confirmReceiptTime"] > 0
-                    else None
-                ),
-                "attitudeName": operation_info.get("attitudeName", ""),
-                "evaluationContent": (
-                    eval_info.get("firstEvaluationInfo", {})
-                    .get("buyerEvaluationInfo", {})
-                    .get("content", "")
-                ),
-                "defaultContent": (
-                    eval_info.get("firstEvaluationInfo", {})
-                    .get("buyerEvaluationInfo", {})
-                    .get("defaultContent", "")
-                ),
-                "evaluationStar": eval_info.get("evaluationStar", 0),
-                "productName": product_info.get("spuName", ""),
-                "canReplyExpireTime": operation_info.get("canReplyExpireTime", 0),
-                "matched": matched_order is not None,
-            }
-
-            results.append(result)
+            results.append(
+                self._build_match_result(
+                    evaluation_context,
+                    matched_order,
+                    match_strategy,
+                    match_score,
+                )
+            )
 
         return results
