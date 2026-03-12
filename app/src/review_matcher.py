@@ -560,18 +560,6 @@ class BadReviewOrderFinder:
         return 0
 
     @staticmethod
-    def _is_sku_matched(sku_name: str, sale_param: str) -> bool:
-        """判断评价 SKU 与订单 saleParam 是否匹配。"""
-        if not sku_name or not sale_param:
-            return False
-
-        if sku_name in sale_param:
-            return True
-
-        sku_parts = [p for p in re.split(r"[，,、/\-_ |]+", sku_name) if p.strip()]
-        return bool(sku_parts and all(p in sale_param for p in sku_parts))
-
-    @staticmethod
     def _match_strategy_by_score(score: int) -> str:
         """根据匹配分数映射策略名称。"""
         if score >= AUTO_FILL_SCORE_THRESHOLD:
@@ -594,12 +582,60 @@ class BadReviewOrderFinder:
                 merged.append(order)
         return merged
 
+    @staticmethod
+    def _first_non_empty(data: JsonDict, keys: tuple[str, ...]) -> Any:
+        """从多个候选字段中取第一个非空值。"""
+        for key in keys:
+            if key not in data:
+                continue
+            value = data.get(key)
+            if isinstance(value, str):
+                if value.strip():
+                    return value.strip()
+                continue
+            if value not in (None, [], {}):
+                return value
+        return None
+
+    @staticmethod
+    def _normalize_product_text(text: str | None) -> str:
+        """标准化商品字段值，便于跨字段名比较。"""
+        if not text:
+            return ""
+        return re.sub(r"[\s，,、/\-_|（）()]+", "", str(text)).lower()
+
+    @classmethod
+    def _normalize_sale_param_value(cls, raw_value: Any) -> str:
+        """将 saleParam / skuName 等规格字段统一为字符串。"""
+        if isinstance(raw_value, list):
+            tokens = [str(v).strip() for v in raw_value if str(v).strip()]
+            return "|".join(tokens)
+        if raw_value is None:
+            return ""
+        return str(raw_value).strip()
+
+    @staticmethod
+    def _build_product_id_key(product_id: str, sku_id: str) -> str | None:
+        """构建 ID 维度索引键。"""
+        if not product_id or not sku_id:
+            return None
+        return f"id::{product_id}::{sku_id}"
+
+    @classmethod
+    def _build_product_value_key(cls, product_name: str, sku_text: str) -> str | None:
+        """构建值维度索引键（商品名 + 规格）。"""
+        name_norm = cls._normalize_product_text(product_name)
+        sku_norm = cls._normalize_product_text(sku_text)
+        if not name_norm or not sku_norm:
+            return None
+        return f"value::{name_norm}::{sku_norm}"
+
     # -------------------------------------------------------------------
     # 匹配算法
     # -------------------------------------------------------------------
 
     def _build_product_sku_index(self, orders: JsonList) -> dict[str, JsonList]:
-        """构建 productId + skuId 的订单索引。"""
+        """构建订单商品索引（ID键 + 值键）。"""
         product_sku_index = {}
 
         for order in orders:
@@ -623,14 +659,43 @@ class BadReviewOrderFinder:
             )
             openid = order.get("commonInfo", {}).get("openid", "")
 
-            order_products = order.get("orderProductInfo", [])
+            order_products = (
+                order.get("orderProductInfo", [])
+                or order.get("productInfos", [])
+                or []
+            )
             for product in order_products:
-                product_id = product.get("productId")
-                sku_id = product.get("skuId")
-                sale_params = product.get("saleParam", [])
-                sale_param_str = "|".join(sale_params) if sale_params else ""
+                raw_product_id = self._first_non_empty(
+                    product,
+                    ("productId", "product_id", "spuId", "spu_id"),
+                )
+                raw_sku_id = self._first_non_empty(
+                    product,
+                    ("skuId", "sku_id"),
+                )
+                raw_sale_param = self._first_non_empty(
+                    product,
+                    ("saleParam", "sale_param", "skuName", "specName", "spec"),
+                )
+                raw_product_name = self._first_non_empty(
+                    product,
+                    ("title", "spuName", "productName", "name"),
+                )
+                raw_thumb_img = self._first_non_empty(
+                    product,
+                    ("thumbImg", "imgUrl", "image", "imageUrl"),
+                )
 
-                if not (product_id and sku_id):
+                product_id = str(raw_product_id).strip() if raw_product_id is not None else ""
+                sku_id = str(raw_sku_id).strip() if raw_sku_id is not None else ""
+                sale_param_str = self._normalize_sale_param_value(raw_sale_param)
+                product_name = str(raw_product_name).strip() if raw_product_name else ""
+                thumb_img = str(raw_thumb_img).strip() if raw_thumb_img else ""
+
+                # 至少要有一类可比对锚点：ID键或值键
+                id_key = self._build_product_id_key(product_id, sku_id)
+                value_key = self._build_product_value_key(product_name, sale_param_str)
+                if not id_key and not value_key:
                     continue
 
                 order_data = {
@@ -638,6 +703,8 @@ class BadReviewOrderFinder:
                     "productId": product_id,
                     "skuId": sku_id,
                     "saleParam": sale_param_str,
+                    "productName": product_name,
+                    "thumbImg": thumb_img,
                     "buyerNickname": buyer_nickname,
                     "normalizedNickname": normalized_buyer_nickname,
                     "createTime": create_time,
@@ -650,10 +717,12 @@ class BadReviewOrderFinder:
                     "orderData": order,
                 }
 
-                product_sku_key = f"{product_id}_{sku_id}"
-                if product_sku_key not in product_sku_index:
-                    product_sku_index[product_sku_key] = []
-                product_sku_index[product_sku_key].append(order_data)
+                for index_key in (id_key, value_key):
+                    if not index_key:
+                        continue
+                    if index_key not in product_sku_index:
+                        product_sku_index[index_key] = []
+                    product_sku_index[index_key].append(order_data)
 
         return product_sku_index
 
@@ -669,15 +738,37 @@ class BadReviewOrderFinder:
             .get("buyerEvaluationInfo", {})
             .get("createTime", 0)
         )
+        raw_product_id = self._first_non_empty(
+            product_info,
+            ("productId", "product_id", "spuId", "spu_id"),
+        )
+        raw_sku_id = self._first_non_empty(
+            product_info,
+            ("skuId", "sku_id"),
+        )
+        raw_sku_name = self._first_non_empty(
+            product_info,
+            ("skuName", "saleParam", "sale_param", "specName", "spec"),
+        )
+        raw_product_name = self._first_non_empty(
+            product_info,
+            ("spuName", "title", "productName", "name"),
+        )
+
+        product_id = str(raw_product_id).strip() if raw_product_id is not None else ""
+        sku_id = str(raw_sku_id).strip() if raw_sku_id is not None else ""
+        sku_name = self._normalize_sale_param_value(raw_sku_name)
+        product_name = str(raw_product_name).strip() if raw_product_name else ""
 
         return {
             "eval_info": eval_info,
             "product_info": product_info,
             "operation_info": operation_info,
             "evaluation_id": evaluation.get("productEvaluationId"),
-            "product_id": product_info.get("productId"),
-            "sku_id": product_info.get("skuId"),
-            "sku_name": product_info.get("skuName", ""),
+            "product_id": product_id,
+            "sku_id": sku_id,
+            "sku_name": sku_name,
+            "product_name": product_name,
             "buyer_nickname": buyer_nickname,
             "normalized_buyer_nickname": self.normalize_nickname(buyer_nickname),
             "eval_time": eval_time,
@@ -691,15 +782,33 @@ class BadReviewOrderFinder:
         return [t.strip() for t in re.split(r"[，,、/\-_ |]+", raw_text) if t.strip()]
 
     @classmethod
-    def _sku_overlap_ratio(cls, sku_name: str, sale_param: str) -> float:
-        """计算 sku_name 在 sale_param 中的 token 覆盖率。"""
-        sku_tokens = cls._split_sku_tokens(sku_name)
-        sale_tokens = cls._split_sku_tokens(sale_param)
-        if not sku_tokens or not sale_tokens:
-            return 0.0
+    def _is_sku_exact_matched(cls, sku_name: str, sale_param: str) -> bool:
+        """规格严格一致校验（用于一票否决）。"""
+        if not sku_name or not sale_param:
+            return False
 
-        matched = sum(1 for token in sku_tokens if token in sale_tokens)
-        return matched / len(sku_tokens)
+        left = sku_name.strip()
+        right = sale_param.strip()
+        if left == right:
+            return True
+
+        # 同义格式兼容：忽略常见分隔符与空白后比较
+        normalize_pattern = r"[，,、/\-_ |（）()]+"
+        normalized_left = re.sub(normalize_pattern, "", left)
+        normalized_right = re.sub(normalize_pattern, "", right)
+        if normalized_left and normalized_left == normalized_right:
+            return True
+
+        # 兜底：分词后需双向完全覆盖，避免“部分重叠”误判为一致
+        left_tokens = cls._split_sku_tokens(left)
+        right_tokens = cls._split_sku_tokens(right)
+        if not left_tokens or not right_tokens:
+            return False
+
+        return (
+            len(left_tokens) == len(right_tokens)
+            and set(left_tokens) == set(right_tokens)
+        )
 
     def _score_nickname_dimension(
         self,
@@ -739,28 +848,13 @@ class BadReviewOrderFinder:
         return 0, f"昵称不一致(可能改名,+0/{weight})"
 
     def _score_sku_dimension(self, sku_name: str, sale_param: str) -> tuple[int, str]:
-        """规格维度（主项）。"""
+        """规格维度（主项，严格一致）。"""
         weight = SCORE_WEIGHTS["sku"]
 
-        if self._is_sku_matched(sku_name, sale_param):
+        if self._is_sku_exact_matched(sku_name, sale_param):
             return weight, f"规格完全一致(+{weight}/{weight})"
 
-        overlap_ratio = self._sku_overlap_ratio(sku_name, sale_param)
-        if overlap_ratio >= 0.75:
-            score = round(weight * 0.8)
-            return score, f"规格高度一致(+{score}/{weight})"
-        if overlap_ratio >= 0.5:
-            score = round(weight * 0.6)
-            return score, f"规格中度一致(+{score}/{weight})"
-        if overlap_ratio >= 0.3:
-            score = round(weight * 0.36)
-            return score, f"规格弱一致(+{score}/{weight})"
-
-        if not sku_name or not sale_param:
-            score = round(weight * 0.24)
-            return score, f"规格信息缺失(+{score}/{weight})"
-
-        return 0, f"规格不匹配(+0/{weight})"
+        return 0, f"规格不一致(淘汰,+0/{weight})"
 
     @staticmethod
     def _score_reference_time_dimension(confirm_diff_seconds: int) -> tuple[int, str]:
@@ -860,6 +954,8 @@ class BadReviewOrderFinder:
         sku_score, sku_reason = self._score_sku_dimension(sku_name, order_data["saleParam"])
         score += sku_score
         reasons.append(sku_reason)
+        if sku_score <= 0:
+            return None
 
         confirm_diff = eval_time - reference_time
         reference_score, reference_reason = self._score_reference_time_dimension(confirm_diff)
@@ -986,7 +1082,11 @@ class BadReviewOrderFinder:
                 .get("defaultContent", "")
             ),
             "evaluationStar": eval_info.get("evaluationStar", 0),
-            "productName": product_info.get("spuName", ""),
+            "productName": (
+                evaluation_context.get("product_name")
+                or product_info.get("spuName", "")
+                or product_info.get("title", "")
+            ),
             "canReplyExpireTime": operation_info.get("canReplyExpireTime", 0),
             "matched": matched_order is not None,
         }
@@ -1038,38 +1138,55 @@ class BadReviewOrderFinder:
 
             product_id = evaluation_context["product_id"]
             sku_id = evaluation_context["sku_id"]
+            product_name = evaluation_context["product_name"]
+            sku_name = evaluation_context["sku_name"]
 
-            if product_id and sku_id:
-                product_sku_key = f"{product_id}_{sku_id}"
-                candidate_orders = product_sku_index.get(product_sku_key, [])
+            candidate_orders = []
+            seen_candidates = set()
+            for index_key in (
+                self._build_product_id_key(product_id, sku_id),
+                self._build_product_value_key(product_name, sku_name),
+            ):
+                if not index_key:
+                    continue
+                for order_data in product_sku_index.get(index_key, []):
+                    candidate_key = (
+                        order_data.get("orderId"),
+                        order_data.get("productId"),
+                        order_data.get("skuId"),
+                    )
+                    if candidate_key in seen_candidates:
+                        continue
+                    seen_candidates.add(candidate_key)
+                    candidate_orders.append(order_data)
 
-                if candidate_orders:
-                    best_matches = []
+            if candidate_orders:
+                best_matches = []
 
-                    for order_data in candidate_orders:
-                        candidate = self._score_candidate_order(
-                            order_data,
-                            evaluation_context["normalized_buyer_nickname"],
-                            evaluation_context["sku_name"],
-                            evaluation_context["eval_time"],
+                for order_data in candidate_orders:
+                    candidate = self._score_candidate_order(
+                        order_data,
+                        evaluation_context["normalized_buyer_nickname"],
+                        sku_name,
+                        evaluation_context["eval_time"],
+                    )
+                    if candidate:
+                        best_matches.append(candidate)
+
+                best_matches = self._apply_multi_order_penalty(best_matches)
+                best_match = self._pick_best_match(best_matches)
+
+                if best_match:
+                    matched_order = best_match["order_data"]
+                    match_score = best_match["score"]
+                    match_strategy = self._match_strategy_by_score(match_score)
+                    matched_count += 1
+
+                    if on_progress:
+                        on_progress(
+                            f"  ✅ 匹配成功 (得分: {match_score}, "
+                            f"策略: {match_strategy}) → 订单 {matched_order['orderId']}"
                         )
-                        if candidate:
-                            best_matches.append(candidate)
-
-                    best_matches = self._apply_multi_order_penalty(best_matches)
-                    best_match = self._pick_best_match(best_matches)
-
-                    if best_match:
-                        matched_order = best_match["order_data"]
-                        match_score = best_match["score"]
-                        match_strategy = self._match_strategy_by_score(match_score)
-                        matched_count += 1
-
-                        if on_progress:
-                            on_progress(
-                                f"  ✅ 匹配成功 (得分: {match_score}, "
-                                f"策略: {match_strategy}) → 订单 {matched_order['orderId']}"
-                            )
 
             if not matched_order and on_progress:
                 on_progress("  ❌ 未找到匹配订单")
