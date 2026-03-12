@@ -13,12 +13,27 @@ import requests
 from .constants import (
     EVALUATION_SEARCH_URL,
     ORDER_SEARCH_URL,
+    QUALITY_REFUND_ORDER_URL,
     REQUEST_TIMEOUT,
 )
 
 ProgressCallback = Callable[[str], None]
 JsonDict = dict[str, Any]
 JsonList = list[JsonDict]
+
+DEFAULT_REQUEST_PARAMS = {"token": "", "lang": "zh_CN"}
+EVALUATION_REFERER = "https://store.weixin.qq.com/shop/evaluate/home"
+ORDER_LIST_REFERER = "https://store.weixin.qq.com/shop/order/list"
+QUALITY_REFUND_REFERER = (
+    "https://store.weixin.qq.com/shop/setting/"
+    "ratedetail?type=product&key=productQualityRatio_30d&detail=order"
+)
+EVALUATION_MAX_PAGES = 10
+ORDER_PAGE_SIZE = 100
+RATE_LIMIT_RETRY_COUNT = 3
+FETCH_PAGE_INTERVAL_SECONDS = 0.3
+ORDER_PROGRESS_PAGE_INTERVAL = 5
+QUALITY_REFUND_REQUEST_METHODS = ("GET", "POST")
 
 # 评分模型配置（总分 100 分）
 SCORE_WEIGHTS = {
@@ -57,7 +72,7 @@ class BadReviewOrderFinder:
 
     def _build_headers(
         self,
-        referer: str = "https://store.weixin.qq.com/shop/evaluate/home",
+        referer: str = EVALUATION_REFERER,
     ) -> dict[str, str]:
         """构建 HTTP 请求头。"""
         return {
@@ -85,6 +100,149 @@ class BadReviewOrderFinder:
             "potter-scene": "weixinShop",
         }
 
+    @staticmethod
+    def _build_request_params() -> dict[str, str]:
+        """构建通用请求参数。"""
+        return dict(DEFAULT_REQUEST_PARAMS)
+
+    @staticmethod
+    def _build_evaluation_search_payload(start_time: int, end_time: int, page: int) -> JsonDict:
+        """构建差评搜索请求体。"""
+        return {
+            "orderId": "",
+            "productId": "",
+            "productEvaluationId": "",
+            "buyerEvaluationTimeStart": start_time,
+            "buyerEvaluationTimeEnd": end_time,
+            "page": page,
+            "status": 2,
+            "visibleType": 0,
+        }
+
+    @staticmethod
+    def _build_order_search_payload(
+        *,
+        next_key: str = "",
+        page: int | None = None,
+        create_time_start: int = 0,
+        create_time_end: int = 0,
+    ) -> JsonDict:
+        """构建订单搜索请求体。"""
+        data = {
+            "pageSize": ORDER_PAGE_SIZE,
+            "nextKey": next_key,
+            "orderStatus": "",
+            "searchType": 0,
+        }
+        if page is not None:
+            data["page"] = page
+        if create_time_start > 0:
+            data["createTimeStart"] = create_time_start
+        if create_time_end > 0:
+            data["createTimeEnd"] = create_time_end
+        return data
+
+    def _post_json(self, url: str, data: JsonDict, headers: JsonDict):
+        """发送通用 POST JSON 请求。"""
+        return requests.post(
+            url,
+            params=self._build_request_params(),
+            json=data,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    def _request_quality_refund_result(
+        self,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonDict:
+        """请求品质退款订单接口，优先 GET，必要时回退 POST。"""
+        headers = self._build_headers(QUALITY_REFUND_REFERER)
+        errors = []
+
+        for method in QUALITY_REFUND_REQUEST_METHODS:
+            try:
+                response = requests.request(
+                    method=method,
+                    url=QUALITY_REFUND_ORDER_URL,
+                    params=self._build_request_params(),
+                    json={} if method == "POST" else None,
+                    headers=headers,
+                    timeout=REQUEST_TIMEOUT,
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{method} 请求异常: {exc}")
+                continue
+
+            if response.status_code not in (200, 201):
+                errors.append(f"{method} 请求失败: HTTP {response.status_code}")
+                continue
+
+            try:
+                result = response.json()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{method} 响应解析失败: {exc}")
+                continue
+
+            if result.get("code") == 0:
+                if on_progress:
+                    on_progress(f"[品退] 使用 {method} 请求成功。")
+                return result
+
+            errors.append(f"{method} API错误: {result}")
+
+        raise RuntimeError("；".join(errors) if errors else "未知错误")
+
+    @staticmethod
+    def _latest_create_time(orders: JsonList) -> int:
+        """返回当前订单列表中的最新下单时间。"""
+        if not orders:
+            return 0
+        return max(o.get("commonInfo", {}).get("createTime", 0) for o in orders)
+
+    def _is_page_outside_earliest_time(self, orders: JsonList, earliest_time: int) -> bool:
+        """判断当前页订单是否全部早于筛选下限。"""
+        if earliest_time <= 0 or not orders:
+            return False
+        return self._latest_create_time(orders) < earliest_time
+
+    @staticmethod
+    def _filter_orders_by_earliest_time(orders: JsonList, earliest_time: int) -> JsonList:
+        """按下单时间下限过滤订单。"""
+        if earliest_time <= 0:
+            return list(orders)
+
+        filtered = []
+        for order in orders:
+            create_time = int(order.get("commonInfo", {}).get("createTime", 0) or 0)
+            if create_time >= earliest_time:
+                filtered.append(order)
+        return filtered
+
+    def _merge_quality_refund_orders(
+        self,
+        orders: JsonList,
+        earliest_time: int = 0,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonList:
+        """将品质退款订单并入订单列表。"""
+        base_orders = self._deduplicate_orders_by_id(orders)
+        quality_refund_orders = self.get_quality_refund_orders(
+            earliest_time=earliest_time,
+            on_progress=on_progress,
+        )
+        if not quality_refund_orders:
+            return base_orders
+
+        merged_orders = self._deduplicate_orders_by_id(base_orders + quality_refund_orders)
+        added_count = len(merged_orders) - len(base_orders)
+        if on_progress:
+            on_progress(
+                f"[品退] 已并入 {added_count} 个订单"
+                f"（接口返回 {len(quality_refund_orders)} 个）。"
+            )
+        return merged_orders
+
     # -------------------------------------------------------------------
     # 获取差评
     # -------------------------------------------------------------------
@@ -108,34 +266,21 @@ class BadReviewOrderFinder:
 
         all_bad_reviews = []
         page = 1
-        max_pages = 10
 
-        while page <= max_pages:
+        while page <= EVALUATION_MAX_PAGES:
             if self._stopped:
                 break
 
             if on_progress:
                 on_progress(f"正在获取第 {page} 页评价...")
 
-            params = {"token": "", "lang": "zh_CN"}
-            data = {
-                "orderId": "",
-                "productId": "",
-                "productEvaluationId": "",
-                "buyerEvaluationTimeStart": start_time,
-                "buyerEvaluationTimeEnd": end_time,
-                "page": page,
-                "status": 2,
-                "visibleType": 0,
-            }
+            data = self._build_evaluation_search_payload(start_time, end_time, page)
 
             try:
-                response = requests.post(
+                response = self._post_json(
                     EVALUATION_SEARCH_URL,
-                    params=params,
-                    json=data,
-                    headers=self._build_headers(),
-                    timeout=REQUEST_TIMEOUT,
+                    data,
+                    self._build_headers(),
                 )
             except Exception as exc:
                 raise RuntimeError(f"差评请求异常: {exc}") from exc
@@ -173,7 +318,7 @@ class BadReviewOrderFinder:
                 break
 
             page += 1
-            time.sleep(0.3)
+            time.sleep(FETCH_PAGE_INTERVAL_SECONDS)
 
         return all_bad_reviews
 
@@ -206,7 +351,7 @@ class BadReviewOrderFinder:
         next_key = ""
         page = 1
 
-        headers = self._build_headers("https://store.weixin.qq.com/shop/order/list")
+        headers = self._build_headers(ORDER_LIST_REFERER)
 
         while True:
             if self._stopped:
@@ -215,43 +360,33 @@ class BadReviewOrderFinder:
             if on_progress:
                 on_progress(f"正在获取第 {page} 页订单...")
 
-            params = {"token": "", "lang": "zh_CN"}
-            data = {
-                "pageSize": 100,
-                "nextKey": next_key,
-                "orderStatus": "",
-                "searchType": 0,
-            }
-            if create_time_start > 0:
-                data["createTimeStart"] = create_time_start
-            if create_time_end > 0:
-                data["createTimeEnd"] = create_time_end
+            data = self._build_order_search_payload(
+                next_key=next_key,
+                create_time_start=create_time_start,
+                create_time_end=create_time_end,
+            )
 
             try:
-                response = requests.post(
+                response = self._post_json(
                     ORDER_SEARCH_URL,
-                    params=params,
-                    json=data,
-                    headers=headers,
-                    timeout=REQUEST_TIMEOUT,
+                    data,
+                    headers,
                 )
             except Exception as exc:
                 raise RuntimeError(f"订单请求异常: {exc}") from exc
 
             # 429 频率限制自动重试（指数退避）
             if response.status_code == 429:
-                for retry in range(3):
+                for retry in range(RATE_LIMIT_RETRY_COUNT):
                     wait = 2 ** (retry + 1)  # 2, 4, 8 秒
                     if on_progress:
                         on_progress(f"触发频率限制，等待 {wait} 秒后重试...")
                     time.sleep(wait)
                     try:
-                        response = requests.post(
+                        response = self._post_json(
                             ORDER_SEARCH_URL,
-                            params=params,
-                            json=data,
-                            headers=headers,
-                            timeout=REQUEST_TIMEOUT,
+                            data,
+                            headers,
                         )
                     except Exception as exc:
                         raise RuntimeError(f"订单请求异常: {exc}") from exc
@@ -265,18 +400,16 @@ class BadReviewOrderFinder:
 
             result = response.json()
             if result.get("code") == 429:
-                for retry in range(3):
+                for retry in range(RATE_LIMIT_RETRY_COUNT):
                     wait = 2 ** (retry + 1)
                     if on_progress:
                         on_progress(f"触发频率限制，等待 {wait} 秒后重试...")
                     time.sleep(wait)
                     try:
-                        response = requests.post(
+                        response = self._post_json(
                             ORDER_SEARCH_URL,
-                            params=params,
-                            json=data,
-                            headers=headers,
-                            timeout=REQUEST_TIMEOUT,
+                            data,
+                            headers,
                         )
                     except Exception as exc:
                         raise RuntimeError(f"订单请求异常: {exc}") from exc
@@ -307,21 +440,21 @@ class BadReviewOrderFinder:
                 break
 
             # 时间窗口早停：该页全部订单均早于阈值 → 停止翻页
-            if earliest_time > 0 and orders:
-                latest_in_page = max(
-                    o.get("commonInfo", {}).get("createTime", 0) for o in orders
-                )
-                if latest_in_page < earliest_time:
-                    if on_progress:
-                        on_progress(
-                            f"后续订单已超出时间窗口，提前结束（已获取 {len(all_orders)} 个订单）"
-                        )
-                    break
+            if self._is_page_outside_earliest_time(orders, earliest_time):
+                if on_progress:
+                    on_progress(
+                        f"后续订单已超出时间窗口，提前结束（已获取 {len(all_orders)} 个订单）"
+                    )
+                break
 
             page += 1
-            time.sleep(0.3)  # 翻页限速，防止触发 429
+            time.sleep(FETCH_PAGE_INTERVAL_SECONDS)  # 翻页限速，防止触发 429
 
-        return all_orders
+        return self._merge_quality_refund_orders(
+            all_orders,
+            earliest_time=earliest_time,
+            on_progress=on_progress,
+        )
 
     def get_orders_concurrent(
         self,
@@ -361,7 +494,7 @@ class BadReviewOrderFinder:
         }
 
         # 预构防 429 请求头
-        headers = self._build_headers("https://store.weixin.qq.com/shop/order/list")
+        headers = self._build_headers(ORDER_LIST_REFERER)
 
         def _worker_loop(worker_id: int) -> None:
             tag = f"[订单线程{worker_id}]"
@@ -371,26 +504,19 @@ class BadReviewOrderFinder:
                     current_page = shared_state["next_page"]
                     shared_state["next_page"] += 1
 
-                params = {"token": "", "lang": "zh_CN"}
-                data = {
-                    "pageSize": 100,
-                    "page": current_page,  # 关键：使用 page 替代 nextKey
-                    "nextKey": "",
-                    "orderStatus": "",
-                    "searchType": 0,
-                }
+                data = self._build_order_search_payload(
+                    page=current_page,  # 关键：使用 page 替代 nextKey
+                )
 
-                if on_progress and current_page % 5 == 1:
+                if on_progress and current_page % ORDER_PROGRESS_PAGE_INTERVAL == 1:
                     # 避免日志过多，每 5 页打印一次
                     on_progress(f"{tag} 正在获取第 {current_page} 页订单...")
 
                 try:
-                    response = requests.post(
+                    response = self._post_json(
                         ORDER_SEARCH_URL,
-                        params=params,
-                        json=data,
-                        headers=headers,
-                        timeout=REQUEST_TIMEOUT,
+                        data,
+                        headers,
                     )
                 except Exception as exc:
                     shared_state["errors"].append(f"{tag} 第 {current_page} 页异常: {exc}")
@@ -400,18 +526,16 @@ class BadReviewOrderFinder:
                 # 429 防御
                 if response.status_code == 429:
                     retry_success = False
-                    for retry in range(3):
+                    for retry in range(RATE_LIMIT_RETRY_COUNT):
                         wait = 2 ** (retry + 1)
                         if on_progress:
                             on_progress(f"{tag} 触发429限流，等待 {wait}s 后重试第 {current_page} 页...")
                         time.sleep(wait)
                         try:
-                            response = requests.post(
+                            response = self._post_json(
                                 ORDER_SEARCH_URL,
-                                params=params,
-                                json=data,
-                                headers=headers,
-                                timeout=REQUEST_TIMEOUT,
+                                data,
+                                headers,
                             )
                         except Exception:
                             pass
@@ -432,18 +556,16 @@ class BadReviewOrderFinder:
                 # API内部可能返回 code=429
                 if result.get("code") == 429:
                     retry_success = False
-                    for retry in range(3):
+                    for retry in range(RATE_LIMIT_RETRY_COUNT):
                         wait = 2 ** (retry + 1)
                         if on_progress:
                             on_progress(f"{tag} 触发429限流(API)，等待 {wait}s 后重试...")
                         time.sleep(wait)
                         try:
-                            response = requests.post(
+                            response = self._post_json(
                                 ORDER_SEARCH_URL,
-                                params=params,
-                                json=data,
-                                headers=headers,
-                                timeout=REQUEST_TIMEOUT,
+                                data,
+                                headers,
                             )
                             result = response.json()
                         except Exception:
@@ -475,18 +597,14 @@ class BadReviewOrderFinder:
 
                 # 判断是否触发时间早停
                 # 取该页所有订单的最大（最新）创建时间
-                if earliest_time > 0:
-                    latest_in_page = max(
-                        o.get("commonInfo", {}).get("createTime", 0) for o in orders
-                    )
-                    if latest_in_page < earliest_time:
-                        shared_state["stop_event"].set()
-                        if on_progress:
-                            on_progress(f"{tag} 第 {current_page} 页订单均早于筛选时间，触发早停。")
-                        break
+                if self._is_page_outside_earliest_time(orders, earliest_time):
+                    shared_state["stop_event"].set()
+                    if on_progress:
+                        on_progress(f"{tag} 第 {current_page} 页订单均早于筛选时间，触发早停。")
+                    break
 
                 # 翻页限速
-                time.sleep(0.3)
+                time.sleep(FETCH_PAGE_INTERVAL_SECONDS)
 
         # 启动线程池
         with ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix="order") as pool:
@@ -497,8 +615,12 @@ class BadReviewOrderFinder:
         if shared_state["errors"]:
             raise RuntimeError("; ".join(shared_state["errors"]))
 
-        # 按 orderId 去重
-        merged = self._deduplicate_orders_by_id(shared_state["all_orders"])
+        # 按 orderId 去重，并补充品质退款订单来源
+        merged = self._merge_quality_refund_orders(
+            shared_state["all_orders"],
+            earliest_time=earliest_time,
+            on_progress=on_progress,
+        )
 
         if on_progress:
             on_progress(
@@ -630,6 +752,222 @@ class BadReviewOrderFinder:
             return None
         return f"value::{name_norm}::{sku_norm}"
 
+    def _extract_product_fields(
+        self,
+        data: JsonDict,
+        *,
+        product_id_keys: tuple[str, ...],
+        sku_id_keys: tuple[str, ...],
+        sku_text_keys: tuple[str, ...],
+        product_name_keys: tuple[str, ...],
+        image_keys: tuple[str, ...] = (),
+    ) -> JsonDict:
+        """按字段别名提取商品匹配字段。"""
+        raw_product_id = self._first_non_empty(data, product_id_keys)
+        raw_sku_id = self._first_non_empty(data, sku_id_keys)
+        raw_sku_text = self._first_non_empty(data, sku_text_keys)
+        raw_product_name = self._first_non_empty(data, product_name_keys)
+        raw_image = self._first_non_empty(data, image_keys) if image_keys else ""
+
+        return {
+            "productId": str(raw_product_id).strip() if raw_product_id is not None else "",
+            "skuId": str(raw_sku_id).strip() if raw_sku_id is not None else "",
+            "skuText": self._normalize_sale_param_value(raw_sku_text),
+            "productName": str(raw_product_name).strip() if raw_product_name else "",
+            "imageUrl": str(raw_image).strip() if raw_image else "",
+        }
+
+    def _build_order_context(self, order: JsonDict) -> JsonDict:
+        """提取订单级公共字段。"""
+        buyer_nickname = order.get("buyerInfo", {}).get("nickName", "")
+        confirm_receipt_time = order.get("acceptInfo", {}).get("confirmReceiptTime", "")
+        confirm_receipt_timestamp = self._parse_confirm_receipt_timestamp(
+            confirm_receipt_time
+        )
+        auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {})
+
+        return {
+            "orderId": order.get("commonInfo", {}).get("orderId"),
+            "buyerNickname": buyer_nickname,
+            "normalizedNickname": self.normalize_nickname(buyer_nickname),
+            "createTime": order.get("commonInfo", {}).get("createTime", 0),
+            "confirmReceiptTime": confirm_receipt_timestamp,
+            "isWaybillReceived": bool(auto_confirm_info.get("isWaybillReceived", False)),
+            "waybillReceivedTime": int(auto_confirm_info.get("waybillReceivedTime", 0) or 0),
+            "isEducationOrder": bool(
+                order.get("commonInfo", {}).get("isEducationOrder", False)
+            ),
+            "orderStatus": order.get("commonInfo", {}).get("status", 0),
+            "openid": order.get("commonInfo", {}).get("openid", ""),
+            "orderData": order,
+        }
+
+    def _build_order_product_data(self, order: JsonDict, product: JsonDict) -> JsonDict | None:
+        """组装单个订单商品的匹配数据。"""
+        product_fields = self._extract_product_fields(
+            product,
+            product_id_keys=("productId", "product_id", "spuId", "spu_id"),
+            sku_id_keys=("skuId", "sku_id"),
+            sku_text_keys=("saleParam", "sale_param", "skuName", "specName", "spec"),
+            product_name_keys=("title", "spuName", "productName", "name"),
+            image_keys=("thumbImg", "imgUrl", "image", "imageUrl"),
+        )
+        id_key = self._build_product_id_key(
+            product_fields["productId"],
+            product_fields["skuId"],
+        )
+        value_key = self._build_product_value_key(
+            product_fields["productName"],
+            product_fields["skuText"],
+        )
+        if not id_key and not value_key:
+            return None
+
+        order_context = self._build_order_context(order)
+        return {
+            **order_context,
+            "productId": product_fields["productId"],
+            "skuId": product_fields["skuId"],
+            "saleParam": product_fields["skuText"],
+            "productName": product_fields["productName"],
+            "thumbImg": product_fields["imageUrl"],
+        }
+
+    def _build_quality_refund_order_stub(self, item: JsonDict) -> JsonDict | None:
+        """将品退接口返回项转换为统一订单结构。"""
+        order_info = item.get("orderInfo", {}) or {}
+        raw_order_id = self._first_non_empty(order_info, ("orderId", "order_id"))
+        if raw_order_id is None:
+            return None
+
+        raw_create_time = self._first_non_empty(order_info, ("createTime", "create_time"))
+        create_time = 0
+        if raw_create_time is not None:
+            raw_text = str(raw_create_time).strip()
+            if raw_text.isdigit():
+                create_time = int(raw_text)
+
+        product_fields = self._extract_product_fields(
+            order_info,
+            product_id_keys=("spuId", "spu_id", "productId", "product_id"),
+            sku_id_keys=("skuCode", "skuId", "sku_id"),
+            sku_text_keys=("skuName", "saleParam", "sale_param", "specName", "spec"),
+            product_name_keys=("name", "title", "spuName", "productName"),
+            image_keys=("imgUrl", "skuThumbUrl", "thumbImg", "imageUrl"),
+        )
+
+        return {
+            "commonInfo": {
+                "orderId": str(raw_order_id).strip(),
+                "createTime": create_time,
+                "status": 0,
+                "openid": "",
+                "isEducationOrder": False,
+            },
+            "buyerInfo": {"nickName": ""},
+            "acceptInfo": {"confirmReceiptTime": ""},
+            "orderStatus": {
+                "autoConfirmInfo": {
+                    "isWaybillReceived": False,
+                    "waybillReceivedTime": 0,
+                }
+            },
+            "orderProductInfo": [
+                {
+                    "productId": product_fields["productId"],
+                    "skuId": product_fields["skuId"],
+                    "saleParam": product_fields["skuText"],
+                    "title": product_fields["productName"],
+                    "thumbImg": product_fields["imageUrl"],
+                }
+            ],
+            "qualityRefundInfo": {
+                "reason": str(item.get("reason", "") or "").strip(),
+                "source": "quality_refund_api",
+            },
+        }
+
+    def get_quality_refund_orders(
+        self,
+        earliest_time: int = 0,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonList:
+        """获取品质退款订单。"""
+        if self._stopped:
+            return []
+
+        if on_progress:
+            on_progress("[品退] 正在获取品质退款订单...")
+
+        try:
+            result = self._request_quality_refund_result(on_progress=on_progress)
+        except Exception as exc:
+            raise RuntimeError(f"品质退款订单请求失败: {exc}") from exc
+
+        quality_refund_orders = []
+        for item in result.get("data", []) or []:
+            order = self._build_quality_refund_order_stub(item)
+            if order is not None:
+                quality_refund_orders.append(order)
+
+        filtered_orders = self._filter_orders_by_earliest_time(
+            quality_refund_orders,
+            earliest_time,
+        )
+
+        if on_progress:
+            total_count = len(quality_refund_orders)
+            filtered_count = len(filtered_orders)
+            if earliest_time > 0 and filtered_count != total_count:
+                on_progress(
+                    f"[品退] 获取到 {total_count} 个订单，"
+                    f"按时间窗口保留 {filtered_count} 个。"
+                )
+            else:
+                on_progress(f"[品退] 获取到 {filtered_count} 个订单。")
+
+        return filtered_orders
+
+    def _build_candidate_index_keys(self, evaluation_context: JsonDict) -> tuple[str, ...]:
+        """根据评价上下文生成候选索引键。"""
+        keys = []
+        for index_key in (
+            self._build_product_id_key(
+                evaluation_context["product_id"],
+                evaluation_context["sku_id"],
+            ),
+            self._build_product_value_key(
+                evaluation_context["product_name"],
+                evaluation_context["sku_name"],
+            ),
+        ):
+            if index_key and index_key not in keys:
+                keys.append(index_key)
+        return tuple(keys)
+
+    def _collect_candidate_orders(
+        self,
+        product_index: dict[str, JsonList],
+        evaluation_context: JsonDict,
+    ) -> JsonList:
+        """根据评价上下文收集并去重候选订单。"""
+        candidate_orders = []
+        seen_candidates = set()
+
+        for index_key in self._build_candidate_index_keys(evaluation_context):
+            for order_data in product_index.get(index_key, []):
+                candidate_key = (
+                    order_data.get("orderId"),
+                    order_data.get("productId"),
+                    order_data.get("skuId"),
+                )
+                if candidate_key in seen_candidates:
+                    continue
+                seen_candidates.add(candidate_key)
+                candidate_orders.append(order_data)
+
+        return candidate_orders
+
     # -------------------------------------------------------------------
     # 匹配算法
     # -------------------------------------------------------------------
@@ -639,85 +977,20 @@ class BadReviewOrderFinder:
         product_sku_index = {}
 
         for order in orders:
-            order_id = order.get("commonInfo", {}).get("orderId")
-            buyer_nickname = order.get("buyerInfo", {}).get("nickName", "")
-            normalized_buyer_nickname = self.normalize_nickname(buyer_nickname)
-            create_time = order.get("commonInfo", {}).get("createTime", 0)
-
-            confirm_receipt_time = order.get("acceptInfo", {}).get("confirmReceiptTime", "")
-            confirm_receipt_timestamp = self._parse_confirm_receipt_timestamp(
-                confirm_receipt_time
-            )
-
-            auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {})
-            is_waybill_received = bool(auto_confirm_info.get("isWaybillReceived", False))
-            waybill_received_time = int(auto_confirm_info.get("waybillReceivedTime", 0) or 0)
-
-            order_status = order.get("commonInfo", {}).get("status", 0)
-            is_education_order = bool(
-                order.get("commonInfo", {}).get("isEducationOrder", False)
-            )
-            openid = order.get("commonInfo", {}).get("openid", "")
-
             order_products = (
                 order.get("orderProductInfo", [])
                 or order.get("productInfos", [])
                 or []
             )
             for product in order_products:
-                raw_product_id = self._first_non_empty(
-                    product,
-                    ("productId", "product_id", "spuId", "spu_id"),
-                )
-                raw_sku_id = self._first_non_empty(
-                    product,
-                    ("skuId", "sku_id"),
-                )
-                raw_sale_param = self._first_non_empty(
-                    product,
-                    ("saleParam", "sale_param", "skuName", "specName", "spec"),
-                )
-                raw_product_name = self._first_non_empty(
-                    product,
-                    ("title", "spuName", "productName", "name"),
-                )
-                raw_thumb_img = self._first_non_empty(
-                    product,
-                    ("thumbImg", "imgUrl", "image", "imageUrl"),
-                )
-
-                product_id = str(raw_product_id).strip() if raw_product_id is not None else ""
-                sku_id = str(raw_sku_id).strip() if raw_sku_id is not None else ""
-                sale_param_str = self._normalize_sale_param_value(raw_sale_param)
-                product_name = str(raw_product_name).strip() if raw_product_name else ""
-                thumb_img = str(raw_thumb_img).strip() if raw_thumb_img else ""
-
-                # 至少要有一类可比对锚点：ID键或值键
-                id_key = self._build_product_id_key(product_id, sku_id)
-                value_key = self._build_product_value_key(product_name, sale_param_str)
-                if not id_key and not value_key:
+                order_data = self._build_order_product_data(order, product)
+                if order_data is None:
                     continue
 
-                order_data = {
-                    "orderId": order_id,
-                    "productId": product_id,
-                    "skuId": sku_id,
-                    "saleParam": sale_param_str,
-                    "productName": product_name,
-                    "thumbImg": thumb_img,
-                    "buyerNickname": buyer_nickname,
-                    "normalizedNickname": normalized_buyer_nickname,
-                    "createTime": create_time,
-                    "confirmReceiptTime": confirm_receipt_timestamp,
-                    "isWaybillReceived": is_waybill_received,
-                    "waybillReceivedTime": waybill_received_time,
-                    "isEducationOrder": is_education_order,
-                    "orderStatus": order_status,
-                    "openid": openid,
-                    "orderData": order,
-                }
-
-                for index_key in (id_key, value_key):
+                for index_key in (
+                    self._build_product_id_key(order_data["productId"], order_data["skuId"]),
+                    self._build_product_value_key(order_data["productName"], order_data["saleParam"]),
+                ):
                     if not index_key:
                         continue
                     if index_key not in product_sku_index:
@@ -738,37 +1011,23 @@ class BadReviewOrderFinder:
             .get("buyerEvaluationInfo", {})
             .get("createTime", 0)
         )
-        raw_product_id = self._first_non_empty(
+        product_fields = self._extract_product_fields(
             product_info,
-            ("productId", "product_id", "spuId", "spu_id"),
+            product_id_keys=("productId", "product_id", "spuId", "spu_id"),
+            sku_id_keys=("skuId", "sku_id"),
+            sku_text_keys=("skuName", "saleParam", "sale_param", "specName", "spec"),
+            product_name_keys=("spuName", "title", "productName", "name"),
         )
-        raw_sku_id = self._first_non_empty(
-            product_info,
-            ("skuId", "sku_id"),
-        )
-        raw_sku_name = self._first_non_empty(
-            product_info,
-            ("skuName", "saleParam", "sale_param", "specName", "spec"),
-        )
-        raw_product_name = self._first_non_empty(
-            product_info,
-            ("spuName", "title", "productName", "name"),
-        )
-
-        product_id = str(raw_product_id).strip() if raw_product_id is not None else ""
-        sku_id = str(raw_sku_id).strip() if raw_sku_id is not None else ""
-        sku_name = self._normalize_sale_param_value(raw_sku_name)
-        product_name = str(raw_product_name).strip() if raw_product_name else ""
 
         return {
             "eval_info": eval_info,
             "product_info": product_info,
             "operation_info": operation_info,
             "evaluation_id": evaluation.get("productEvaluationId"),
-            "product_id": product_id,
-            "sku_id": sku_id,
-            "sku_name": sku_name,
-            "product_name": product_name,
+            "product_id": product_fields["productId"],
+            "sku_id": product_fields["skuId"],
+            "sku_name": product_fields["skuText"],
+            "product_name": product_fields["productName"],
             "buyer_nickname": buyer_nickname,
             "normalized_buyer_nickname": self.normalize_nickname(buyer_nickname),
             "eval_time": eval_time,
@@ -1031,6 +1290,37 @@ class BadReviewOrderFinder:
         )
         return best_matches[0]
 
+    def _match_single_evaluation(
+        self,
+        evaluation_context: JsonDict,
+        product_index: dict[str, JsonList],
+    ) -> tuple[JsonDict | None, str | None, int]:
+        """执行单条评价的候选收集、评分和最佳匹配选择。"""
+        candidate_orders = self._collect_candidate_orders(product_index, evaluation_context)
+        if not candidate_orders:
+            return None, None, 0
+
+        best_matches = []
+        for order_data in candidate_orders:
+            candidate = self._score_candidate_order(
+                order_data,
+                evaluation_context["normalized_buyer_nickname"],
+                evaluation_context["sku_name"],
+                evaluation_context["eval_time"],
+            )
+            if candidate:
+                best_matches.append(candidate)
+
+        best_matches = self._apply_multi_order_penalty(best_matches)
+        best_match = self._pick_best_match(best_matches)
+        if best_match is None:
+            return None, None, 0
+
+        matched_order = best_match["order_data"]
+        match_score = best_match["score"]
+        match_strategy = self._match_strategy_by_score(match_score)
+        return matched_order, match_strategy, match_score
+
     @staticmethod
     def _build_match_result(
         evaluation_context: JsonDict,
@@ -1112,13 +1402,12 @@ class BadReviewOrderFinder:
         if on_progress:
             on_progress("正在构建索引...")
 
-        product_sku_index = self._build_product_sku_index(orders)
+        product_index = self._build_product_sku_index(orders)
 
         if on_progress:
-            on_progress(f"索引构建完成: {len(product_sku_index)} 个商品+SKU 组合")
+            on_progress(f"索引构建完成: {len(product_index)} 个商品+SKU 组合")
 
         results = []
-        matched_count = 0
         total = len(bad_evaluations)
 
         for i, evaluation in enumerate(bad_evaluations, 1):
@@ -1136,57 +1425,15 @@ class BadReviewOrderFinder:
             match_strategy = None
             match_score = 0
 
-            product_id = evaluation_context["product_id"]
-            sku_id = evaluation_context["sku_id"]
-            product_name = evaluation_context["product_name"]
-            sku_name = evaluation_context["sku_name"]
-
-            candidate_orders = []
-            seen_candidates = set()
-            for index_key in (
-                self._build_product_id_key(product_id, sku_id),
-                self._build_product_value_key(product_name, sku_name),
-            ):
-                if not index_key:
-                    continue
-                for order_data in product_sku_index.get(index_key, []):
-                    candidate_key = (
-                        order_data.get("orderId"),
-                        order_data.get("productId"),
-                        order_data.get("skuId"),
-                    )
-                    if candidate_key in seen_candidates:
-                        continue
-                    seen_candidates.add(candidate_key)
-                    candidate_orders.append(order_data)
-
-            if candidate_orders:
-                best_matches = []
-
-                for order_data in candidate_orders:
-                    candidate = self._score_candidate_order(
-                        order_data,
-                        evaluation_context["normalized_buyer_nickname"],
-                        sku_name,
-                        evaluation_context["eval_time"],
-                    )
-                    if candidate:
-                        best_matches.append(candidate)
-
-                best_matches = self._apply_multi_order_penalty(best_matches)
-                best_match = self._pick_best_match(best_matches)
-
-                if best_match:
-                    matched_order = best_match["order_data"]
-                    match_score = best_match["score"]
-                    match_strategy = self._match_strategy_by_score(match_score)
-                    matched_count += 1
-
-                    if on_progress:
-                        on_progress(
-                            f"  ✅ 匹配成功 (得分: {match_score}, "
-                            f"策略: {match_strategy}) → 订单 {matched_order['orderId']}"
-                        )
+            matched_order, match_strategy, match_score = self._match_single_evaluation(
+                evaluation_context,
+                product_index,
+            )
+            if matched_order and on_progress:
+                on_progress(
+                    f"  ✅ 匹配成功 (得分: {match_score}, "
+                    f"策略: {match_strategy}) → 订单 {matched_order['orderId']}"
+                )
 
             if not matched_order and on_progress:
                 on_progress("  ❌ 未找到匹配订单")

@@ -16,11 +16,11 @@ WINDOW_TITLE = "驼铃视频小店中差评处理"
 AUTHOR_WECHAT = "TLS-801"
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
 
-DESIGN_WIDTH = 1240
+DESIGN_WIDTH = 1160
 DESIGN_HEIGHT = 980
-MAC_DEFAULT_WINDOW_WIDTH = 1880
+MAC_DEFAULT_WINDOW_WIDTH = 1760
 MAC_DEFAULT_WINDOW_HEIGHT = 1668
-WINDOWS_DEFAULT_WINDOW_WIDTH = 1200
+WINDOWS_DEFAULT_WINDOW_WIDTH = 1120
 WINDOWS_DEFAULT_WINDOW_HEIGHT = 1000
 
 # ---------------------------------------------------------------------------
@@ -81,6 +81,7 @@ DELIVERY_MISMATCH_MESSAGE = "快递单号与所选物流商不匹配"
 # 中差评查找 API
 EVALUATION_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeevaluation/cgi/search"
 ORDER_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"
+QUALITY_REFUND_ORDER_URL = "https://store.weixin.qq.com/shop-faas/statistic/dsr/product/refund/order"
 DEFAULT_REVIEW_DAYS = 30
 
 # ---------------------------------------------------------------------------
