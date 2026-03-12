@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PySide6.QtCore import QObject, Signal
 
 from .config import ConfigNotFoundError, get_cookie, get_magic
-from .review_matcher import BadReviewOrderFinder
+from .review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
 
 # 订单并发拉取线程数（降低并发数防 429 限流）
 ORDER_FETCH_WORKERS = 3
@@ -194,7 +194,7 @@ class ReviewMatcherWorker(QObject):
         autofill_order_ids = [
             r["orderId"]
             for r in matched_results
-            if r["orderId"] and r["matchScore"] >= 100
+            if r["orderId"] and r["matchScore"] >= AUTO_FILL_SCORE_THRESHOLD
         ]
         manual_review_count = len(matched_results) - len(autofill_order_ids)
 
@@ -206,13 +206,18 @@ class ReviewMatcherWorker(QObject):
 
         if matched_results:
             progress(
-                f"其中 {len(autofill_order_ids)} 个得分达标(100分)已自动填入，"
+                f"其中 {len(autofill_order_ids)} 个得分达标"
+                f"({AUTO_FILL_SCORE_THRESHOLD}分)已自动填入，"
                 f"{manual_review_count} 个需人工核对。"
             )
             progress("\n匹配成功的订单明细:")
             for item in matched_results:
                 score = item["matchScore"]
-                mark = "✅ 自动填入" if score >= 100 else "⚠️ 需人工核对"
+                mark = (
+                    "✅ 自动填入"
+                    if score >= AUTO_FILL_SCORE_THRESHOLD
+                    else "⚠️ 需人工核对"
+                )
                 progress(
                     f"  {mark} | 得分: {score} | "
                     f"订单: {item['orderId']} | "
