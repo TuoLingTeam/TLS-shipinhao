@@ -117,13 +117,13 @@ class MainWindow(QWidget):
         self._batch_rows = []
         self._license_reason = license_reason
         self._license_info = license_info or {}
-        self._ui_scale = self._resolve_ui_scale()
+        default_w, default_h = self._resolve_initial_window_size()
+        self._ui_scale = self._resolve_ui_scale_for_size(default_w, default_h)
         set_ui_scale(self._ui_scale)
         reset_font_caches()
 
         self._sync_window_title_with_license(self._license_reason, self._license_info)
         self.setObjectName("AppRoot")
-        default_w, default_h = self._resolve_initial_window_size()
         self.setMinimumSize(
             scale_px(MIN_WINDOW_WIDTH, min_value=640),
             scale_px(MIN_WINDOW_HEIGHT, min_value=560),
@@ -1006,13 +1006,20 @@ class MainWindow(QWidget):
         return "dense"
 
     def _resolve_ui_scale(self):
-        """结合缩放模式和逻辑 DPI，计算当前窗口的紧凑缩放系数。"""
+        """结合缩放模式和逻辑 DPI，计算当前窗口的紧凑缩放系数（基于屏幕可用区域）。"""
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return 1.0
+        available = screen.availableGeometry()
+        return self._resolve_ui_scale_for_size(available.width(), available.height())
+
+    def _resolve_ui_scale_for_size(self, width, height):
+        """根据给定窗口尺寸与平台/DPI 计算缩放系数，用于首次打开时与默认窗口匹配。"""
         screen = QApplication.primaryScreen()
         if screen is None:
             return 1.0
 
-        available = screen.availableGeometry()
-        layout_mode = self._resolve_layout_mode(available.width(), available.height())
+        layout_mode = self._resolve_layout_mode(width, height)
         scale_map = {
             "wide": 1.0,
             "compact": 0.92,
@@ -1026,6 +1033,9 @@ class MainWindow(QWidget):
                 scale *= 0.97 if layout_mode == "wide" else 0.92
             elif logical_dpi >= HIGH_DPI_COMPACT_THRESHOLD:
                 scale *= 0.985 if layout_mode == "wide" else 0.96
+            else:
+                # Windows 常见 100%~125% 显示缩放下，默认略降系数更友好
+                scale *= 0.93
         else:
             logical_dpi = screen.logicalDotsPerInch()
             if logical_dpi >= VERY_HIGH_DPI_COMPACT_THRESHOLD and layout_mode != "wide":
