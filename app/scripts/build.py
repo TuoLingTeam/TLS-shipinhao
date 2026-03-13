@@ -73,7 +73,6 @@ HIDDEN_IMPORTS = [
     "PySide6.QtWebChannel",
     "PySide6.QtWebEngineCore",
     "PySide6.QtWebEngineWidgets",
-    "PIL.Image",
 ]
 
 # Cython 编译后的模块（使用混淆源时需要）
@@ -206,6 +205,43 @@ QT_PRUNE_FILES = (
     "svgtoqml",
 )
 RESOURCE_PRUNE_GLOBS = ("*.dist-info", "*.pyi")
+WEBENGINE_RESOURCE_RELATIVE_DIR = Path("Qt") / "lib" / "QtWebEngineCore.framework" / "Versions" / "A" / "Resources"
+WEBENGINE_KEEP_LOCALES = {"en-US.pak", "zh-CN.pak", "zh-TW.pak"}
+WEBENGINE_PRUNE_FILES = ("qtwebengine_devtools_resources.pak",)
+PYSIDE_KEEP_BINDINGS = {
+    "QtCore.abi3.so",
+    "QtGui.abi3.so",
+    "QtNetwork.abi3.so",
+    "QtPrintSupport.abi3.so",
+    "QtWebChannel.abi3.so",
+    "QtWebEngineCore.abi3.so",
+    "QtWebEngineWidgets.abi3.so",
+    "QtWidgets.abi3.so",
+}
+PYSIDE_PRUNE_LIBRARIES = {"libpyside6qml.abi3.6.10.dylib"}
+QT_KEEP_PLUGIN_FILES = {
+    Path("platforms") / "libqcocoa.dylib",
+    Path("styles") / "libqmacstyle.dylib",
+}
+QT_KEEP_FRAMEWORKS = {
+    "QtCore",
+    "QtDBus",
+    "QtGui",
+    "QtNetwork",
+    "QtOpenGL",
+    "QtPositioning",
+    "QtPrintSupport",
+    "QtQml",
+    "QtQmlMeta",
+    "QtQmlModels",
+    "QtQmlWorkerScript",
+    "QtQuick",
+    "QtQuickWidgets",
+    "QtWebChannel",
+    "QtWebEngineCore",
+    "QtWebEngineWidgets",
+    "QtWidgets",
+}
 
 
 # =========================
@@ -291,6 +327,88 @@ def copy_runtime_files(destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     if COOKIE_FILE.exists():
         shutil.copy2(COOKIE_FILE, destination / COOKIE_FILE.name)
+
+
+def prune_webengine_resources(root: Path) -> int:
+    """裁剪 QtWebEngine 的非核心资源，避免误删运行时依赖。"""
+    removed_count = 0
+    resources_dir = root / WEBENGINE_RESOURCE_RELATIVE_DIR
+    if not resources_dir.exists():
+        return removed_count
+
+    for name in WEBENGINE_PRUNE_FILES:
+        if remove_path(resources_dir / name):
+            removed_count += 1
+
+    locales_dir = resources_dir / "qtwebengine_locales"
+    if not locales_dir.exists():
+        return removed_count
+
+    for locale_file in locales_dir.glob("*.pak"):
+        if locale_file.name in WEBENGINE_KEEP_LOCALES:
+            continue
+        if remove_path(locale_file):
+            removed_count += 1
+
+    return removed_count
+
+
+def prune_pyside_bindings(root: Path) -> int:
+    """只保留运行时会实际导入的 PySide6 扩展模块。"""
+    removed_count = 0
+    if not root.exists():
+        return removed_count
+
+    for target in root.glob("*.abi3.so"):
+        if target.name in PYSIDE_KEEP_BINDINGS:
+            continue
+        if remove_path(target):
+            removed_count += 1
+
+    for name in PYSIDE_PRUNE_LIBRARIES:
+        if remove_path(root / name):
+            removed_count += 1
+
+    return removed_count
+
+
+def prune_qt_plugins(root: Path) -> int:
+    """删除主程序不依赖的 Qt 插件，避免它们继续拖入附带 framework。"""
+    removed_count = 0
+    plugin_root = root / "Qt" / "plugins"
+    if not plugin_root.exists():
+        return removed_count
+
+    for target in plugin_root.rglob("*.dylib"):
+        relative_path = target.relative_to(plugin_root)
+        if relative_path in QT_KEEP_PLUGIN_FILES:
+            continue
+        if remove_path(target):
+            removed_count += 1
+
+    # 清理被裁空的插件目录，避免包里残留无内容目录。
+    for directory in sorted(plugin_root.rglob("*"), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+
+    return removed_count
+
+
+def prune_qt_frameworks(root: Path) -> int:
+    """删除不在主程序运行闭包中的 Qt frameworks。"""
+    removed_count = 0
+    framework_root = root / "Qt" / "lib"
+    if not framework_root.exists():
+        return removed_count
+
+    for target in framework_root.glob("*.framework"):
+        name = target.name.split(".framework", 1)[0]
+        if name in QT_KEEP_FRAMEWORKS:
+            continue
+        if remove_path(target):
+            removed_count += 1
+
+    return removed_count
 
 
 # =========================
@@ -423,6 +541,11 @@ def prune_macos_bundle(app_bundle: Path) -> None:
             for target in root.glob(pattern):
                 if remove_path(target):
                     removed_count += 1
+
+        removed_count += prune_webengine_resources(root)
+        removed_count += prune_pyside_bindings(root)
+        removed_count += prune_qt_plugins(root)
+        removed_count += prune_qt_frameworks(root)
 
     for parent in (app_bundle / "Contents" / "Resources", app_bundle / "Contents" / "Frameworks"):
         for target in parent.glob("*.dist-info"):
