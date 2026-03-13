@@ -861,6 +861,12 @@ class MainWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
+        body_wrap = QWidget()
+        body_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        body_layout = QVBoxLayout(body_wrap)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(10)
+
         info_panel = QFrame()
         info_panel.setObjectName("LicenseInfoPanel")
         panel_layout = QVBoxLayout(info_panel)
@@ -879,7 +885,7 @@ class MainWindow(QWidget):
         self.license_meta_label.setWordWrap(True)
         panel_layout.addWidget(self.license_meta_label)
 
-        layout.addWidget(info_panel)
+        body_layout.addWidget(info_panel)
 
         self.license_help_label = QLabel(
             f"如需续费、重绑设备或重新激活，请联系微信：{AUTHOR_WECHAT}。"
@@ -887,7 +893,9 @@ class MainWindow(QWidget):
         self.license_help_label.setObjectName("LicenseHelp")
         self.license_help_label.setFont(build_font(11))
         self.license_help_label.setWordWrap(True)
-        layout.addWidget(self.license_help_label)
+        body_layout.addWidget(self.license_help_label)
+        layout.addStretch(1)
+        layout.addWidget(body_wrap)
         layout.addStretch(1)
         return content
 
