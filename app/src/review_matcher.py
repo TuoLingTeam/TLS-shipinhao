@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""TLS-shipinhao 中差评订单查找器（核心逻辑）。"""
+"""TLS-shipinhao  订单查找器（核心逻辑）。"""
 
 import re
 import threading

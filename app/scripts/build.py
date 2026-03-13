@@ -47,17 +47,34 @@ WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
 PYINSTALLER_CACHE_DIR = REPO_ROOT / ".pyinstaller"
 
 # 构建时需要的最小依赖集合（避免漏装导致中断）。
-BUILD_REQUIREMENTS = ["PySide6_Essentials", "shiboken6", "requests", "pyinstaller", "Pillow"]
+BUILD_REQUIREMENTS = [
+    "PySide6_Essentials",
+    "PySide6_Addons",
+    "shiboken6",
+    "requests",
+    "pyinstaller",
+    "Pillow",
+]
 PROBE_IMPORTS = (
     "import requests, shiboken6, PyInstaller; "
     "from PIL import Image; "
     "from PySide6.QtCore import QObject; "
     "from PySide6.QtGui import QFont; "
-    "from PySide6.QtWidgets import QApplication"
+    "from PySide6.QtWidgets import QApplication; "
+    "from PySide6.QtWebEngineWidgets import QWebEngineView"
 )
 
 # PyInstaller 需要保留的隐藏导入。
-HIDDEN_IMPORTS = ["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PIL.Image"]
+HIDDEN_IMPORTS = [
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtPrintSupport",
+    "PySide6.QtWebChannel",
+    "PySide6.QtWebEngineCore",
+    "PySide6.QtWebEngineWidgets",
+    "PIL.Image",
+]
 
 # Cython 编译后的模块（使用混淆源时需要）
 CYTHON_MODULES = [
@@ -102,18 +119,11 @@ QT_OPTIONAL_MODULES = (
     "QtMultimediaWidgets",
     "QtNetworkAuth",
     "QtNfc",
-    "QtOpenGL",
-    "QtOpenGLWidgets",
     "QtPdf",
     "QtPdfWidgets",
-    "QtPositioning",
-    "QtPrintSupport",
-    "QtQml",
-    "QtQuick",
     "QtQuick3D",
     "QtQuickControls2",
     "QtQuickTest",
-    "QtQuickWidgets",
     "QtRemoteObjects",
     "QtScxml",
     "QtSensors",
@@ -127,10 +137,6 @@ QT_OPTIONAL_MODULES = (
     "QtTest",
     "QtTextToSpeech",
     "QtUiTools",
-    "QtWebChannel",
-    "QtWebEngineCore",
-    "QtWebEngineQuick",
-    "QtWebEngineWidgets",
     "QtWebSockets",
     "QtWebView",
     "QtXml",
@@ -144,7 +150,6 @@ QT_PRUNE_DIRS = (
     Path("Qt") / "qml",
     Path("Qt") / "translations",
     Path("Qt") / "metatypes",
-    Path("Qt") / "libexec",
     Path("include"),
     Path("typesystems"),
     Path("scripts"),
@@ -421,7 +426,7 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, 
 
     print(f"打包完成。\n应用位置: {app_bundle}")
     if profile == PROFILE_MAIN:
-        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 的路径。")
+        print("使用前：可点击「自动获取 Cookie」完成登录并生成 cookie.txt，或手动选择配置目录。")
     return app_bundle
 
 
@@ -442,7 +447,7 @@ def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str
 
     print(f"打包完成。\n可执行文件: {exe_file}")
     if profile == PROFILE_MAIN:
-        print("使用前：启动应用后点击「选择配置目录」设置 cookie.txt 的路径。")
+        print("使用前：可点击「自动获取 Cookie」完成登录并生成 cookie.txt，或手动选择配置目录。")
     return exe_file
 
 

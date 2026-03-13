@@ -14,8 +14,8 @@ def main():
     """程序入口。"""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    _, reason = check_stored_license()
-    window = MainWindow(license_reason=reason)
+    info, reason = check_stored_license()
+    window = MainWindow(license_reason=reason, license_info=info)
     window.show()
     if reason != "ok":
         window.prompt_license_on_startup()

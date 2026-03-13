@@ -178,6 +178,48 @@ def read_cookie_data(cookie_path):
     return parse_cookie_content(content)
 
 
+def serialize_cookie_data(cookie_data):
+    """将 cookie 字典还原为 cookie.txt 内容。"""
+    parts = []
+    for key, value in (cookie_data or {}).items():
+        normalized_key = str(key).strip()
+        if not normalized_key:
+            continue
+        parts.append(f"{normalized_key}={str(value).strip()}")
+    return "; ".join(parts)
+
+
+def get_default_config_dir():
+    """返回自动保存配置时优先使用的目录。"""
+    selected_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir()
+    if selected_dir:
+        return os.path.abspath(selected_dir)
+    return os.path.abspath(get_home_config_dir())
+
+
+def save_cookie_text(content, config_dir=None, *, remember_dir=True):
+    """将原始 cookie 文本保存到目标目录。"""
+    target_dir = os.path.abspath(config_dir or get_default_config_dir())
+    os.makedirs(target_dir, exist_ok=True)
+
+    cookie_path = os.path.join(target_dir, COOKIE_FILE_NAME)
+    with open(cookie_path, "w", encoding="utf-8") as file:
+        file.write((content or "").strip())
+
+    if remember_dir:
+        save_user_config_dir(target_dir)
+    return cookie_path
+
+
+def save_cookie_data(cookie_data, config_dir=None, *, remember_dir=True):
+    """将 cookie 字典保存成标准 cookie.txt 文件。"""
+    return save_cookie_text(
+        serialize_cookie_data(cookie_data),
+        config_dir=config_dir,
+        remember_dir=remember_dir,
+    )
+
+
 def extract_biz_magic_from_cookie(cookie_data):
     """从 cookie 字典中提取 biz_magic（大小写不敏感）。"""
     direct = cookie_data.get("biz_magic")
