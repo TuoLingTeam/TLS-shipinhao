@@ -1053,7 +1053,7 @@ class MainWindow(QWidget):
             if sys.platform.startswith("win"):
                 max_w = int(available.width() * 0.96)
                 max_h = int(available.height() * 0.97)
-                target_w = max(default_width, int(available.width() * 0.84))
+                target_w = max(default_width, int(available.width() * 0.55))
                 w = min(target_w, max_w)
                 h = min(default_height, max_h)
             else:
