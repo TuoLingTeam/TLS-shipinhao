@@ -15,6 +15,8 @@ DEFAULT_WINDOW_WIDTH = 900
 DEFAULT_WINDOW_HEIGHT = 850
 MIN_WINDOW_WIDTH = 800
 MIN_WINDOW_HEIGHT = 700
+MIN_UI_SCALE = 0.82
+MAX_UI_SCALE = 1.0
 
 # 布局
 PAGE_MARGIN = 16
@@ -94,6 +96,30 @@ LICENSE_API_BASE_URL = "https://sphapi.199908.top"
 LICENSE_ACTIVATE_URL = f"{LICENSE_API_BASE_URL}/api/activate"
 LICENSE_VERIFY_URL = f"{LICENSE_API_BASE_URL}/api/verify"
 LICENSE_API_TIMEOUT = 15
+
+
+_UI_SCALE = 1.0
+
+
+def clamp_ui_scale(scale):
+    """限制 UI 缩放系数，避免过小或过大。"""
+    return max(MIN_UI_SCALE, min(MAX_UI_SCALE, float(scale)))
+
+
+def set_ui_scale(scale):
+    """设置全局 UI 缩放系数。"""
+    global _UI_SCALE
+    _UI_SCALE = clamp_ui_scale(scale)
+
+
+def get_ui_scale():
+    """获取全局 UI 缩放系数。"""
+    return _UI_SCALE
+
+
+def scale_px(value, *, min_value=0):
+    """按当前 UI 缩放系数返回像素值。"""
+    return max(min_value, int(round(value * _UI_SCALE)))
 
 
 def get_platform_default_window_size():

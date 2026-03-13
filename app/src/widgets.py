@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import normalize_batch_text
-from .constants import AUTHOR_WECHAT
+from .constants import AUTHOR_WECHAT, get_ui_scale
 
 from .license import activate_license
 
@@ -31,7 +31,7 @@ from .license import activate_license
 def build_font(size, bold=False):
     """获取通用字体（带缓存，避免重复创建）。"""
     font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
-    font.setPointSize(size)
+    font.setPointSize(max(9, int(round(size * get_ui_scale()))))
     font.setBold(bold)
     return font
 
@@ -40,8 +40,14 @@ def build_font(size, bold=False):
 def build_fixed_font(size):
     """获取等宽字体（带缓存，避免重复创建）。"""
     font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-    font.setPointSize(size)
+    font.setPointSize(max(9, int(round(size * get_ui_scale()))))
     return font
+
+
+def reset_font_caches():
+    """缩放系数变化后清理字体缓存。"""
+    build_font.cache_clear()
+    build_fixed_font.cache_clear()
 
 
 # ---------------------------------------------------------------------------
