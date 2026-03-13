@@ -188,18 +188,18 @@ class MainWindow(QWidget):
                 border-radius: 22px;
             }}
             QFrame#ReviewCard {{
-                background: #FFF7ED;
-                border: 1px solid #E7C89D;
+                background: #F8FBFF;
+                border: 1px solid #C8D6E5;
                 border-radius: 22px;
             }}
             QFrame#ControlCard {{
-                background: #0F172A;
-                border: 1px solid #23314A;
+                background: #F8FBFF;
+                border: 1px solid #C8D6E5;
                 border-radius: 22px;
             }}
             QFrame#LogCard {{
-                background: {c["log_bg"]};
-                border: 1px solid #205187;
+                background: #F8FBFF;
+                border: 1px solid #C8D6E5;
                 border-radius: 20px;
             }}
             QFrame#InputShell {{
@@ -219,9 +219,9 @@ class MainWindow(QWidget):
                 background: #FFFFFF;
             }}
             QPlainTextEdit#LogEdit {{
-                background: {c["log_surface"]};
-                color: {c["log_fg"]};
-                border: 1px solid #2D5D94;
+                background: #FFFFFF;
+                color: #17314A;
+                border: 1px solid #BDD0E2;
                 border-radius: 18px;
                 padding: 14px;
                 selection-background-color: {c["blue"]};
@@ -246,21 +246,21 @@ class MainWindow(QWidget):
                 border: 1px solid #ADC0D8;
             }}
             QPushButton#PauseButton {{
-                background: #24364C;
-                color: #EAF2FC;
-                border: 1px solid #5A7598;
+                background: #EEF5FF;
+                color: #0C3C8F;
+                border: 1px solid #B6CAE2;
                 border-radius: 16px;
                 padding: 12px 18px;
                 font-weight: 700;
             }}
             QPushButton#PauseButton:hover {{
-                background: #1E2F44;
+                background: #E1ECFB;
             }}
             QPushButton#PauseButton:pressed {{
-                background: #17273B;
+                background: #D6E5F8;
             }}
             QPushButton#PauseButton:disabled {{
-                background: #D7E2F0;
+                background: #F1F5F9;
                 color: #94A3B8;
                 border: 1px solid #ADC0D8;
             }}
@@ -274,10 +274,10 @@ class MainWindow(QWidget):
                 color: #10243B;
             }}
             QLabel#ControlTitle {{
-                color: #F8FAFC;
+                color: #10243B;
             }}
             QLabel#ControlDesc {{
-                color: #CBD5E1;
+                color: #597089;
             }}
             QLabel#MetricChip {{
                 background: rgba(148, 163, 184, 0.12);
@@ -292,10 +292,10 @@ class MainWindow(QWidget):
                 font-weight: 700;
             }}
             QLabel#LogTitle {{
-                color: {c["log_fg"]};
+                color: #10243B;
             }}
             QLabel#LogHint {{
-                color: {c["log_muted"]};
+                color: #597089;
             }}
             QLabel#ConfigPath {{
                 color: #4F6680;
@@ -481,7 +481,7 @@ class MainWindow(QWidget):
         self.review_title_label.setObjectName("ReviewTitle")
         self.review_title_label.setFont(build_font(16, bold=True))
         self.review_title_label.setStyleSheet(
-            f"color: {c['orange_deep']}; background: transparent;"
+            f"color: {c['blue_deep']}; background: transparent;"
         )
 
         card_layout.addWidget(self.review_title_label)
@@ -500,7 +500,7 @@ class MainWindow(QWidget):
         days_label = QLabel("查询天数")
         days_label.setFont(build_font(12, bold=True))
         days_label.setStyleSheet(
-            f"color: {c['orange_deep']}; background: transparent;"
+            f"color: {c['blue_deep']}; background: transparent;"
         )
         self.review_days_label = days_label
         days_row_layout.addWidget(days_label, 0, Qt.AlignVCenter)
@@ -516,7 +516,7 @@ class MainWindow(QWidget):
             f"""QSpinBox {{
                 background: #FFFFFF;
                 color: {c['text']};
-                border: 1px solid #E0B880;
+                border: 1px solid #B6CAE2;
                 border-radius: 12px;
                 padding: 4px 8px;
                 font-size: 13px;
@@ -543,23 +543,23 @@ class MainWindow(QWidget):
         self.review_find_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.review_find_button.setStyleSheet(
             f"""QPushButton#ReviewButton {{
-                background: #D97706;
+                background: #2563EB;
                 color: white;
-                border: 1px solid #B85F04;
+                border: 1px solid #1D4ED8;
                 border-radius: 14px;
                 padding: 10px 18px;
                 font-weight: 700;
             }}
             QPushButton#ReviewButton:hover {{
-                background: #C56C05;
+                background: #1D4ED8;
             }}
             QPushButton#ReviewButton:pressed {{
-                background: #B55F04;
+                background: #1E40AF;
             }}
             QPushButton#ReviewButton:disabled {{
-                background: #E8D5C0;
-                color: #A0927F;
-                border: 1px solid #C9B89E;
+                background: #E2E8F0;
+                color: #94A3B8;
+                border: 1px solid #CBD5E1;
             }}"""
         )
         self.review_find_button.clicked.connect(self.on_review_find_clicked)

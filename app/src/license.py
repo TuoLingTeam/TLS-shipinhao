@@ -148,6 +148,28 @@ def _save_license_file(info: dict) -> None:
         json.dump(info, file, ensure_ascii=False, indent=2)
 
 
+def _refresh_license_fields(info: dict, result: dict) -> bool:
+    """用后端返回数据刷新本地 license 字段。"""
+    updated = False
+    field_aliases = {
+        "key": ("key", "license_key", "licenseKey"),
+        "expires_at": ("expires_at", "expiresAt"),
+        "activated_at": ("activated_at", "activatedAt"),
+        "plan_days": ("plan_days", "planDays"),
+        "device_id": ("device_id", "deviceId"),
+    }
+    for target, aliases in field_aliases.items():
+        for alias in aliases:
+            if alias in result and result[alias]:
+                if info.get(target) != result[alias]:
+                    info[target] = result[alias]
+                    updated = True
+                break
+    if info.get("key"):
+        info["key"] = info["key"].upper()
+    return updated
+
+
 def _invalidate_license_file() -> None:
     """将本地 license 文件标记为无效（清除签名）。"""
     path = _license_path()
@@ -251,6 +273,9 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
         )
         result = resp.json()
         if result.get("success"):
+            refreshed = _refresh_license_fields(info, result)
+            if refreshed or not _verify_signature(info):
+                _save_license_file(info)
             return info, "ok"
         # 后端明确返回失败，同时失效本地缓存防止离线绕过
         _invalidate_license_file()
@@ -266,7 +291,10 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
 
     # 离线回退：先验证本地文件的 HMAC 签名完整性
     if not _verify_signature(info):
-        logger.warning("本地 license 文件签名校验失败，疑似被篡改")
+        if not info.get("signature"):
+            logger.warning("本地 license 缺少签名字段，需要联网校验或重新激活")
+        else:
+            logger.warning("本地 license 文件签名校验失败，疑似被篡改")
         return None, "invalid"
 
     try:
