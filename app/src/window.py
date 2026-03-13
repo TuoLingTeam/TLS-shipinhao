@@ -39,8 +39,11 @@ from .constants import (
     AUTHOR_WECHAT,
     DEFAULT_REVIEW_DAYS,
     DESIGN_HEIGHT,
+    DESIGN_SIZES,
     DESIGN_WIDTH,
     MAX_BATCH_SIZE,
+    MIN_WINDOW_HEIGHT,
+    MIN_WINDOW_WIDTH,
     TUTORIAL_URL,
     WINDOW_TITLE,
     get_platform_default_window_size,
@@ -62,56 +65,12 @@ from .review_worker import (
 from .license import check_stored_license
 
 
-SIDEBAR_BUTTON_HEIGHT = {
-    "design": 48,
-    "minimum": 44,
-}
-
-INPUT_PANE_VISIBLE_LINES = {
-    "design": 11,
-    "minimum": 9,
-}
-
-TOP_PANEL_STRETCH = {
-    "config": 42,
-    "inputs": 58,
-}
-
-TOP_INPUT_PAIR_STRETCH = {
-    "order": 3,
-    "tracking": 3,
-}
-
-BOTTOM_PANEL_STRETCH = {
-    "left_column": 42,
-    "right_column": 58,
-}
-
-BOTTOM_LEFT_PANEL_HEIGHT = {
-    "review": 6,
-    "action": 4,
-}
-
-WORKSPACE_PANEL_MIN_HEIGHT = {
-    "top": {
-        "design": 300,
-        "minimum": 270,
-    },
-    "bottom": {
-        "design": 340,
-        "minimum": 280,
-    },
-}
-
-WORKSPACE_PANEL_STRETCH = {
-    "top": 5,
-    "bottom": 6,
-}
-
-LOG_PANEL_MIN_HEIGHT = {
-    "design": 170,
-    "minimum": 140,
-}
+# 布局权重（比例，非 px）
+TOP_PANEL_STRETCH = {"config": 42, "inputs": 58}
+TOP_INPUT_PAIR_STRETCH = {"order": 3, "tracking": 3}
+BOTTOM_PANEL_STRETCH = {"left_column": 42, "right_column": 58}
+BOTTOM_LEFT_PANEL_HEIGHT = {"review": 6, "action": 4}
+WORKSPACE_PANEL_STRETCH = {"top": 5, "bottom": 6}
 
 
 class MainWindow(QWidget):
@@ -130,8 +89,9 @@ class MainWindow(QWidget):
 
         self._sync_window_title_with_license(self._license_reason)
         self.setObjectName("AppRoot")
-        fixed_width, fixed_height = self._resolve_fixed_window_size()
-        self.setFixedSize(fixed_width, fixed_height)
+        default_w, default_h = self._resolve_initial_window_size()
+        self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+        self.resize(default_w, default_h)
         self.setStyleSheet(self._build_stylesheet())
 
         self._build_ui()
@@ -143,8 +103,9 @@ class MainWindow(QWidget):
 
     @staticmethod
     def _build_stylesheet():
-        """构建全局 QSS 样式表。"""
+        """构建全局 QSS 样式表（颜色与圆角来自 DESIGN_SIZES / APP_COLORS）。"""
         c = APP_COLORS
+        r = DESIGN_SIZES
         return f"""
             QWidget#AppRoot {{
                 background: {c["bg"]};
@@ -171,171 +132,165 @@ class MainWindow(QWidget):
                 background: transparent;
             }}
             QFrame#Card {{
-                background: #F7FAFC;
-                border: 1px solid #CCD8E5;
-                border-radius: 22px;
+                background: {c["surface"]};
+                border: 1px solid {c["border"]};
+                border-radius: {r["radius_lg"]}px;
             }}
             QFrame#HeroCard {{
-                background: #F2F7FB;
-                border: 1px solid #C9D7E4;
-                border-radius: 26px;
+                background: {c["surface_soft"]};
+                border: 1px solid {c["hero_border"]};
+                border-radius: {r["radius_xl"]}px;
             }}
             QFrame#InputCardBlue,
             QFrame#InputCardBlue2,
             QFrame#ConfigCard {{
-                background: #F8FBFF;
-                border: 1px solid #C8D6E5;
-                border-radius: 22px;
+                background: {c["surface"]};
+                border: 1px solid {c["border"]};
+                border-radius: {r["radius_lg"]}px;
             }}
-            QFrame#ReviewCard {{
-                background: #F8FBFF;
-                border: 1px solid #C8D6E5;
-                border-radius: 22px;
-            }}
+            QFrame#ReviewCard,
             QFrame#ControlCard {{
-                background: #F8FBFF;
-                border: 1px solid #C8D6E5;
-                border-radius: 22px;
+                background: {c["surface"]};
+                border: 1px solid {c["border"]};
+                border-radius: {r["sidebar_card_radius"]}px;
             }}
             QFrame#LogCard {{
-                background: #F8FBFF;
-                border: 1px solid #C8D6E5;
-                border-radius: 20px;
+                background: {c["surface"]};
+                border: 1px solid {c["border"]};
+                border-radius: {r["log_card_radius"]}px;
             }}
             QFrame#InputShell {{
                 background: transparent;
                 border: none;
             }}
             QPlainTextEdit#InputEdit {{
-                background: #FFFFFF;
-                color: #17314A;
-                border: 1px solid #BDD0E2;
-                border-radius: 18px;
-                padding: 16px;
+                background: {c["input_bg"]};
+                color: {c["text"]};
+                border: {r["input_edit_border_width"]}px solid {c["input_border"]};
+                border-radius: {r["input_edit_radius"]}px;
+                padding: {r["input_edit_padding"]}px;
                 selection-background-color: {c["blue"]};
             }}
             QPlainTextEdit#InputEdit:focus {{
-                border: 2px solid #1D7AF2;
-                background: #FFFFFF;
+                border: 2px solid {c["input_border_focus"]};
+                background: {c["input_bg"]};
             }}
             QPlainTextEdit#LogEdit {{
-                background: #FFFFFF;
-                color: #17314A;
-                border: 1px solid #BDD0E2;
-                border-radius: 18px;
-                padding: 14px;
+                background: {c["surface"]};
+                color: {c["text"]};
+                border: 1px solid {c["border"]};
+                border-radius: {r["log_edit_radius"]}px;
+                padding: {r["log_edit_padding"]}px;
                 selection-background-color: {c["blue"]};
             }}
             QPushButton#PrimaryButton {{
-                background: #D97706;
+                background: {c["orange"]};
                 color: white;
-                border: 1px solid #B85F04;
-                border-radius: 16px;
-                padding: 12px 18px;
+                border: 1px solid {c["orange_deep"]};
+                border-radius: {r["radius_md"]}px;
+                padding: 12px 20px;
                 font-weight: 700;
             }}
             QPushButton#PrimaryButton:hover {{
-                background: #C56C05;
+                background: {c["orange_deep"]};
             }}
             QPushButton#PrimaryButton:pressed {{
-                background: #B45E04;
+                background: #C2410C;
             }}
             QPushButton#PrimaryButton:disabled {{
-                background: #F1F5F9;
-                color: #94A3B8;
-                border: 1px solid #ADC0D8;
+                background: {c["neutral_bg"]};
+                color: {c["neutral_text"]};
+                border: 1px solid {c["neutral_border"]};
             }}
             QPushButton#PauseButton {{
-                background: #EEF5FF;
-                color: #0C3C8F;
-                border: 1px solid #B6CAE2;
-                border-radius: 16px;
-                padding: 12px 18px;
+                background: {c["surface_soft"]};
+                color: {c["blue_deep"]};
+                border: 1px solid {c["border_strong"]};
+                border-radius: {r["radius_md"]}px;
+                padding: 12px 20px;
                 font-weight: 700;
             }}
             QPushButton#PauseButton:hover {{
-                background: #E1ECFB;
+                background: {c["blue_tint"]};
             }}
             QPushButton#PauseButton:pressed {{
-                background: #D6E5F8;
+                background: {c["blue_soft"]};
             }}
             QPushButton#PauseButton:disabled {{
-                background: #F1F5F9;
-                color: #94A3B8;
-                border: 1px solid #ADC0D8;
+                background: {c["neutral_bg"]};
+                color: {c["neutral_text"]};
+                border: 1px solid {c["neutral_border"]};
             }}
             QLabel#HeroTitle {{
-                color: #10243B;
+                color: {c["heading"]};
             }}
             QLabel#HeroSubtitle {{
-                color: #597089;
+                color: {c["muted"]};
             }}
-            QLabel#SectionTitle {{
-                color: #10243B;
-            }}
+            QLabel#SectionTitle,
             QLabel#ControlTitle {{
-                color: #10243B;
+                color: {c["heading"]};
             }}
             QLabel#ControlDesc {{
-                color: #597089;
+                color: {c["muted"]};
             }}
             QLabel#MetricChip {{
-                background: rgba(148, 163, 184, 0.12);
-                color: #E2E8F0;
-                border: 1px solid #334155;
-                border-radius: 11px;
+                background: {c["blue_soft"]};
+                color: {c["blue_deep"]};
+                border: 1px solid {c["blue_tint"]};
+                border-radius: {r["count_badge_radius"]}px;
                 padding: 6px 10px;
             }}
             QLabel#StatusBadge {{
-                border-radius: 12px;
+                border-radius: {r["badge_radius"]}px;
                 padding: 7px 12px;
                 font-weight: 700;
             }}
             QLabel#LogTitle {{
-                color: #10243B;
+                color: {c["heading"]};
             }}
             QLabel#LogHint {{
-                color: #597089;
+                color: {c["muted"]};
             }}
             QLabel#ConfigPath {{
-                color: #4F6680;
-                background: #FFFFFF;
-                border: 1px solid #D3DFEB;
-                border-radius: 14px;
+                color: {c["muted"]};
+                background: {c["surface"]};
+                border: 1px solid {c["border"]};
+                border-radius: {r["radius_md"]}px;
                 padding: 12px 14px;
             }}
             QPushButton#SecondaryButton {{
-                background: #EEF5FF;
-                color: #0C3C8F;
-                border: 1px solid #B6CAE2;
-                border-radius: 14px;
-                padding: 10px 14px;
+                background: {c["blue_soft"]};
+                color: {c["blue_deep"]};
+                border: 1px solid {c["blue_tint"]};
+                border-radius: {r["radius_md"]}px;
+                padding: 10px 16px;
                 font-weight: 700;
             }}
             QPushButton#SecondaryButton:hover {{
-                background: #E1ECFB;
-                border-color: #A5BDD8;
+                background: {c["blue_tint"]};
+                border-color: {c["border_strong"]};
             }}
             QPushButton#SecondaryButton:pressed {{
-                background: #D6E5F8;
+                background: {c["blue_soft"]};
             }}
             QScrollArea {{
                 border: none;
                 background: transparent;
             }}
             QScrollBar:vertical {{
-                background: #D8E2EE;
+                background: {c["border"]};
                 width: 12px;
                 margin: 8px 4px 8px 0;
-                border-radius: 6px;
+                border-radius: {r["radius_sm"]}px;
             }}
             QScrollBar::handle:vertical {{
-                background: #8EA5C1;
+                background: {c["border_strong"]};
                 min-height: 36px;
-                border-radius: 6px;
+                border-radius: {r["radius_sm"]}px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: #738FB2;
+                background: {c["muted_soft"]};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
@@ -377,8 +332,13 @@ class MainWindow(QWidget):
         self.scroll_area.setWidget(self.page_widget)
 
         self.page_layout = QVBoxLayout(self.page_widget)
-        self.page_layout.setContentsMargins(24, 22, 24, 22)
-        self.page_layout.setSpacing(22)
+        self.page_layout.setContentsMargins(
+            DESIGN_SIZES["page_margin_x"],
+            DESIGN_SIZES["page_margin_y"],
+            DESIGN_SIZES["page_margin_x"],
+            DESIGN_SIZES["page_margin_y"],
+        )
+        self.page_layout.setSpacing(DESIGN_SIZES["page_spacing"])
         self.page_layout.setAlignment(Qt.AlignTop)
 
     def _build_header_card(self):
@@ -391,8 +351,13 @@ class MainWindow(QWidget):
         header_body = QWidget()
         header_body.setObjectName("HeaderBody")
         header_box = QHBoxLayout(header_body)
-        header_box.setContentsMargins(22, 14, 22, 14)
-        header_box.setSpacing(14)
+        header_box.setContentsMargins(
+            DESIGN_SIZES["hero_padding_x"],
+            DESIGN_SIZES["hero_padding_y"],
+            DESIGN_SIZES["hero_padding_x"],
+            DESIGN_SIZES["hero_padding_y"],
+        )
+        header_box.setSpacing(DESIGN_SIZES["badge_gap"])
 
         title_wrap = QWidget()
         title_wrap.setObjectName("TitleWrap")
@@ -402,7 +367,7 @@ class MainWindow(QWidget):
 
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
-        title_label.setFont(build_font(22, bold=True))
+        title_label.setFont(build_font(DESIGN_SIZES["hero_title_font_size"], bold=True))
         self.hero_title_label = title_label
         title_box.addWidget(title_label)
 
@@ -411,7 +376,7 @@ class MainWindow(QWidget):
         )
         self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(True)
-        self.title_description_label.setFont(build_font(12))
+        self.title_description_label.setFont(build_font(DESIGN_SIZES["hero_subtitle_font_size"]))
         title_box.addWidget(self.title_description_label)
 
         header_box.addWidget(title_wrap, 1)
@@ -430,13 +395,14 @@ class MainWindow(QWidget):
 
         self.author_badge = QLabel(f"微信：{AUTHOR_WECHAT}")
         self.author_badge.setAlignment(Qt.AlignCenter)
-        self.author_badge.setFont(build_font(12, bold=True))
+        self.author_badge.setFont(build_font(DESIGN_SIZES["hero_subtitle_font_size"], bold=True))
+        self.author_badge.setFixedSize(DESIGN_SIZES["badge_min_width"], DESIGN_SIZES["badge_height"])
         self.author_badge.setStyleSheet(
-            "background: #EAF3FF;"
-            "color: #0C3C8F;"
-            "border: 1px solid #BED0E6;"
-            "border-radius: 14px;"
-            "padding: 10px 14px;"
+            f"background: {APP_COLORS['blue_soft']};"
+            f"color: {APP_COLORS['blue_deep']};"
+            f"border: 1px solid {APP_COLORS['blue_tint']};"
+            f"border-radius: {DESIGN_SIZES['badge_radius']}px;"
+            f"padding: {DESIGN_SIZES['badge_padding_y']}px {DESIGN_SIZES['badge_padding_x']}px;"
         )
         self.author_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_layout.addWidget(self.author_badge, 0, Qt.AlignVCenter)
@@ -447,16 +413,17 @@ class MainWindow(QWidget):
         self.tutorial_badge.setTextInteractionFlags(Qt.TextBrowserInteraction)
         self.tutorial_badge.setOpenExternalLinks(True)
         self.tutorial_badge.setCursor(Qt.PointingHandCursor)
-        self.tutorial_badge.setFont(build_font(12, bold=True))
+        self.tutorial_badge.setFont(build_font(DESIGN_SIZES["hero_subtitle_font_size"], bold=True))
+        self.tutorial_badge.setFixedSize(DESIGN_SIZES["badge_min_width"], DESIGN_SIZES["badge_height"])
         self.tutorial_badge.setText(
             f'<a href="{TUTORIAL_URL}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
         )
         self.tutorial_badge.setStyleSheet(
-            "background: #F4F7FB;"
-            "color: #0C3C8F;"
-            "border: 1px solid #C8D4E2;"
-            "border-radius: 14px;"
-            "padding: 10px 14px;"
+            f"background: {APP_COLORS['surface_soft']};"
+            f"color: {APP_COLORS['blue_deep']};"
+            f"border: 1px solid {APP_COLORS['border']};"
+            f"border-radius: {DESIGN_SIZES['badge_radius']}px;"
+            f"padding: {DESIGN_SIZES['badge_padding_y']}px {DESIGN_SIZES['badge_padding_x']}px;"
         )
         self.tutorial_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_layout.addWidget(self.tutorial_badge, 0, Qt.AlignVCenter)
@@ -474,8 +441,13 @@ class MainWindow(QWidget):
         self.review_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         card_layout = QVBoxLayout(self.review_card)
-        card_layout.setContentsMargins(18, 16, 18, 16)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(
+            DESIGN_SIZES["sidebar_card_padding_x"],
+            DESIGN_SIZES["card_header_top_padding"],
+            DESIGN_SIZES["sidebar_card_padding_x"],
+            DESIGN_SIZES["sidebar_card_padding_y"],
+        )
+        card_layout.setSpacing(DESIGN_SIZES["sidebar_card_gap"])
 
         self.review_title_label = QLabel("一键获取中差评 / 品退订单")
         self.review_title_label.setObjectName("ReviewTitle")
@@ -510,20 +482,20 @@ class MainWindow(QWidget):
         self.review_days_spin.setRange(1, 90)
         self.review_days_spin.setValue(DEFAULT_REVIEW_DAYS)
         self.review_days_spin.setSuffix(" 天")
-        self.review_days_spin.setFixedWidth(110)
-        self.review_days_spin.setFixedHeight(38)
+        self.review_days_spin.setFixedWidth(100)
+        self.review_days_spin.setFixedHeight(40)
         self.review_days_spin.setStyleSheet(
             f"""QSpinBox {{
-                background: #FFFFFF;
+                background: {APP_COLORS['surface']};
                 color: {c['text']};
-                border: 1px solid #B6CAE2;
-                border-radius: 12px;
-                padding: 4px 8px;
+                border: 1px solid {APP_COLORS['border']};
+                border-radius: {DESIGN_SIZES['radius_md']}px;
+                padding: 6px 10px;
                 font-size: 13px;
                 font-weight: 600;
             }}
             QSpinBox::up-button, QSpinBox::down-button {{
-                width: 18px;
+                width: 20px;
             }}"""
         )
         days_row_layout.addWidget(self.review_days_spin, 0, Qt.AlignVCenter)
@@ -539,27 +511,27 @@ class MainWindow(QWidget):
         self.review_find_button.setObjectName("ReviewButton")
         self.review_find_button.setCursor(Qt.PointingHandCursor)
         self.review_find_button.setFont(build_font(14, bold=True))
-        self.review_find_button.setFixedHeight(SIDEBAR_BUTTON_HEIGHT["design"])
+        self.review_find_button.setFixedHeight(DESIGN_SIZES["sidebar_button_height"])
         self.review_find_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.review_find_button.setStyleSheet(
             f"""QPushButton#ReviewButton {{
-                background: #2563EB;
+                background: {APP_COLORS['blue']};
                 color: white;
-                border: 1px solid #1D4ED8;
-                border-radius: 14px;
+                border: 1px solid {APP_COLORS['blue_deep']};
+                border-radius: {DESIGN_SIZES['radius_md']}px;
                 padding: 10px 18px;
                 font-weight: 700;
             }}
             QPushButton#ReviewButton:hover {{
-                background: #1D4ED8;
+                background: {APP_COLORS['blue_deep']};
             }}
             QPushButton#ReviewButton:pressed {{
-                background: #1E40AF;
+                background: #065F46;
             }}
             QPushButton#ReviewButton:disabled {{
-                background: #E2E8F0;
-                color: #94A3B8;
-                border: 1px solid #CBD5E1;
+                background: {APP_COLORS['neutral_bg']};
+                color: {APP_COLORS['neutral_text']};
+                border: 1px solid {APP_COLORS['neutral_border']};
             }}"""
         )
         self.review_find_button.clicked.connect(self.on_review_find_clicked)
@@ -569,7 +541,7 @@ class MainWindow(QWidget):
         self.quality_refund_button.setObjectName("ReviewButton")
         self.quality_refund_button.setCursor(Qt.PointingHandCursor)
         self.quality_refund_button.setFont(build_font(14, bold=True))
-        self.quality_refund_button.setFixedHeight(SIDEBAR_BUTTON_HEIGHT["design"])
+        self.quality_refund_button.setFixedHeight(DESIGN_SIZES["sidebar_button_height"])
         self.quality_refund_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.quality_refund_button.setStyleSheet(self.review_find_button.styleSheet())
         self.quality_refund_button.clicked.connect(self.on_quality_refund_clicked)
@@ -585,7 +557,7 @@ class MainWindow(QWidget):
         self.input_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.input_layout = QBoxLayout(QBoxLayout.LeftToRight, self.input_container)
         self.input_layout.setContentsMargins(0, 0, 0, 0)
-        self.input_layout.setSpacing(16)
+        self.input_layout.setSpacing(DESIGN_SIZES["column_gap"])
 
         self.order_count_badge = self._create_count_badge(
             text_color=APP_COLORS["blue"],
@@ -624,7 +596,7 @@ class MainWindow(QWidget):
         self.top_input_pair_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.top_input_pair_layout = QHBoxLayout(self.top_input_pair_panel)
         self.top_input_pair_layout.setContentsMargins(0, 0, 0, 0)
-        self.top_input_pair_layout.setSpacing(16)
+        self.top_input_pair_layout.setSpacing(DESIGN_SIZES["input_pair_gap"])
         self.top_input_pair_layout.addWidget(self.order_card, TOP_INPUT_PAIR_STRETCH["order"])
         self.top_input_pair_layout.addWidget(
             self.tracking_card,
@@ -641,8 +613,13 @@ class MainWindow(QWidget):
         self.action_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         card_layout = QVBoxLayout(self.action_card)
-        card_layout.setContentsMargins(18, 16, 18, 16)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(
+            DESIGN_SIZES["sidebar_card_padding_x"],
+            DESIGN_SIZES["card_header_top_padding"],
+            DESIGN_SIZES["sidebar_card_padding_x"],
+            DESIGN_SIZES["sidebar_card_padding_y"],
+        )
+        card_layout.setSpacing(DESIGN_SIZES["sidebar_card_gap"])
 
         self.action_title_label = QLabel("第四步：执行批量处理")
         self.action_title_label.setObjectName("ControlTitle")
@@ -654,13 +631,13 @@ class MainWindow(QWidget):
         self.action_row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.action_layout = QVBoxLayout(self.action_row)
         self.action_layout.setContentsMargins(0, 0, 0, 0)
-        self.action_layout.setSpacing(10)
+        self.action_layout.setSpacing(6)
 
         self.start_button = QPushButton("开始批量处理")
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.setCursor(Qt.PointingHandCursor)
         self.start_button.setFont(build_font(16, bold=True))
-        self.start_button.setFixedHeight(SIDEBAR_BUTTON_HEIGHT["design"])
+        self.start_button.setFixedHeight(DESIGN_SIZES["sidebar_button_height"])
         self.start_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.start_button.clicked.connect(self.on_start_clicked)
         self.action_layout.addWidget(self.start_button)
@@ -669,7 +646,7 @@ class MainWindow(QWidget):
         self.pause_button.setObjectName("PauseButton")
         self.pause_button.setCursor(Qt.PointingHandCursor)
         self.pause_button.setFont(build_font(15, bold=True))
-        self.pause_button.setFixedHeight(SIDEBAR_BUTTON_HEIGHT["design"])
+        self.pause_button.setFixedHeight(DESIGN_SIZES["sidebar_button_height"])
         self.pause_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.pause_button.clicked.connect(self.on_pause_clicked)
         self.action_layout.addWidget(self.pause_button)
@@ -682,21 +659,21 @@ class MainWindow(QWidget):
         self.workspace_layout = QVBoxLayout(self.workspace_panel)
         self.workspace_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.workspace_layout.setContentsMargins(0, 0, 0, 0)
-        self.workspace_layout.setSpacing(16)
+        self.workspace_layout.setSpacing(DESIGN_SIZES["workspace_gap"])
 
         self.bottom_panel = QWidget()
         self.bottom_panel.setObjectName("PrimaryColumn")
         self.bottom_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.bottom_panel_layout = QHBoxLayout(self.bottom_panel)
         self.bottom_panel_layout.setContentsMargins(0, 0, 0, 0)
-        self.bottom_panel_layout.setSpacing(18)
+        self.bottom_panel_layout.setSpacing(DESIGN_SIZES["column_gap"])
 
         self.sidebar_panel = QWidget()
         self.sidebar_panel.setObjectName("SidebarColumn")
         self.sidebar_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.sidebar_layout = QVBoxLayout(self.sidebar_panel)
         self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        self.sidebar_layout.setSpacing(16)
+        self.sidebar_layout.setSpacing(DESIGN_SIZES["workspace_gap"])
 
         self.config_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.review_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
@@ -731,8 +708,13 @@ class MainWindow(QWidget):
         log_body = QWidget()
         log_body.setObjectName("LogBody")
         log_box = QVBoxLayout(log_body)
-        log_box.setContentsMargins(16, 14, 16, 14)
-        log_box.setSpacing(10)
+        log_box.setContentsMargins(
+            DESIGN_SIZES["log_card_padding_x"],
+            DESIGN_SIZES["card_header_top_padding"],
+            DESIGN_SIZES["log_card_padding_x"],
+            DESIGN_SIZES["log_card_padding_y"],
+        )
+        log_box.setSpacing(DESIGN_SIZES["sidebar_card_gap"])
 
         log_header = QWidget()
         log_header.setObjectName("LogHeader")
@@ -742,14 +724,14 @@ class MainWindow(QWidget):
 
         log_title = QLabel("执行日志")
         log_title.setObjectName("LogTitle")
-        log_title.setFont(build_font(15, bold=True))
+        log_title.setFont(build_font(DESIGN_SIZES["log_title_font_size"], bold=True))
         self.log_title_label = log_title
         log_header_box.addWidget(log_title)
 
         self.log_hint_label = QLabel("（最近执行记录会按时间顺序滚动显示）")
         self.log_hint_label.setObjectName("LogHint")
         self.log_hint_label.setWordWrap(False)
-        self.log_hint_label.setFont(build_font(10))
+        self.log_hint_label.setFont(build_font(DESIGN_SIZES["log_hint_font_size"]))
         self.log_hint_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         log_header_box.addWidget(self.log_hint_label, 0)
         log_header_box.addStretch(1)
@@ -760,7 +742,7 @@ class MainWindow(QWidget):
         self.log_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.log_view.setReadOnly(True)
         self.log_view.setFont(build_fixed_font(11))
-        self.log_view.setMinimumHeight(LOG_PANEL_MIN_HEIGHT["design"])
+        self.log_view.setMinimumHeight(DESIGN_SIZES["log_panel_min_height"])
         log_box.addWidget(self.log_view, 1)
 
         log_layout.addWidget(log_body)
@@ -780,18 +762,19 @@ class MainWindow(QWidget):
         return card
 
     def _create_count_badge(self, text_color, bg_color, border_color):
-        """创建输入数量徽标。"""
+        """创建输入数量徽标（尺寸见 DESIGN_SIZES count_badge_*）。"""
         badge = QLabel()
         badge.setAlignment(Qt.AlignCenter)
-        badge.setMinimumWidth(60)
-        badge.setFont(build_font(10, bold=True))
+        badge.setMinimumWidth(DESIGN_SIZES["count_badge_min_width"])
+        badge.setFixedHeight(DESIGN_SIZES["count_badge_height"])
+        badge.setFont(build_font(DESIGN_SIZES["count_badge_font_size"], bold=True))
         badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge.setStyleSheet(
             f"background: {bg_color};"
             f"color: {text_color};"
             f"border: 1px solid {border_color};"
-            "border-radius: 8px;"
-            "padding: 4px 8px;"
+            f"border-radius: {DESIGN_SIZES['count_badge_radius']}px;"
+            "padding: 4px 10px;"
         )
         return badge
 
@@ -807,12 +790,18 @@ class MainWindow(QWidget):
         body = QWidget()
         body.setObjectName("InputCardBody")
         body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(16, 14, 16, 14)
-        body_layout.setSpacing(10)
+        body_layout.setContentsMargins(
+            DESIGN_SIZES["input_card_padding_x"],
+            DESIGN_SIZES["card_header_top_padding"],
+            DESIGN_SIZES["input_card_padding_x"],
+            DESIGN_SIZES["input_card_padding_y"],
+        )
+        body_layout.setSpacing(DESIGN_SIZES["input_card_header_gap"])
 
         header = QWidget()
         header.setObjectName("CardHeader")
-        header.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        header.setFixedHeight(DESIGN_SIZES["badge_height"])
+        header.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(10)
@@ -835,13 +824,15 @@ class MainWindow(QWidget):
         """创建配置目录卡片。"""
         badge_placeholder = QLabel("未配置")
         badge_placeholder.setAlignment(Qt.AlignCenter)
-        badge_placeholder.setMinimumWidth(72)
+        badge_placeholder.setMinimumWidth(DESIGN_SIZES["count_badge_min_width"])
+        badge_placeholder.setFixedHeight(DESIGN_SIZES["count_badge_height"])
         badge_placeholder.setObjectName("StatusBadge")
         badge_placeholder.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         badge_placeholder.setStyleSheet(
-            "background: #FEE2E2;"
-            "color: #B91C1C;"
+            f"background: {APP_COLORS['red_soft']};"
+            f"color: {APP_COLORS['red']};"
             "border: 1px solid #FCA5A5;"
+            f"border-radius: {DESIGN_SIZES['count_badge_radius']}px;"
         )
         self.config_badge = badge_placeholder
 
@@ -862,7 +853,7 @@ class MainWindow(QWidget):
         button = QPushButton("选择配置目录")
         button.setObjectName("SecondaryButton")
         button.setCursor(Qt.PointingHandCursor)
-        button.setFixedHeight(SIDEBAR_BUTTON_HEIGHT["design"])
+        button.setFixedHeight(DESIGN_SIZES["config_button_height"])
         button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         button.clicked.connect(self.choose_config_dir)
         shell_layout.addWidget(button)
@@ -890,25 +881,23 @@ class MainWindow(QWidget):
         return line_height * visible_lines + document_margin + frame + padding
 
     def _fit_window_to_screen(self):
-        """按屏幕缩放比例锁定固定窗口尺寸。"""
-        fixed_width, fixed_height = self._resolve_fixed_window_size()
-        self.setFixedSize(fixed_width, fixed_height)
+        """首次打开时确保窗口在屏幕内，不超出可用区域。"""
+        default_w, default_h = self._resolve_initial_window_size()
+        self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+        self.resize(default_w, default_h)
 
-    def _resolve_fixed_window_size(self):
-        """结合平台默认值与屏幕信息，计算最终窗口固定尺寸。"""
+    def _resolve_initial_window_size(self):
+        """结合平台默认值与屏幕可用区域，计算首次打开时的窗口尺寸（逻辑像素，可缩放）。"""
         default_width, default_height = get_platform_default_window_size()
         screen = self.screen() or QApplication.primaryScreen()
-        scale = max(1.0, screen.devicePixelRatio()) if screen is not None else 1.0
         available = screen.availableGeometry() if screen is not None else None
-        fixed_width = int(round(default_width / scale))
-        fixed_height = int(round(default_height / scale))
+        w, h = default_width, default_height
         if available is not None:
-            # 限制不超过可用屏幕面积的 92%，避免小屏笔记本上窗口贴满边缘
             max_w = int(available.width() * 0.92)
             max_h = int(available.height() * 0.92)
-            fixed_width = min(fixed_width, max_w)
-            fixed_height = min(fixed_height, max_h)
-        return fixed_width, fixed_height
+            w = min(w, max_w)
+            h = min(h, max_h)
+        return w, h
 
     @staticmethod
     def _scaled(design, minimum, scale):
@@ -961,8 +950,8 @@ class MainWindow(QWidget):
         sc = self._scaled
         # -- 字体：(widget, design_size, min_size, bold, fixed) --
         _font_rules = [
-            (self.hero_title_label,           22, 18, True,  False),
-            (self.title_description_label,    12, 10, False, False),
+            (self.hero_title_label,           DESIGN_SIZES["hero_title_font_size"], 18, True,  False),
+            (self.title_description_label,    DESIGN_SIZES["hero_subtitle_font_size"], 10, False, False),
             (self.license_status_badge,       11, 10, True,  False),
             (self.author_badge,               12, 11, True,  False),
             (self.tutorial_badge,             12, 11, True,  False),
@@ -979,7 +968,7 @@ class MainWindow(QWidget):
             (self.config_path_label,          13, 11, False, False),
             (self.config_button,              11, 10, True,  False),
             (self.action_title_label,         16, 14, True,  False),
-            (self.log_title_label,            15, 13, True,  False),
+            (self.log_title_label,             DESIGN_SIZES["log_title_font_size"], 13, True,  False),
             (self.log_hint_label,             10,  9, False, False),
             (self.start_button,               16, 13, True,  False),
             (self.pause_button,               15, 12, True,  False),
@@ -991,25 +980,25 @@ class MainWindow(QWidget):
             size = sc(design, minimum, s)
             widget.setFont(build_fixed_font(size) if fixed else build_font(size, bold=bold))
 
-        # -- 尺寸 --
-        badge_h = sc(30, 26, s)
-        author_h = sc(50, 44, s)
-        author_w = sc(170, 150, s)
+        # -- 尺寸（设计值来自 DESIGN_SIZES）--
+        badge_h = sc(DESIGN_SIZES["count_badge_height"], 26, s)
+        author_h = sc(DESIGN_SIZES["badge_height"], 44, s)
+        author_w = sc(DESIGN_SIZES["badge_min_width"] + 82, 150, s)
         sidebar_button_h = sc(
-            SIDEBAR_BUTTON_HEIGHT["design"],
-            SIDEBAR_BUTTON_HEIGHT["minimum"],
+            DESIGN_SIZES["sidebar_button_height"],
+            max(44, int(DESIGN_SIZES["sidebar_button_height"] * 0.88)),
             s,
         )
-        header_h = sc(124, 104, s)
+        header_h = sc(DESIGN_SIZES["hero_card_height"] + 24, 104, s)
         log_h = sc(
-            LOG_PANEL_MIN_HEIGHT["design"],
-            LOG_PANEL_MIN_HEIGHT["minimum"],
+            DESIGN_SIZES["log_panel_min_height"],
+            max(200, int(DESIGN_SIZES["log_panel_min_height"] * 0.75)),
             s,
         )
         input_lines = (
-            INPUT_PANE_VISIBLE_LINES["design"]
+            DESIGN_SIZES["input_visible_lines"]
             if s >= 0.9
-            else INPUT_PANE_VISIBLE_LINES["minimum"]
+            else max(9, DESIGN_SIZES["input_visible_lines"] - 2)
         )
         input_h = self._calculate_editor_height(self.order_edit, input_lines)
 
@@ -1017,7 +1006,7 @@ class MainWindow(QWidget):
         self.tutorial_badge.setFixedSize(author_w, author_h)
         for badge in (self.order_count_badge, self.tracking_count_badge, self.config_badge):
             badge.setFixedHeight(badge_h)
-        self.license_status_badge.setFixedHeight(sc(34, 30, s))
+        self.license_status_badge.setFixedHeight(sc(DESIGN_SIZES["badge_height"], 30, s))
         self.review_find_button.setFixedHeight(sidebar_button_h)
         self.quality_refund_button.setFixedHeight(sidebar_button_h)
         self.review_days_spin.setFixedHeight(sc(40, 36, s))
@@ -1029,21 +1018,23 @@ class MainWindow(QWidget):
         self.tracking_edit.setFixedHeight(input_h)
         self.log_view.setMinimumHeight(log_h)
         self.config_button.setFixedHeight(sidebar_button_h)
-        self.config_path_label.setMinimumHeight(sc(136, 110, s))
+        self.config_path_label.setMinimumHeight(
+            sc(DESIGN_SIZES["config_path_min_height"], 90, s)
+        )
 
-        page_margin_x = sc(24, 14, s)
-        page_margin_y = sc(22, 12, s)
-        page_spacing = sc(22, 12, s)
-        workspace_gap = sc(16, 12, s)
-        shared_column_gap = sc(18, 12, s)
-        input_pair_gap = sc(16, 10, s)
+        page_margin_x = sc(DESIGN_SIZES["page_margin_x"], 14, s)
+        page_margin_y = sc(DESIGN_SIZES["page_margin_y"], 12, s)
+        page_spacing = sc(DESIGN_SIZES["page_spacing"], 12, s)
+        workspace_gap = sc(DESIGN_SIZES["workspace_gap"], 12, s)
+        shared_column_gap = sc(DESIGN_SIZES["column_gap"], 12, s)
+        input_pair_gap = sc(DESIGN_SIZES["input_pair_gap"], 10, s)
         available_content_width = max(0, viewport.width() - page_margin_x * 2)
         sidebar_ratio = (
             BOTTOM_PANEL_STRETCH["left_column"]
             / (BOTTOM_PANEL_STRETCH["left_column"] + BOTTOM_PANEL_STRETCH["right_column"])
         )
         sidebar_target_width = max(
-            sc(320, 280, s),
+            sc(DESIGN_SIZES["sidebar_width"], 280, s),
             int(round(max(0, available_content_width - shared_column_gap) * sidebar_ratio)),
         )
 
@@ -1055,12 +1046,12 @@ class MainWindow(QWidget):
         self.top_input_pair_layout.setSpacing(input_pair_gap)
         self.bottom_panel_layout.setSpacing(shared_column_gap)
         self.sidebar_layout.setSpacing(workspace_gap)
-        self.action_layout.setSpacing(sc(10, 8, s))
+        self.action_layout.setSpacing(sc(6, 4, s))
 
         minimum_top_height = max(
             sc(
-                WORKSPACE_PANEL_MIN_HEIGHT["top"]["design"],
-                WORKSPACE_PANEL_MIN_HEIGHT["top"]["minimum"],
+                DESIGN_SIZES["workspace_top_min_height"],
+                int(DESIGN_SIZES["workspace_top_min_height"] * 0.85),
                 s,
             ),
             self.config_card.sizeHint().height(),
@@ -1068,8 +1059,8 @@ class MainWindow(QWidget):
             self.tracking_card.sizeHint().height(),
         )
         minimum_bottom_height = sc(
-            WORKSPACE_PANEL_MIN_HEIGHT["bottom"]["design"],
-            WORKSPACE_PANEL_MIN_HEIGHT["bottom"]["minimum"],
+            DESIGN_SIZES["workspace_bottom_min_height"],
+            int(DESIGN_SIZES["workspace_bottom_min_height"] * 0.82),
             s,
         )
         minimum_workspace_height = minimum_top_height + minimum_bottom_height + workspace_gap
@@ -1381,9 +1372,9 @@ class MainWindow(QWidget):
             )
             badge_text = "已连接"
             badge_style = (
-                "background: #DCFCE7;"
-                "color: #166534;"
-                "border: 1px solid #86EFAC;"
+                f"background: {APP_COLORS['green_soft']};"
+                f"color: {APP_COLORS['green']};"
+                f"border: 1px solid {APP_COLORS['border_strong']};"
             )
         elif saved_dir:
             text = (
@@ -1404,8 +1395,8 @@ class MainWindow(QWidget):
             )
             badge_text = "未配置"
             badge_style = (
-                "background: #FEE2E2;"
-                "color: #B91C1C;"
+                f"background: {APP_COLORS['red_soft']};"
+                f"color: {APP_COLORS['red']};"
                 "border: 1px solid #FCA5A5;"
             )
         self.config_path_label.setText(text)
@@ -1489,14 +1480,14 @@ class MainWindow(QWidget):
             self.license_status_badge.setText(status)
             if reason == "ok":
                 self.license_status_badge.setStyleSheet(
-                    "background: #DCFCE7;"
-                    "color: #166534;"
-                    "border: 1px solid #86EFAC;"
+                    f"background: {APP_COLORS['green_soft']};"
+                    f"color: {APP_COLORS['green']};"
+                    f"border: 1px solid {APP_COLORS['border_strong']};"
                 )
             else:
                 self.license_status_badge.setStyleSheet(
-                    "background: #FEE2E2;"
-                    "color: #B91C1C;"
+                    f"background: {APP_COLORS['red_soft']};"
+                    f"color: {APP_COLORS['red']};"
                     "border: 1px solid #FCA5A5;"
                 )
 
