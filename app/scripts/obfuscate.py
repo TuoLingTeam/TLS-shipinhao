@@ -20,6 +20,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import Iterable
 
 # =========================
 # 路径常量
@@ -102,23 +103,54 @@ def ensure_cython() -> None:
         )
 
 
+def collect_python_sources() -> list[Path]:
+    """按稳定顺序收集 src/ 下需要编译的 Python 文件。"""
+    return sorted(
+        path
+        for path in SRC_DIR.glob("*.py")
+        if path.name != "__init__.py"
+    )
+
+
+def module_name_from_path(path: Path) -> str:
+    """从源文件路径提取模块名。"""
+    return path.stem
+
+
+def verify_compiled_modules(module_names: Iterable[str]) -> None:
+    """校验每个源模块都已生成对应的二进制扩展。"""
+    module_names = list(module_names)
+    compiled_dir = DIST_SRC / "src"
+    missing_modules: list[str] = []
+
+    for module_name in module_names:
+        candidates = list(compiled_dir.glob(f"{module_name}.*"))
+        if not any(candidate.suffix.lower() in {".so", ".pyd"} for candidate in candidates):
+            missing_modules.append(module_name)
+
+    if missing_modules:
+        raise RuntimeError(
+            "以下模块未生成二进制扩展: " + ", ".join(missing_modules)
+        )
+
+    print(f"Verified compiled modules: {len(module_names)}")
+
+
 def compile_with_cython() -> None:
     """使用 Cython 将 src/ 下所有 .py 编译为 .so/.pyd。"""
     ensure_cython()
     python_bin = _project_python()
 
-    # 收集需要编译的 .py 文件（排除 __init__.py，保留为纯 .py 以确保包可导入）
-    py_files = [
-        f"src/{f}" for f in os.listdir(SRC_DIR)
-        if f.endswith(".py") and f != "__init__.py"
-    ]
-    if not py_files:
+    source_files = collect_python_sources()
+    if not source_files:
         print("No .py files found for compilation")
         return
+    py_files = [f"src/{path.name}" for path in source_files]
+    module_names = [module_name_from_path(path) for path in source_files]
 
     print(f"Files to compile: {len(py_files)}")
-    for f in py_files:
-        print(f"  {f}")
+    for module_name, source_file in zip(module_names, py_files):
+        print(f"  {source_file} -> src.{module_name}")
 
     # Generate temporary setup.py
     setup_content = textwrap.dedent(f"""\
@@ -175,6 +207,7 @@ def compile_with_cython() -> None:
     
     # 修复 Cython 编译后的导入问题
     fix_cython_imports()
+    verify_compiled_modules(module_names)
 
 
 # =========================

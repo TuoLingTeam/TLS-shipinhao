@@ -79,10 +79,13 @@ HIDDEN_IMPORTS = [
 # Cython 编译后的模块（使用混淆源时需要）
 CYTHON_MODULES = [
     "src.api",
-    "src.app", 
+    "src.app",
     "src.config",
     "src.constants",
+    "src.cookie_browser",
     "src.license",
+    "src.review_matcher",
+    "src.review_worker",
     "src.widgets",
     "src.window",
     "src.worker",
@@ -90,11 +93,20 @@ CYTHON_MODULES = [
 
 # Cython 模块依赖的标准库（使用混淆源时需要）
 CYTHON_STDLIB_DEPS = [
+    "concurrent.futures",
+    "datetime",
+    "functools",
     "hmac",
     "hashlib",
     "json",
+    "logging",
+    "os",
+    "re",
     "threading",
     "requests",
+    "subprocess",
+    "time",
+    "typing",
 ]
 
 # 业务不使用的 Qt 模块，显式排除可显著减小体积。
@@ -343,7 +355,7 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
         
         # 使用混淆源时，需要显式声明所有 Cython 编译的模块及其标准库依赖
         if use_dist:
-            for module in CYTHON_MODULES:
+            for module in resolve_cython_modules():
                 cmd.extend(["--hidden-import", module])
             for module in CYTHON_STDLIB_DEPS:
                 cmd.extend(["--hidden-import", module])
@@ -356,6 +368,27 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
             cmd.append("--strip")
 
     return cmd
+
+
+def resolve_cython_modules() -> list[str]:
+    """解析混淆产物中的 Cython 模块列表。"""
+    dist_src_dir = APP_DIST / "src"
+    if not dist_src_dir.exists():
+        return list(CYTHON_MODULES)
+
+    modules: list[str] = []
+    seen: set[str] = set()
+    for artifact in sorted(dist_src_dir.iterdir()):
+        if artifact.suffix.lower() not in {".so", ".pyd"}:
+            continue
+        module_name = artifact.name.split(".", 1)[0]
+        hidden_import = f"src.{module_name}"
+        if hidden_import in seen:
+            continue
+        seen.add(hidden_import)
+        modules.append(hidden_import)
+
+    return modules or list(CYTHON_MODULES)
 
 
 # =========================
