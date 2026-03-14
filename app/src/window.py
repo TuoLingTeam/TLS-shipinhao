@@ -36,11 +36,6 @@ from .config import (
     save_cookie_data,
     save_user_config_dir,
 )
-from .cookie_browser import (
-    CookieCaptureDialog,
-    QTWEBENGINE_AVAILABLE,
-    QTWEBENGINE_IMPORT_ERROR,
-)
 from .constants import (
     APP_COLORS,
     AUTHOR_WECHAT,
@@ -1378,6 +1373,19 @@ class MainWindow(QWidget):
 
     def open_cookie_capture_dialog(self):
         """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
+        # 延迟导入 QtWebEngine 相关模块，避免启动时加载
+        try:
+            from .cookie_browser import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
+        except ImportError as exc:
+            self.show_message(
+                QMessageBox.Warning,
+                "当前环境缺少 QtWebEngine",
+                "暂时无法打开内置网页登录窗口。",
+                "请先安装支持 QtWebEngine 的 PySide6 组件后重试。\n"
+                f"错误详情：{exc}",
+            )
+            return
+
         if not QTWEBENGINE_AVAILABLE:
             self.show_message(
                 QMessageBox.Warning,

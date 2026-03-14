@@ -8,7 +8,8 @@ MAX_BATCH_SIZE = 100              # 批量处理最大订单数
 REQUEST_TIMEOUT = 30              # 网络请求超时时间（秒）
 
 # 窗口 & 品牌
-WINDOW_TITLE = "驼铃视频小店中差评处理"  # 窗口标题
+APP_VERSION = "3.0"                # 应用版本号（Mac 简介/Windows 属性及窗口标题）
+WINDOW_TITLE = f"驼铃视频小店中差评处理 {APP_VERSION}"  # 窗口标题
 AUTHOR_WECHAT = "TLS-801"         # 作者微信（用于授权联系）
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"  # 教程链接
 DEFAULT_WINDOW_WIDTH = 830        # 非 Windows 系统默认窗口宽度
