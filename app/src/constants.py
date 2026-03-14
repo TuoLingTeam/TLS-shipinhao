@@ -103,6 +103,7 @@ FONT_SIZES = {
 
 # 颜色方案
 APP_COLORS = {
+    "window_base": "#3A3D38",     # 主窗口最底层背景色（深灰绿）
     "bg": "#ECFDF5",              # 页面背景色（淡绿）
     "surface": "#FFFFFF",         # 卡片/表面背景色（白色）
     "surface_soft": "#F0FDF4",    # 柔和表面背景色（淡绿白）

@@ -123,14 +123,15 @@ class MainWindow(QWidget):
 
         self._sync_window_title_with_license(self._license_reason, self._license_info)
         self.setObjectName("AppRoot")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setMinimumSize(
             scale_px(MIN_WINDOW_WIDTH, min_value=640),
             scale_px(MIN_WINDOW_HEIGHT, min_value=560),
         )
         self.resize(default_w, default_h)
-        self.setStyleSheet(self._build_stylesheet())
 
         self._build_ui()
+        self.setStyleSheet(self._build_stylesheet())
         self.refresh_config_path_label()
         self._fit_window_to_screen()
         self.refresh_input_metrics()
@@ -156,8 +157,10 @@ class MainWindow(QWidget):
         scroll_side_margin = scale_px(4, min_value=2)
         scroll_handle_height = scale_px(36, min_value=20)
         return f"""
-            QWidget#AppRoot {{
-                background: {c["bg"]};
+            QWidget#AppRoot,
+            QWidget#ScrollViewport,
+            QWidget#PageWidget {{
+                background: {c["window_base"]};
             }}
             QWidget {{
                 color: {c["text"]};
@@ -375,10 +378,14 @@ class MainWindow(QWidget):
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll_area.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        viewport = self.scroll_area.viewport()
+        viewport.setObjectName("ScrollViewport")
+        viewport.setAttribute(Qt.WA_StyledBackground, True)
         root_layout.addWidget(self.scroll_area)
 
         self.page_widget = QWidget()
         self.page_widget.setObjectName("PageWidget")
+        self.page_widget.setAttribute(Qt.WA_StyledBackground, True)
         self.scroll_area.setWidget(self.page_widget)
 
         self.page_layout = QVBoxLayout(self.page_widget)
