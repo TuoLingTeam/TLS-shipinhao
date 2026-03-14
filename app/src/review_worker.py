@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QObject, Signal
 
-from .config import ConfigNotFoundError, get_cookie, get_magic
+from .config import ConfigNotFoundError, get_cookie, get_magic, serialize_cookie_data
 from .review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
 
 # 订单并发拉取线程数（降低并发数防 429 限流）
@@ -44,11 +44,6 @@ class ReviewMatcherWorker(QObject):
         self._stopped = True
 
     @staticmethod
-    def _serialize_cookie(cookie_data):
-        """将 cookie 字典还原为字符串。"""
-        return "; ".join(f"{k}={v}" for k, v in cookie_data.items())
-
-    @staticmethod
     def _filter_active_evaluations(raw_evaluations):
         """过滤系统自动评价，仅保留主动评价。"""
         return [
@@ -72,6 +67,23 @@ class ReviewMatcherWorker(QObject):
         self.error.emit(message)
         self.finished.emit(matched_count, total_count)
 
+    def _emit_empty_results(self, progress, message):
+        """输出空结果状态并同步结束信号。"""
+        progress(message)
+        self.results_ready.emit([])
+        self.order_ids_ready.emit([])
+        self.finished.emit(0, 0)
+
+    @staticmethod
+    def _collect_unique_order_ids(orders):
+        """从订单列表中提取去重后的 orderId。"""
+        order_ids = []
+        for order in orders:
+            order_id = order.get("commonInfo", {}).get("orderId")
+            if order_id and order_id not in order_ids:
+                order_ids.append(order_id)
+        return order_ids
+
     def _load_matcher_credentials(self):
         """读取配置并返回匹配所需凭据。"""
         try:
@@ -90,7 +102,7 @@ class ReviewMatcherWorker(QObject):
             self._emit_error_and_finish(f"提取 biz_magic 失败: {exc}")
             return None
 
-        return self._serialize_cookie(cookie_data), magic
+        return serialize_cookie_data(cookie_data), magic
 
     def _build_order_earliest_time(self):
         """计算订单抓取的时间窗口下限。"""
@@ -261,17 +273,10 @@ class ReviewMatcherWorker(QObject):
             return
 
         if not orders:
-            progress("未找到品质退款订单。")
-            self.results_ready.emit([])
-            self.order_ids_ready.emit([])
-            self.finished.emit(0, 0)
+            self._emit_empty_results(progress, "未找到品质退款订单。")
             return
 
-        order_ids = []
-        for order in orders:
-            order_id = order.get("commonInfo", {}).get("orderId")
-            if order_id and order_id not in order_ids:
-                order_ids.append(order_id)
+        order_ids = self._collect_unique_order_ids(orders)
 
         self._emit_quality_refund_summary(orders, order_ids, progress)
         self.results_ready.emit(orders)

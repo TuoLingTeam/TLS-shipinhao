@@ -1277,6 +1277,92 @@ class MainWindow(QWidget):
         dialog = self._build_message_dialog(level, title, text, informative_text)
         dialog.exec()
 
+    @staticmethod
+    def _shutdown_thread(thread, *, graceful_timeout=3000, terminate_timeout=1000):
+        """优雅停止后台线程，必要时强制终止。"""
+        if thread is None or not thread.isRunning():
+            return
+        thread.quit()
+        if not thread.wait(graceful_timeout):
+            thread.terminate()
+            thread.wait(terminate_timeout)
+
+    @staticmethod
+    def _resolve_config_status_content(saved_dir, resolved_dir):
+        """返回配置卡片展示文案和徽标状态。"""
+        if resolved_dir:
+            return (
+                resolved_dir,
+                "软件会使用这里的 cookie 文件进行自动化操作。",
+                "已连接",
+                (
+                    APP_COLORS["green_soft"],
+                    APP_COLORS["green"],
+                    APP_COLORS["border_strong"],
+                ),
+            )
+        if saved_dir:
+            return (
+                saved_dir,
+                "以上目录未找到 cookie.txt 文件，请重新获取。",
+                "待修复",
+                (
+                    APP_COLORS["neutral_bg"],
+                    APP_COLORS["muted"],
+                    APP_COLORS["neutral_border"],
+                ),
+            )
+        return (
+            "请点击下方按钮自动获取 cookie 文件。",
+            "自动获取时会自动保存 cookie.txt 文件。",
+            "未配置",
+            (
+                APP_COLORS["red_soft"],
+                APP_COLORS["red"],
+                APP_COLORS["red"],
+            ),
+        )
+
+    def _build_license_status_badge_style(self, is_active):
+        """根据授权状态构建徽标样式。"""
+        if is_active:
+            colors = (
+                APP_COLORS["green_soft"],
+                APP_COLORS["green"],
+                APP_COLORS["border_strong"],
+            )
+        else:
+            colors = (
+                APP_COLORS["red_soft"],
+                APP_COLORS["red"],
+                APP_COLORS["red"],
+            )
+        return self._build_badge_style(
+            *colors,
+            radius=scale_px(BADGE_RADIUS, min_value=10),
+            padding=self._scaled_padding(7, 12),
+        )
+
+    @staticmethod
+    def _activation_required_message(task_label):
+        """返回未激活时的统一提示文案。"""
+        return f"软件尚未激活，无法执行{task_label}。\n请先输入有效卡密完成激活。"
+
+    def _show_activation_required(self, task_label):
+        """显示未激活提示。"""
+        self.show_message(
+            QMessageBox.Warning,
+            "未激活",
+            self._activation_required_message(task_label),
+        )
+
+    def _bind_thread_lifecycle(self, thread, worker, clear_callback):
+        """绑定通用线程生命周期。"""
+        thread.started.connect(worker.run)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(clear_callback)
+
     # -----------------------------------------------------------------------
     # 按钮状态
     # -----------------------------------------------------------------------
@@ -1311,33 +1397,11 @@ class MainWindow(QWidget):
         except ConfigNotFoundError:
             resolved_dir = None
 
-        if resolved_dir:
-            path_text = resolved_dir
-            note_text = "软件会使用这里的 cookie 文件进行自动化操作。"
-            badge_text = "已连接"
-            badge_style = self._build_badge_style(
-                APP_COLORS["green_soft"],
-                APP_COLORS["green"],
-                APP_COLORS["border_strong"],
-            )
-        elif saved_dir:
-            path_text = saved_dir
-            note_text = "以上目录未找到 cookie.txt 文件，请重新获取。"
-            badge_text = "待修复"
-            badge_style = self._build_badge_style(
-                APP_COLORS["neutral_bg"],
-                APP_COLORS["muted"],
-                APP_COLORS["neutral_border"],
-            )
-        else:
-            path_text = "请点击下方按钮自动获取 cookie 文件。"
-            note_text = "自动获取时会自动保存 cookie.txt 文件。"
-            badge_text = "未配置"
-            badge_style = self._build_badge_style(
-                APP_COLORS["red_soft"],
-                APP_COLORS["red"],
-                APP_COLORS["red"],
-            )
+        path_text, note_text, badge_text, badge_colors = self._resolve_config_status_content(
+            saved_dir,
+            resolved_dir,
+        )
+        badge_style = self._build_badge_style(*badge_colors)
         self.config_path_label.setText(path_text)
         self.config_note_label.setText(note_text)
         if hasattr(self, "config_badge"):
@@ -1515,26 +1579,9 @@ class MainWindow(QWidget):
         self.setWindowTitle(WINDOW_TITLE)
         if hasattr(self, "license_status_badge"):
             self.license_status_badge.setText(status)
-            if reason == "ok":
-                self.license_status_badge.setStyleSheet(
-                    self._build_badge_style(
-                        APP_COLORS["green_soft"],
-                        APP_COLORS["green"],
-                        APP_COLORS["border_strong"],
-                        radius=scale_px(BADGE_RADIUS, min_value=10),
-                        padding=self._scaled_padding(7, 12),
-                    )
-                )
-            else:
-                self.license_status_badge.setStyleSheet(
-                    self._build_badge_style(
-                        APP_COLORS["red_soft"],
-                        APP_COLORS["red"],
-                        APP_COLORS["red"],
-                        radius=scale_px(BADGE_RADIUS, min_value=10),
-                        padding=self._scaled_padding(7, 12),
-                    )
-                )
+            self.license_status_badge.setStyleSheet(
+                self._build_license_status_badge_style(reason == "ok")
+            )
         expires_at = str(info.get("expires_at", ""))[:10]
         if hasattr(self, "license_summary_label"):
             if reason == "ok":
@@ -1623,11 +1670,7 @@ class MainWindow(QWidget):
 
         _, reason = self._refresh_license_state()
         if reason != "ok" and not self._prompt_license_activation(reason):
-            self.show_message(
-                QMessageBox.Warning,
-                "未激活",
-                "软件尚未激活，无法执行批量处理。\n请先输入有效卡密完成激活。",
-            )
+            self._show_activation_required("批量处理")
             return
 
         self.normalize_inputs()
@@ -1672,7 +1715,6 @@ class MainWindow(QWidget):
         self.worker = BatchWorker(order_ids, tracking_numbers)
         self.worker.moveToThread(self.worker_thread)
 
-        self.worker_thread.started.connect(self.worker.run)
         self.worker.started.connect(self._on_worker_started)
         self.worker.step_started.connect(self._on_worker_step_started)
         self.worker.step_succeeded.connect(self._on_worker_step_succeeded)
@@ -1681,9 +1723,11 @@ class MainWindow(QWidget):
         self.worker.missing_config.connect(self.show_missing_config_error)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.finished.connect(self.worker_thread.quit)
-        self.worker_thread.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-        self.worker_thread.finished.connect(self._clear_worker_refs)
+        self._bind_thread_lifecycle(
+            self.worker_thread,
+            self.worker,
+            self._clear_worker_refs,
+        )
         self.worker_thread.start()
         self.refresh_action_buttons()
 
@@ -1708,18 +1752,10 @@ class MainWindow(QWidget):
         """窗口关闭时安全终止后台线程。"""
         if self.worker is not None:
             self.worker.stop()
-        if self.worker_thread is not None and self.worker_thread.isRunning():
-            self.worker_thread.quit()
-            if not self.worker_thread.wait(3000):
-                self.worker_thread.terminate()
-                self.worker_thread.wait(1000)
+        self._shutdown_thread(self.worker_thread)
         if self.review_worker is not None:
             self.review_worker.stop()
-        if self.review_worker_thread is not None and self.review_worker_thread.isRunning():
-            self.review_worker_thread.quit()
-            if not self.review_worker_thread.wait(3000):
-                self.review_worker_thread.terminate()
-                self.review_worker_thread.wait(1000)
+        self._shutdown_thread(self.review_worker_thread)
         super().closeEvent(event)
 
     def _on_worker_started(self, total_count):
@@ -1785,11 +1821,7 @@ class MainWindow(QWidget):
         if reason == "ok" or self._prompt_license_activation(reason):
             return True
 
-        self.show_message(
-            QMessageBox.Warning,
-            "未激活",
-            f"软件尚未激活，无法执行{task_label}。\n请先输入有效卡密完成激活。",
-        )
+        self._show_activation_required(task_label)
         return False
 
     def _start_review_worker(self, *, task_type, days, start_message):
@@ -1804,16 +1836,17 @@ class MainWindow(QWidget):
         self.review_worker = ReviewMatcherWorker(days=days, task_type=task_type)
         self.review_worker.moveToThread(self.review_worker_thread)
 
-        self.review_worker_thread.started.connect(self.review_worker.run)
         self.review_worker.progress.connect(self._on_review_progress)
         self.review_worker.order_ids_ready.connect(self._on_review_order_ids)
         self.review_worker.error.connect(self._on_review_error)
         self.review_worker.missing_config.connect(self.show_missing_config_error)
         self.review_worker.finished.connect(self._on_review_finished)
         self.review_worker.finished.connect(self.review_worker_thread.quit)
-        self.review_worker_thread.finished.connect(self.review_worker.deleteLater)
-        self.review_worker_thread.finished.connect(self.review_worker_thread.deleteLater)
-        self.review_worker_thread.finished.connect(self._clear_review_worker_refs)
+        self._bind_thread_lifecycle(
+            self.review_worker_thread,
+            self.review_worker,
+            self._clear_review_worker_refs,
+        )
         self.review_worker_thread.start()
 
     def on_review_find_clicked(self):

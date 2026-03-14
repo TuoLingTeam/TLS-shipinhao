@@ -52,6 +52,26 @@ class BatchWorker(QObject):
                 return False
         return not self._stopped
 
+    def _emit_step_failure(self, index, total_count, order_id, tracking_number, error):
+        """统一发送单条失败信号。"""
+        self.step_failed.emit(
+            index,
+            total_count,
+            order_id,
+            tracking_number,
+            str(error),
+        )
+
+    def _emit_step_success(self, index, total_count, order_id, tracking_number, old_waybill):
+        """统一发送单条成功信号。"""
+        self.step_succeeded.emit(
+            index,
+            total_count,
+            order_id,
+            tracking_number,
+            old_waybill or "无原物流单号",
+        )
+
     def run(self):
         """后台线程执行入口。"""
         success_count = 0
@@ -78,22 +98,22 @@ class BatchWorker(QObject):
                         old_waybill = update_single_order(order_id, tracking_number, session)
                     except Exception as exc:  # noqa: BLE001
                         failure_count += 1
-                        self.step_failed.emit(
+                        self._emit_step_failure(
                             index,
                             total_count,
                             order_id,
                             tracking_number,
-                            str(exc),
+                            exc,
                         )
                         continue
 
                     success_count += 1
-                    self.step_succeeded.emit(
+                    self._emit_step_success(
                         index,
                         total_count,
                         order_id,
                         tracking_number,
-                        old_waybill or "无原物流单号",
+                        old_waybill,
                     )
         except Exception as exc:  # noqa: BLE001
             failure_count += total_count - success_count - failure_count

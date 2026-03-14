@@ -4,9 +4,7 @@
 封装微信小商店 API 常用的请求构建、响应解析等功能。
 """
 
-import json
 import platform
-import sys
 from typing import Any
 
 import requests
@@ -15,7 +13,6 @@ from .constants import REQUEST_TIMEOUT
 
 # 检测当前平台，用于构建合适的请求头
 _CURRENT_PLATFORM = platform.system()
-_IS_WINDOWS = _CURRENT_PLATFORM == "Windows"
 _IS_MACOS = _CURRENT_PLATFORM == "Darwin"
 
 # 基础请求头模板（不含平台相关字段）
@@ -61,6 +58,33 @@ def get_sec_ch_ua_platform() -> str:
     if _IS_MACOS:
         return _SEC_CH_UA_PLATFORM_MACOS
     return _SEC_CH_UA_PLATFORM_WINDOWS
+
+
+def _post_json_request(
+    request_callable,
+    *,
+    url: str,
+    data: dict[str, Any],
+    headers: dict[str, str],
+    params: dict[str, str] | None = None,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """执行通用 POST JSON 请求并统一处理网络/HTTP 层错误。"""
+    try:
+        response = request_callable(
+            url,
+            params=params or build_request_params(),
+            json=data,
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"请求失败：{exc}") from exc
+
+    if response.status_code != 200:
+        raise RuntimeError(f"请求失败：{get_response_error(response)}")
+
+    return response
 
 
 def build_headers(magic: str, referer: str = "") -> dict[str, str]:
@@ -176,21 +200,14 @@ def post_json(
     Raises:
         RuntimeError: 请求失败时抛出
     """
-    try:
-        response = requests.post(
-            url,
-            params=params or build_request_params(),
-            json=data,
-            headers=headers,
-            timeout=timeout,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"请求失败：{exc}") from exc
-
-    if response.status_code != 200:
-        raise RuntimeError(f"请求失败：{get_response_error(response)}")
-
-    return response
+    return _post_json_request(
+        requests.post,
+        url=url,
+        data=data,
+        headers=headers,
+        params=params,
+        timeout=timeout,
+    )
 
 
 def post_json_with_session(
@@ -217,21 +234,14 @@ def post_json_with_session(
     Raises:
         RuntimeError: 请求失败时抛出
     """
-    try:
-        response = session.post(
-            url,
-            params=params or build_request_params(),
-            json=data,
-            headers=headers,
-            timeout=timeout,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"请求失败：{exc}") from exc
-
-    if response.status_code != 200:
-        raise RuntimeError(f"请求失败：{get_response_error(response)}")
-
-    return response
+    return _post_json_request(
+        session.post,
+        url=url,
+        data=data,
+        headers=headers,
+        params=params,
+        timeout=timeout,
+    )
 
 
 def check_api_response(response: requests.Response, error_prefix: str = "接口返回失败") -> dict[str, Any]:

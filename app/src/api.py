@@ -5,7 +5,7 @@ import json
 
 import requests
 
-from .config import ConfigNotFoundError, get_cookie, get_magic
+from .config import get_cookie, get_magic
 from .constants import (
     DELIVERY_MISMATCH_MESSAGE,
     ORDER_DELIVERY_UPDATE_URL,
@@ -15,10 +15,28 @@ from .constants import (
 from .http_utils import (
     build_headers,
     build_request_params,
-    check_api_response,
     get_payload_error,
     get_response_error,
 )
+
+
+def _post_session_json_payload(session, url, payload, error_prefix):
+    """使用现有会话发送 JSON 字符串并返回解析后的响应。"""
+    params = build_request_params()
+    data = json.dumps(payload, separators=(",", ":"))
+
+    try:
+        response = session.post(url, params=params, data=data, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"{error_prefix}：{exc}") from exc
+
+    if response.status_code != 200:
+        raise RuntimeError(f"{error_prefix}：{get_response_error(response)}")
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"{error_prefix}：接口返回了非 JSON 响应。") from exc
 
 
 def normalize_product_infos(delivery_product_info):
@@ -51,21 +69,12 @@ def create_session():
 
 def fetch_order_detail_payload(order_id, session):
     """拉取完整订单详情响应。"""
-    params = build_request_params()
-    data = json.dumps({"id": str(order_id)}, separators=(",", ":"))
-
-    try:
-        response = session.post(ORDER_DETAIL_URL, params=params, data=data, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"获取订单详情失败：{exc}") from exc
-
-    if response.status_code != 200:
-        raise RuntimeError(f"获取订单详情失败：{get_response_error(response)}")
-
-    try:
-        detail_payload = response.json()
-    except ValueError as exc:
-        raise RuntimeError("获取订单详情失败：接口返回了非 JSON 响应。") from exc
+    detail_payload = _post_session_json_payload(
+        session,
+        ORDER_DETAIL_URL,
+        {"id": str(order_id)},
+        "获取订单详情失败",
+    )
 
     if detail_payload.get("success") is False:
         raise RuntimeError(
@@ -130,7 +139,6 @@ def build_delivery_candidates(order_id, tracking_number, delivery_product_info, 
 
 def update_delivery_info(order_id, tracking_number, delivery_product_info, session, delivery_override=None):
     """提交单个订单的物流更新。"""
-    params = build_request_params()
     selected_delivery_id = (
         delivery_override.get("deliveryId") if delivery_override else delivery_product_info.get("deliveryId")
     )
@@ -153,7 +161,9 @@ def update_delivery_info(order_id, tracking_number, delivery_product_info, sessi
         if delivery_time not in (None, ""):
             delivery_item["deliveryTime"] = delivery_time
 
-    payload = json.dumps(
+    result = _post_session_json_payload(
+        session,
+        ORDER_DELIVERY_UPDATE_URL,
         {
             "orderId": str(order_id),
             "deliveryInfo": {
@@ -161,21 +171,8 @@ def update_delivery_info(order_id, tracking_number, delivery_product_info, sessi
                 "deliveryProductInfo": [delivery_item],
             },
         },
-        separators=(",", ":"),
+        "更新物流信息失败",
     )
-
-    try:
-        response = session.post(ORDER_DELIVERY_UPDATE_URL, params=params, data=payload, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"更新物流信息失败：{exc}") from exc
-
-    if response.status_code != 200:
-        raise RuntimeError(f"更新物流信息失败：{get_response_error(response)}")
-
-    try:
-        result = response.json()
-    except ValueError as exc:
-        raise RuntimeError("更新物流信息失败：接口返回了非 JSON 响应。") from exc
 
     if result.get("success") is True:
         return

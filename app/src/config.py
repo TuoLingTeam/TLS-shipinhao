@@ -65,6 +65,11 @@ def get_saved_user_config_dir():
     return None
 
 
+def _get_selected_config_dir():
+    """返回当前缓存或上次记住的配置目录。"""
+    return _CONFIG_DIR_CACHE or get_saved_user_config_dir()
+
+
 def save_user_config_dir(config_dir):
     """保存用户指定的配置目录。"""
     global _CONFIG_DIR_CACHE
@@ -77,7 +82,7 @@ def save_user_config_dir(config_dir):
 
 def get_config_search_dirs():
     """仅返回用户手动选择过的配置目录。"""
-    selected_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir()
+    selected_dir = _get_selected_config_dir()
     if not selected_dir:
         return []
     return [os.path.abspath(selected_dir)]
@@ -191,7 +196,7 @@ def serialize_cookie_data(cookie_data):
 
 def get_default_config_dir():
     """返回自动保存配置时优先使用的目录。"""
-    selected_dir = _CONFIG_DIR_CACHE or get_saved_user_config_dir()
+    selected_dir = _get_selected_config_dir()
     if selected_dir:
         return os.path.abspath(selected_dir)
     return os.path.abspath(get_home_config_dir())

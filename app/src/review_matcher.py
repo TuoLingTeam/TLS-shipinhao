@@ -27,7 +27,7 @@ from .constants import (
     RATE_LIMIT_RETRY_COUNT,
     SCORE_WEIGHTS,
 )
-from .http_utils import build_request_params, get_payload_error, get_response_error
+from .http_utils import build_request_params
 
 ProgressCallback = Callable[[str], None]
 JsonDict = dict[str, Any]
@@ -41,12 +41,6 @@ QUALITY_REFUND_REFERER = (
 )
 ORDER_PROGRESS_PAGE_INTERVAL = 5
 QUALITY_REFUND_REQUEST_METHODS = ("GET", "POST")
-
-# 达到该分数才认为“可匹配”
-PADDING_MAX = 12
-# 达到该分数才自动填入订单号，低于该分数需要人工核对
-MULTI_ORDER_PENALTY_MAX = 12
-
 
 class BadReviewOrderFinder:
     """中差评订单查找器。
@@ -144,6 +138,11 @@ class BadReviewOrderFinder:
             headers=headers,
             timeout=REQUEST_TIMEOUT,
         )
+
+    @staticmethod
+    def _rate_limit_wait_seconds(retry_index: int) -> int:
+        """根据重试轮次返回指数退避等待时间。"""
+        return 2 ** (retry_index + 1)
 
     def _request_quality_refund_result(
         self,
@@ -371,7 +370,7 @@ class BadReviewOrderFinder:
             # 429 频率限制自动重试（指数退避）
             if response.status_code == 429:
                 for retry in range(RATE_LIMIT_RETRY_COUNT):
-                    wait = 2 ** (retry + 1)  # 2, 4, 8 秒
+                    wait = self._rate_limit_wait_seconds(retry)
                     if on_progress:
                         on_progress(f"触发频率限制，等待 {wait} 秒后重试...")
                     time.sleep(wait)
@@ -394,7 +393,7 @@ class BadReviewOrderFinder:
             result = response.json()
             if result.get("code") == 429:
                 for retry in range(RATE_LIMIT_RETRY_COUNT):
-                    wait = 2 ** (retry + 1)
+                    wait = self._rate_limit_wait_seconds(retry)
                     if on_progress:
                         on_progress(f"触发频率限制，等待 {wait} 秒后重试...")
                     time.sleep(wait)
@@ -520,7 +519,7 @@ class BadReviewOrderFinder:
                 if response.status_code == 429:
                     retry_success = False
                     for retry in range(RATE_LIMIT_RETRY_COUNT):
-                        wait = 2 ** (retry + 1)
+                        wait = self._rate_limit_wait_seconds(retry)
                         if on_progress:
                             on_progress(f"{tag} 触发429限流，等待 {wait}s 后重试第 {current_page} 页...")
                         time.sleep(wait)
@@ -550,7 +549,7 @@ class BadReviewOrderFinder:
                 if result.get("code") == 429:
                     retry_success = False
                     for retry in range(RATE_LIMIT_RETRY_COUNT):
-                        wait = 2 ** (retry + 1)
+                        wait = self._rate_limit_wait_seconds(retry)
                         if on_progress:
                             on_progress(f"{tag} 触发429限流(API)，等待 {wait}s 后重试...")
                         time.sleep(wait)

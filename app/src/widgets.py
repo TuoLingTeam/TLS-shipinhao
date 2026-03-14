@@ -31,7 +31,7 @@ from .license import activate_license
 def build_font(size, bold=False):
     """获取通用字体（带缓存，避免重复创建）。"""
     font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
-    font.setPointSize(max(9, int(round(size * get_ui_scale()))))
+    font.setPointSize(_scale_font_size(size))
     font.setBold(bold)
     return font
 
@@ -40,8 +40,13 @@ def build_font(size, bold=False):
 def build_fixed_font(size):
     """获取等宽字体（带缓存，避免重复创建）。"""
     font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-    font.setPointSize(max(9, int(round(size * get_ui_scale()))))
+    font.setPointSize(_scale_font_size(size))
     return font
+
+
+def _scale_font_size(size):
+    """按当前 UI 缩放系数返回字体大小。"""
+    return max(9, int(round(size * get_ui_scale())))
 
 
 def reset_font_caches():
@@ -234,28 +239,28 @@ class LicenseDialog(QDialog):
     def _copy_wechat(self, _event):
         clipboard = QApplication.clipboard()
         clipboard.setText(AUTHOR_WECHAT)
-        self.message_label.setText(f"已复制作者微信：{AUTHOR_WECHAT}")
-        self.message_label.setStyleSheet("color: " + APP_COLORS["green"] + ";")
+        self._set_message(f"已复制作者微信：{AUTHOR_WECHAT}", APP_COLORS["green"])
+
+    def _set_message(self, text, color):
+        """更新弹窗提示文案与颜色。"""
+        self.message_label.setText(text)
+        self.message_label.setStyleSheet("color: " + color + ";")
 
     def _on_activate_clicked(self):
         key = self.key_input.text().strip()
         if not key:
-            self.message_label.setText("请输入卡密。")
-            self.message_label.setStyleSheet("color: """ + APP_COLORS["red"] + ";")
+            self._set_message("请输入卡密。", APP_COLORS["red"])
             return
         try:
             info = activate_license(key)
         except ValueError as exc:
-            self.message_label.setText(str(exc))
-            self.message_label.setStyleSheet("color: """ + APP_COLORS["red"] + ";")
+            self._set_message(str(exc), APP_COLORS["red"])
             return
         except Exception as exc:  # noqa: BLE001
-            self.message_label.setText(f"激活失败：{exc}")
-            self.message_label.setStyleSheet("color: """ + APP_COLORS["red"] + ";")
+            self._set_message(f"激活失败：{exc}", APP_COLORS["red"])
             return
 
         self.activated = True
         expires = str(info.get("expires_at", ""))[:19]
-        self.message_label.setText(f"激活成功，有效期至：{expires}")
-        self.message_label.setStyleSheet("color: """ + APP_COLORS["green"] + ";")
+        self._set_message(f"激活成功，有效期至：{expires}", APP_COLORS["green"])
         self.accept()

@@ -115,6 +115,26 @@ def _license_path() -> str:
     return os.path.join(_resolve_data_root(), _LICENSE_FILE_NAME)
 
 
+def _read_license_file() -> Optional[dict]:
+    """读取本地 license.json。"""
+    path = _license_path()
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _write_license_file(info: dict) -> None:
+    """将 license 信息写入本地文件。"""
+    path = _license_path()
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(info, file, ensure_ascii=False, indent=2)
+
+
 def _compute_signature(key: str, expires_at: str, device_id: str) -> str:
     """计算 license 关键字段的 HMAC-SHA256 签名。"""
     payload = f"{key}|{expires_at}|{device_id}".encode("utf-8")
@@ -142,10 +162,7 @@ def _save_license_file(info: dict) -> None:
         info.get("expires_at", ""),
         info.get("device_id", ""),
     )
-    path = _license_path()
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w", encoding="utf-8") as file:
-        json.dump(info, file, ensure_ascii=False, indent=2)
+    _write_license_file(info)
 
 
 def _refresh_license_fields(info: dict, result: dict) -> bool:
@@ -172,15 +189,12 @@ def _refresh_license_fields(info: dict, result: dict) -> bool:
 
 def _invalidate_license_file() -> None:
     """将本地 license 文件标记为无效（清除签名）。"""
-    path = _license_path()
-    if not os.path.isfile(path):
+    info = _read_license_file()
+    if info is None:
         return
+    info.pop("signature", None)
     try:
-        with open(path, "r", encoding="utf-8") as file:
-            info = json.load(file)
-        info.pop("signature", None)
-        with open(path, "w", encoding="utf-8") as file:
-            json.dump(info, file, ensure_ascii=False, indent=2)
+        _write_license_file(info)
     except Exception:  # noqa: BLE001
         pass
 
@@ -253,10 +267,8 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
     if not os.path.isfile(path):
         return None, "not_found"
 
-    try:
-        with open(path, "r", encoding="utf-8") as file:
-            info = json.load(file)
-    except Exception:
+    info = _read_license_file()
+    if info is None:
         return None, "invalid"
 
     key = info.get("key", "")
@@ -317,14 +329,7 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
 
 def get_license_info() -> Optional[dict]:
     """读取许可证信息（用于 UI 展示）。"""
-    path = _license_path()
-    if not os.path.isfile(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except Exception:
-        return None
+    return _read_license_file()
 
 
 def deactivate_license():
