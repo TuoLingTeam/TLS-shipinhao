@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""TLS-shipinhao 微信小商店 API 交互。"""
+"""TLS-shipinhao 微信小商店 API 交互（物流更新）。"""
 
 import json
 
@@ -12,78 +12,13 @@ from .constants import (
     ORDER_DETAIL_URL,
     REQUEST_TIMEOUT,
 )
-
-
-def build_headers(magic):
-    """根据 magic 构建 HTTP 请求头。"""
-    return {
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Content-Type": "application/json",
-        "Origin": "https://store.weixin.qq.com",
-        "Pragma": "no-cache",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
-        ),
-        "biz_magic": magic,
-        "mcn_magic": "",
-        "potter-scene": "weixinShop",
-        "sec-ch-ua": '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "supplier_magic": "",
-        "talent_magic": "",
-        "wecom_magic": "",
-    }
-
-
-def get_response_error(response):
-    """尽量从接口响应里提取可读错误信息。"""
-    try:
-        payload = response.json()
-    except ValueError:
-        text = response.text.strip()
-        if text:
-            return f"HTTP {response.status_code}: {text[:200]}"
-        return f"HTTP {response.status_code}"
-
-    if not isinstance(payload, dict):
-        return f"HTTP {response.status_code}"
-
-    for key in ("errmsg", "message", "msg"):
-        value = payload.get(key)
-        if value:
-            return str(value)
-
-    errcode = payload.get("errcode")
-    if errcode not in (None, 0):
-        return f"错误码 {errcode}"
-
-    return f"HTTP {response.status_code}"
-
-
-def get_payload_error(payload, default_message):
-    """从业务响应里提取更具体的错误信息。"""
-    if not isinstance(payload, dict):
-        return default_message
-
-    for key in ("errmsg", "message", "msg"):
-        value = payload.get(key)
-        if value:
-            return str(value)
-
-    for key in ("code", "errcode", "ret"):
-        value = payload.get(key)
-        if value not in (None, 0):
-            return f"{default_message}（错误码 {value}）"
-
-    return default_message
+from .http_utils import (
+    build_headers,
+    build_request_params,
+    check_api_response,
+    get_payload_error,
+    get_response_error,
+)
 
 
 def normalize_product_infos(delivery_product_info):
@@ -116,7 +51,7 @@ def create_session():
 
 def fetch_order_detail_payload(order_id, session):
     """拉取完整订单详情响应。"""
-    params = {"token": "", "lang": "zh_CN"}
+    params = build_request_params()
     data = json.dumps({"id": str(order_id)}, separators=(",", ":"))
 
     try:
@@ -195,7 +130,7 @@ def build_delivery_candidates(order_id, tracking_number, delivery_product_info, 
 
 def update_delivery_info(order_id, tracking_number, delivery_product_info, session, delivery_override=None):
     """提交单个订单的物流更新。"""
-    params = {"token": "", "lang": "zh_CN"}
+    params = build_request_params()
     selected_delivery_id = (
         delivery_override.get("deliveryId") if delivery_override else delivery_product_info.get("deliveryId")
     )

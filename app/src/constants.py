@@ -57,6 +57,56 @@ LOG_EDIT_PADDING = 14              # 日志区域内边距
 LOG_PANEL_MIN_HEIGHT = 180         # 日志面板最小高度
 DEFAULT_REVIEW_DAYS = 30          # 默认查询天数
 
+# ============================================================================
+# 差评匹配算法配置
+# ============================================================================
+
+# 评分权重（总分 100 分）
+SCORE_WEIGHTS = {
+    "nickname": 10,        # 买家昵称在评价阶段可能已被用户修改，只作为辅助维度
+    "sku": 30,             # 规格信息一致性（主维度）
+    "reference_time": 35,  # 评价时间与收货/签收时间贴合度（主维度）
+    "create_time": 20,     # 评价时间与下单时间合理性（主维度）
+    "order_status": 5,     # 订单状态可靠性
+}
+
+# 匹配阈值
+MATCH_MIN_SCORE = 52              # 达到该分数才认为"可匹配"
+AUTO_FILL_SCORE_THRESHOLD = 80    # 达到该分数才自动填入订单号，低于该分数需要人工核对
+
+# 昵称维度评分参数
+NICKNAME_PARTIAL_SCORE_RATIO = 0.73   # 昵称强相关得分比例
+NICKNAME_WEAK_SCORE_RATIO = 0.47      # 昵称弱相关得分比例
+
+# 时间维度评分参数（小时）
+REFERENCE_TIME_WITHIN_6H = 6            # 评价紧邻收货（满分）
+REFERENCE_TIME_WITHIN_24H = 24           # 评价与收货同日
+REFERENCE_TIME_WITHIN_72H = 72          # 评价与收货间隔较短（3天内）
+REFERENCE_TIME_WITHIN_1W = 168          # 评价与收货间隔一周内（7天）
+REFERENCE_TIME_WITHIN_15D = 360         # 评价与收货间隔偏长（15天）
+REFERENCE_TIME_WITHIN_30D = 720         # 评价与收货间隔较远（30天内）
+
+# 下单时间维度评分参数（天）
+CREATE_TIME_WITHIN_1D = 1               # 下单后很快评价（满分）
+CREATE_TIME_WITHIN_3D = 3               # 下单后短期评价
+CREATE_TIME_WITHIN_1W = 7               # 下单后一周内评价
+CREATE_TIME_WITHIN_2W = 14              # 下单后两周内评价
+CREATE_TIME_WITHIN_1M = 30              # 下单后一个月内评价
+
+# 多候选订单竞争扣分参数
+MULTI_ORDER_PENALTY_FACTOR = 1.5       # 多单竞争时效劣势扣分系数
+MULTI_ORDER_PENALTY_MAX = 12            # 多单竞争最大扣分
+
+# 评价匹配时间窗口（天）
+EVALUATION_MAX_DAYS = 30                # 普通订单评价有效天数
+EDUCATION_ORDER_MAX_DAYS = 60           # 教育订单评价有效天数
+
+# API 请求参数
+FETCH_PAGE_INTERVAL_SECONDS = 0.3       # 翻页请求间隔（秒）
+ORDER_PAGE_SIZE = 100                    # 订单每页大小
+EVALUATION_MAX_PAGES = 10               # 差评搜索最大页数
+RATE_LIMIT_RETRY_COUNT = 3              # 频率限制重试次数
+
 # 字体方案（统一管理各场景字体大小）
 FONT_SIZES = {
     "title": 24,           # 主标题（窗口标题）

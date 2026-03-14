@@ -11,10 +11,21 @@ from typing import Any, Callable
 import requests
 
 from .constants import (
+    AUTO_FILL_SCORE_THRESHOLD,
+    EDUCATION_ORDER_MAX_DAYS,
+    EVALUATION_MAX_DAYS,
+    EVALUATION_MAX_PAGES,
     EVALUATION_SEARCH_URL,
+    FETCH_PAGE_INTERVAL_SECONDS,
+    MATCH_MIN_SCORE,
+    MULTI_ORDER_PENALTY_FACTOR,
+    MULTI_ORDER_PENALTY_MAX,
+    ORDER_PAGE_SIZE,
     ORDER_SEARCH_URL,
     QUALITY_REFUND_ORDER_URL,
     REQUEST_TIMEOUT,
+    RATE_LIMIT_RETRY_COUNT,
+    SCORE_WEIGHTS,
 )
 
 ProgressCallback = Callable[[str], None]
@@ -28,26 +39,13 @@ QUALITY_REFUND_REFERER = (
     "https://store.weixin.qq.com/shop/setting/"
     "ratedetail?type=product&key=productQualityRatio_30d&detail=order"
 )
-EVALUATION_MAX_PAGES = 10
-ORDER_PAGE_SIZE = 100
-RATE_LIMIT_RETRY_COUNT = 3
-FETCH_PAGE_INTERVAL_SECONDS = 0.3
 ORDER_PROGRESS_PAGE_INTERVAL = 5
 QUALITY_REFUND_REQUEST_METHODS = ("GET", "POST")
 
-# 评分模型配置（总分 100 分）
-SCORE_WEIGHTS = {
-    # 买家昵称在评价阶段可能已被用户修改，只作为辅助维度
-    "nickname": 10,
-    "sku": 30,              # 规格信息一致性（主维度）
-    "reference_time": 35,   # 评价时间与收货/签收时间贴合度（主维度）
-    "create_time": 20,      # 评价时间与下单时间合理性（主维度）
-    "order_status": 5,      # 订单状态可靠性
-}
 # 达到该分数才认为“可匹配”
-MATCH_MIN_SCORE = 52
+PADDING_MAX = 12
 # 达到该分数才自动填入订单号，低于该分数需要人工核对
-AUTO_FILL_SCORE_THRESHOLD = 80
+MULTI_ORDER_PENALTY_MAX = 12
 
 
 class BadReviewOrderFinder:
