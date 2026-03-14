@@ -54,6 +54,7 @@ from .constants import (
     CARD_RADIUS,
     CONFIG_PATH_MIN_HEIGHT,
     DEFAULT_REVIEW_DAYS,
+    FONT_SIZES,
     HERO_PADDING_X,
     HERO_PADDING_Y,
     HERO_RADIUS,
@@ -63,6 +64,7 @@ from .constants import (
     INPUT_EDIT_PADDING,
     INPUT_EDIT_RADIUS,
     INPUT_VISIBLE_LINES,
+    LEFT_COLUMN_GAP,
     LOG_EDIT_PADDING,
     LOG_EDIT_RADIUS,
     LOG_PANEL_MIN_HEIGHT,
@@ -76,6 +78,8 @@ from .constants import (
     PAGE_GAP,
     PAGE_MARGIN,
     ROW_GAP,
+    SETUP_SECTION_PADDING,
+    SETUP_SECTION_SPACING,
     TUTORIAL_URL,
     VERY_HIGH_DPI_COMPACT_THRESHOLD,
     WIDE_LAYOUT_MIN_HEIGHT,
@@ -303,8 +307,7 @@ class MainWindow(QWidget):
             QLabel#LicenseSummary {{
                 color: {c["heading"]};
             }}
-            QLabel#LicenseMeta,
-            QLabel#LicenseHelp {{
+            QLabel#LicenseMeta {{
                 color: {c["muted"]};
             }}
             QLabel#LogHintPill {{
@@ -414,7 +417,7 @@ class MainWindow(QWidget):
 
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
-        title_label.setFont(build_font(24, bold=True))
+        title_label.setFont(build_font(FONT_SIZES["title"], bold=True))
         self.hero_title_label = title_label
         title_box.addWidget(title_label)
 
@@ -423,7 +426,7 @@ class MainWindow(QWidget):
         )
         self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(True)
-        self.title_description_label.setFont(build_font(13))
+        self.title_description_label.setFont(build_font(FONT_SIZES["badge"]))
         title_box.addWidget(self.title_description_label)
 
         header_box.addWidget(title_wrap, 1)
@@ -435,7 +438,7 @@ class MainWindow(QWidget):
 
         self.author_badge = QLabel(f"微信：{AUTHOR_WECHAT}")
         self.author_badge.setAlignment(Qt.AlignCenter)
-        self.author_badge.setFont(build_font(13, bold=True))
+        self.author_badge.setFont(build_font(FONT_SIZES["badge"], bold=True))
         self.author_badge.setMinimumSize(
             scale_px(BADGE_MIN_WIDTH, min_value=64),
             scale_px(BADGE_HEIGHT, min_value=28),
@@ -458,7 +461,7 @@ class MainWindow(QWidget):
         self.tutorial_badge.setTextInteractionFlags(Qt.TextBrowserInteraction)
         self.tutorial_badge.setOpenExternalLinks(True)
         self.tutorial_badge.setCursor(Qt.PointingHandCursor)
-        self.tutorial_badge.setFont(build_font(13, bold=True))
+        self.tutorial_badge.setFont(build_font(FONT_SIZES["badge"], bold=True))
         self.tutorial_badge.setMinimumSize(
             scale_px(BADGE_MIN_WIDTH, min_value=64),
             scale_px(BADGE_HEIGHT, min_value=28),
@@ -560,7 +563,7 @@ class MainWindow(QWidget):
 
         self.log_hint_label = QLabel("按时间顺序滚动")
         self.log_hint_label.setObjectName("LogHintPill")
-        self.log_hint_label.setFont(build_font(10, bold=True))
+        self.log_hint_label.setFont(build_font(FONT_SIZES["hint"], bold=True))
         self.log_hint_label.setAlignment(Qt.AlignCenter)
         self.log_hint_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.log_hint_label.setToolTip("最近执行记录会按时间顺序滚动显示")
@@ -596,8 +599,8 @@ class MainWindow(QWidget):
         self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         left_column = QVBoxLayout()
-        left_column.setContentsMargins(0, 0, 0, 0)
-        left_column.setSpacing(scale_px(ROW_GAP, min_value=6))
+        left_column.setContentsMargins(0, scale_px(4, min_value=2), 0, scale_px(4, min_value=2))
+        left_column.setSpacing(scale_px(LEFT_COLUMN_GAP, min_value=12))
         left_column.addWidget(self.config_card)
         left_column.addWidget(self.action_card)
         left_column.addWidget(self.license_card, 1)
@@ -653,7 +656,7 @@ class MainWindow(QWidget):
             if title:
                 title_label = QLabel(title)
                 title_label.setObjectName("LogTitle" if object_name == "LogCard" else "SectionTitle")
-                title_label.setFont(build_font(16 if object_name == "LogCard" else 15, bold=True))
+                title_label.setFont(build_font(FONT_SIZES["section_log"] if object_name == "LogCard" else FONT_SIZES["section"], bold=True))
                 title_label.setWordWrap(True)
                 title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
                 header_layout.addWidget(title_label, 1)
@@ -687,7 +690,7 @@ class MainWindow(QWidget):
         self.config_badge.setAlignment(Qt.AlignCenter)
         self.config_badge.setMinimumWidth(scale_px(INPUT_BADGE_MIN_WIDTH, min_value=52))
         self.config_badge.setFixedHeight(scale_px(INPUT_BADGE_HEIGHT, min_value=24))
-        self.config_badge.setFont(build_font(11, bold=True))
+        self.config_badge.setFont(build_font(FONT_SIZES["secondary"], bold=True))
         self.config_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.config_badge.setStyleSheet(
             self._build_badge_style(
@@ -712,7 +715,7 @@ class MainWindow(QWidget):
         button = QPushButton(text)
         button.setObjectName("ReviewButton")
         button.setCursor(Qt.PointingHandCursor)
-        button.setFont(build_font(14, bold=True))
+        button.setFont(build_font(FONT_SIZES["button"], bold=True))
         button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=30))
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(
@@ -742,7 +745,7 @@ class MainWindow(QWidget):
         """创建组合卡中的小节标题。"""
         label = QLabel(text)
         label.setObjectName("SetupSectionTitle")
-        label.setFont(build_font(11, bold=True))
+        label.setFont(build_font(FONT_SIZES["secondary"], bold=True))
         label.setAlignment(Qt.AlignCenter)
         label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         return label
@@ -755,12 +758,12 @@ class MainWindow(QWidget):
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(
-            scale_px(8, min_value=6),
-            scale_px(8, min_value=5),
-            scale_px(8, min_value=5),
-            scale_px(8, min_value=5),
+            scale_px(SETUP_SECTION_PADDING, min_value=8),
+            scale_px(SETUP_SECTION_PADDING, min_value=8),
+            scale_px(SETUP_SECTION_PADDING, min_value=8),
+            scale_px(SETUP_SECTION_PADDING, min_value=8),
         )
-        layout.setSpacing(scale_px(6, min_value=3))
+        layout.setSpacing(scale_px(SETUP_SECTION_SPACING, min_value=6))
         if title:
             layout.addWidget(self._create_setup_section_label(title), 0, Qt.AlignLeft)
         layout.addWidget(content)
@@ -770,8 +773,8 @@ class MainWindow(QWidget):
         """构建系统配置与订单获取组合区域。"""
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(8, min_value=4))
+        layout.setContentsMargins(0, scale_px(10, min_value=6), 0, scale_px(8, min_value=6))
+        layout.setSpacing(scale_px(24, min_value=16))
 
         config_content = self._build_config_content()
         config_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -787,7 +790,7 @@ class MainWindow(QWidget):
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(6, min_value=3))
+        layout.setSpacing(scale_px(14, min_value=10))
 
         path_panel = QFrame()
         path_panel.setObjectName("ConfigPathPanel")
@@ -795,18 +798,18 @@ class MainWindow(QWidget):
         path_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         path_layout = QVBoxLayout(path_panel)
         path_layout.setContentsMargins(
-            scale_px(10, min_value=6),
-            scale_px(10, min_value=6),
-            scale_px(10, min_value=6),
-            scale_px(10, min_value=6),
+            scale_px(12, min_value=8),
+            scale_px(12, min_value=8),
+            scale_px(12, min_value=8),
+            scale_px(12, min_value=8),
         )
-        path_layout.setSpacing(scale_px(6, min_value=3))
+        path_layout.setSpacing(scale_px(8, min_value=5))
 
         self.config_path_label = QLabel()
         self.config_path_label.setObjectName("ConfigPath")
         self.config_path_label.setWordWrap(True)
         self.config_path_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.config_path_label.setFont(build_font(12))
+        self.config_path_label.setFont(build_font(FONT_SIZES["body"]))
         self.config_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.config_path_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         path_layout.addWidget(self.config_path_label)
@@ -815,7 +818,7 @@ class MainWindow(QWidget):
         self.config_note_label.setObjectName("ConfigNote")
         self.config_note_label.setWordWrap(True)
         self.config_note_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.config_note_label.setFont(build_font(11))
+        self.config_note_label.setFont(build_font(FONT_SIZES["secondary"]))
         self.config_note_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         path_layout.addWidget(self.config_note_label)
 
@@ -824,23 +827,13 @@ class MainWindow(QWidget):
         actions = QWidget()
         actions_layout = QVBoxLayout(actions)
         actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(scale_px(6, min_value=3))
+        actions_layout.setSpacing(scale_px(16, min_value=10))
 
-        self.config_button = QPushButton("(1)设置 cookie 保存到哪")
-        self.config_button.setObjectName("SecondaryButton")
-        self.config_button.setCursor(Qt.PointingHandCursor)
-        self.config_button.setFont(build_font(11, bold=True))
-        self.config_button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=30))
-        self.config_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.config_button = self._create_review_button("(1)设置 cookie 保存到哪")
         self.config_button.clicked.connect(self.choose_config_dir)
         actions_layout.addWidget(self.config_button, 1)
 
-        self.auto_cookie_button = QPushButton("(2)自动获取 cookie 并保存")
-        self.auto_cookie_button.setObjectName("SecondaryButton")
-        self.auto_cookie_button.setCursor(Qt.PointingHandCursor)
-        self.auto_cookie_button.setFont(build_font(11, bold=True))
-        self.auto_cookie_button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=30))
-        self.auto_cookie_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.auto_cookie_button = self._create_review_button("(2)自动获取 cookie 并保存")
         self.auto_cookie_button.clicked.connect(self.open_cookie_capture_dialog)
         actions_layout.addWidget(self.auto_cookie_button, 1)
 
@@ -853,15 +846,15 @@ class MainWindow(QWidget):
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(6, min_value=3))
+        layout.setSpacing(scale_px(16, min_value=10))
 
         days_row = QWidget()
         days_row_layout = QHBoxLayout(days_row)
         days_row_layout.setContentsMargins(0, 0, 0, 0)
         days_row_layout.setSpacing(scale_px(6, min_value=3))
 
-        self.review_days_label = QLabel("查询天数")
-        self.review_days_label.setFont(build_font(12, bold=True))
+        self.review_days_label = QLabel("选择订单查询天数")
+        self.review_days_label.setFont(build_font(FONT_SIZES["body"], bold=True))
         self.review_days_label.setStyleSheet(f"color: {APP_COLORS['blue_deep']};")
         days_row_layout.addWidget(self.review_days_label, 0, Qt.AlignVCenter)
         days_row_layout.addStretch(1)
@@ -873,7 +866,7 @@ class MainWindow(QWidget):
         self.review_days_spin.setAlignment(Qt.AlignCenter)
         self.review_days_spin.setFixedWidth(scale_px(128, min_value=96))
         self.review_days_spin.setFixedHeight(scale_px(36, min_value=28))
-        self.review_days_spin.setFont(build_font(13, bold=True))
+        self.review_days_spin.setFont(build_font(FONT_SIZES["button"], bold=True))
         self.review_days_spin.setStyleSheet(
             f"""QSpinBox {{
                 background: {APP_COLORS['surface']};
@@ -904,12 +897,12 @@ class MainWindow(QWidget):
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(4, min_value=2))
+        layout.setSpacing(scale_px(12, min_value=8))
 
         self.start_button = QPushButton("开始批量处理")
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.setCursor(Qt.PointingHandCursor)
-        self.start_button.setFont(build_font(16, bold=True))
+        self.start_button.setFont(build_font(FONT_SIZES["button"], bold=True))
         self.start_button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=30))
         self.start_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.start_button.clicked.connect(self.on_start_clicked)
@@ -918,7 +911,7 @@ class MainWindow(QWidget):
         self.pause_button = QPushButton("暂停批量处理")
         self.pause_button.setObjectName("PauseButton")
         self.pause_button.setCursor(Qt.PointingHandCursor)
-        self.pause_button.setFont(build_font(15, bold=True))
+        self.pause_button.setFont(build_font(FONT_SIZES["button"], bold=True))
         self.pause_button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=30))
         self.pause_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.pause_button.clicked.connect(self.on_pause_clicked)
@@ -951,25 +944,17 @@ class MainWindow(QWidget):
 
         self.license_summary_label = QLabel()
         self.license_summary_label.setObjectName("LicenseSummary")
-        self.license_summary_label.setFont(build_font(13, bold=True))
+        self.license_summary_label.setFont(build_font(FONT_SIZES["badge"], bold=True))
         self.license_summary_label.setWordWrap(True)
         panel_layout.addWidget(self.license_summary_label)
 
         self.license_meta_label = QLabel()
         self.license_meta_label.setObjectName("LicenseMeta")
-        self.license_meta_label.setFont(build_font(11))
+        self.license_meta_label.setFont(build_font(FONT_SIZES["secondary"]))
         self.license_meta_label.setWordWrap(True)
         panel_layout.addWidget(self.license_meta_label)
 
         body_layout.addWidget(info_panel)
-
-        self.license_help_label = QLabel(
-            f"如需续费、重绑设备或重新激活，请联系微信：{AUTHOR_WECHAT}。"
-        )
-        self.license_help_label.setObjectName("LicenseHelp")
-        self.license_help_label.setFont(build_font(11))
-        self.license_help_label.setWordWrap(True)
-        body_layout.addWidget(self.license_help_label)
         layout.addStretch(1)
         layout.addWidget(body_wrap)
         layout.addStretch(1)
@@ -1328,7 +1313,7 @@ class MainWindow(QWidget):
 
         if resolved_dir:
             path_text = resolved_dir
-            note_text = "程序会使用这里的 cookie 文件，也可以点击下方按钮自动更新。"
+            note_text = "软件自动使用这里的 cookie 文件进行操作。"
             badge_text = "已连接"
             badge_style = self._build_badge_style(
                 APP_COLORS["green_soft"],

@@ -29,15 +29,18 @@ VERY_HIGH_DPI_COMPACT_THRESHOLD = 140
 PAGE_MARGIN = 16
 PAGE_GAP = 10
 ROW_GAP = 12
+LEFT_COLUMN_GAP = 20  # 左側配置區卡片間距，略大於 ROW_GAP 以減輕擁擠感
 CARD_PADDING = 12
 CARD_HEADER_HEIGHT = 28
 CARD_HEADER_GAP = 6
+SETUP_SECTION_PADDING = 14  # 配置區內小節（如配置目錄、訂單查詢）內邊距
+SETUP_SECTION_SPACING = 12  # 配置區內小節標題與內容間距
 CARD_RADIUS = 16
 HERO_RADIUS = 20
 
 # 组件尺寸
 HERO_PADDING_X = 24
-HERO_PADDING_Y = 10
+HERO_PADDING_Y = 22  # 進一步增加標題卡片垂直內邊距
 BADGE_MIN_WIDTH = 88
 BADGE_HEIGHT = 36
 BADGE_RADIUS = 12
@@ -45,14 +48,26 @@ INPUT_BADGE_MIN_WIDTH = 72
 INPUT_BADGE_HEIGHT = 34
 INPUT_BADGE_RADIUS = 10
 BUTTON_HEIGHT = 40
-CONFIG_PATH_MIN_HEIGHT = 68
-INPUT_VISIBLE_LINES = 9
+CONFIG_PATH_MIN_HEIGHT = 76  # 路徑區最小高度，略增以減輕擁擠感
+INPUT_VISIBLE_LINES = 25
 INPUT_EDIT_RADIUS = 14
 INPUT_EDIT_PADDING = 16
 LOG_EDIT_RADIUS = 14
 LOG_EDIT_PADDING = 14
 LOG_PANEL_MIN_HEIGHT = 180
 DEFAULT_REVIEW_DAYS = 30
+
+# 字体方案
+FONT_SIZES = {
+    "title": 24,           # 主标题（TLS-shipinhao）
+    "section": 15,         # 卡片标题（配置目录、订单获取等）
+    "section_log": 16,     # 日志卡片标题
+    "badge": 13,           # 徽标文字（授权状态、配置状态）
+    "body": 12,            # 正文/路径显示
+    "button": 13,          # 按钮文字
+    "secondary": 11,       # 副文本/说明/帮助
+    "hint": 10,            # 提示文字
+}
 
 # 颜色方案
 APP_COLORS = {
@@ -82,6 +97,9 @@ APP_COLORS = {
     "neutral_text": "#64748B",
     "neutral_border": "#CBD5E1",
     "input_bg": "#FFFFFF",
+    # 语义化颜色（用于统一引用）
+    "section_title": "#064E3B",  # 卡片标题颜色
+    "body_text": "#064E3B",       # 正文颜色（同 text）
 }
 
 # 配置文件
