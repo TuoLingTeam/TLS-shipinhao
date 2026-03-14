@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import normalize_batch_text
-from .constants import AUTHOR_WECHAT, get_ui_scale
+from .constants import APP_COLORS, AUTHOR_WECHAT, get_ui_scale
 
 from .license import activate_license
 
@@ -122,62 +122,62 @@ class LicenseDialog(QDialog):
         self.setStyleSheet(
             """
             QDialog#LicenseDialog {
-                background: #0A1C36;
-                border: 1px solid #1E3A8A;
+                background: """ + APP_COLORS["bg"] + """;
+                border: 1px solid """ + APP_COLORS["border"] + """;
                 border-radius: 14px;
             }
             QLabel#LicenseTitle {
-                color: #F8FAFC;
+                color: """ + APP_COLORS["heading"] + """;
                 font-size: 19px;
                 font-weight: 700;
             }
             QLabel#LicenseDesc {
-                color: #CFE0F5;
+                color: """ + APP_COLORS["muted"] + """;
                 font-size: 14px;
                 line-height: 1.45;
             }
             QLabel#LicenseHint {
-                color: #22D3EE;
+                color: """ + APP_COLORS["blue"] + """;
                 font-size: 14px;
                 font-weight: 700;
             }
             QLineEdit#LicenseInput {
-                background: #0F2748;
-                color: #F8FAFC;
-                border: 1px solid #3B82F6;
+                background: """ + APP_COLORS["input_bg"] + """;
+                color: """ + APP_COLORS["text"] + """;
+                border: 1px solid """ + APP_COLORS["input_border"] + """;
                 border-radius: 10px;
                 padding: 10px 12px;
                 font-size: 15px;
             }
             QLineEdit#LicenseInput:focus {
-                border: 2px solid #60A5FA;
+                border: 2px solid """ + APP_COLORS["input_border_focus"] + """;
             }
             QLabel#LicenseMessage {
                 font-size: 13px;
             }
             QPushButton#LicensePrimary {
-                background: #1D4ED8;
-                color: #F8FAFC;
-                border: 1px solid #3B82F6;
+                background: """ + APP_COLORS["blue"] + """;
+                color: #FFFFFF;
+                border: 1px solid """ + APP_COLORS["blue_deep"] + """;
                 border-radius: 10px;
                 padding: 9px 18px;
                 min-width: 110px;
                 font-weight: 700;
             }
             QPushButton#LicensePrimary:hover {
-                background: #2563EB;
+                background: """ + APP_COLORS["blue_deep"] + """;
             }
             QPushButton#LicenseSecondary {
-                background: rgba(148, 163, 184, 0.18);
-                color: #EAF2FC;
-                border: 1px solid #64748B;
+                background: """ + APP_COLORS["neutral_bg"] + """;
+                color: """ + APP_COLORS["text"] + """;
+                border: 1px solid """ + APP_COLORS["neutral_border"] + """;
                 border-radius: 10px;
                 padding: 9px 18px;
                 min-width: 110px;
                 font-weight: 600;
             }
             QPushButton#LicenseSecondary:hover {
-                background: rgba(148, 163, 184, 0.28);
+                background: """ + APP_COLORS["border"] + """;
             }
             """
         )
@@ -210,7 +210,7 @@ class LicenseDialog(QDialog):
         self.message_label = QLabel("")
         self.message_label.setObjectName("LicenseMessage")
         self.message_label.setWordWrap(True)
-        self.message_label.setStyleSheet("color: #FCA5A5;")
+        self.message_label.setStyleSheet("color: " + APP_COLORS["red"] + ";")
         root.addWidget(self.message_label)
 
         action_row = QHBoxLayout()
@@ -235,27 +235,27 @@ class LicenseDialog(QDialog):
         clipboard = QApplication.clipboard()
         clipboard.setText(AUTHOR_WECHAT)
         self.message_label.setText(f"已复制作者微信：{AUTHOR_WECHAT}")
-        self.message_label.setStyleSheet("color: #86EFAC;")
+        self.message_label.setStyleSheet("color: " + APP_COLORS["green"] + ";")
 
     def _on_activate_clicked(self):
         key = self.key_input.text().strip()
         if not key:
             self.message_label.setText("请输入卡密。")
-            self.message_label.setStyleSheet("color: #FCA5A5;")
+            self.message_label.setStyleSheet("color: """ + APP_COLORS["red"] + ";")
             return
         try:
             info = activate_license(key)
         except ValueError as exc:
             self.message_label.setText(str(exc))
-            self.message_label.setStyleSheet("color: #FCA5A5;")
+            self.message_label.setStyleSheet("color: """ + APP_COLORS["red"] + ";")
             return
         except Exception as exc:  # noqa: BLE001
             self.message_label.setText(f"激活失败：{exc}")
-            self.message_label.setStyleSheet("color: #FCA5A5;")
+            self.message_label.setStyleSheet("color: """ + APP_COLORS["red"] + ";")
             return
 
         self.activated = True
         expires = str(info.get("expires_at", ""))[:19]
         self.message_label.setText(f"激活成功，有效期至：{expires}")
-        self.message_label.setStyleSheet("color: #86EFAC;")
+        self.message_label.setStyleSheet("color: """ + APP_COLORS["green"] + ";")
         self.accept()

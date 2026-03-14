@@ -217,7 +217,7 @@ class MainWindow(QWidget):
                 background: {c["orange_deep"]};
             }}
             QPushButton#PrimaryButton:pressed {{
-                background: #C2410C;
+                background: {c["orange_deep"]};
             }}
             QPushButton#PrimaryButton:disabled {{
                 background: {c["neutral_bg"]};
@@ -692,7 +692,7 @@ class MainWindow(QWidget):
             self._build_badge_style(
                 APP_COLORS["red_soft"],
                 APP_COLORS["red"],
-                "#FCA5A5",
+                APP_COLORS["red"],
             )
         )
         return self.config_badge
@@ -727,7 +727,7 @@ class MainWindow(QWidget):
                 background: {APP_COLORS['blue_deep']};
             }}
             QPushButton#ReviewButton:pressed {{
-                background: #065F46;
+                background: {APP_COLORS['blue_deep']};
             }}
             QPushButton#ReviewButton:disabled {{
                 background: {APP_COLORS['neutral_bg']};
@@ -1129,54 +1129,54 @@ class MainWindow(QWidget):
         dialog.setStyleSheet(
             """
             QDialog#AppMessageDialog {
-                background: #0A1C36;
-                border: 1px solid #1E3A8A;
+                background: """ + APP_COLORS["bg"] + """;
+                border: 1px solid """ + APP_COLORS["border"] + """;
                 border-radius: 14px;
             }
             QLabel#MessageTitle {
-                color: #F8FAFC;
+                color: """ + APP_COLORS["heading"] + """;
                 font-size: 18px;
                 font-weight: 700;
             }
             QLabel#MessageText {
-                color: #EAF2FC;
+                color: """ + APP_COLORS["text"] + """;
                 font-size: 15px;
                 line-height: 1.45;
             }
             QLabel#MessageInfo {
-                color: #BFD0E5;
+                color: """ + APP_COLORS["muted"] + """;
                 font-size: 13px;
                 line-height: 1.45;
             }
             QPushButton#MessagePrimary {
-                background: #1D4ED8;
-                color: #F8FAFC;
-                border: 1px solid #3B82F6;
+                background: """ + APP_COLORS["blue"] + """;
+                color: #FFFFFF;
+                border: 1px solid """ + APP_COLORS["blue_deep"] + """;
                 border-radius: 10px;
                 padding: 9px 18px;
                 min-width: 112px;
                 font-weight: 700;
             }
             QPushButton#MessagePrimary:hover {
-                background: #2563EB;
+                background: """ + APP_COLORS["blue_deep"] + """;
             }
             QPushButton#MessagePrimary:pressed {
-                background: #1E40AF;
+                background: """ + APP_COLORS["blue_deep"] + """;
             }
             QPushButton#MessageSecondary {
-                background: rgba(148, 163, 184, 0.18);
-                color: #EAF2FC;
-                border: 1px solid #64748B;
+                background: """ + APP_COLORS["neutral_bg"] + """;
+                color: """ + APP_COLORS["text"] + """;
+                border: 1px solid """ + APP_COLORS["neutral_border"] + """;
                 border-radius: 10px;
                 padding: 9px 18px;
                 min-width: 112px;
                 font-weight: 600;
             }
             QPushButton#MessageSecondary:hover {
-                background: rgba(148, 163, 184, 0.28);
+                background: """ + APP_COLORS["border"] + """;
             }
             QPushButton#MessageSecondary:pressed {
-                background: rgba(100, 116, 139, 0.35);
+                background: """ + APP_COLORS["border_strong"] + """;
             }
             """
         )
@@ -1318,9 +1318,9 @@ class MainWindow(QWidget):
             note_text = "以上目录未找到 cookie.txt 文件，请重新获取。"
             badge_text = "待修复"
             badge_style = self._build_badge_style(
-                "#FEF3C7",
-                "#B45309",
-                "#FCD34D",
+                APP_COLORS["neutral_bg"],
+                APP_COLORS["muted"],
+                APP_COLORS["neutral_border"],
             )
         else:
             path_text = "请点击下方按钮自动获取 cookie 文件。"
@@ -1329,7 +1329,7 @@ class MainWindow(QWidget):
             badge_style = self._build_badge_style(
                 APP_COLORS["red_soft"],
                 APP_COLORS["red"],
-                "#FCA5A5",
+                APP_COLORS["red"],
             )
         self.config_path_label.setText(path_text)
         self.config_note_label.setText(note_text)
@@ -1523,7 +1523,7 @@ class MainWindow(QWidget):
                     self._build_badge_style(
                         APP_COLORS["red_soft"],
                         APP_COLORS["red"],
-                        "#FCA5A5",
+                        APP_COLORS["red"],
                         radius=scale_px(BADGE_RADIUS, min_value=10),
                         padding=self._scaled_padding(7, 12),
                     )
