@@ -519,8 +519,8 @@ class MainWindow(QWidget):
         self.order_count_badge = self._create_count_badge()
         self.tracking_count_badge = self._create_count_badge()
 
-        self.order_edit = self._create_input_editor("多个请用英文逗号、换行分隔，最多100条")
-        self.tracking_edit = self._create_input_editor("多个请用英文逗号、换行分隔，最多100条")
+        self.order_edit = self._create_input_editor("请用英文逗号、换行分隔，最多100个")
+        self.tracking_edit = self._create_input_editor("请用英文逗号、换行分隔，最多100个")
         self.order_edit.textChanged.connect(self.refresh_input_metrics)
         self.tracking_edit.textChanged.connect(self.refresh_input_metrics)
         self.order_edit.normalized.connect(self.refresh_input_metrics)
@@ -1308,7 +1308,7 @@ class MainWindow(QWidget):
 
         if resolved_dir:
             path_text = resolved_dir
-            note_text = "软件自动使用这里的 cookie 文件进行操作。"
+            note_text = "软件会使用这里的 cookie 文件进行自动化操作。"
             badge_text = "已连接"
             badge_style = self._build_badge_style(
                 APP_COLORS["green_soft"],
@@ -1317,7 +1317,7 @@ class MainWindow(QWidget):
             )
         elif saved_dir:
             path_text = saved_dir
-            note_text = "但是未找到可用的 cookie.txt 文件，你也可以直接重新自动获取。"
+            note_text = "以上目录未找到 cookie.txt 文件，请重新获取。"
             badge_text = "待修复"
             badge_style = self._build_badge_style(
                 "#FEF3C7",
@@ -1325,8 +1325,8 @@ class MainWindow(QWidget):
                 "#FCD34D",
             )
         else:
-            path_text = "请点击下方按钮手动选择配置目录，或直接自动获取 Cookie。"
-            note_text = "自动获取时会自动创建配置目录并写入标准 cookie.txt。"
+            path_text = "请点击下方按钮自动获取 cookie 文件。"
+            note_text = "自动获取时会自动保存 cookie.txt 文件。"
             badge_text = "未配置"
             badge_style = self._build_badge_style(
                 APP_COLORS["red_soft"],
