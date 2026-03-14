@@ -10,12 +10,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
+import plistlib
+import re
 import shutil
 import subprocess
 import sys
-import json
 from pathlib import Path
 
 # Windows 终端默认编码对中文输出不友好，统一切成 UTF-8。
@@ -45,6 +47,7 @@ SOURCE_ICON_FILE = APP_ROOT / "src" / "favicon.png"
 MACOS_ICON_FILE = BUILD_DIR / "app_icon.icns"
 WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
 PYINSTALLER_CACHE_DIR = REPO_ROOT / ".pyinstaller"
+CONSTANTS_PY = APP_ROOT / "src" / "constants.py"
 
 # 构建时需要的最小依赖集合（避免漏装导致中断）。
 BUILD_REQUIREMENTS = [
@@ -242,6 +245,77 @@ QT_KEEP_FRAMEWORKS = {
     "QtWebEngineWidgets",
     "QtWidgets",
 }
+
+
+# =========================
+# 版本号（与 app/src/constants.py 中 APP_VERSION 保持一致）
+# =========================
+def get_app_version() -> str:
+    """从 constants.py 读取 APP_VERSION。"""
+    if not CONSTANTS_PY.exists():
+        return "0.0.0"
+    text = CONSTANTS_PY.read_text(encoding="utf-8")
+    match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
+    return match.group(1).strip() if match else "0.0.0"
+
+
+def patch_macos_bundle_version(app_bundle: Path, version: str) -> None:
+    """修补 macOS .app 的 Info.plist，设置 CFBundleShortVersionString 与 CFBundleVersion。"""
+    plist_path = app_bundle / "Contents" / "Info.plist"
+    if not plist_path.exists():
+        return
+    with open(plist_path, "rb") as f:
+        plist = plistlib.load(f)
+    plist["CFBundleShortVersionString"] = version
+    plist["CFBundleVersion"] = version
+    with open(plist_path, "wb") as f:
+        plistlib.dump(plist, f)
+    print(f"已设置 macOS 应用版本: {version}")
+
+
+def prepare_windows_version_file(version: str) -> Path:
+    """生成 Windows 版本资源文件，返回文件路径。PyInstaller 会 eval 该文件并注入 VSVersionInfo 等。"""
+    parts = [int(x) for x in version.split(".")[:4]]
+    while len(parts) < 4:
+        parts.append(0)
+    vers_tuple = tuple(parts)
+    BUILD_DIR.mkdir(exist_ok=True)
+    path = BUILD_DIR / "version_info.txt"
+    # 仅包含 VSVersionInfo(...)，类名由 PyInstaller eval 时注入
+    content = f'''# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={vers_tuple},
+    prodvers={vers_tuple},
+    mask=0x3F,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        "040904B0",
+        [
+          StringStruct("CompanyName", "驼铃"),
+          StringStruct("FileDescription", "驼铃视频小店中差评处理"),
+          StringStruct("FileVersion", "{version}"),
+          StringStruct("InternalName", "{MAIN_APP_NAME}"),
+          StringStruct("LegalCopyright", ""),
+          StringStruct("OriginalFilename", "{MAIN_APP_NAME}.exe"),
+          StringStruct("ProductName", "驼铃视频小店中差评处理"),
+          StringStruct("ProductVersion", "{version}"),
+        ],
+      ),
+    ]),
+    VarFileInfo([VarStruct("Translation", [0, 1200])]),
+  ],
+)
+'''
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 # =========================
@@ -578,6 +652,7 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, 
 
     if profile == PROFILE_MAIN:
         prune_macos_bundle(app_bundle)
+        patch_macos_bundle_version(app_bundle, get_app_version())
     cleanup_temp_files(app_name)
 
     print(f"打包完成。\n应用位置: {app_bundle}")
@@ -590,7 +665,9 @@ def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str
     """构建 Windows .exe。"""
     print(f"开始打包 Windows 应用: {app_name}")
     cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_WINDOWS, profile, use_dist)
-    cmd.extend(["--onefile", "--windowed", "--name", app_name, str(entry_file)])
+    version = get_app_version()
+    version_file = prepare_windows_version_file(version)
+    cmd.extend(["--onefile", "--windowed", "--name", app_name, "--version-file", str(version_file), str(entry_file)])
     run(cmd)
 
     exe_file = DIST_DIR / f"{app_name}.exe"
