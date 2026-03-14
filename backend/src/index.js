@@ -151,6 +151,18 @@ function checkAdmin(request, env) {
   return constantTimeEqual(auth, secret);
 }
 
+async function deleteLicenseKeyRecords(env, licenseKey) {
+  await env.DB.prepare("DELETE FROM activations WHERE license_key = ?").bind(licenseKey).run();
+  await env.DB.prepare("DELETE FROM generated_keys WHERE license_key = ?").bind(licenseKey).run();
+}
+
+async function purgeRevokedKeys(env) {
+  await env.DB.prepare(
+    "DELETE FROM activations WHERE license_key IN (SELECT license_key FROM generated_keys WHERE status = 'revoked')"
+  ).run();
+  await env.DB.prepare("DELETE FROM generated_keys WHERE status = 'revoked'").run();
+}
+
 // ---------------------------------------------------------------------------
 // 客户端 API
 // ---------------------------------------------------------------------------
@@ -171,8 +183,11 @@ async function handleActivate(request, env) {
 
   // 检查卡密是否在 generated_keys 表中注册且未被吊销
   const genRecord = await env.DB.prepare("SELECT * FROM generated_keys WHERE license_key = ?").bind(normalizedKey).first();
-  if (!genRecord) return errorResponse("卡密未注册：该卡密不在系统记录中", 403);
-  if (genRecord.status === "revoked") return errorResponse("该卡密已被吊销，无法使用", 403);
+  if (!genRecord) return errorResponse("该卡密不存在或已被吊销", 403);
+  if (genRecord.status === "revoked") {
+    await deleteLicenseKeyRecords(env, normalizedKey);
+    return errorResponse("该卡密已被吊销，无法使用", 403);
+  }
 
   const existing = await env.DB.prepare("SELECT * FROM activations WHERE license_key = ?").bind(normalizedKey).first();
   const now = nowISO();
@@ -213,7 +228,11 @@ async function handleVerify(request, env) {
 
   // 检查卡密是否已被吊销
   const genRecord = await env.DB.prepare("SELECT status FROM generated_keys WHERE license_key = ?").bind(normalizedKey).first();
+  if (!genRecord) {
+    return jsonResponse({ success: false, message: "该卡密已被吊销", expired: true });
+  }
   if (genRecord && genRecord.status === "revoked") {
+    await deleteLicenseKeyRecords(env, normalizedKey);
     return jsonResponse({ success: false, message: "该卡密已被吊销", expired: true });
   }
 
@@ -258,6 +277,8 @@ async function handleAdminGenerate(request, env) {
 async function handleAdminList(request, env) {
   if (!checkAdmin(request, env)) return errorResponse("管理员密钥错误", 401);
 
+  await purgeRevokedKeys(env);
+
   const generated = await env.DB.prepare(
     "SELECT g.*, a.device_id, a.device_fingerprint, a.activated_at, a.expires_at FROM generated_keys g LEFT JOIN activations a ON g.license_key = a.license_key ORDER BY g.id DESC LIMIT 200"
   ).all();
@@ -280,10 +301,9 @@ async function handleAdminRevoke(request, env) {
 
   const record = await env.DB.prepare("SELECT * FROM generated_keys WHERE license_key = ?").bind(key).first();
   if (!record) return errorResponse("卡密不存在", 404);
-  if (record.status === "revoked") return errorResponse("该卡密已被吊销", 400);
 
-  await env.DB.prepare("UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?").bind(key).run();
-  return jsonResponse({ success: true, message: "卡密已吊销" });
+  await deleteLicenseKeyRecords(env, key);
+  return jsonResponse({ success: true, message: "卡密已吊销并删除记录" });
 }
 
 // ---------------------------------------------------------------------------
@@ -451,9 +471,8 @@ function renderList(res) {
   const total = (res.stats || []).reduce((s, r) => s + r.cnt, 0);
   const unused = (res.stats || []).find(r => r.status === "unused")?.cnt || 0;
   const activated = (res.stats || []).find(r => r.status === "activated")?.cnt || 0;
-  const revoked = (res.stats || []).find(r => r.status === "revoked")?.cnt || 0;
   sa.innerHTML = [
-    stat(total, "总计"), stat(unused, "未使用"), stat(activated, "已激活"), stat(revoked, "已吊销")
+    stat(total, "总计"), stat(unused, "未使用"), stat(activated, "已激活")
   ].join("");
   
   const tbody = document.getElementById("keysList");
