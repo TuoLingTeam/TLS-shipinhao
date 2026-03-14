@@ -27,12 +27,12 @@ from .constants import (
     RATE_LIMIT_RETRY_COUNT,
     SCORE_WEIGHTS,
 )
+from .http_utils import build_request_params, get_payload_error, get_response_error
 
 ProgressCallback = Callable[[str], None]
 JsonDict = dict[str, Any]
 JsonList = list[JsonDict]
 
-DEFAULT_REQUEST_PARAMS = {"token": "", "lang": "zh_CN"}
 EVALUATION_REFERER = "https://store.weixin.qq.com/shop/evaluate/home"
 ORDER_LIST_REFERER = "https://store.weixin.qq.com/shop/order/list"
 QUALITY_REFUND_REFERER = (
@@ -99,11 +99,6 @@ class BadReviewOrderFinder:
         }
 
     @staticmethod
-    def _build_request_params() -> dict[str, str]:
-        """构建通用请求参数。"""
-        return dict(DEFAULT_REQUEST_PARAMS)
-
-    @staticmethod
     def _build_evaluation_search_payload(start_time: int, end_time: int, page: int) -> JsonDict:
         """构建差评搜索请求体。"""
         return {
@@ -144,7 +139,7 @@ class BadReviewOrderFinder:
         """发送通用 POST JSON 请求。"""
         return requests.post(
             url,
-            params=self._build_request_params(),
+            params=build_request_params(),
             json=data,
             headers=headers,
             timeout=REQUEST_TIMEOUT,
@@ -163,7 +158,7 @@ class BadReviewOrderFinder:
                 response = requests.request(
                     method=method,
                     url=QUALITY_REFUND_ORDER_URL,
-                    params=self._build_request_params(),
+                    params=build_request_params(),
                     json={} if method == "POST" else None,
                     headers=headers,
                     timeout=REQUEST_TIMEOUT,

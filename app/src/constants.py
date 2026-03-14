@@ -74,25 +74,6 @@ SCORE_WEIGHTS = {
 MATCH_MIN_SCORE = 52              # 达到该分数才认为"可匹配"
 AUTO_FILL_SCORE_THRESHOLD = 80    # 达到该分数才自动填入订单号，低于该分数需要人工核对
 
-# 昵称维度评分参数
-NICKNAME_PARTIAL_SCORE_RATIO = 0.73   # 昵称强相关得分比例
-NICKNAME_WEAK_SCORE_RATIO = 0.47      # 昵称弱相关得分比例
-
-# 时间维度评分参数（小时）
-REFERENCE_TIME_WITHIN_6H = 6            # 评价紧邻收货（满分）
-REFERENCE_TIME_WITHIN_24H = 24           # 评价与收货同日
-REFERENCE_TIME_WITHIN_72H = 72          # 评价与收货间隔较短（3天内）
-REFERENCE_TIME_WITHIN_1W = 168          # 评价与收货间隔一周内（7天）
-REFERENCE_TIME_WITHIN_15D = 360         # 评价与收货间隔偏长（15天）
-REFERENCE_TIME_WITHIN_30D = 720         # 评价与收货间隔较远（30天内）
-
-# 下单时间维度评分参数（天）
-CREATE_TIME_WITHIN_1D = 1               # 下单后很快评价（满分）
-CREATE_TIME_WITHIN_3D = 3               # 下单后短期评价
-CREATE_TIME_WITHIN_1W = 7               # 下单后一周内评价
-CREATE_TIME_WITHIN_2W = 14              # 下单后两周内评价
-CREATE_TIME_WITHIN_1M = 30              # 下单后一个月内评价
-
 # 多候选订单竞争扣分参数
 MULTI_ORDER_PENALTY_FACTOR = 1.5       # 多单竞争时效劣势扣分系数
 MULTI_ORDER_PENALTY_MAX = 12            # 多单竞争最大扣分
