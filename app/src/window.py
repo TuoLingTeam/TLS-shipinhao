@@ -829,11 +829,7 @@ class MainWindow(QWidget):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(scale_px(16, min_value=10))
 
-        self.config_button = self._create_review_button("(1)设置 cookie 保存到哪")
-        self.config_button.clicked.connect(self.choose_config_dir)
-        actions_layout.addWidget(self.config_button, 1)
-
-        self.auto_cookie_button = self._create_review_button("(2)自动获取 cookie 并保存")
+        self.auto_cookie_button = self._create_review_button("自动获取 cookie 并保存")
         self.auto_cookie_button.clicked.connect(self.open_cookie_capture_dialog)
         actions_layout.addWidget(self.auto_cookie_button, 1)
 
@@ -1285,7 +1281,6 @@ class MainWindow(QWidget):
         running = self.worker is not None
         self.order_edit.setReadOnly(running)
         self.tracking_edit.setReadOnly(running)
-        self.config_button.setDisabled(running)
         if hasattr(self, "auto_cookie_button"):
             self.auto_cookie_button.setDisabled(running)
         self.pause_button.setDisabled((not running) or self.is_paused)
@@ -1382,7 +1377,7 @@ class MainWindow(QWidget):
         )
 
     def open_cookie_capture_dialog(self):
-        """打开网页登录窗口并自动抓取 Cookie。"""
+        """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
         if not QTWEBENGINE_AVAILABLE:
             self.show_message(
                 QMessageBox.Warning,
@@ -1393,10 +1388,10 @@ class MainWindow(QWidget):
             )
             return
 
-        target_dir = get_default_config_dir()
-        self.append_result_log("正在打开内置网页登录窗口，登录成功后会自动捕获 Cookie。")
+        initial_dir = get_default_config_dir()
+        self.append_result_log("正在打开内置网页登录窗口，登录成功后点击保存并选择目录即可。")
         try:
-            dialog = CookieCaptureDialog(target_dir, self)
+            dialog = CookieCaptureDialog(initial_dir, self)
         except Exception as exc:  # noqa: BLE001
             self.show_message(
                 QMessageBox.Critical,
@@ -1420,8 +1415,18 @@ class MainWindow(QWidget):
             )
             return
 
+        start_dir = get_config_dir_cache() or get_saved_user_config_dir() or os.path.expanduser("~")
+        selected_dir = QFileDialog.getExistingDirectory(
+            self,
+            "选择 Cookie 保存位置",
+            start_dir,
+        )
+        if not selected_dir:
+            self.append_result_log("已取消选择目录，Cookie 未保存。")
+            return
+
         try:
-            cookie_path = save_cookie_data(cookie_data, config_dir=target_dir, remember_dir=True)
+            cookie_path = save_cookie_data(cookie_data, config_dir=selected_dir, remember_dir=True)
         except Exception as exc:  # noqa: BLE001
             self.show_message(
                 QMessageBox.Critical,
@@ -1432,13 +1437,13 @@ class MainWindow(QWidget):
             return
 
         self.refresh_config_path_label()
-        self.append_result_log(f"Cookie 已自动保存：{cookie_path}")
-        self.append_result_log("已检测到 biz_magic，后续请求会使用最新登录态。")
+        self.append_result_log(f"Cookie 已保存到：{cookie_path}")
+        self.append_result_log("已记住该路径，后续将从此目录读取 cookie.txt。")
         self.show_message(
             QMessageBox.Information,
             "Cookie 获取成功",
-            f"已自动保存到：\n{cookie_path}",
-            "后续执行获取差评、获取品退和批量处理时会直接使用这份 Cookie。",
+            f"已保存到：\n{cookie_path}",
+            "已记住该配置目录，后续获取差评、获取品退和批量处理会直接使用此目录下的 cookie.txt。",
         )
 
     def show_missing_config_error(self, searched_dirs):

@@ -6,6 +6,7 @@ import os
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import (
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -82,15 +83,16 @@ class CookieCaptureDialog(QDialog):
             QLabel#CookieTitle {{
                 color: {APP_COLORS["heading"]};
             }}
+            QFrame#CookiePromptCard {{
+                background: {APP_COLORS["surface"]};
+                border: 1px solid {APP_COLORS["border_strong"]};
+                border-radius: 12px;
+            }}
             QLabel#CookieHint {{
                 color: {APP_COLORS["muted"]};
             }}
             QLabel#CookieStatus {{
-                background: {APP_COLORS["surface_soft"]};
                 color: {APP_COLORS["blue_deep"]};
-                border: 1px solid {APP_COLORS["border"]};
-                border-radius: 12px;
-                padding: 8px 12px;
             }}
             QPushButton#CookieSecondary {{
                 background: {APP_COLORS["surface"]};
@@ -150,19 +152,27 @@ class CookieCaptureDialog(QDialog):
 
         root.addWidget(header)
 
+        prompt_card = QFrame()
+        prompt_card.setObjectName("CookiePromptCard")
+        card_layout = QVBoxLayout(prompt_card)
+        card_layout.setContentsMargins(16, 12, 16, 12)
+        card_layout.setSpacing(8)
+
         hint_label = QLabel(
-            "请在下方页面完成扫码登录。检测到登录态后，右上角“保存 Cookie”会自动可用。"
+            "在下方页面完成扫码登录；点击「保存 Cookie」后将选择保存目录，软件会从该目录读取 cookie.txt。"
         )
         hint_label.setObjectName("CookieHint")
         hint_label.setWordWrap(True)
         hint_label.setFont(build_font(11))
-        root.addWidget(hint_label)
+        card_layout.addWidget(hint_label)
 
         self.status_label = QLabel()
         self.status_label.setObjectName("CookieStatus")
         self.status_label.setWordWrap(True)
         self.status_label.setFont(build_font(11))
-        root.addWidget(self.status_label)
+        card_layout.addWidget(self.status_label)
+
+        root.addWidget(prompt_card)
 
         self.browser_container = QWidget()
         self.browser_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -256,10 +266,10 @@ class CookieCaptureDialog(QDialog):
         """刷新 Cookie 捕获状态文案。"""
         magic_value = extract_biz_magic_from_cookie(self._cookies)
         if magic_value:
-            base_text = "已检测到登录态，点击右上角“保存 Cookie”即可完成。"
+            base_text = "已检测到登录态，点击右上角「保存 Cookie」后选择保存目录即可。"
             self.save_button.setEnabled(True)
         else:
-            base_text = "请先在页面中完成扫码或确认登录，登录成功后再保存 Cookie。"
+            base_text = "请先完成扫码或确认登录。"
             self.save_button.setEnabled(False)
 
         if self._status_suffix:
