@@ -491,9 +491,8 @@ button,input{font:inherit}
 .top-grid{
   display:grid;
   grid-template-columns:minmax(0,1.18fr) minmax(300px,.82fr);
-  gap:12px;
-  min-height:248px;
-  height:clamp(248px, 31vh, 300px);
+  gap:10px;
+  align-items:start;
 }
 .card{
   position:relative;
@@ -585,8 +584,17 @@ button,input{font:inherit}
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:10px;
 }
+.field-grid-generate{
+  grid-template-columns:minmax(0,.8fr) minmax(0,.8fr) minmax(0,1fr) minmax(148px,.62fr);
+  align-items:end;
+}
 .field{
   display:block;
+}
+.field-action{
+  display:flex;
+  align-items:flex-end;
+  min-height:100%;
 }
 .field span{
   display:block;
@@ -612,12 +620,6 @@ button:focus-visible{
   outline:none;
   border-color:var(--cyan);
   box-shadow:0 0 0 3px rgba(56,189,248,.18);
-}
-.action-row{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin-top:12px;
 }
 .btn{
   display:inline-flex;
@@ -663,11 +665,14 @@ button:focus-visible{
   padding:0 12px;
   font-size:.78rem;
 }
+.btn-fill{
+  width:100%;
+}
 .keys-output{
-  margin-top:12px;
+  margin-top:10px;
   min-height:0;
-  max-height:96px;
-  padding:12px;
+  max-height:72px;
+  padding:10px 12px;
   border-radius:14px;
   border:1px solid rgba(34,197,94,.18);
   background:
@@ -684,11 +689,11 @@ button:focus-visible{
 .stats{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:10px;
+  gap:8px;
 }
 .stat-item{
-  padding:14px 12px;
-  border-radius:16px;
+  padding:12px 10px;
+  border-radius:14px;
   border:1px solid var(--stroke);
   background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(10,15,28,.8));
 }
@@ -704,11 +709,15 @@ button:focus-visible{
 }
 .stat-num{
   display:block;
-  margin-top:8px;
-  font-size:1.65rem;
+  margin-top:6px;
+  font-size:1.5rem;
   font-weight:700;
   line-height:1;
   letter-spacing:-.05em;
+}
+.copy-btn{
+  align-self:flex-start;
+  margin-top:8px;
 }
 .stat-item:nth-child(1) .stat-num{color:var(--cyan)}
 .stat-item:nth-child(2) .stat-num{color:#4ade80}
@@ -984,7 +993,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <div class="status-pill">同源安全连接</div>
         </div>
         <div id="genMsg"></div>
-        <div class="field-grid">
+        <div class="field-grid field-grid-generate">
           <label class="field">
             <span>数量（1-50）</span>
             <input type="number" id="genCount" value="5" min="1" max="50">
@@ -997,12 +1006,12 @@ th:nth-child(9),td:nth-child(9){width:6%}
             <span>备注</span>
             <input type="text" id="genNote" placeholder="可选备注">
           </label>
-        </div>
-        <div class="action-row">
-          <button class="btn btn-primary" onclick="doGenerate()">生成卡密</button>
-          <button class="btn btn-secondary hidden" onclick="copyKeys()" id="copyBtn">复制全部</button>
+          <div class="field-action">
+            <button class="btn btn-primary btn-fill" onclick="doGenerate()">生成卡密</button>
+          </div>
         </div>
         <div id="keysOutput" class="keys-output hidden"></div>
+        <button class="btn btn-secondary btn-sm copy-btn hidden" onclick="copyKeys()" id="copyBtn">复制全部</button>
       </article>
 
       <article class="card">
