@@ -377,11 +377,11 @@ button,input{font:inherit}
   width:100%;
   height:100vh;
   margin:0 auto;
-  padding:18px;
+  padding:14px;
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:18px;
+  gap:12px;
 }
 .masthead{
   width:100%;
@@ -389,10 +389,10 @@ button,input{font:inherit}
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:20px;
-  padding:18px 22px;
+  gap:16px;
+  padding:14px 18px;
   border:1px solid var(--stroke);
-  border-radius:28px;
+  border-radius:24px;
   background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(7,14,27,.92));
   box-shadow:var(--shadow);
   backdrop-filter:blur(20px);
@@ -400,15 +400,15 @@ button,input{font:inherit}
 .brand{
   display:flex;
   align-items:center;
-  gap:16px;
+  gap:14px;
   min-width:0;
 }
 .brand-icon{
-  width:52px;
-  height:52px;
+  width:46px;
+  height:46px;
   display:grid;
   place-items:center;
-  border-radius:16px;
+  border-radius:14px;
   background:linear-gradient(135deg, rgba(56,189,248,.16), rgba(34,197,94,.18));
   border:1px solid rgba(56,189,248,.28);
   box-shadow:0 0 0 1px rgba(56,189,248,.08), 0 12px 28px rgba(15,23,42,.45);
@@ -421,10 +421,10 @@ button,input{font:inherit}
   display:inline-flex;
   align-items:center;
   gap:8px;
-  margin-bottom:8px;
-  font-size:.72rem;
+  margin-bottom:6px;
+  font-size:.68rem;
   font-weight:600;
-  letter-spacing:.18em;
+  letter-spacing:.16em;
   text-transform:uppercase;
   color:var(--cyan);
 }
@@ -436,119 +436,53 @@ button,input{font:inherit}
 }
 .brand h1{
   margin:0;
-  font-size:2rem;
+  font-size:1.6rem;
   line-height:1.05;
   letter-spacing:-.03em;
 }
 .brand p{
-  margin:8px 0 0;
+  margin:6px 0 0;
   color:var(--muted);
-  font-size:.98rem;
+  font-size:.88rem;
 }
 .masthead-meta{
   display:grid;
-  grid-template-columns:repeat(2,minmax(140px,1fr));
-  gap:12px;
-  min-width:320px;
+  grid-template-columns:repeat(2,minmax(124px,1fr));
+  gap:10px;
+  min-width:280px;
 }
 .meta-chip{
-  padding:12px 14px;
-  border-radius:16px;
+  padding:10px 12px;
+  border-radius:14px;
   border:1px solid var(--stroke);
   background:rgba(15,23,42,.68);
 }
 .meta-chip span{
   display:block;
-  font-size:.72rem;
+  font-size:.66rem;
   color:var(--muted);
   letter-spacing:.08em;
   text-transform:uppercase;
 }
 .meta-chip strong{
   display:block;
-  margin-top:6px;
-  font-size:1rem;
+  margin-top:4px;
+  font-size:.92rem;
   color:var(--text);
 }
 .login-shell{
   flex:1;
   display:grid;
   width:100%;
-  max-width:1120px;
+  max-width:420px;
   margin:0 auto;
-  gap:12px;
-  align-content:center;
-  justify-items:center;
+  place-items:center;
   min-height:0;
-}
-.login-hero{
-  width:100%;
-  gap:18px;
-  padding:20px 22px;
-  justify-content:center;
-  align-items:center;
-  text-align:center;
-}
-.login-hero-copy{
-  max-width:760px;
-}
-.login-hero-copy h2{
-  margin:0;
-  font-size:2rem;
-  line-height:1.05;
-  letter-spacing:-.04em;
-}
-.login-hero-copy p{
-  margin:12px auto 0;
-  max-width:52ch;
-  color:var(--muted);
-  font-size:.96rem;
-  line-height:1.65;
-}
-.login-feature-grid{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:12px;
-  width:100%;
-}
-.feature-card{
-  padding:14px;
-  border-radius:20px;
-  border:1px solid var(--stroke);
-  background:linear-gradient(180deg, rgba(15,23,42,.8), rgba(8,15,31,.72));
-  box-shadow:inset 0 0 0 1px rgba(56,189,248,.05);
-}
-.feature-label{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  font-size:.72rem;
-  font-weight:700;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  color:var(--cyan);
-}
-.feature-label::before{
-  content:"";
-  width:18px;
-  height:1px;
-  background:linear-gradient(90deg, rgba(56,189,248,0), rgba(56,189,248,.9));
-}
-.feature-card strong{
-  display:block;
-  margin-top:10px;
-  font-size:.98rem;
-}
-.feature-card p{
-  margin:6px 0 0;
-  color:var(--muted);
-  font-size:.82rem;
-  line-height:1.55;
 }
 .workspace{
   display:flex;
   flex-direction:column;
-  gap:18px;
+  gap:12px;
   flex:1;
   width:100%;
   max-width:1120px;
@@ -556,10 +490,10 @@ button,input{font:inherit}
 }
 .top-grid{
   display:grid;
-  grid-template-columns:minmax(0,1.16fr) minmax(360px,.84fr);
-  gap:18px;
-  min-height:320px;
-  height:clamp(320px, 36vh, 390px);
+  grid-template-columns:minmax(0,1.18fr) minmax(300px,.82fr);
+  gap:12px;
+  min-height:248px;
+  height:clamp(248px, 31vh, 300px);
 }
 .card{
   position:relative;
@@ -567,8 +501,8 @@ button,input{font:inherit}
   flex-direction:column;
   min-height:0;
   overflow:hidden;
-  padding:20px;
-  border-radius:var(--radius-xl);
+  padding:16px;
+  border-radius:22px;
   border:1px solid var(--stroke);
   background:
     linear-gradient(180deg, rgba(15,23,42,.92), rgba(8,15,31,.88));
@@ -592,36 +526,36 @@ button,input{font:inherit}
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
-  gap:18px;
-  margin-bottom:18px;
+  gap:12px;
+  margin-bottom:12px;
 }
 .panel-head h2{
   margin:0;
-  font-size:1.35rem;
+  font-size:1.14rem;
   line-height:1.08;
   letter-spacing:-.03em;
 }
 .panel-head p{
-  margin:8px 0 0;
-  max-width:56ch;
+  margin:4px 0 0;
+  max-width:44ch;
   color:var(--muted);
-  font-size:.92rem;
-  line-height:1.55;
+  font-size:.82rem;
+  line-height:1.45;
 }
 .panel-head-tight{
-  margin-bottom:14px;
+  margin-bottom:10px;
 }
 .status-pill,.legend-item{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:10px 12px;
+  padding:8px 10px;
   border-radius:999px;
   border:1px solid rgba(34,197,94,.24);
   background:rgba(34,197,94,.09);
   color:#d1fae5;
   white-space:nowrap;
-  font-size:.8rem;
+  font-size:.74rem;
   font-weight:600;
 }
 .status-pill::before,.dot{
@@ -643,29 +577,29 @@ button,input{font:inherit}
   display:flex;
   align-items:center;
   justify-content:flex-end;
-  gap:10px;
+  gap:8px;
   flex-wrap:wrap;
 }
 .field-grid{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:14px;
+  gap:10px;
 }
 .field{
   display:block;
 }
 .field span{
   display:block;
-  margin-bottom:8px;
+  margin-bottom:6px;
   color:var(--muted);
-  font-size:.82rem;
+  font-size:.76rem;
   letter-spacing:.04em;
 }
 input{
   width:100%;
-  height:48px;
-  padding:0 14px;
-  border-radius:14px;
+  height:42px;
+  padding:0 12px;
+  border-radius:12px;
   border:1px solid rgba(71,85,105,.82);
   background:rgba(8,15,31,.9);
   color:var(--text);
@@ -682,18 +616,18 @@ button:focus-visible{
 .action-row{
   display:flex;
   align-items:center;
-  gap:12px;
-  margin-top:16px;
+  gap:10px;
+  margin-top:12px;
 }
 .btn{
   display:inline-flex;
   align-items:center;
   justify-content:center;
   gap:10px;
-  min-height:44px;
-  padding:0 18px;
+  min-height:40px;
+  padding:0 16px;
   border:1px solid transparent;
-  border-radius:14px;
+  border-radius:12px;
   cursor:pointer;
   font-weight:700;
   letter-spacing:.01em;
@@ -716,8 +650,8 @@ button:focus-visible{
   color:var(--text);
 }
 .btn-danger{
-  min-height:36px;
-  padding:0 14px;
+  min-height:34px;
+  padding:0 12px;
   border-radius:12px;
   border-color:rgba(248,113,113,.3);
   background:rgba(127,29,29,.62);
@@ -725,23 +659,23 @@ button:focus-visible{
   box-shadow:none;
 }
 .btn-sm{
-  min-height:38px;
-  padding:0 14px;
-  font-size:.84rem;
+  min-height:34px;
+  padding:0 12px;
+  font-size:.78rem;
 }
 .keys-output{
-  margin-top:16px;
-  flex:1;
+  margin-top:12px;
   min-height:0;
-  padding:16px;
-  border-radius:18px;
+  max-height:96px;
+  padding:12px;
+  border-radius:14px;
   border:1px solid rgba(34,197,94,.18);
   background:
     linear-gradient(180deg, rgba(7,18,20,.88), rgba(3,10,18,.92));
   color:#bbf7d0;
   font-family:var(--mono);
-  font-size:.84rem;
-  line-height:1.7;
+  font-size:.78rem;
+  line-height:1.55;
   white-space:pre-wrap;
   word-break:break-all;
   overflow:auto;
@@ -750,11 +684,11 @@ button:focus-visible{
 .stats{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:14px;
+  gap:10px;
 }
 .stat-item{
-  padding:18px 16px;
-  border-radius:20px;
+  padding:14px 12px;
+  border-radius:16px;
   border:1px solid var(--stroke);
   background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(10,15,28,.8));
 }
@@ -763,15 +697,15 @@ button:focus-visible{
 .stat-item:nth-child(3){box-shadow:inset 0 0 0 1px rgba(245,158,11,.08)}
 .stat-label{
   display:block;
-  font-size:.8rem;
-  letter-spacing:.06em;
+  font-size:.72rem;
+  letter-spacing:.05em;
   text-transform:uppercase;
   color:var(--muted);
 }
 .stat-num{
   display:block;
-  margin-top:10px;
-  font-size:2rem;
+  margin-top:8px;
+  font-size:1.65rem;
   font-weight:700;
   line-height:1;
   letter-spacing:-.05em;
@@ -781,12 +715,13 @@ button:focus-visible{
 .stat-item:nth-child(3) .stat-num{color:#fbbf24}
 .table-card{
   flex:1;
+  padding:14px 16px 16px;
 }
 .table-wrap{
   flex:1;
   min-height:0;
   overflow:auto;
-  border-radius:20px;
+  border-radius:16px;
   border:1px solid var(--stroke);
   background:rgba(4,10,22,.72);
 }
@@ -801,9 +736,9 @@ thead th{
   position:sticky;
   top:0;
   z-index:2;
-  padding:14px 12px;
+  padding:11px 10px;
   text-align:left;
-  font-size:.75rem;
+  font-size:.68rem;
   letter-spacing:.08em;
   text-transform:uppercase;
   color:var(--muted);
@@ -817,11 +752,11 @@ tbody tr:hover{
   background:rgba(15,23,42,.66);
 }
 tbody td{
-  padding:14px 12px;
+  padding:10px;
   border-bottom:1px solid rgba(148,163,184,.08);
   vertical-align:top;
   color:#dbe4f3;
-  line-height:1.45;
+  line-height:1.35;
   word-break:break-word;
 }
 th:nth-child(1),td:nth-child(1){width:16%}
@@ -840,10 +775,10 @@ th:nth-child(9),td:nth-child(9){width:6%}
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:5px 10px;
+  padding:4px 9px;
   border-radius:999px;
   border:1px solid transparent;
-  font-size:.74rem;
+  font-size:.7rem;
   font-weight:700;
   white-space:nowrap;
 }
@@ -871,20 +806,20 @@ th:nth-child(9),td:nth-child(9){width:6%}
   border-color:rgba(248,113,113,.14);
 }
 .cell-sub{
-  margin-top:6px;
+  margin-top:4px;
   color:var(--muted);
-  font-size:.74rem;
+  font-size:.68rem;
 }
 .empty-state{
-  padding:30px 18px !important;
+  padding:24px 18px !important;
   text-align:center;
   color:var(--muted);
 }
 .msg{
-  margin-bottom:14px;
-  padding:12px 14px;
-  border-radius:14px;
-  font-size:.85rem;
+  margin-bottom:12px;
+  padding:10px 12px;
+  border-radius:12px;
+  font-size:.8rem;
   line-height:1.5;
   border:1px solid transparent;
 }
@@ -899,27 +834,29 @@ th:nth-child(9),td:nth-child(9){width:6%}
   border-color:rgba(74,222,128,.16);
 }
 .login-card{
-  width:min(100%, 560px);
-  padding:20px;
+  width:min(100%, 420px);
+  padding:18px;
   justify-self:center;
-  align-self:start;
+  align-self:center;
 }
 .login-card .panel-head{
-  margin-bottom:14px;
+  margin-bottom:12px;
+  flex-direction:column;
+  align-items:flex-start;
 }
 .login-form{
   display:grid;
-  gap:12px;
+  gap:10px;
 }
 .login-card .btn{
   width:100%;
   margin-top:2px;
 }
 .login-footnote{
-  margin-top:10px;
+  margin-top:8px;
   color:var(--muted);
-  font-size:.82rem;
-  line-height:1.5;
+  font-size:.76rem;
+  line-height:1.45;
 }
 
 @media (max-width: 1240px){
@@ -935,10 +872,6 @@ th:nth-child(9),td:nth-child(9){width:6%}
     grid-template-columns:1fr;
     min-height:auto;
     height:auto;
-  }
-  .login-feature-grid{
-    grid-template-columns:1fr;
-    margin-top:20px;
   }
 }
 
@@ -960,7 +893,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
     width:100%;
   }
   .table-card{
-    min-height:580px;
+    min-height:520px;
   }
   .legend{
     justify-content:flex-start;
@@ -977,7 +910,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
     min-height:auto;
   }
   .table-card{
-    min-height:540px;
+    min-height:500px;
   }
 }
 
@@ -992,7 +925,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
 </head>
 <body>
 <div class="shell">
-  <header class="masthead">
+  <header id="appHeader" class="masthead hidden">
     <div class="brand">
       <div class="brand-icon" aria-hidden="true">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" role="presentation">
@@ -1003,7 +936,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
       <div class="brand-copy">
         <span class="eyebrow">Admin Control Grid</span>
         <h1>TLS-shipinhao License Console</h1>
-        <p>单屏管理卡密生成、状态总览与记录维护，默认在桌面端完整展示全部核心模块。</p>
+        <p>卡密生成、统计与吊销管理</p>
       </div>
     </div>
     <div class="masthead-meta">
@@ -1019,36 +952,12 @@ th:nth-child(9),td:nth-child(9){width:6%}
   </header>
 
   <div id="loginView" class="login-shell">
-    <section class="card login-hero">
-      <div class="login-hero-copy">
-        <span class="eyebrow">Operator Launchpad</span>
-        <h2>统一完成卡密生成、吊销与激活记录审查</h2>
-        <p>登录后直接进入单屏控制台，生成配置、状态统计和卡密明细会同时进入视野，不再因为浏览器可视高度变化而意外切成窄屏布局。</p>
-      </div>
-      <div class="login-feature-grid">
-        <div class="feature-card">
-          <span class="feature-label">Batch</span>
-          <strong>批量发卡更直接</strong>
-          <p>数量、有效期和备注固定保持桌面端同排配置，减少来回扫视。</p>
-        </div>
-        <div class="feature-card">
-          <span class="feature-label">Live</span>
-          <strong>统计与列表同屏</strong>
-          <p>总量、未使用、已激活会跟明细区联动刷新，定位记录更快。</p>
-        </div>
-        <div class="feature-card">
-          <span class="feature-label">Audit</span>
-          <strong>吊销后即时清除</strong>
-          <p>管理员操作直接落到 Worker 与 D1，避免旧数据残留造成误判。</p>
-        </div>
-      </div>
-    </section>
     <section class="card login-card">
       <div class="panel-head">
         <div>
           <span class="eyebrow">Admin Access</span>
           <h2>管理员登录</h2>
-          <p>输入管理员密钥后进入卡密控制台，所有操作均通过同源接口完成。</p>
+          <p>输入管理员密钥后进入卡密控制台。</p>
         </div>
         <div class="status-pill">安全校验中</div>
       </div>
@@ -1060,7 +969,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
         </label>
         <button class="btn btn-primary" onclick="doLogin()">进入控制台</button>
       </div>
-      <div class="login-footnote">建议使用桌面浏览器登录。按下回车也可以直接提交，不需要额外点击。</div>
+      <div class="login-footnote">按下回车也可以直接登录。</div>
     </section>
   </div>
 
@@ -1071,7 +980,6 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <div>
             <span class="eyebrow">Key Forge</span>
             <h2>批量生成卡密</h2>
-            <p>在同一视野内完成数量、有效期和备注配置，生成结果会固定显示在下方输出区。</p>
           </div>
           <div class="status-pill">同源安全连接</div>
         </div>
@@ -1102,7 +1010,6 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <div>
             <span class="eyebrow">License Telemetry</span>
             <h2>卡密总览</h2>
-            <p>实时查看总量、未使用与已激活数量，并快速刷新列表，避免来回滚动查看关键信息。</p>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="loadList()">刷新列表</button>
         </div>
@@ -1115,7 +1022,6 @@ th:nth-child(9),td:nth-child(9){width:6%}
         <div>
           <span class="eyebrow">License Registry</span>
           <h2>卡密明细</h2>
-          <p>列表区域自动占满剩余高度，桌面端默认无需页面滚动即可查看所有控制区。</p>
         </div>
         <div class="legend">
           <span class="legend-item"><span class="dot"></span>未使用</span>
@@ -1168,6 +1074,7 @@ function doLogin() {
       SECRET = "";
       return;
     }
+    document.getElementById("appHeader").classList.remove("hidden");
     document.getElementById("loginView").classList.add("hidden");
     document.getElementById("mainView").classList.remove("hidden");
     renderList(res);
