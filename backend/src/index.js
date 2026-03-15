@@ -315,10 +315,10 @@ const ADMIN_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23020617'/%3E%3Cpath d='M18 4a6 6 0 0 0-5.65 7.99L3 21.34V28h6.66l2-2h2.67l2-2v-2.66l3.01-3.01A6 6 0 1 0 18 4Zm2 6.66h.01' fill='none' stroke='%2338bdf8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <title>TLS-shipinhao 卡密管理</title>
 <style>
-@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap");
-
 :root{
   --bg:#020617;
   --bg-soft:#0f172a;
@@ -340,8 +340,8 @@ const ADMIN_HTML = `<!DOCTYPE html>
   --radius-xl:26px;
   --radius-lg:18px;
   --radius-md:14px;
-  --mono:"Fira Code","SFMono-Regular",Consolas,monospace;
-  --sans:"Fira Sans","Segoe UI",sans-serif;
+  --mono:"SFMono-Regular","Menlo","Consolas","Liberation Mono",monospace;
+  --sans:"SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
 }
 
 *{box-sizing:border-box}
@@ -374,14 +374,18 @@ button,input{font:inherit}
   position:relative;
   z-index:1;
   max-width:1680px;
+  width:100%;
   height:100vh;
   margin:0 auto;
   padding:18px;
   display:flex;
   flex-direction:column;
+  align-items:center;
   gap:18px;
 }
 .masthead{
+  width:100%;
+  max-width:1120px;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -469,14 +473,85 @@ button,input{font:inherit}
 .login-shell{
   flex:1;
   display:grid;
-  place-items:center;
+  width:100%;
+  max-width:1120px;
+  margin:0 auto;
+  gap:12px;
+  align-content:center;
+  justify-items:center;
   min-height:0;
+}
+.login-hero{
+  width:100%;
+  gap:18px;
+  padding:20px 22px;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
+}
+.login-hero-copy{
+  max-width:760px;
+}
+.login-hero-copy h2{
+  margin:0;
+  font-size:2rem;
+  line-height:1.05;
+  letter-spacing:-.04em;
+}
+.login-hero-copy p{
+  margin:12px auto 0;
+  max-width:52ch;
+  color:var(--muted);
+  font-size:.96rem;
+  line-height:1.65;
+}
+.login-feature-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+  width:100%;
+}
+.feature-card{
+  padding:14px;
+  border-radius:20px;
+  border:1px solid var(--stroke);
+  background:linear-gradient(180deg, rgba(15,23,42,.8), rgba(8,15,31,.72));
+  box-shadow:inset 0 0 0 1px rgba(56,189,248,.05);
+}
+.feature-label{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-size:.72rem;
+  font-weight:700;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--cyan);
+}
+.feature-label::before{
+  content:"";
+  width:18px;
+  height:1px;
+  background:linear-gradient(90deg, rgba(56,189,248,0), rgba(56,189,248,.9));
+}
+.feature-card strong{
+  display:block;
+  margin-top:10px;
+  font-size:.98rem;
+}
+.feature-card p{
+  margin:6px 0 0;
+  color:var(--muted);
+  font-size:.82rem;
+  line-height:1.55;
 }
 .workspace{
   display:flex;
   flex-direction:column;
   gap:18px;
   flex:1;
+  width:100%;
+  max-width:1120px;
   min-height:0;
 }
 .top-grid{
@@ -824,15 +899,27 @@ th:nth-child(9),td:nth-child(9){width:6%}
   border-color:rgba(74,222,128,.16);
 }
 .login-card{
-  width:min(480px,100%);
-  padding:28px;
+  width:min(100%, 560px);
+  padding:20px;
+  justify-self:center;
+  align-self:start;
 }
 .login-card .panel-head{
-  margin-bottom:22px;
+  margin-bottom:14px;
+}
+.login-form{
+  display:grid;
+  gap:12px;
 }
 .login-card .btn{
   width:100%;
-  margin-top:4px;
+  margin-top:2px;
+}
+.login-footnote{
+  margin-top:10px;
+  color:var(--muted);
+  font-size:.82rem;
+  line-height:1.5;
 }
 
 @media (max-width: 1240px){
@@ -849,9 +936,13 @@ th:nth-child(9),td:nth-child(9){width:6%}
     min-height:auto;
     height:auto;
   }
+  .login-feature-grid{
+    grid-template-columns:1fr;
+    margin-top:20px;
+  }
 }
 
-@media (max-width: 980px), (max-height: 860px){
+@media (max-width: 980px){
   body{overflow:auto}
   .shell{
     height:auto;
@@ -865,11 +956,28 @@ th:nth-child(9),td:nth-child(9){width:6%}
   .field-grid{
     grid-template-columns:1fr;
   }
+  .login-shell{
+    width:100%;
+  }
   .table-card{
     min-height:580px;
   }
   .legend{
     justify-content:flex-start;
+  }
+}
+
+@media (max-height: 720px){
+  body{overflow:auto}
+  .shell{
+    height:auto;
+    min-height:100vh;
+  }
+  .workspace{
+    min-height:auto;
+  }
+  .table-card{
+    min-height:540px;
   }
 }
 
@@ -911,6 +1019,30 @@ th:nth-child(9),td:nth-child(9){width:6%}
   </header>
 
   <div id="loginView" class="login-shell">
+    <section class="card login-hero">
+      <div class="login-hero-copy">
+        <span class="eyebrow">Operator Launchpad</span>
+        <h2>统一完成卡密生成、吊销与激活记录审查</h2>
+        <p>登录后直接进入单屏控制台，生成配置、状态统计和卡密明细会同时进入视野，不再因为浏览器可视高度变化而意外切成窄屏布局。</p>
+      </div>
+      <div class="login-feature-grid">
+        <div class="feature-card">
+          <span class="feature-label">Batch</span>
+          <strong>批量发卡更直接</strong>
+          <p>数量、有效期和备注固定保持桌面端同排配置，减少来回扫视。</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-label">Live</span>
+          <strong>统计与列表同屏</strong>
+          <p>总量、未使用、已激活会跟明细区联动刷新，定位记录更快。</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-label">Audit</span>
+          <strong>吊销后即时清除</strong>
+          <p>管理员操作直接落到 Worker 与 D1，避免旧数据残留造成误判。</p>
+        </div>
+      </div>
+    </section>
     <section class="card login-card">
       <div class="panel-head">
         <div>
@@ -921,11 +1053,14 @@ th:nth-child(9),td:nth-child(9){width:6%}
         <div class="status-pill">安全校验中</div>
       </div>
       <div id="loginMsg"></div>
-      <label class="field">
-        <span>管理密钥</span>
-        <input type="password" id="adminSecret" placeholder="请输入 ADMIN_SECRET" autocomplete="current-password">
-      </label>
-      <button class="btn btn-primary" onclick="doLogin()">进入控制台</button>
+      <div class="login-form">
+        <label class="field">
+          <span>管理密钥</span>
+          <input type="password" id="adminSecret" placeholder="请输入 ADMIN_SECRET" autocomplete="current-password">
+        </label>
+        <button class="btn btn-primary" onclick="doLogin()">进入控制台</button>
+      </div>
+      <div class="login-footnote">建议使用桌面浏览器登录。按下回车也可以直接提交，不需要额外点击。</div>
     </section>
   </div>
 
