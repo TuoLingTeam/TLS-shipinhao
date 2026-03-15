@@ -978,7 +978,6 @@ th:nth-child(9),td:nth-child(9){width:6%}
         </label>
         <button class="btn btn-primary" onclick="doLogin()">进入控制台</button>
       </div>
-      <div class="login-footnote">按下回车也可以直接登录。</div>
     </section>
   </div>
 
