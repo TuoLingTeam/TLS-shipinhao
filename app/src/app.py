@@ -5,9 +5,8 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from .window import MainWindow
-
-from .license import check_stored_license
+from .ui.window import MainWindow
+from .core.license import check_stored_license
 
 
 def main():

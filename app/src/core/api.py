@@ -5,8 +5,8 @@ import json
 
 import requests
 
-from .config import get_cookie, get_magic
-from .constants import (
+from ..config import get_cookie, get_magic
+from ..constants import (
     DELIVERY_MISMATCH_MESSAGE,
     ORDER_DELIVERY_UPDATE_URL,
     ORDER_DETAIL_URL,

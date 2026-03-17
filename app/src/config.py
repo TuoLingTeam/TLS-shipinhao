@@ -311,3 +311,25 @@ def parse_batch_input(raw_text):
 def normalize_batch_text(raw_text):
     """将批量输入规范化为一行一个值。"""
     return "\n".join(parse_batch_input(raw_text))
+
+
+# ---------------------------------------------------------------------------
+# 昵称标准化
+# ---------------------------------------------------------------------------
+
+_EMOJI_CHARS = [
+    "🌈", "⭐", "💎", "🔥", "✨", "🎉", "🎊", "💫", "🌟",
+    "❤️", "💕", "💖", "💗", "💘", "💙", "💚", "💛", "💜",
+    "🧡", "🖤", "🤍", "🤎", "💯", "💢", "💥", "💫", "💦",
+    "💨", "🕳️", "💣", "💬", "👁️‍🗨️", "🗨️", "🗯️", "💭", "💤",
+]
+
+
+def normalize_nickname(nickname: str | None) -> str:
+    """标准化昵称，移除 emoji 和特殊字符。"""
+    if not nickname:
+        return ""
+    result = nickname
+    for emoji in _EMOJI_CHARS:
+        result = result.replace(emoji, "")
+    return result.strip()

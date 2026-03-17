@@ -80,17 +80,23 @@ HIDDEN_IMPORTS = [
 
 # Cython 编译后的模块（使用混淆源时需要）
 CYTHON_MODULES = [
-    "src.api",
     "src.app",
     "src.config",
     "src.constants",
-    "src.cookie_browser",
-    "src.license",
-    "src.review_matcher",
-    "src.review_worker",
-    "src.widgets",
-    "src.window",
-    "src.worker",
+    "src.core",
+    "src.core.api",
+    "src.core.cookie_browser",
+    "src.core.http_utils",
+    "src.core.license",
+    "src.services",
+    "src.services.order_cache",
+    "src.services.order_sync",
+    "src.services.review_matcher",
+    "src.ui",
+    "src.ui.review_worker",
+    "src.ui.widgets",
+    "src.ui.window",
+    "src.ui.worker",
 ]
 
 # Cython 模块依赖的标准库（使用混淆源时需要）
@@ -563,18 +569,19 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
 
 
 def resolve_cython_modules() -> list[str]:
-    """解析混淆产物中的 Cython 模块列表。"""
+    """解析混淆产物中的 Cython 模块列表（递归扫描子包）。"""
     dist_src_dir = APP_DIST / "src"
     if not dist_src_dir.exists():
         return list(CYTHON_MODULES)
 
     modules: list[str] = []
     seen: set[str] = set()
-    for artifact in sorted(dist_src_dir.iterdir()):
+    for artifact in sorted(dist_src_dir.rglob("*")):
         if artifact.suffix.lower() not in {".so", ".pyd"}:
             continue
-        module_name = artifact.name.split(".", 1)[0]
-        hidden_import = f"src.{module_name}"
+        module_stem = artifact.name.split(".", 1)[0]
+        rel_parent = artifact.parent.relative_to(APP_DIST)
+        hidden_import = str(rel_parent / module_stem).replace(os.sep, ".")
         if hidden_import in seen:
             continue
         seen.add(hidden_import)

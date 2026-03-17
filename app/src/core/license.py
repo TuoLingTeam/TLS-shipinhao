@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 
 import requests
 
-from .constants import CONFIG_DIR_NAME
+from ..constants import CONFIG_DIR_NAME
 
 logger = logging.getLogger(__name__)
 

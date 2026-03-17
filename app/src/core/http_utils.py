@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from .constants import REQUEST_TIMEOUT
+from ..constants import REQUEST_TIMEOUT
 
 # 检测当前平台，用于构建合适的请求头
 _CURRENT_PLATFORM = platform.system()

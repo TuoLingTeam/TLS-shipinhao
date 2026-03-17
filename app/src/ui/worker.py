@@ -5,8 +5,8 @@ import threading
 
 from PySide6.QtCore import QObject, Signal
 
-from .api import create_session, update_single_order
-from .config import ConfigNotFoundError
+from ..core.api import create_session, update_single_order
+from ..config import ConfigNotFoundError
 
 
 class BatchWorker(QObject):

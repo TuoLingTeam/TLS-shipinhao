@@ -104,28 +104,39 @@ def ensure_cython() -> None:
 
 
 def collect_python_sources() -> list[Path]:
-    """按稳定顺序收集 src/ 下需要编译的 Python 文件。"""
+    """按稳定顺序递归收集 src/ 下需要编译的 Python 文件。"""
     return sorted(
         path
-        for path in SRC_DIR.glob("*.py")
+        for path in SRC_DIR.rglob("*.py")
         if path.name != "__init__.py"
     )
 
 
 def module_name_from_path(path: Path) -> str:
-    """从源文件路径提取模块名。"""
-    return path.stem
+    """从源文件路径提取点分模块名（相对于 SRC_DIR 的父目录）。
+
+    例如 src/core/api.py -> core.api，src/config.py -> config
+    """
+    rel = path.relative_to(SRC_DIR)
+    parts = list(rel.parent.parts) + [rel.stem]
+    return ".".join(parts)
 
 
 def verify_compiled_modules(module_names: Iterable[str]) -> None:
-    """校验每个源模块都已生成对应的二进制扩展。"""
+    """校验每个源模块都已生成对应的二进制扩展。
+
+    module_names 使用点分格式，如 "core.api"、"config"。
+    """
     module_names = list(module_names)
     compiled_dir = DIST_SRC / "src"
     missing_modules: list[str] = []
 
     for module_name in module_names:
-        candidates = list(compiled_dir.glob(f"{module_name}.*"))
-        if not any(candidate.suffix.lower() in {".so", ".pyd"} for candidate in candidates):
+        parts = module_name.split(".")
+        stem = parts[-1]
+        parent = compiled_dir.joinpath(*parts[:-1]) if len(parts) > 1 else compiled_dir
+        candidates = list(parent.glob(f"{stem}.*"))
+        if not any(c.suffix.lower() in {".so", ".pyd"} for c in candidates):
             missing_modules.append(module_name)
 
     if missing_modules:
@@ -137,7 +148,7 @@ def verify_compiled_modules(module_names: Iterable[str]) -> None:
 
 
 def compile_with_cython() -> None:
-    """使用 Cython 将 src/ 下所有 .py 编译为 .so/.pyd。"""
+    """使用 Cython 将 src/ 下所有 .py 编译为 .so/.pyd（支持子包）。"""
     ensure_cython()
     python_bin = _project_python()
 
@@ -145,14 +156,13 @@ def compile_with_cython() -> None:
     if not source_files:
         print("No .py files found for compilation")
         return
-    py_files = [f"src/{path.name}" for path in source_files]
+    py_files = [str(path.relative_to(APP_ROOT)) for path in source_files]
     module_names = [module_name_from_path(path) for path in source_files]
 
     print(f"Files to compile: {len(py_files)}")
     for module_name, source_file in zip(module_names, py_files):
         print(f"  {source_file} -> src.{module_name}")
 
-    # Generate temporary setup.py
     setup_content = textwrap.dedent(f"""\
         from setuptools import setup
         from Cython.Build import cythonize
@@ -186,26 +196,22 @@ def compile_with_cython() -> None:
         )
         print("Cython compilation completed")
     finally:
-        # 清理临时文件
         setup_file.unlink(missing_ok=True)
         if build_temp.exists():
             shutil.rmtree(build_temp)
-        # 清理 Cython 在源目录生成的 .c 文件
-        for c_file in SRC_DIR.glob("*.c"):
+        for c_file in SRC_DIR.rglob("*.c"):
             c_file.unlink()
 
-    # 复制 __init__.py（保持包结构）
-    init_src = SRC_DIR / "__init__.py"
-    if init_src.exists():
-        init_dst = DIST_SRC / "src" / "__init__.py"
+    # 复制所有 __init__.py 以保持包/子包结构
+    for init_file in SRC_DIR.rglob("__init__.py"):
+        rel = init_file.relative_to(SRC_DIR)
+        init_dst = DIST_SRC / "src" / rel
         init_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(init_src, init_dst)
+        shutil.copy2(init_file, init_dst)
 
-    # 复制并修复 main.py 入口（PyInstaller 需要 .py 入口文件）
     main_content = MAIN_FILE.read_text(encoding="utf-8")
     (DIST_SRC / "main.py").write_text(main_content, encoding="utf-8")
-    
-    # 修复 Cython 编译后的导入问题
+
     fix_cython_imports()
     verify_compiled_modules(module_names)
 
@@ -214,15 +220,12 @@ def compile_with_cython() -> None:
 # 修复导入问题
 # =========================
 def fix_cython_imports() -> None:
-    """Fix Cython import issues."""
+    """删除编译后残留的 .py 源文件，只保留 .so/.pyd 和 __init__.py。"""
     print("Fixing Cython import issues...")
-    
-    # 删除所有 .py 文件，只保留 .so 文件
-    # Python 会自动从 .so 文件导入模块
-    for py_file in (DIST_SRC / "src").glob("*.py"):
+    for py_file in (DIST_SRC / "src").rglob("*.py"):
         if py_file.name != "__init__.py":
             py_file.unlink()
-            print(f"  Removed {py_file.name} (using .so version)")
+            print(f"  Removed {py_file.relative_to(DIST_SRC)} (using .so version)")
 
 
 # =========================

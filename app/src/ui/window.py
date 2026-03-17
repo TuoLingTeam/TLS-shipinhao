@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config import (
+from ..config import (
     ConfigNotFoundError,
     extract_biz_magic_from_cookie,
     get_config_dir_cache,
@@ -36,7 +36,7 @@ from .config import (
     save_cookie_data,
     save_user_config_dir,
 )
-from .constants import (
+from ..constants import (
     APP_COLORS,
     AUTHOR_WECHAT,
     BADGE_HEIGHT,
@@ -70,6 +70,8 @@ from .constants import (
     MIN_UI_SCALE,
     COMPACT_LAYOUT_MIN_WIDTH,
     HIGH_DPI_COMPACT_THRESHOLD,
+    ORDER_CACHE_COVERAGE_DAYS,
+    ORDER_CACHE_INCREMENTAL_DAYS,
     PAGE_GAP,
     PAGE_MARGIN,
     ROW_GAP,
@@ -84,6 +86,7 @@ from .constants import (
     scale_px,
     set_ui_scale,
 )
+from ..core.license import check_stored_license
 from .widgets import (
     BatchInputEdit,
     LicenseDialog,
@@ -95,11 +98,15 @@ from .widgets import (
 from .worker import BatchWorker
 from .review_worker import (
     ReviewMatcherWorker,
+    TERMINAL_STATUS_CANCELLED,
+    TERMINAL_STATUS_ERROR,
+    TERMINAL_STATUS_WARNING,
+    TASK_CACHE_REBUILD,
+    TASK_CACHE_REFRESH,
     TASK_QUALITY_REFUND,
+    TASK_REVIEW_FULL_SCAN,
     TASK_REVIEW_MATCH,
 )
-
-from .license import check_stored_license
 
 
 class MainWindow(QWidget):
@@ -885,9 +892,17 @@ class MainWindow(QWidget):
         self.review_find_button.clicked.connect(self.on_review_find_clicked)
         layout.addWidget(self.review_find_button)
 
+        self.review_full_scan_button = self._create_review_button("完整补查订单")
+        self.review_full_scan_button.clicked.connect(self.on_review_full_scan_clicked)
+        layout.addWidget(self.review_full_scan_button)
+
         self.quality_refund_button = self._create_review_button("获取品退订单")
         self.quality_refund_button.clicked.connect(self.on_quality_refund_clicked)
         layout.addWidget(self.quality_refund_button)
+
+        self.order_cache_button = self._create_review_button("订单缓存管理")
+        self.order_cache_button.clicked.connect(self.on_order_cache_manage_clicked)
+        layout.addWidget(self.order_cache_button)
         layout.addStretch(1)
         return content
 
@@ -1449,7 +1464,7 @@ class MainWindow(QWidget):
         """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
         # 延迟导入 QtWebEngine 相关模块，避免启动时加载
         try:
-            from .cookie_browser import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
+            from ..core.cookie_browser import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
         except ImportError as exc:
             self.show_message(
                 QMessageBox.Warning,
@@ -1807,12 +1822,26 @@ class MainWindow(QWidget):
     def _set_review_task_buttons(self, *, running, active_task=None):
         """同步中差评 / 品退按钮状态。"""
         self.review_find_button.setDisabled(running)
+        self.review_full_scan_button.setDisabled(running)
         self.quality_refund_button.setDisabled(running)
+        self.order_cache_button.setDisabled(running)
         self.review_find_button.setText(
             "正在获取..." if running and active_task == TASK_REVIEW_MATCH else "获取差评订单"
         )
+        self.review_full_scan_button.setText(
+            "正在完整补查..." if running and active_task == TASK_REVIEW_FULL_SCAN else "完整补查订单"
+        )
         self.quality_refund_button.setText(
             "正在获取..." if running and active_task == TASK_QUALITY_REFUND else "获取品退订单"
+        )
+        self.order_cache_button.setText(
+            "正在刷新缓存..."
+            if running and active_task == TASK_CACHE_REFRESH
+            else (
+                "正在重建缓存..."
+                if running and active_task == TASK_CACHE_REBUILD
+                else "订单缓存管理"
+            )
         )
 
     def _ensure_review_task_license(self, task_label):
@@ -1824,10 +1853,46 @@ class MainWindow(QWidget):
         self._show_activation_required(task_label)
         return False
 
-    def _start_review_worker(self, *, task_type, days, start_message):
+    def _show_order_cache_manage_dialog(self):
+        """弹出订单缓存管理对话框，返回选中的任务类型。"""
+        dialog, actions = self._create_message_dialog_base(
+            QMessageBox.Question,
+            "订单缓存管理",
+            "请选择要执行的订单缓存任务。",
+            (
+                f"增量刷新会同步最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天订单；"
+                f"重建缓存会清空本地数据并重新抓取最近 {ORDER_CACHE_COVERAGE_DAYS} 天订单。"
+            ),
+            min_width=640,
+        )
+        selected_task = {"task_type": None}
+
+        def _accept(task_type):
+            selected_task["task_type"] = task_type
+            dialog.accept()
+
+        self._add_message_action(actions, "关闭", "MessageSecondary", dialog.reject)
+        self._add_message_action(
+            actions,
+            f"重建最近 {ORDER_CACHE_COVERAGE_DAYS} 天",
+            "MessageSecondary",
+            lambda: _accept(TASK_CACHE_REBUILD),
+        )
+        self._add_message_action(
+            actions,
+            f"增量刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天",
+            "MessagePrimary",
+            lambda: _accept(TASK_CACHE_REFRESH),
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return None
+        return selected_task["task_type"]
+
+    def _start_review_worker(self, *, task_type, days, start_message, clear_order_input=True):
         """启动中差评 / 品退后台任务。"""
         self.review_task_type = task_type
-        self._set_order_input_values([])
+        if clear_order_input:
+            self._set_order_input_values([])
         self.clear_result_log()
         self.append_result_log(start_message)
         self._set_review_task_buttons(running=True, active_task=task_type)
@@ -1838,10 +1903,9 @@ class MainWindow(QWidget):
 
         self.review_worker.progress.connect(self._on_review_progress)
         self.review_worker.order_ids_ready.connect(self._on_review_order_ids)
-        self.review_worker.error.connect(self._on_review_error)
         self.review_worker.missing_config.connect(self.show_missing_config_error)
         self.review_worker.finished.connect(self._on_review_finished)
-        self.review_worker.finished.connect(self.review_worker_thread.quit)
+        self.review_worker.finished.connect(lambda *_: self.review_worker_thread.quit())
         self._bind_thread_lifecycle(
             self.review_worker_thread,
             self.review_worker,
@@ -1879,6 +1943,46 @@ class MainWindow(QWidget):
             start_message=f"开始获取最近 {days} 天的品质退款订单...",
         )
 
+    def on_review_full_scan_clicked(self):
+        """开始完整补查订单（最近 30 天用缓存，更早范围临时抓取）。"""
+        if self.review_worker is not None:
+            return
+
+        if not self._ensure_review_task_license("完整补查订单"):
+            return
+
+        days = self.review_days_spin.value()
+        self._start_review_worker(
+            task_type=TASK_REVIEW_FULL_SCAN,
+            days=days,
+            start_message=f"开始完整补查最近 {days} 天差评订单（最近 30 天命中缓存，超出范围临时抓取）...",
+        )
+
+    def on_order_cache_manage_clicked(self):
+        """打开订单缓存管理入口。"""
+        if self.review_worker is not None:
+            return
+
+        if not self._ensure_review_task_license("订单缓存同步"):
+            return
+
+        task_type = self._show_order_cache_manage_dialog()
+        if task_type is None:
+            return
+
+        days = self.review_days_spin.value()
+        if task_type == TASK_CACHE_REBUILD:
+            start_message = f"开始重建最近 {ORDER_CACHE_COVERAGE_DAYS} 天订单缓存..."
+        else:
+            start_message = f"开始增量刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天订单缓存..."
+
+        self._start_review_worker(
+            task_type=task_type,
+            days=days,
+            start_message=start_message,
+            clear_order_input=False,
+        )
+
     def _on_review_progress(self, message):
         """追加中差评查找进度日志。"""
         self.append_result_log(message)
@@ -1888,34 +1992,78 @@ class MainWindow(QWidget):
         self._set_order_input_values(order_ids)
 
     def _on_review_error(self, message):
-        """处理中差评查找错误。"""
+        """兼容保留：仅记录错误日志。"""
         self.append_result_log(f"❌ 错误: {message}")
-        self.show_message(QMessageBox.Critical, "查找失败", message)
 
-    def _on_review_finished(self, matched_count, total_count):
+    def _on_review_finished(self, status, message, matched_count, total_count):
         """中差评 / 品退查找完成。"""
         task_type = self.review_task_type
         self._set_review_task_buttons(running=False)
+        warning_text = (message or "").strip()
+
+        if status == TERMINAL_STATUS_CANCELLED:
+            return
+
+        if status == TERMINAL_STATUS_ERROR:
+            self.append_result_log(f"❌ 错误: {message}")
+            title = (
+                "缓存任务失败"
+                if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD)
+                else "查找失败"
+            )
+            self.show_message(QMessageBox.Critical, title, message)
+            return
+
+        if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD):
+            action_label = "订单缓存重建" if task_type == TASK_CACHE_REBUILD else "订单缓存刷新"
+            summary = f"{action_label}完成：写入/更新 {matched_count} 个订单。"
+            self.append_result_log(summary)
+            if status == TERMINAL_STATUS_WARNING and warning_text:
+                self.append_result_log(f"⚠️ 提醒: {warning_text}")
+                self.show_message(
+                    QMessageBox.Warning,
+                    "缓存任务提醒",
+                    f"{summary}\n\n{warning_text}",
+                )
+            else:
+                self.show_message(QMessageBox.Information, "缓存任务完成", summary)
+            return
 
         if task_type == TASK_QUALITY_REFUND:
             summary = (
                 f"品退订单获取完成：共 {total_count} 个订单，"
                 f"回填 {matched_count} 个订单号。"
             )
-            self.append_result_log(summary)
             if total_count > 0:
-                self.show_message(QMessageBox.Information, "查找完成", summary)
+                self.append_result_log(summary)
+                if status == TERMINAL_STATUS_WARNING and warning_text:
+                    self.append_result_log(f"⚠️ 提醒: {warning_text}")
+                    self.show_message(
+                        QMessageBox.Warning,
+                        "查找提醒",
+                        f"{summary}\n\n{warning_text}",
+                    )
+                else:
+                    self.show_message(QMessageBox.Information, "查找完成", summary)
             else:
                 self.show_message(QMessageBox.Warning, "查找完成", "未找到品质退款订单。")
             return
 
+        task_label = "完整补查" if task_type == TASK_REVIEW_FULL_SCAN else "中差评查找"
         if total_count > 0:
             summary = (
-                f"中差评查找完成：共 {total_count} 条差评，"
+                f"{task_label}完成：共 {total_count} 条差评，"
                 f"匹配到 {matched_count} 个订单。"
             )
             self.append_result_log(summary)
-            if matched_count > 0:
+            if status == TERMINAL_STATUS_WARNING and warning_text:
+                self.append_result_log(f"⚠️ 提醒: {warning_text}")
+                self.show_message(
+                    QMessageBox.Warning,
+                    "查找提醒",
+                    f"{summary}\n\n{warning_text}",
+                )
+            elif matched_count > 0:
                 self.show_message(QMessageBox.Information, "查找完成", summary)
             else:
                 self.show_message(QMessageBox.Warning, "查找完成", summary)

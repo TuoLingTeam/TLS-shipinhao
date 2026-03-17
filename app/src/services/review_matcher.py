@@ -4,13 +4,17 @@
 import re
 import threading
 import time
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from itertools import count
+from queue import Empty, PriorityQueue
 from typing import Any, Callable
 
 import requests
 
-from .constants import (
+from ..config import normalize_nickname as _normalize_nickname
+from ..constants import (
     AUTO_FILL_SCORE_THRESHOLD,
     EDUCATION_ORDER_MAX_DAYS,
     EVALUATION_MAX_DAYS,
@@ -21,13 +25,22 @@ from .constants import (
     MULTI_ORDER_PENALTY_FACTOR,
     MULTI_ORDER_PENALTY_MAX,
     ORDER_PAGE_SIZE,
+    ORDER_RISK_MIN_SECONDS,
+    ORDER_RISK_PAGE_INTERVAL_SECONDS,
+    ORDER_RISK_SPLIT_PAGE_THRESHOLD,
+    ORDER_RISK_WINDOW_WORKERS,
+    ORDER_WINDOW_INITIAL_COUNT,
+    ORDER_WINDOW_MAX_DEPTH,
+    ORDER_WINDOW_MIN_SECONDS,
+    ORDER_WINDOW_SPLIT_PAGE_THRESHOLD,
+    ORDER_WINDOW_WORKERS,
     ORDER_SEARCH_URL,
     QUALITY_REFUND_ORDER_URL,
     REQUEST_TIMEOUT,
     RATE_LIMIT_RETRY_COUNT,
     SCORE_WEIGHTS,
 )
-from .http_utils import build_request_params
+from ..core.http_utils import build_request_params
 
 ProgressCallback = Callable[[str], None]
 JsonDict = dict[str, Any]
@@ -41,6 +54,52 @@ QUALITY_REFUND_REFERER = (
 )
 ORDER_PROGRESS_PAGE_INTERVAL = 5
 QUALITY_REFUND_REQUEST_METHODS = ("GET", "POST")
+_CACHE_FETCH_BATCH_ORDERS = 1000  # 每积累多少订单触发一次持久化回调
+
+
+@dataclass(frozen=True)
+class OrderWindow:
+    """订单抓取时间窗口。"""
+
+    start_ts: int
+    end_ts: int
+    depth: int
+    window_id: str
+
+
+@dataclass
+class WindowFetchResult:
+    """单个时间窗口抓取结果。"""
+
+    orders: JsonList
+    warnings: list[str]
+    page_count: int
+    should_split: bool
+    completed: bool
+    risk_triggered: bool = False
+    risk_message: str = ""
+
+
+@dataclass(frozen=True)
+class OrderFetchRuntimeConfig:
+    """订单抓取运行配置。"""
+
+    workers: int
+    split_page_threshold: int
+    min_window_seconds: int
+    page_interval_seconds: float
+    risk_mode: bool = False
+
+
+class OrderRiskControlError(RuntimeError):
+    """平台风控触发，需要切换抓取模式。"""
+
+    def __init__(self, message: str, partial_orders=None, warnings=None, stats=None, remaining_windows=None):
+        super().__init__(message)
+        self.partial_orders = partial_orders or []
+        self.warnings = warnings or []
+        self.stats = stats or {}
+        self.remaining_windows = remaining_windows or []
 
 class BadReviewOrderFinder:
     """中差评订单查找器。
@@ -185,6 +244,70 @@ class BadReviewOrderFinder:
 
         raise RuntimeError("；".join(errors) if errors else "未知错误")
 
+    def _request_order_search_result(
+        self,
+        data: JsonDict,
+        headers: JsonDict,
+        page_index: int,
+        on_progress: ProgressCallback | None = None,
+    ) -> JsonDict:
+        """请求订单接口，并统一处理 429 限流。"""
+        try:
+            response = self._post_json(
+                ORDER_SEARCH_URL,
+                data,
+                headers,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"订单请求异常: {exc}") from exc
+
+        if response.status_code == 429:
+            for retry in range(RATE_LIMIT_RETRY_COUNT):
+                wait = self._rate_limit_wait_seconds(retry)
+                if on_progress:
+                    on_progress(f"第 {page_index} 页触发频率限制，等待 {wait} 秒后重试...")
+                time.sleep(wait)
+                try:
+                    response = self._post_json(
+                        ORDER_SEARCH_URL,
+                        data,
+                        headers,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(f"订单请求异常: {exc}") from exc
+                if response.status_code != 429:
+                    break
+            else:
+                raise RuntimeError("订单API持续频率限制，请稍后再试")
+
+        if response.status_code not in (200, 201):
+            raise RuntimeError(f"订单请求失败: HTTP {response.status_code}")
+
+        result = response.json()
+        if result.get("code") == 429:
+            for retry in range(RATE_LIMIT_RETRY_COUNT):
+                wait = self._rate_limit_wait_seconds(retry)
+                if on_progress:
+                    on_progress(f"第 {page_index} 页触发频率限制(API)，等待 {wait} 秒后重试...")
+                time.sleep(wait)
+                try:
+                    response = self._post_json(
+                        ORDER_SEARCH_URL,
+                        data,
+                        headers,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(f"订单请求异常: {exc}") from exc
+                if response.status_code not in (200, 201):
+                    raise RuntimeError(f"订单请求失败: HTTP {response.status_code}")
+                result = response.json()
+                if result.get("code") != 429:
+                    break
+            else:
+                raise RuntimeError("订单API持续频率限制，请稍后再试")
+
+        return result
+
     @staticmethod
     def _latest_create_time(orders: JsonList) -> int:
         """返回当前订单列表中的最新下单时间。"""
@@ -234,6 +357,724 @@ class BadReviewOrderFinder:
                 f"（接口返回 {len(quality_refund_orders)} 个）。"
             )
         return merged_orders
+
+    @staticmethod
+    def _format_window_range(window: OrderWindow) -> str:
+        """格式化时间窗口范围，便于日志展示。"""
+        start_text = datetime.fromtimestamp(window.start_ts).strftime("%m-%d %H:%M")
+        end_text = datetime.fromtimestamp(window.end_ts).strftime("%m-%d %H:%M")
+        return f"{start_text} ~ {end_text}"
+
+    @staticmethod
+    def _window_span_seconds(window: OrderWindow) -> int:
+        """返回窗口宽度（秒）。"""
+        return max(0, int(window.end_ts) - int(window.start_ts))
+
+    def _can_split_window(self, window: OrderWindow) -> bool:
+        """判断窗口是否仍可继续二分。"""
+        return (
+            window.depth < ORDER_WINDOW_MAX_DEPTH
+            and self._window_span_seconds(window) > ORDER_WINDOW_MIN_SECONDS
+        )
+
+    @staticmethod
+    def _is_risk_control_result(result: JsonDict) -> bool:
+        """判断是否命中了平台风控。"""
+        code = int(result.get("code", 0) or 0)
+        resp_status = int(result.get("respStatusCode", 0) or 0)
+        message = str(result.get("msg", "") or "")
+        return code == 430 or resp_status == 430 or "异常行为" in message or "拒绝访问" in message
+
+    @staticmethod
+    def _default_fetch_config(*, risk_mode: bool = False) -> OrderFetchRuntimeConfig:
+        """返回默认抓取运行配置。"""
+        if risk_mode:
+            return OrderFetchRuntimeConfig(
+                workers=ORDER_RISK_WINDOW_WORKERS,
+                split_page_threshold=ORDER_RISK_SPLIT_PAGE_THRESHOLD,
+                min_window_seconds=ORDER_RISK_MIN_SECONDS,
+                page_interval_seconds=ORDER_RISK_PAGE_INTERVAL_SECONDS,
+                risk_mode=True,
+            )
+        return OrderFetchRuntimeConfig(
+            workers=ORDER_WINDOW_WORKERS,
+            split_page_threshold=ORDER_WINDOW_SPLIT_PAGE_THRESHOLD,
+            min_window_seconds=ORDER_WINDOW_MIN_SECONDS,
+            page_interval_seconds=FETCH_PAGE_INTERVAL_SECONDS,
+            risk_mode=False,
+        )
+
+    @staticmethod
+    def _build_initial_windows(start_ts: int, end_ts: int, count_hint: int) -> list[OrderWindow]:
+        """构建初始时间窗口。"""
+        start_ts = int(start_ts or 0)
+        end_ts = int(end_ts or 0)
+        if end_ts < start_ts:
+            return [OrderWindow(start_ts=start_ts, end_ts=start_ts, depth=0, window_id="W1")]
+
+        span = end_ts - start_ts + 1
+        window_count = max(1, min(int(count_hint or 1), span))
+        base_size, remainder = divmod(span, window_count)
+        windows = []
+        cursor = start_ts
+        for index in range(window_count):
+            size = base_size + (1 if index < remainder else 0)
+            window_start = cursor
+            window_end = min(end_ts, cursor + size - 1)
+            windows.append(
+                OrderWindow(
+                    start_ts=window_start,
+                    end_ts=window_end,
+                    depth=0,
+                    window_id=f"W{index + 1}",
+                )
+            )
+            cursor = window_end + 1
+        return windows
+
+    def _split_window(self, window: OrderWindow, runtime_config: OrderFetchRuntimeConfig) -> tuple[OrderWindow, OrderWindow] | None:
+        """将时间窗口二分为新旧两个子窗口。"""
+        if not (
+            window.depth < ORDER_WINDOW_MAX_DEPTH
+            and self._window_span_seconds(window) > runtime_config.min_window_seconds
+        ):
+            return None
+
+        midpoint = window.start_ts + (window.end_ts - window.start_ts) // 2
+        if midpoint <= window.start_ts or midpoint >= window.end_ts:
+            return None
+
+        older_window = OrderWindow(
+            start_ts=window.start_ts,
+            end_ts=midpoint,
+            depth=window.depth + 1,
+            window_id=f"{window.window_id}O",
+        )
+        newer_window = OrderWindow(
+            start_ts=midpoint + 1,
+            end_ts=window.end_ts,
+            depth=window.depth + 1,
+            window_id=f"{window.window_id}N",
+        )
+        return older_window, newer_window
+
+    def _window_incomplete_warning(self, window: OrderWindow) -> str:
+        """生成窗口无法继续切分时的不完整提示。"""
+        return (
+            f"订单窗口 {self._format_window_range(window)} "
+            "在最小切分后仍未完整抓取，结果可能不完整"
+        )
+
+    def _fetch_orders_in_window(
+        self,
+        window: OrderWindow,
+        *,
+        runtime_config: OrderFetchRuntimeConfig,
+        earliest_time: int = 0,
+        max_pages: int | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> WindowFetchResult:
+        """在单个时间窗口内使用 nextKey 顺序抓取订单。"""
+        orders: JsonList = []
+        warnings: list[str] = []
+        next_key = ""
+        page_index = 1
+        last_success_page = 0
+        has_success_page = False
+        headers = self._build_headers(ORDER_LIST_REFERER)
+        window_text = self._format_window_range(window)
+
+        while not self._stopped:
+            if on_progress:
+                on_progress(
+                    f"[窗口 {window.window_id}] {window_text} 正在获取第 {page_index} 页订单..."
+                )
+
+            data = self._build_order_search_payload(
+                next_key=next_key,
+                create_time_start=window.start_ts,
+                create_time_end=window.end_ts,
+            )
+
+            try:
+                result = self._request_order_search_result(
+                    data,
+                    headers,
+                    page_index,
+                    on_progress=on_progress,
+                )
+            except Exception as exc:  # noqa: BLE001
+                can_split = (
+                    window.depth < ORDER_WINDOW_MAX_DEPTH
+                    and self._window_span_seconds(window) > runtime_config.min_window_seconds
+                )
+                if can_split:
+                    if on_progress:
+                        on_progress(
+                            f"[窗口 {window.window_id}] 第 {page_index} 页请求异常，将切分时间窗口重试：{exc}"
+                        )
+                    return WindowFetchResult(
+                        orders=orders,
+                        warnings=[],
+                        page_count=last_success_page,
+                        should_split=True,
+                        completed=False,
+                    )
+
+                if has_success_page:
+                    warning = self._window_incomplete_warning(window)
+                    warnings.append(warning)
+                    if on_progress:
+                        on_progress(f"⚠️ {warning}")
+                    break
+
+                raise RuntimeError(f"[窗口 {window.window_id}] {exc}") from exc
+
+            if self._is_risk_control_result(result):
+                return WindowFetchResult(
+                    orders=[],
+                    warnings=[],
+                    page_count=last_success_page,
+                    should_split=False,
+                    completed=False,
+                    risk_triggered=True,
+                    risk_message=(
+                        f"[窗口 {window.window_id}] 订单API错误: {result}"
+                    ),
+                )
+
+            if result.get("code") == 10003:
+                if has_success_page:
+                    if on_progress:
+                        on_progress(
+                            f"[窗口 {window.window_id}] 第 {page_index} 页返回 10003，等待 1 秒后重试..."
+                        )
+                    time.sleep(1)
+                    result = self._request_order_search_result(
+                        data,
+                        headers,
+                        page_index,
+                        on_progress=on_progress,
+                    )
+                if self._is_risk_control_result(result):
+                    return WindowFetchResult(
+                        orders=[],
+                        warnings=[],
+                        page_count=last_success_page,
+                        should_split=False,
+                        completed=False,
+                        risk_triggered=True,
+                        risk_message=(
+                            f"[窗口 {window.window_id}] 订单API错误: {result}"
+                        ),
+                    )
+                if result.get("code") == 10003:
+                    can_split = (
+                        window.depth < ORDER_WINDOW_MAX_DEPTH
+                        and self._window_span_seconds(window) > runtime_config.min_window_seconds
+                    )
+                    if can_split:
+                        if on_progress:
+                            on_progress(
+                                f"[窗口 {window.window_id}] 第 {page_index} 页返回 10003，将切分时间窗口重试。"
+                            )
+                        return WindowFetchResult(
+                            orders=orders,
+                            warnings=[],
+                            page_count=last_success_page,
+                            should_split=True,
+                            completed=False,
+                        )
+
+                    warning = self._window_incomplete_warning(window)
+                    warnings.append(warning)
+                    if on_progress:
+                        on_progress(f"⚠️ {warning}")
+                    break
+
+            if result.get("code") != 0:
+                raise RuntimeError(
+                    f"[窗口 {window.window_id}] 订单API错误: {result}"
+                )
+
+            page_orders = result.get("orderList", []) or []
+            next_key = result.get("nextKey", "")
+
+            if not page_orders:
+                if on_progress:
+                    on_progress(f"[窗口 {window.window_id}] 第 {page_index} 页为空，订单已全部拉取完毕。")
+                break
+
+            orders.extend(page_orders)
+            has_success_page = True
+            last_success_page = page_index
+
+            if on_progress:
+                on_progress(
+                    f"[窗口 {window.window_id}] 第 {page_index} 页获取到 {len(page_orders)} 个订单"
+                    f"（窗口累计: {len(orders)}）"
+                )
+
+            if self._is_page_outside_earliest_time(page_orders, earliest_time):
+                if on_progress:
+                    on_progress(
+                        f"[窗口 {window.window_id}] 当前页订单已超出时间窗口，提前结束。"
+                    )
+                break
+
+            if max_pages and page_index >= max_pages:
+                break
+
+            if next_key and page_index >= runtime_config.split_page_threshold:
+                can_split = (
+                    window.depth < ORDER_WINDOW_MAX_DEPTH
+                    and self._window_span_seconds(window) > runtime_config.min_window_seconds
+                )
+                if can_split:
+                    if on_progress:
+                        on_progress(
+                            f"[窗口 {window.window_id}] 页深达到 {runtime_config.split_page_threshold}，将切分时间窗口重试。"
+                        )
+                    return WindowFetchResult(
+                        orders=orders,
+                        warnings=[],
+                        page_count=last_success_page,
+                        should_split=True,
+                        completed=False,
+                    )
+
+                warning = self._window_incomplete_warning(window)
+                warnings.append(warning)
+                if on_progress:
+                    on_progress(f"⚠️ {warning}")
+                break
+
+            if not next_key:
+                if on_progress:
+                    on_progress(f"[窗口 {window.window_id}] 第 {page_index} 页已无 nextKey，窗口抓取结束。")
+                break
+
+            page_index += 1
+            time.sleep(runtime_config.page_interval_seconds)
+
+        return WindowFetchResult(
+            orders=orders,
+            warnings=warnings,
+            page_count=last_success_page,
+            should_split=False,
+            completed=True,
+        )
+
+    def _fetch_orders_adaptive(
+        self,
+        *,
+        max_pages: int | None = None,
+        earliest_time: int = 0,
+        create_time_start: int = 0,
+        create_time_end: int = 0,
+        on_progress: ProgressCallback | None = None,
+        on_window_completed: Callable[[OrderWindow, JsonList], None] | None = None,
+    ) -> tuple[JsonList, list[str], JsonDict]:
+        """使用自适应时间分片并发抓取订单。"""
+        return self._fetch_orders_adaptive_with_runtime(
+            max_pages=max_pages,
+            earliest_time=earliest_time,
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            on_progress=on_progress,
+            on_window_completed=on_window_completed,
+            runtime_config=self._default_fetch_config(risk_mode=False),
+        )
+
+    def _fetch_orders_adaptive_with_runtime(
+        self,
+        *,
+        max_pages: int | None = None,
+        earliest_time: int = 0,
+        create_time_start: int = 0,
+        create_time_end: int = 0,
+        on_progress: ProgressCallback | None = None,
+        on_window_completed: Callable[[OrderWindow, JsonList], None] | None = None,
+        runtime_config: OrderFetchRuntimeConfig,
+        initial_windows: list[OrderWindow] | None = None,
+    ) -> tuple[JsonList, list[str], JsonDict]:
+        """使用指定运行配置抓取订单。"""
+        end_timestamp = int(create_time_end or time.time())
+        start_timestamp = int(create_time_start or earliest_time or max(0, end_timestamp - 30 * 86400))
+        if end_timestamp < start_timestamp:
+            end_timestamp = start_timestamp
+
+        if initial_windows is None:
+            initial_windows = self._build_initial_windows(
+                start_timestamp,
+                end_timestamp,
+                ORDER_WINDOW_INITIAL_COUNT,
+            )
+        stats: JsonDict = {
+            "top_level_window_count": len(initial_windows),
+            "split_count": 0,
+            "natural_completion_count": 0,
+            "degraded_completion_count": 0,
+            "page_count": 0,
+            "deduped_count": 0,
+            "risk_mode": runtime_config.risk_mode,
+        }
+        warnings: list[str] = []
+        all_orders: JsonList = []
+        all_orders_lock = threading.Lock()
+        task_queue: PriorityQueue = PriorityQueue()
+        sequence = count()
+        fatal_errors: list[str] = []
+        stop_event = threading.Event()
+        risk_trigger = {"message": "", "window": None}
+
+        def _enqueue(window: OrderWindow):
+            task_queue.put((-window.end_ts, next(sequence), window))
+
+        for window in initial_windows:
+            _enqueue(window)
+
+        if on_progress:
+            on_progress(
+                f"[订单] 启动 {runtime_config.workers} 个时间窗口 worker，初始分片 {len(initial_windows)} 个。"
+            )
+
+        def _worker_loop(worker_id: int):
+            while True:
+                try:
+                    _, _, window = task_queue.get(timeout=0.2)
+                except Empty:
+                    if stop_event.is_set():
+                        break
+                    continue
+
+                if window is None:
+                    task_queue.task_done()
+                    break
+
+                try:
+                    if stop_event.is_set():
+                        continue
+
+                    result = self._fetch_orders_in_window(
+                        window,
+                        runtime_config=runtime_config,
+                        earliest_time=earliest_time,
+                        max_pages=max_pages,
+                        on_progress=on_progress,
+                    )
+                    with all_orders_lock:
+                        stats["page_count"] += result.page_count
+                    if result.risk_triggered:
+                        risk_trigger["message"] = result.risk_message
+                        risk_trigger["window"] = window
+                        stop_event.set()
+                        continue
+                    if result.should_split:
+                        split_windows = self._split_window(window, runtime_config)
+                        if not split_windows:
+                            warning = self._window_incomplete_warning(window)
+                            with all_orders_lock:
+                                warnings.append(warning)
+                                all_orders.extend(result.orders)
+                                stats["degraded_completion_count"] += 1
+                            if on_window_completed and result.orders:
+                                on_window_completed(window, result.orders)
+                            if on_progress:
+                                on_progress(f"⚠️ {warning}")
+                            continue
+
+                        older_window, newer_window = split_windows
+                        with all_orders_lock:
+                            stats["split_count"] += 1
+                        if on_progress:
+                            on_progress(
+                                f"[窗口 {window.window_id}] 切分为 {newer_window.window_id}({self._format_window_range(newer_window)})"
+                                f" 和 {older_window.window_id}({self._format_window_range(older_window)})。"
+                            )
+                        _enqueue(newer_window)
+                        _enqueue(older_window)
+                        continue
+
+                    with all_orders_lock:
+                        all_orders.extend(result.orders)
+                        warnings.extend(result.warnings)
+                        if result.warnings:
+                            stats["degraded_completion_count"] += 1
+                        else:
+                            stats["natural_completion_count"] += 1
+                    if on_window_completed and result.orders:
+                        on_window_completed(window, result.orders)
+                except Exception as exc:  # noqa: BLE001
+                    fatal_errors.append(str(exc))
+                    stop_event.set()
+                finally:
+                    task_queue.task_done()
+
+        with ThreadPoolExecutor(max_workers=runtime_config.workers, thread_name_prefix="order-window") as pool:
+            futures = [pool.submit(_worker_loop, index + 1) for index in range(runtime_config.workers)]
+            task_queue.join()
+            stop_event.set()
+            for _ in range(runtime_config.workers):
+                task_queue.put((float("inf"), next(sequence), None))
+            for future in as_completed(futures):
+                future.result()
+
+        if fatal_errors:
+            raise RuntimeError("; ".join(fatal_errors))
+        if risk_trigger["message"]:
+            remaining_windows = []
+            if risk_trigger["window"] is not None:
+                remaining_windows.append(risk_trigger["window"])
+            while True:
+                try:
+                    _, _, pending_window = task_queue.get_nowait()
+                except Empty:
+                    break
+                if pending_window is not None:
+                    remaining_windows.append(pending_window)
+                task_queue.task_done()
+            raise OrderRiskControlError(
+                risk_trigger["message"],
+                partial_orders=all_orders,
+                warnings=warnings,
+                stats=stats,
+                remaining_windows=remaining_windows,
+            )
+
+        deduped_orders = self._deduplicate_orders_by_id(all_orders)
+        stats["deduped_count"] = len(deduped_orders)
+        if on_progress:
+            on_progress(
+                "[订单] 时间分片抓取结束："
+                f"初始窗口 {stats['top_level_window_count']} 个，"
+                f"实际切分 {stats['split_count']} 次，"
+                f"自然完成 {stats['natural_completion_count']} 个，"
+                f"降级完成 {stats['degraded_completion_count']} 个，"
+                f"去重后 {stats['deduped_count']} 个订单。"
+            )
+        return deduped_orders, warnings, stats
+
+    def _fetch_orders_by_page(
+        self,
+        *,
+        earliest_time: int = 0,
+        num_workers: int = ORDER_WINDOW_WORKERS,
+        page_interval_seconds: float = FETCH_PAGE_INTERVAL_SECONDS,
+        on_progress: ProgressCallback | None = None,
+        on_batch_completed: Callable[[OrderWindow, JsonList], None] | None = None,
+    ) -> tuple[JsonList, list[str]]:
+        """页码并行抓取：num_workers 个 worker 共享自增页码，各取不同页，无重复。
+
+        替代时间窗口分片方案——微信订单 API 忽略 createTimeStart/End，
+        时间窗口无法实现服务端过滤，只能用页码偏移实现真正的并行分工。
+        """
+        headers = self._build_headers(ORDER_LIST_REFERER)
+        shared_page: dict[str, int] = {"next": 1}
+        page_lock = threading.Lock()
+
+        collected: JsonList = []
+        pending: JsonList = []
+        collect_lock = threading.Lock()
+        batch_counter: dict[str, int] = {"n": 0}
+
+        stop_event = threading.Event()
+        risk_message: list[str] = []
+        fatal_errors: list[str] = []
+
+        def _extract_batch(force: bool) -> tuple[JsonList, int] | None:
+            """collect_lock 内调用：取出一批待提交数据，返回 (batch, batch_n) 或 None。"""
+            if not pending:
+                return None
+            if not force and len(pending) < _CACHE_FETCH_BATCH_ORDERS:
+                return None
+            batch = list(pending)
+            pending.clear()
+            collected.extend(batch)
+            batch_counter["n"] += 1
+            return batch, batch_counter["n"]
+
+        def _commit_batch(batch: JsonList, batch_n: int) -> None:
+            """collect_lock 外调用：触发持久化回调，避免锁内做 IO。"""
+            if not on_batch_completed or not batch:
+                return
+            times = [
+                int(o.get("commonInfo", {}).get("createTime", 0) or 0)
+                for o in batch
+                if int(o.get("commonInfo", {}).get("createTime", 0) or 0) > 0
+            ]
+            if not times:
+                return
+            window = OrderWindow(
+                start_ts=min(times),
+                end_ts=max(times),
+                depth=0,
+                window_id=f"B{batch_n}",
+            )
+            on_batch_completed(window, batch)
+
+        def _worker(worker_id: int) -> None:
+            while not stop_event.is_set() and not self._stopped:
+                with page_lock:
+                    pg = shared_page["next"]
+                    shared_page["next"] += 1
+
+                if stop_event.is_set() or self._stopped:
+                    break
+
+                if on_progress and pg % ORDER_PROGRESS_PAGE_INTERVAL == 1:
+                    on_progress(f"[订单] 正在获取第 {pg} 页订单...")
+
+                data = self._build_order_search_payload(page=pg)
+                try:
+                    result = self._request_order_search_result(data, headers, pg, on_progress)
+                except Exception as exc:  # noqa: BLE001
+                    fatal_errors.append(str(exc))
+                    stop_event.set()
+                    break
+
+                if self._is_risk_control_result(result):
+                    risk_message.append(f"[第 {pg} 页] {result.get('msg', str(result))}")
+                    stop_event.set()
+                    break
+
+                if result.get("code") == 10003:
+                    if on_progress:
+                        on_progress(f"[订单] 第 {pg} 页返回 10003，已到达数据末尾。")
+                    stop_event.set()
+                    break
+
+                if result.get("code") != 0:
+                    fatal_errors.append(f"[第 {pg} 页] API错误: {result}")
+                    stop_event.set()
+                    break
+
+                page_orders: JsonList = result.get("orderList", []) or []
+                if not page_orders:
+                    if on_progress:
+                        on_progress(f"[订单] 第 {pg} 页为空，订单全部拉取完毕。")
+                    stop_event.set()
+                    break
+
+                filtered = (
+                    [
+                        o for o in page_orders
+                        if int(o.get("commonInfo", {}).get("createTime", 0) or 0) >= earliest_time
+                    ]
+                    if earliest_time > 0
+                    else list(page_orders)
+                )
+
+                batch_info = None
+                with collect_lock:
+                    pending.extend(filtered)
+                    batch_info = _extract_batch(force=False)
+
+                if batch_info:
+                    _commit_batch(*batch_info)
+
+                if on_progress:
+                    on_progress(
+                        f"[订单] 第 {pg} 页获取到 {len(filtered)} 个订单"
+                        f"（累计约 {len(collected) + len(pending)}）"
+                    )
+
+                if self._is_page_outside_earliest_time(page_orders, earliest_time):
+                    if on_progress:
+                        on_progress(f"[订单] 第 {pg} 页订单均早于筛选时间，触发早停。")
+                    stop_event.set()
+                    break
+
+                time.sleep(page_interval_seconds)
+
+        with ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix="order-page") as pool:
+            futures = [pool.submit(_worker, i + 1) for i in range(num_workers)]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as exc:  # noqa: BLE001
+                    fatal_errors.append(str(exc))
+
+        last_batch = None
+        with collect_lock:
+            last_batch = _extract_batch(force=True)
+        if last_batch:
+            _commit_batch(*last_batch)
+
+        if fatal_errors:
+            raise RuntimeError("; ".join(fatal_errors))
+        if risk_message:
+            raise OrderRiskControlError(
+                risk_message[0],
+                partial_orders=self._deduplicate_orders_by_id(collected),
+            )
+
+        deduped = self._deduplicate_orders_by_id(collected)
+        if on_progress:
+            on_progress(
+                f"[订单] 页码并行抓取完成：共 {shared_page['next'] - 1} 页，"
+                f"去重后 {len(deduped)} 个订单。"
+            )
+        return deduped, []
+
+    def get_orders_for_cache(
+        self,
+        *,
+        earliest_time: int = 0,
+        create_time_start: int = 0,
+        create_time_end: int = 0,
+        on_progress: ProgressCallback | None = None,
+        on_window_completed: Callable[[OrderWindow, JsonList], None] | None = None,
+    ) -> tuple[JsonList, list[str]]:
+        """为本地缓存获取纯订单数据（页码并行，客户端时间边界早停）。"""
+        # API 忽略 createTimeStart/createTimeEnd，使用页码并行 + 客户端早停
+        effective_earliest = max(int(earliest_time or 0), int(create_time_start or 0))
+
+        try:
+            return self._fetch_orders_by_page(
+                earliest_time=effective_earliest,
+                num_workers=ORDER_WINDOW_WORKERS,
+                page_interval_seconds=FETCH_PAGE_INTERVAL_SECONDS,
+                on_progress=on_progress,
+                on_batch_completed=on_window_completed,
+            )
+        except OrderRiskControlError as exc:
+            cooldown = 60
+            if on_progress:
+                on_progress(
+                    f"⚠️ 检测到平台风控，等待 {cooldown} 秒冷却后切换到极速模式（单线程 + 更慢间隔）。"
+                )
+            for remaining in range(cooldown, 0, -10):
+                if self._stopped:
+                    break
+                if on_progress:
+                    on_progress(f"[风控冷却] 还剩 {remaining} 秒...")
+                time.sleep(min(10, remaining))
+
+            risk_warning = "本次抓取触发平台风控，已自动降级到极速模式"
+            try:
+                risk_orders, risk_warnings = self._fetch_orders_by_page(
+                    earliest_time=effective_earliest,
+                    num_workers=ORDER_RISK_WINDOW_WORKERS,
+                    page_interval_seconds=ORDER_RISK_PAGE_INTERVAL_SECONDS,
+                    on_progress=on_progress,
+                    on_batch_completed=on_window_completed,
+                )
+                merged_warnings = list(exc.warnings)
+                merged_warnings.append(risk_warning)
+                merged_warnings.extend(risk_warnings)
+                merged_orders = self._deduplicate_orders_by_id(exc.partial_orders + risk_orders)
+                return merged_orders, merged_warnings
+            except OrderRiskControlError as risk_exc:
+                merged_orders = self._deduplicate_orders_by_id(exc.partial_orders + risk_exc.partial_orders)
+                merged_warnings = list(exc.warnings)
+                merged_warnings.append(risk_warning)
+                merged_warnings.extend(risk_exc.warnings)
+                merged_warnings.append("仍有部分窗口未完成，结果可能不完整")
+                if merged_orders:
+                    return merged_orders, merged_warnings
+                merged_warnings.append("平台风控持续触发，本次未能获取订单数据，请稍后重试")
+                return [], merged_warnings
 
     # -------------------------------------------------------------------
     # 获取差评
@@ -325,8 +1166,8 @@ class BadReviewOrderFinder:
         create_time_start: int = 0,
         create_time_end: int = 0,
         on_progress: ProgressCallback | None = None,
-    ) -> JsonList:
-        """获取订单数据（单线程）。
+    ) -> tuple[JsonList, list[str]]:
+        """获取订单数据（自适应时间分片并发）。
 
         Args:
             max_pages: 最大页数限制，``None`` 表示获取全部。
@@ -337,116 +1178,21 @@ class BadReviewOrderFinder:
             on_progress: 可选回调 ``on_progress(message)``。
 
         Returns:
-            订单列表。
+            ``(订单列表, 警告列表)``。
         """
-        all_orders = []
-        next_key = ""
-        page = 1
-
-        headers = self._build_headers(ORDER_LIST_REFERER)
-
-        while True:
-            if self._stopped:
-                break
-
-            if on_progress:
-                on_progress(f"正在获取第 {page} 页订单...")
-
-            data = self._build_order_search_payload(
-                next_key=next_key,
-                create_time_start=create_time_start,
-                create_time_end=create_time_end,
-            )
-
-            try:
-                response = self._post_json(
-                    ORDER_SEARCH_URL,
-                    data,
-                    headers,
-                )
-            except Exception as exc:
-                raise RuntimeError(f"订单请求异常: {exc}") from exc
-
-            # 429 频率限制自动重试（指数退避）
-            if response.status_code == 429:
-                for retry in range(RATE_LIMIT_RETRY_COUNT):
-                    wait = self._rate_limit_wait_seconds(retry)
-                    if on_progress:
-                        on_progress(f"触发频率限制，等待 {wait} 秒后重试...")
-                    time.sleep(wait)
-                    try:
-                        response = self._post_json(
-                            ORDER_SEARCH_URL,
-                            data,
-                            headers,
-                        )
-                    except Exception as exc:
-                        raise RuntimeError(f"订单请求异常: {exc}") from exc
-                    if response.status_code != 429:
-                        break
-                else:
-                    raise RuntimeError("订单API持续频率限制，请稍后再试")
-
-            if response.status_code not in (200, 201):
-                raise RuntimeError(f"订单请求失败: HTTP {response.status_code}")
-
-            result = response.json()
-            if result.get("code") == 429:
-                for retry in range(RATE_LIMIT_RETRY_COUNT):
-                    wait = self._rate_limit_wait_seconds(retry)
-                    if on_progress:
-                        on_progress(f"触发频率限制，等待 {wait} 秒后重试...")
-                    time.sleep(wait)
-                    try:
-                        response = self._post_json(
-                            ORDER_SEARCH_URL,
-                            data,
-                            headers,
-                        )
-                    except Exception as exc:
-                        raise RuntimeError(f"订单请求异常: {exc}") from exc
-                    result = response.json()
-                    if result.get("code") != 429:
-                        break
-                else:
-                    raise RuntimeError("订单API持续频率限制，请稍后再试")
-
-            if result.get("code") != 0:
-                raise RuntimeError(f"订单API错误: {result}")
-
-            orders = result.get("orderList", [])
-            next_key = result.get("nextKey", "")
-
-            all_orders.extend(orders)
-
-            if on_progress:
-                on_progress(
-                    f"第 {page} 页获取到 {len(orders)} 个订单"
-                    f"（累计: {len(all_orders)}）"
-                )
-
-            if not next_key or not orders:
-                break
-
-            if max_pages and page >= max_pages:
-                break
-
-            # 时间窗口早停：该页全部订单均早于阈值 → 停止翻页
-            if self._is_page_outside_earliest_time(orders, earliest_time):
-                if on_progress:
-                    on_progress(
-                        f"后续订单已超出时间窗口，提前结束（已获取 {len(all_orders)} 个订单）"
-                    )
-                break
-
-            page += 1
-            time.sleep(FETCH_PAGE_INTERVAL_SECONDS)  # 翻页限速，防止触发 429
-
-        return self._merge_quality_refund_orders(
-            all_orders,
+        orders, warnings, _ = self._fetch_orders_adaptive(
+            max_pages=max_pages,
+            earliest_time=earliest_time,
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            on_progress=on_progress,
+        )
+        merged_orders = self._merge_quality_refund_orders(
+            orders,
             earliest_time=earliest_time,
             on_progress=on_progress,
         )
+        return merged_orders, warnings
 
     def get_orders_concurrent(
         self,
@@ -495,6 +1241,10 @@ class BadReviewOrderFinder:
                 with page_lock:
                     current_page = shared_state["next_page"]
                     shared_state["next_page"] += 1
+
+                # 拿到页码后、发请求前再检查一次：其他 worker 可能已触发停止
+                if shared_state["stop_event"].is_set() or self._stopped:
+                    break
 
                 data = self._build_order_search_payload(
                     page=current_page,  # 关键：使用 page 替代 nextKey
@@ -570,6 +1320,13 @@ class BadReviewOrderFinder:
                         shared_state["stop_event"].set()
                         break
 
+                if result.get("code") == 10003:
+                    # 页码超出可用范围，视为正常的分页结束信号
+                    shared_state["stop_event"].set()
+                    if on_progress:
+                        on_progress(f"{tag} 第 {current_page} 页返回 10003，已到达数据末尾。")
+                    break
+
                 if result.get("code") != 0:
                     shared_state["errors"].append(f"{tag} API错误: {result}")
                     shared_state["stop_event"].set()
@@ -639,21 +1396,7 @@ class BadReviewOrderFinder:
     @staticmethod
     def normalize_nickname(nickname: str | None) -> str:
         """标准化昵称，移除 emoji 和特殊字符。"""
-        if not nickname:
-            return ""
-
-        emoji_chars = [
-            "🌈", "⭐", "💎", "🔥", "✨", "🎉", "🎊", "💫", "🌟",
-            "❤️", "💕", "💖", "💗", "💘", "💙", "💚", "💛", "💜",
-            "🧡", "🖤", "🤍", "🤎", "💯", "💢", "💥", "💫", "💦",
-            "💨", "🕳️", "💣", "💬", "👁️‍🗨️", "🗨️", "🗯️", "💭", "💤",
-        ]
-
-        result = nickname
-        for emoji in emoji_chars:
-            result = result.replace(emoji, "")
-
-        return result.strip()
+        return _normalize_nickname(nickname)
 
     @staticmethod
     def _parse_confirm_receipt_timestamp(confirm_receipt_time: Any) -> int:
