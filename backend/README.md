@@ -14,6 +14,19 @@ https://sphapi.199908.top
 https://sphapi.199908.top/admin
 ```
 
+## 目录结构
+
+```text
+backend/
+├── src/
+│   ├── index.js          # Worker 入口（API 路由、卡密生成/校验、管理员接口）
+│   └── admin.html        # 管理后台页面（构建时以 Text 方式导入 Worker）
+├── schema.sql            # D1 数据库建表语句
+├── wrangler.toml         # Cloudflare Workers 部署配置
+├── package.json          # npm 脚本与依赖
+└── README.md
+```
+
 ## 功能概览
 
 - 客户端激活卡密：`POST /api/activate`
@@ -43,7 +56,7 @@ Worker 入口与路由定义在 [wrangler.toml](./wrangler.toml)。
 本项目依赖两个 Secret：
 
 - `HMAC_SECRET`
-  用于卡密签名校验，必须与客户端 [app/src/license.py](../app/src/license.py) 中使用的密钥保持一致。
+  用于卡密签名校验，必须与客户端 [app/src/core/license.py](../app/src/core/license.py) 中使用的密钥保持一致。
 - `ADMIN_SECRET`
   用于 `/admin` 管理后台登录和管理员接口鉴权。
 
@@ -86,22 +99,10 @@ npx wrangler secret put HMAC_SECRET
 npx wrangler secret put ADMIN_SECRET
 ```
 
-`HMAC_SECRET` 必须与客户端一致，当前使用值为：
-
-```text
-TLS-shipinhao-2026-LicenseKey-HMAC
-```
-
 ### 4. 部署
 
 ```bash
 npm run deploy
-```
-
-或者直接使用 Wrangler：
-
-```bash
-npx wrangler deploy
 ```
 
 部署完成后，可直接访问：
@@ -111,59 +112,33 @@ npx wrangler deploy
 
 ## 本地开发
 
-### 方式一：使用 `.dev.vars`
-
 在 `backend/` 目录创建 `.dev.vars`：
 
 ```dotenv
-HMAC_SECRET=TLS-shipinhao-2026-LicenseKey-HMAC
-ADMIN_SECRET=your-local-admin-secret
+HMAC_SECRET=<与线上一致的密钥>
+ADMIN_SECRET=<本地管理密码>
 ```
 
-初始化本地数据库：
+初始化本地数据库并启动：
 
 ```bash
 npm run db:init:local
-```
-
-启动本地服务：
-
-```bash
 npm run dev
 ```
 
-### 方式二：命令行临时传入变量
-
-如果不想创建 `.dev.vars`，可以直接用 `--var`：
-
-```bash
-npx wrangler dev \
-  --local \
-  --var HMAC_SECRET:TLS-shipinhao-2026-LicenseKey-HMAC \
-  --var ADMIN_SECRET:your-local-admin-secret
-```
-
-### 本地访问地址
+本地访问地址：
 
 - 管理后台：`http://127.0.0.1:8787/admin`
 - 激活接口：`http://127.0.0.1:8787/api/activate`
 - 校验接口：`http://127.0.0.1:8787/api/verify`
 
-Wrangler 本地状态与 D1 数据默认保存在：
-
-```text
-backend/.wrangler/
-```
-
-这个目录只用于本地开发，不应提交到 Git。
-
 ## 管理后台
 
-管理后台使用同源接口，不开放跨域给外部站点调用。
+管理后台页面位于 `src/admin.html`，通过 esbuild Text import 在构建时内联到 Worker 中。管理接口仅允许同源访问，不开放 CORS。
 
 登录后支持：
 
-- 批量生成卡密
+- 批量生成卡密（1-50 个，可指定有效期和备注）
 - 查看总量、未使用、已激活统计
 - 查看最近 200 条卡密记录
 - 吊销卡密并同步删除相关激活记录
@@ -237,12 +212,6 @@ X-Admin-Secret: <ADMIN_SECRET>
 
 批量生成卡密。
 
-请求头：
-
-```text
-X-Admin-Secret: <ADMIN_SECRET>
-```
-
 请求体：
 
 ```json
@@ -257,27 +226,9 @@ X-Admin-Secret: <ADMIN_SECRET>
 
 返回卡密列表和状态统计。
 
-请求头：
-
-```text
-X-Admin-Secret: <ADMIN_SECRET>
-```
-
-请求体：
-
-```json
-{}
-```
-
 ### `POST /api/admin/revoke`
 
 吊销卡密并删除对应记录。
-
-请求头：
-
-```text
-X-Admin-Secret: <ADMIN_SECRET>
-```
 
 请求体：
 
@@ -313,7 +264,7 @@ X-Admin-Secret: <ADMIN_SECRET>
 | `id` | `INTEGER` | 自增主键 |
 | `license_key` | `TEXT` | 卡密，唯一 |
 | `plan_days` | `INTEGER` | 有效期天数 |
-| `status` | `TEXT` | 状态，当前使用 `unused` / `activated` |
+| `status` | `TEXT` | 状态：`unused` / `activated` |
 | `created_at` | `TEXT` | 生成时间 |
 | `note` | `TEXT` | 管理备注 |
 
