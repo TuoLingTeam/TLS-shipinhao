@@ -9,7 +9,6 @@ from typing import Any
 
 import requests
 
-from ..constants import REQUEST_TIMEOUT
 
 # 检测当前平台，用于构建合适的请求头
 _CURRENT_PLATFORM = platform.system()
@@ -58,33 +57,6 @@ def get_sec_ch_ua_platform() -> str:
     if _IS_MACOS:
         return _SEC_CH_UA_PLATFORM_MACOS
     return _SEC_CH_UA_PLATFORM_WINDOWS
-
-
-def _post_json_request(
-    request_callable,
-    *,
-    url: str,
-    data: dict[str, Any],
-    headers: dict[str, str],
-    params: dict[str, str] | None = None,
-    timeout: int = REQUEST_TIMEOUT,
-) -> requests.Response:
-    """执行通用 POST JSON 请求并统一处理网络/HTTP 层错误。"""
-    try:
-        response = request_callable(
-            url,
-            params=params or build_request_params(),
-            json=data,
-            headers=headers,
-            timeout=timeout,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"请求失败：{exc}") from exc
-
-    if response.status_code != 200:
-        raise RuntimeError(f"请求失败：{get_response_error(response)}")
-
-    return response
 
 
 def build_headers(magic: str, referer: str = "") -> dict[str, str]:
@@ -178,94 +150,3 @@ def get_payload_error(payload: dict[str, Any], default_message: str) -> str:
     return default_message
 
 
-def post_json(
-    url: str,
-    data: dict[str, Any],
-    headers: dict[str, str],
-    params: dict[str, str] | None = None,
-    timeout: int = REQUEST_TIMEOUT,
-) -> requests.Response:
-    """发送 POST JSON 请求的简写方法。
-
-    Args:
-        url: 请求 URL
-        data: JSON 请求体
-        headers: 请求头
-        params: URL 查询参数（可选）
-        timeout: 超时时间（秒）
-
-    Returns:
-        requests 响应对象
-
-    Raises:
-        RuntimeError: 请求失败时抛出
-    """
-    return _post_json_request(
-        requests.post,
-        url=url,
-        data=data,
-        headers=headers,
-        params=params,
-        timeout=timeout,
-    )
-
-
-def post_json_with_session(
-    session: requests.Session,
-    url: str,
-    data: dict[str, Any],
-    headers: dict[str, str],
-    params: dict[str, str] | None = None,
-    timeout: int = REQUEST_TIMEOUT,
-) -> requests.Response:
-    """使用指定会话发送 POST JSON 请求。
-
-    Args:
-        session: requests 会话对象
-        url: 请求 URL
-        data: JSON 请求体
-        headers: 请求头
-        params: URL 查询参数（可选）
-        timeout: 超时时间（秒）
-
-    Returns:
-        requests 响应对象
-
-    Raises:
-        RuntimeError: 请求失败时抛出
-    """
-    return _post_json_request(
-        session.post,
-        url=url,
-        data=data,
-        headers=headers,
-        params=params,
-        timeout=timeout,
-    )
-
-
-def check_api_response(response: requests.Response, error_prefix: str = "接口返回失败") -> dict[str, Any]:
-    """检查 API 响应并解析 JSON，验证业务状态码。
-
-    Args:
-        response: requests 响应对象
-        error_prefix: 错误信息前缀
-
-    Returns:
-        解析后的 JSON 字典
-
-    Raises:
-        RuntimeError: 响应状态异常时抛出
-    """
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise RuntimeError(f"{error_prefix}：接口返回了非 JSON 响应。") from exc
-
-    if payload.get("success") is False:
-        raise RuntimeError(f"{error_prefix}：{get_payload_error(payload, error_prefix)}")
-
-    if payload.get("code") not in (None, 0):
-        raise RuntimeError(f"{error_prefix}：{get_payload_error(payload, error_prefix)}")
-
-    return payload

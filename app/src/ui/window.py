@@ -1991,10 +1991,6 @@ class MainWindow(QWidget):
         """将匹配到的订单号回填到订单输入框。"""
         self._set_order_input_values(order_ids)
 
-    def _on_review_error(self, message):
-        """兼容保留：仅记录错误日志。"""
-        self.append_result_log(f"❌ 错误: {message}")
-
     def _on_review_finished(self, status, message, matched_count, total_count):
         """中差评 / 品退查找完成。"""
         task_type = self.review_task_type
