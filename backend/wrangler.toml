@@ -13,6 +13,12 @@ routes = [
 # HMAC_SECRET 通过 wrangler secret put HMAC_SECRET 设置
 # ADMIN_SECRET 通过 wrangler secret put ADMIN_SECRET 设置（管理页面登录密码）
 
+# .html 文件以纯文本方式导入（esbuild Text loader）
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "tls-license-db"

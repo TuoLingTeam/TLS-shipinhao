@@ -54,62 +54,18 @@ widgets + worker ← window ← app（入口）
 pip install -r app/requirements.txt
 ```
 
-## 配置文件
-
-运行前需要准备两个配置文件：
-
-1. `cookie.txt` - 存放微信小商店的 Cookie 信息（包含 biz_magic 认证信息）
-
-开发模式默认从项目根目录读取配置文件；打包后默认从 `.app` 或 `exe` 同级目录读取。
-
-## 运行方式
-
-```bash
-python app/main.py
-```
-
-## 使用说明
-
-1. 启动程序后，在左侧输入订单号
-2. 在右侧输入新的物流单号
-3. 点击“点击开始批量处理”
-4. 在下方查看执行日志和结果提示
-
 ## 注意事项
 
 - 确保 `cookie.txt` 文件存在且内容有效（包含 biz_magic 值）
 - Cookie 信息需要定期更新
 - 建议在虚拟环境内运行和打包
 
-## 打包为可执行文件
 
-### 统一入口
+执行混淆
+python3 app/scripts/obfuscate.py
 
-```bash
-python app/scripts/build.py
-```
+用混淆文件目录构建包
+python3 app/scripts/build.py --dist
 
-该脚本会根据当前系统自动调用：
-- macOS: `build_mac.sh`
-- Windows: `build_windows.bat`
-
-### Windows (exe)
-
-请在 Windows 环境下执行：
-
-```bat
-build_windows.bat
-```
-
-输出目录为 `dist/TLS-shipinhao/`，主程序为 `dist/TLS-shipinhao/TLS-shipinhao.exe`。
-
-### macOS (.app)
-
-在项目目录下执行：
-
-```bash
-chmod +x build_mac.sh
-./build_mac.sh
-```
-
-应用输出在 `dist/TLS-shipinhao.app`。使用前将 `cookie.txt` 放在 `dist/` 目录，与 `.app` 同级即可。
+部署到 Cloudflare
+cd /Users/zxr/Downloads/source-code/TLS-shipinhao/backend && npx wrangler deploy 2>&1

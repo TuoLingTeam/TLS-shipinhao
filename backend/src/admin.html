@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23020617'/%3E%3Cpath d='M18 4a6 6 0 0 0-5.65 7.99L3 21.34V28h6.66l2-2h2.67l2-2v-2.66l3.01-3.01A6 6 0 1 0 18 4Zm2 6.66h.01' fill='none' stroke='%2338bdf8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>TLS-shipinhao 卡密管理</title>
+<style>
+:root{
+  --bg:#020617;
+  --bg-soft:#0f172a;
+  --panel:rgba(15,23,42,.86);
+  --panel-strong:rgba(8,15,31,.94);
+  --panel-soft:rgba(30,41,59,.72);
+  --stroke:rgba(148,163,184,.16);
+  --stroke-strong:rgba(56,189,248,.34);
+  --text:#f8fafc;
+  --muted:#94a3b8;
+  --cyan:#38bdf8;
+  --cyan-soft:rgba(56,189,248,.18);
+  --green:#22c55e;
+  --green-soft:rgba(34,197,94,.18);
+  --amber:#f59e0b;
+  --red:#f87171;
+  --red-soft:rgba(248,113,113,.18);
+  --shadow:0 24px 80px rgba(2,6,23,.55);
+  --radius-xl:26px;
+  --radius-lg:18px;
+  --radius-md:14px;
+  --mono:"SFMono-Regular","Menlo","Consolas","Liberation Mono",monospace;
+  --sans:"SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:var(--sans);
+  color:var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(34,197,94,.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(56,189,248,.17), transparent 26%),
+    linear-gradient(135deg, #020617 0%, #081120 46%, #030712 100%);
+  overflow:hidden;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background:
+    linear-gradient(rgba(148,163,184,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.05) 1px, transparent 1px);
+  background-size:42px 42px;
+  mask-image:linear-gradient(to bottom, rgba(0,0,0,.55), transparent 92%);
+  pointer-events:none;
+}
+a{color:inherit}
+button,input{font:inherit}
+.hidden{display:none !important}
+.shell{
+  position:relative;
+  z-index:1;
+  max-width:1680px;
+  width:100%;
+  height:100vh;
+  margin:0 auto;
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+}
+.masthead{
+  width:100%;
+  max-width:1120px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px 18px;
+  border:1px solid var(--stroke);
+  border-radius:24px;
+  background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(7,14,27,.92));
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(20px);
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
+}
+.brand-icon{
+  width:46px;
+  height:46px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  background:linear-gradient(135deg, rgba(56,189,248,.16), rgba(34,197,94,.18));
+  border:1px solid rgba(56,189,248,.28);
+  box-shadow:0 0 0 1px rgba(56,189,248,.08), 0 12px 28px rgba(15,23,42,.45);
+  color:var(--cyan);
+}
+.brand-copy{
+  min-width:0;
+}
+.eyebrow{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:6px;
+  font-size:.68rem;
+  font-weight:600;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--cyan);
+}
+.eyebrow::before{
+  content:"";
+  width:22px;
+  height:1px;
+  background:linear-gradient(90deg, rgba(56,189,248,0), rgba(56,189,248,.9));
+}
+.brand h1{
+  margin:0;
+  font-size:1.6rem;
+  line-height:1.05;
+  letter-spacing:-.03em;
+}
+.brand p{
+  margin:6px 0 0;
+  color:var(--muted);
+  font-size:.88rem;
+}
+.masthead-meta{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(124px,1fr));
+  gap:10px;
+  min-width:280px;
+}
+.meta-chip{
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid var(--stroke);
+  background:rgba(15,23,42,.68);
+}
+.meta-chip span{
+  display:block;
+  font-size:.66rem;
+  color:var(--muted);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.meta-chip strong{
+  display:block;
+  margin-top:4px;
+  font-size:.92rem;
+  color:var(--text);
+}
+.login-shell{
+  flex:1;
+  display:grid;
+  width:100%;
+  max-width:420px;
+  margin:0 auto;
+  place-items:center;
+  min-height:0;
+}
+.workspace{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  flex:1;
+  width:100%;
+  max-width:1120px;
+  min-height:0;
+}
+.top-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1.18fr) minmax(300px,.82fr);
+  gap:10px;
+  align-items:start;
+}
+.card{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+  padding:16px;
+  border-radius:22px;
+  border:1px solid var(--stroke);
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.92), rgba(8,15,31,.88));
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(22px);
+}
+.card::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  padding:1px;
+  background:linear-gradient(135deg, rgba(56,189,248,.32), rgba(148,163,184,.06), rgba(34,197,94,.26));
+  mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite:exclude;
+  -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;
+  pointer-events:none;
+}
+.panel-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.panel-head h2{
+  margin:0;
+  font-size:1.14rem;
+  line-height:1.08;
+  letter-spacing:-.03em;
+}
+.panel-head p{
+  margin:4px 0 0;
+  max-width:44ch;
+  color:var(--muted);
+  font-size:.82rem;
+  line-height:1.45;
+}
+.panel-head-tight{
+  margin-bottom:10px;
+}
+.status-pill,.legend-item{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:999px;
+  border:1px solid rgba(34,197,94,.24);
+  background:rgba(34,197,94,.09);
+  color:#d1fae5;
+  white-space:nowrap;
+  font-size:.74rem;
+  font-weight:600;
+}
+.status-pill::before,.dot{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:currentColor;
+  box-shadow:0 0 12px currentColor;
+}
+.dot{
+  display:inline-block;
+  background:var(--cyan);
+  color:var(--cyan);
+}
+.dot-green{background:var(--green);color:var(--green)}
+.dot-amber{background:var(--amber);color:var(--amber)}
+.legend{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.field-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.field-grid-generate{
+  grid-template-columns:minmax(0,.8fr) minmax(0,.8fr) minmax(0,1fr) minmax(148px,.62fr);
+  align-items:end;
+}
+.field{
+  display:block;
+}
+.field-action{
+  display:flex;
+  align-items:flex-end;
+  min-height:100%;
+}
+.field span{
+  display:block;
+  margin-bottom:6px;
+  color:var(--muted);
+  font-size:.76rem;
+  letter-spacing:.04em;
+}
+input{
+  width:100%;
+  height:42px;
+  padding:0 12px;
+  border-radius:12px;
+  border:1px solid rgba(71,85,105,.82);
+  background:rgba(8,15,31,.9);
+  color:var(--text);
+  transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+input::placeholder{color:rgba(148,163,184,.72)}
+input:hover{border-color:rgba(56,189,248,.38)}
+input:focus-visible,
+button:focus-visible{
+  outline:none;
+  border-color:var(--cyan);
+  box-shadow:0 0 0 3px rgba(56,189,248,.18);
+}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  min-height:40px;
+  padding:0 16px;
+  border:1px solid transparent;
+  border-radius:12px;
+  cursor:pointer;
+  font-weight:700;
+  letter-spacing:.01em;
+  transition:transform .18s ease, filter .18s ease, background .18s ease, border-color .18s ease;
+}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.04)}
+.btn-primary{
+  background:linear-gradient(135deg, #0ea5e9, #2563eb);
+  color:#eff6ff;
+  box-shadow:0 12px 26px rgba(37,99,235,.32);
+}
+.btn-secondary{
+  border-color:rgba(56,189,248,.22);
+  background:rgba(15,23,42,.78);
+  color:#dbeafe;
+}
+.btn-ghost{
+  border-color:rgba(148,163,184,.2);
+  background:rgba(255,255,255,.02);
+  color:var(--text);
+}
+.btn-danger{
+  min-height:34px;
+  padding:0 12px;
+  border-radius:12px;
+  border-color:rgba(248,113,113,.3);
+  background:rgba(127,29,29,.62);
+  color:#fecaca;
+  box-shadow:none;
+}
+.btn-sm{
+  min-height:34px;
+  padding:0 12px;
+  font-size:.78rem;
+}
+.btn-fill{
+  width:100%;
+}
+.keys-output{
+  margin-top:10px;
+  min-height:0;
+  max-height:72px;
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(34,197,94,.18);
+  background:
+    linear-gradient(180deg, rgba(7,18,20,.88), rgba(3,10,18,.92));
+  color:#bbf7d0;
+  font-family:var(--mono);
+  font-size:.78rem;
+  line-height:1.55;
+  white-space:pre-wrap;
+  word-break:break-all;
+  overflow:auto;
+  box-shadow:inset 0 0 0 1px rgba(34,197,94,.05);
+}
+.stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.stat-item{
+  padding:12px 10px;
+  border-radius:14px;
+  border:1px solid var(--stroke);
+  background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(10,15,28,.8));
+}
+.stat-item:nth-child(1){box-shadow:inset 0 0 0 1px rgba(56,189,248,.08)}
+.stat-item:nth-child(2){box-shadow:inset 0 0 0 1px rgba(34,197,94,.08)}
+.stat-item:nth-child(3){box-shadow:inset 0 0 0 1px rgba(245,158,11,.08)}
+.stat-label{
+  display:block;
+  font-size:.72rem;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.stat-num{
+  display:block;
+  margin-top:6px;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1;
+  letter-spacing:-.05em;
+}
+.copy-btn{
+  align-self:flex-start;
+  margin-top:8px;
+}
+.stat-item:nth-child(1) .stat-num{color:var(--cyan)}
+.stat-item:nth-child(2) .stat-num{color:#4ade80}
+.stat-item:nth-child(3) .stat-num{color:#fbbf24}
+.table-card{
+  flex:1;
+  padding:14px 16px 16px;
+}
+.table-wrap{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+  border-radius:16px;
+  border:1px solid var(--stroke);
+  background:rgba(4,10,22,.72);
+}
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;
+  font-size:.8rem;
+}
+thead th{
+  position:sticky;
+  top:0;
+  z-index:2;
+  padding:11px 10px;
+  text-align:left;
+  font-size:.68rem;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--muted);
+  background:rgba(2,6,23,.96);
+  border-bottom:1px solid var(--stroke);
+}
+tbody tr{
+  transition:background .18s ease, transform .18s ease;
+}
+tbody tr:hover{
+  background:rgba(15,23,42,.66);
+}
+tbody td{
+  padding:10px;
+  border-bottom:1px solid rgba(148,163,184,.08);
+  vertical-align:top;
+  color:#dbe4f3;
+  line-height:1.35;
+  word-break:break-word;
+}
+th:nth-child(1),td:nth-child(1){width:16%}
+th:nth-child(2),td:nth-child(2){width:7%}
+th:nth-child(3),td:nth-child(3){width:10%}
+th:nth-child(4),td:nth-child(4){width:10%}
+th:nth-child(5),td:nth-child(5){width:13%}
+th:nth-child(6),td:nth-child(6){width:14%}
+th:nth-child(7),td:nth-child(7){width:12%}
+th:nth-child(8),td:nth-child(8){width:12%}
+th:nth-child(9),td:nth-child(9){width:6%}
+.mono{
+  font-family:var(--mono);
+}
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:4px 9px;
+  border-radius:999px;
+  border:1px solid transparent;
+  font-size:.7rem;
+  font-weight:700;
+  white-space:nowrap;
+}
+.badge::before{
+  content:"";
+  width:7px;
+  height:7px;
+  border-radius:999px;
+  background:currentColor;
+  box-shadow:0 0 12px currentColor;
+}
+.badge-green{
+  color:#4ade80;
+  background:rgba(20,83,45,.28);
+  border-color:rgba(74,222,128,.16);
+}
+.badge-gray{
+  color:#cbd5e1;
+  background:rgba(51,65,85,.38);
+  border-color:rgba(148,163,184,.12);
+}
+.badge-red{
+  color:#fca5a5;
+  background:rgba(127,29,29,.3);
+  border-color:rgba(248,113,113,.14);
+}
+.cell-sub{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:.68rem;
+}
+.empty-state{
+  padding:24px 18px !important;
+  text-align:center;
+  color:var(--muted);
+}
+.msg{
+  margin-bottom:12px;
+  padding:10px 12px;
+  border-radius:12px;
+  font-size:.8rem;
+  line-height:1.5;
+  border:1px solid transparent;
+}
+.msg-err{
+  background:rgba(127,29,29,.22);
+  color:#fecaca;
+  border-color:rgba(248,113,113,.16);
+}
+.msg-ok{
+  background:rgba(20,83,45,.22);
+  color:#d1fae5;
+  border-color:rgba(74,222,128,.16);
+}
+.login-card{
+  width:min(100%, 420px);
+  padding:18px;
+  justify-self:center;
+  align-self:center;
+}
+.login-card .panel-head{
+  margin-bottom:12px;
+  flex-direction:column;
+  align-items:flex-start;
+}
+.login-form{
+  display:grid;
+  gap:10px;
+}
+.login-card .btn{
+  width:100%;
+  margin-top:2px;
+}
+.login-footnote{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:.76rem;
+  line-height:1.45;
+}
+
+@media (max-width: 1240px){
+  .masthead{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .masthead-meta{
+    width:100%;
+    min-width:0;
+  }
+  .top-grid{
+    grid-template-columns:1fr;
+    min-height:auto;
+    height:auto;
+  }
+}
+
+@media (max-width: 980px){
+  body{overflow:auto}
+  .shell{
+    height:auto;
+    min-height:100vh;
+  }
+  .workspace{
+    min-height:auto;
+  }
+  .stats,
+  .masthead-meta,
+  .field-grid{
+    grid-template-columns:1fr;
+  }
+  .login-shell{
+    width:100%;
+  }
+  .table-card{
+    min-height:520px;
+  }
+  .legend{
+    justify-content:flex-start;
+  }
+}
+
+@media (max-height: 720px){
+  body{overflow:auto}
+  .shell{
+    height:auto;
+    min-height:100vh;
+  }
+  .workspace{
+    min-height:auto;
+  }
+  .table-card{
+    min-height:500px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation:none !important;
+    transition:none !important;
+    scroll-behavior:auto !important;
+  }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header id="appHeader" class="masthead hidden">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" role="presentation">
+          <path d="M13.5 2a4.5 4.5 0 0 0-4.24 5.99L2 15.25V20h4.75l1.5-1.5h2l1.5-1.5v-2l2.26-2.26A4.5 4.5 0 1 0 13.5 2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M15.5 7.5h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brand-copy">
+        <span class="eyebrow">Admin Control Grid</span>
+        <h1>TLS-shipinhao License Console</h1>
+        <p>卡密生成、统计与吊销管理</p>
+      </div>
+    </div>
+    <div class="masthead-meta">
+      <div class="meta-chip">
+        <span>当前模式</span>
+        <strong>Secure Admin</strong>
+      </div>
+      <div class="meta-chip">
+        <span>布局策略</span>
+        <strong>Desktop Single Screen</strong>
+      </div>
+    </div>
+  </header>
+
+  <div id="loginView" class="login-shell">
+    <section class="card login-card">
+      <div class="panel-head">
+        <div>
+          <span class="eyebrow">Admin Access</span>
+          <h2>管理员登录</h2>
+          <p>输入管理员密钥后进入卡密控制台。</p>
+        </div>
+        <div class="status-pill">安全校验中</div>
+      </div>
+      <div id="loginMsg"></div>
+      <div class="login-form">
+        <label class="field">
+          <span>管理密钥</span>
+          <input type="password" id="adminSecret" placeholder="请输入 ADMIN_SECRET" autocomplete="current-password">
+        </label>
+        <button class="btn btn-primary" onclick="doLogin()">进入控制台</button>
+      </div>
+    </section>
+  </div>
+
+  <main id="mainView" class="workspace hidden">
+    <section class="top-grid">
+      <article class="card">
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">Key Forge</span>
+            <h2>批量生成卡密</h2>
+          </div>
+          <div class="status-pill">同源安全连接</div>
+        </div>
+        <div id="genMsg"></div>
+        <div class="field-grid field-grid-generate">
+          <label class="field">
+            <span>数量（1-50）</span>
+            <input type="number" id="genCount" value="5" min="1" max="50">
+          </label>
+          <label class="field">
+            <span>有效期（天）</span>
+            <input type="number" id="genDays" value="30" min="1">
+          </label>
+          <label class="field">
+            <span>备注</span>
+            <input type="text" id="genNote" placeholder="可选备注">
+          </label>
+          <div class="field-action">
+            <button class="btn btn-primary btn-fill" onclick="doGenerate()">生成卡密</button>
+          </div>
+        </div>
+        <div id="keysOutput" class="keys-output hidden"></div>
+        <button class="btn btn-secondary btn-sm copy-btn hidden" onclick="copyKeys()" id="copyBtn">复制全部</button>
+      </article>
+
+      <article class="card">
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">License Telemetry</span>
+            <h2>卡密总览</h2>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadList()">刷新列表</button>
+        </div>
+        <div id="statsArea" class="stats"></div>
+      </article>
+    </section>
+
+    <section class="card table-card">
+      <div class="panel-head panel-head-tight">
+        <div>
+          <span class="eyebrow">License Registry</span>
+          <h2>卡密明细</h2>
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="dot"></span>未使用</span>
+          <span class="legend-item"><span class="dot dot-green"></span>已激活</span>
+          <span class="legend-item"><span class="dot dot-amber"></span>已过期</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>卡密</th>
+              <th>有效期</th>
+              <th>状态</th>
+              <th>备注</th>
+              <th>生成时间</th>
+              <th>设备 ID</th>
+              <th>激活时间</th>
+              <th>过期时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="keysList"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+let SECRET = "";
+const API = location.origin;
+
+function api(path, body) {
+  return fetch(API + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Admin-Secret": SECRET },
+    body: JSON.stringify(body)
+  }).then(res => res.json());
+}
+
+function doLogin() {
+  SECRET = document.getElementById("adminSecret").value;
+  if (!SECRET) {
+    showMsg("loginMsg", "请输入管理密钥", true);
+    return;
+  }
+  api("/api/admin/list", {}).then(res => {
+    if (!res.success) {
+      showMsg("loginMsg", "密钥错误", true);
+      SECRET = "";
+      return;
+    }
+    document.getElementById("appHeader").classList.remove("hidden");
+    document.getElementById("loginView").classList.add("hidden");
+    document.getElementById("mainView").classList.remove("hidden");
+    renderList(res);
+  }).catch(() => {
+    showMsg("loginMsg", "登录请求失败，请稍后重试", true);
+    SECRET = "";
+  });
+}
+
+function doGenerate() {
+  const count = parseInt(document.getElementById("genCount").value, 10) || 5;
+  const plan_days = parseInt(document.getElementById("genDays").value, 10) || 30;
+  const note = document.getElementById("genNote").value;
+  api("/api/admin/generate", { count, plan_days, note }).then(res => {
+    if (!res.success) {
+      showMsg("genMsg", res.message, true);
+      return;
+    }
+    showMsg("genMsg", "成功生成 " + res.keys.length + " 个卡密", false);
+    const out = document.getElementById("keysOutput");
+    out.textContent = res.keys.join("\n");
+    out.classList.remove("hidden");
+    document.getElementById("copyBtn").classList.remove("hidden");
+    loadList();
+  }).catch(() => {
+    showMsg("genMsg", "生成请求失败，请稍后重试", true);
+  });
+}
+
+function copyKeys() {
+  const text = document.getElementById("keysOutput").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "已复制";
+    setTimeout(() => { btn.textContent = "复制全部"; }, 1500);
+  });
+}
+
+function doRevoke(key) {
+  if (!confirm("确定要吊销卡密 " + key + " 吗？此操作不可逆！")) return;
+  api("/api/admin/revoke", { key }).then(res => {
+    if (!res.success) {
+      alert(res.message);
+      return;
+    }
+    loadList();
+  });
+}
+
+function loadList() {
+  api("/api/admin/list", {}).then(res => {
+    if (res.success) renderList(res);
+  });
+}
+
+function renderList(res) {
+  const stats = res.stats || [];
+  const total = stats.reduce((sum, row) => sum + row.cnt, 0);
+  const unused = stats.find(row => row.status === "unused")?.cnt || 0;
+  const activated = stats.find(row => row.status === "activated")?.cnt || 0;
+  document.getElementById("statsArea").innerHTML = [
+    stat(total, "总计"),
+    stat(unused, "未使用"),
+    stat(activated, "已激活")
+  ].join("");
+
+  const rows = res.keys || [];
+  const tbody = document.getElementById("keysList");
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">当前还没有卡密记录，生成后会在这里立即展示。</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(row => {
+    const expired = !!(row.expires_at && new Date() > new Date(row.expires_at));
+    const badge = row.status === "activated"
+      ? '<span class="badge badge-green">已激活</span>'
+      : row.status === "revoked"
+        ? '<span class="badge badge-red">已吊销</span>'
+        : '<span class="badge badge-gray">未使用</span>';
+    const expireTag = expired ? '<div class="cell-sub"><span class="badge badge-red">已过期</span></div>' : '';
+    const revokeBtn = row.status !== "revoked"
+      ? '<button class="btn btn-danger btn-sm" onclick="doRevoke(&quot;' + esc(row.license_key) + '&quot;)">吊销</button>'
+      : "-";
+
+    return '<tr>'
+      + '<td class="mono">' + esc(row.license_key) + '</td>'
+      + '<td>' + row.plan_days + ' 天</td>'
+      + '<td>' + badge + expireTag + '</td>'
+      + '<td>' + esc(row.note || "-") + '</td>'
+      + '<td>' + fmt(row.created_at) + '</td>'
+      + '<td class="mono">' + esc(row.device_id || "-") + '</td>'
+      + '<td>' + fmt(row.activated_at) + '</td>'
+      + '<td>' + fmt(row.expires_at) + '</td>'
+      + '<td>' + revokeBtn + '</td>'
+      + '</tr>';
+  }).join("");
+}
+
+function stat(n, label) {
+  return '<div class="stat-item"><span class="stat-label">' + label + '</span><span class="stat-num">' + n + '</span></div>';
+}
+
+function fmt(value) {
+  return value ? value.replace(/T/, " ").replace(/\+00:00$/, "") : "-";
+}
+
+function esc(value) {
+  const node = document.createElement("div");
+  node.textContent = value;
+  return node.innerHTML;
+}
+
+function showMsg(id, msg, err) {
+  document.getElementById(id).innerHTML = '<div class="msg ' + (err ? "msg-err" : "msg-ok") + '">' + esc(msg) + '</div>';
+  setTimeout(() => {
+    document.getElementById(id).innerHTML = "";
+  }, 4000);
+}
+
+document.getElementById("adminSecret").addEventListener("keydown", event => {
+  if (event.key === "Enter") doLogin();
+});
+</script>
+</body>
+</html>
