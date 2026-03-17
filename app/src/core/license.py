@@ -206,7 +206,7 @@ def activate_license(key: str) -> dict:
     1. 调用后端 API 验证卡密并绑定设备
     2. 后端通过后写入本地 license.json
     """
-    from .constants import LICENSE_ACTIVATE_URL, LICENSE_API_TIMEOUT
+    from ..constants import LICENSE_ACTIVATE_URL, LICENSE_API_TIMEOUT
 
     key = key.strip()
     if not key:
@@ -261,7 +261,7 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
 
     优先通过后端 /api/verify 在线校验，网络不可用时回退到本地缓存校验。
     """
-    from .constants import LICENSE_API_TIMEOUT, LICENSE_VERIFY_URL
+    from ..constants import LICENSE_API_TIMEOUT, LICENSE_VERIFY_URL
 
     path = _license_path()
     if not os.path.isfile(path):

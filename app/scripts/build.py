@@ -101,6 +101,7 @@ CYTHON_MODULES = [
 
 # Cython 模块依赖的标准库（使用混淆源时需要）
 CYTHON_STDLIB_DEPS = [
+    "charset_normalizer",
     "concurrent.futures",
     "datetime",
     "functools",
@@ -110,6 +111,7 @@ CYTHON_STDLIB_DEPS = [
     "logging",
     "os",
     "re",
+    "sqlite3",
     "threading",
     "requests",
     "subprocess",
@@ -538,6 +540,24 @@ def prepare_icon(system: str, python_bin: str) -> Path | None:
         return None
 
 
+def _generate_runtime_hook() -> Path:
+    """生成 runtime hook 脚本，在 frozen 环境启动前预初始化子包层级。
+
+    PyInstaller 的 FrozenImporter 对 Cython .so 的相对 import 支持不完整，
+    需要在主脚本执行前确保所有子包的 __init__ 已被加载。
+    """
+    BUILD_DIR.mkdir(exist_ok=True)
+    hook_path = BUILD_DIR / "_rthook_init_packages.py"
+    hook_path.write_text(
+        "import src\n"
+        "import src.core\n"
+        "import src.services\n"
+        "import src.ui\n",
+        encoding="utf-8",
+    )
+    return hook_path
+
+
 def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_dist: bool = False) -> list[str]:
     """组装 PyInstaller 公共参数。"""
     cmd = [python_bin, "-m", "PyInstaller", "--clean", "--noconfirm"]
@@ -557,6 +577,14 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
                 cmd.extend(["--hidden-import", module])
             for module in CYTHON_STDLIB_DEPS:
                 cmd.extend(["--hidden-import", module])
+            cmd.extend(["--collect-submodules", "src"])
+            for init_file in (APP_DIST / "src").rglob("__init__.py"):
+                dest = str(init_file.parent.relative_to(APP_DIST))
+                cmd.extend(["--add-data", f"{init_file}{os.pathsep}{dest}"])
+            # runtime hook：在 frozen 环境启动前预先初始化包层级，
+            # 使 Cython .so 的相对 import 能正确解析
+            hook = _generate_runtime_hook()
+            cmd.extend(["--runtime-hook", str(hook)])
         
         for module in EXCLUDED_MODULES:
             cmd.extend(["--exclude-module", module])
@@ -660,6 +688,12 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, 
     if profile == PROFILE_MAIN:
         prune_macos_bundle(app_bundle)
         patch_macos_bundle_version(app_bundle, get_app_version())
+
+    # PyInstaller --windowed 会同时产出展开目录，只保留 .app bundle
+    loose_dir = DIST_DIR / app_name
+    if loose_dir.is_dir() and not str(loose_dir).endswith(".app"):
+        shutil.rmtree(loose_dir, ignore_errors=True)
+
     cleanup_temp_files(app_name)
 
     print(f"打包完成。\n应用位置: {app_bundle}")

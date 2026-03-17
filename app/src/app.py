@@ -3,6 +3,10 @@
 
 import sys
 
+# 预加载顶层模块，确保 frozen 环境中子包的相对 import 能正确解析
+from . import constants as _constants  # noqa: F401
+from . import config as _config  # noqa: F401
+
 from PySide6.QtWidgets import QApplication
 
 from .ui.window import MainWindow
