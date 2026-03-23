@@ -2,6 +2,7 @@
 """TLS-shipinhao 后台批量任务执行器。"""
 
 import threading
+import time
 
 from PySide6.QtCore import QObject, Signal
 
@@ -20,8 +21,8 @@ class BatchWorker(QObject):
     missing_config = Signal(str)
     finished = Signal(int, int, int, bool)
 
-    # 暂停状态下 wait() 的轮询间隔（秒），用于响应 stop 请求
     _WAIT_POLL_INTERVAL = 0.5
+    _STEP_INTERVAL = 1.0
 
     def __init__(self, order_ids, tracking_numbers):
         super().__init__()
@@ -105,6 +106,8 @@ class BatchWorker(QObject):
                             tracking_number,
                             exc,
                         )
+                        if index < total_count and not self._stopped:
+                            time.sleep(self._STEP_INTERVAL)
                         continue
 
                     success_count += 1
@@ -115,6 +118,8 @@ class BatchWorker(QObject):
                         tracking_number,
                         old_waybill,
                     )
+                    if index < total_count and not self._stopped:
+                        time.sleep(self._STEP_INTERVAL)
         except Exception as exc:  # noqa: BLE001
             failure_count += total_count - success_count - failure_count
             self.fatal_error.emit(str(exc))

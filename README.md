@@ -74,6 +74,11 @@ constants ← config ← core/api ← services/review_matcher
 # 安装依赖
 pip install -r app/requirements.txt
 
+#激活虚拟环境
+source .venv/bin/activate
+#激退出虚拟环境
+deactivate .venv/bin/activate
+
 # 运行
 python app/main.py
 ```
