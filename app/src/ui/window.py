@@ -59,7 +59,6 @@ from ..constants import (
     INPUT_EDIT_PADDING,
     INPUT_EDIT_RADIUS,
     INPUT_VISIBLE_LINES,
-    LEFT_COLUMN_GAP,
     LOG_EDIT_PADDING,
     LOG_EDIT_RADIUS,
     LOG_PANEL_MIN_HEIGHT,
@@ -76,7 +75,6 @@ from ..constants import (
     PAGE_MARGIN,
     ROW_GAP,
     SETUP_SECTION_PADDING,
-    SETUP_SECTION_SPACING,
     TUTORIAL_URL,
     VERY_HIGH_DPI_COMPACT_THRESHOLD,
     WIDE_LAYOUT_MIN_HEIGHT,
@@ -92,6 +90,10 @@ from .widgets import (
     LicenseDialog,
     build_fixed_font,
     build_font,
+    get_dialog_action_spacing,
+    get_dialog_content_margins,
+    get_dialog_section_spacing,
+    get_dialog_text_spacing,
     get_license_reason_text,
     reset_font_caches,
 )
@@ -123,6 +125,8 @@ class MainWindow(QWidget):
         self._batch_rows = []
         self._license_reason = license_reason
         self._license_info = license_info or {}
+        self._initial_height_fit_applied = False
+        self._last_responsive_profile = None
         default_w, default_h = self._resolve_initial_window_size()
         self._ui_scale = self._resolve_ui_scale_for_size(default_w, default_h)
         set_ui_scale(self._ui_scale)
@@ -408,27 +412,28 @@ class MainWindow(QWidget):
         """创建顶部标题卡片。"""
         self.header_card = QFrame()
         self.header_card.setObjectName("HeroCard")
+        self.header_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.page_layout.addWidget(self.header_card)
 
-        header_box = QHBoxLayout(self.header_card)
-        header_box.setContentsMargins(
+        self.header_box = QHBoxLayout(self.header_card)
+        self.header_box.setContentsMargins(
             scale_px(HERO_PADDING_X, min_value=14),
             scale_px(HERO_PADDING_Y, min_value=6),
             scale_px(HERO_PADDING_X, min_value=14),
             scale_px(HERO_PADDING_Y, min_value=6),
         )
-        header_box.setSpacing(scale_px(12, min_value=6))
+        self.header_box.setSpacing(scale_px(12, min_value=6))
 
         title_wrap = QWidget()
-        title_box = QVBoxLayout(title_wrap)
-        title_box.setContentsMargins(0, 0, 0, 0)
-        title_box.setSpacing(scale_px(4, min_value=2))
+        self.title_box = QVBoxLayout(title_wrap)
+        self.title_box.setContentsMargins(0, 0, 0, 0)
+        self.title_box.setSpacing(scale_px(4, min_value=2))
 
         title_label = QLabel("驼铃视频小店中差评处理")
         title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(FONT_SIZES["title"], bold=True))
         self.hero_title_label = title_label
-        title_box.addWidget(title_label)
+        self.title_box.addWidget(title_label)
 
         self.title_description_label = QLabel(
             "软件实现自动化批量处理中差评、品质退款订单的功能。"
@@ -436,9 +441,9 @@ class MainWindow(QWidget):
         self.title_description_label.setObjectName("HeroSubtitle")
         self.title_description_label.setWordWrap(True)
         self.title_description_label.setFont(build_font(FONT_SIZES["badge"]))
-        title_box.addWidget(self.title_description_label)
+        self.title_box.addWidget(self.title_description_label)
 
-        header_box.addWidget(title_wrap, 1)
+        self.header_box.addWidget(title_wrap, 1)
 
         badge_wrap = QWidget()
         badge_layout = QHBoxLayout(badge_wrap)
@@ -490,7 +495,7 @@ class MainWindow(QWidget):
         self.tutorial_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         badge_layout.addWidget(self.tutorial_badge, 0, Qt.AlignVCenter)
 
-        header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
+        self.header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._sync_window_title_with_license(self._license_reason)
 
     @staticmethod
@@ -522,6 +527,11 @@ class MainWindow(QWidget):
             f"{scale_px(vertical, min_value=1)}px "
             f"{scale_px(horizontal, min_value=1)}px"
         )
+
+    @staticmethod
+    def _standard_layout_spacing():
+        """主界面统一内容间距。"""
+        return scale_px(ROW_GAP, min_value=8)
 
     def _build_main_content(self):
         """构建主内容区。"""
@@ -594,7 +604,7 @@ class MainWindow(QWidget):
         self.log_title_label = self.log_card.title_label
 
         self.main_content = QWidget()
-        self.main_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.main_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.main_content_layout = QHBoxLayout(self.main_content)
         self.main_content_layout.setContentsMargins(0, 0, 0, 0)
         self.main_content_layout.setSpacing(scale_px(ROW_GAP, min_value=6))
@@ -603,34 +613,35 @@ class MainWindow(QWidget):
         self.action_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.config_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        left_column = QVBoxLayout()
-        left_column.setContentsMargins(0, scale_px(4, min_value=2), 0, scale_px(4, min_value=2))
-        left_column.setSpacing(scale_px(LEFT_COLUMN_GAP, min_value=12))
-        left_column.addWidget(self.config_card)
-        left_column.addWidget(self.action_card)
-        left_column.addWidget(self.license_card)
-        left_column.addStretch(1)
+        self.left_column_layout = QVBoxLayout()
+        self.left_column_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_column_layout.setSpacing(self._standard_layout_spacing())
+        self.left_column_layout.addWidget(self.config_card)
+        self.left_column_layout.addWidget(self.action_card)
+        self.left_column_layout.addWidget(self.license_card)
+        self.left_column_layout.addStretch(1)
 
-        right_column = QVBoxLayout()
-        right_column.setContentsMargins(0, 0, 0, 0)
-        right_column.setSpacing(scale_px(ROW_GAP, min_value=6))
+        self.right_column_layout = QVBoxLayout()
+        self.right_column_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_column_layout.setSpacing(self._standard_layout_spacing())
 
-        input_row = QHBoxLayout()
-        input_row.setContentsMargins(0, 0, 0, 0)
-        input_row.setSpacing(scale_px(ROW_GAP, min_value=6))
-        input_row.addWidget(self.order_card, 1)
-        input_row.addWidget(self.tracking_card, 1)
+        self.input_row_layout = QHBoxLayout()
+        self.input_row_layout.setContentsMargins(0, 0, 0, 0)
+        self.input_row_layout.setSpacing(self._standard_layout_spacing())
+        self.input_row_layout.addWidget(self.order_card, 1)
+        self.input_row_layout.addWidget(self.tracking_card, 1)
 
-        right_column.addLayout(input_row, 1)
-        right_column.addWidget(self.log_card, 1)
+        self.right_column_layout.addLayout(self.input_row_layout, 0)
+        self.right_column_layout.addWidget(self.log_card, 1)
 
-        self.main_content_layout.addLayout(left_column, 4)
-        self.main_content_layout.addLayout(right_column, 7)
-        self.page_layout.addWidget(self.main_content, 1)
+        self.main_content_layout.addLayout(self.left_column_layout, 4)
+        self.main_content_layout.addLayout(self.right_column_layout, 7)
+        self.page_layout.addWidget(self.main_content, 0, Qt.AlignTop)
+        self.page_layout.addStretch(1)
         self._sync_window_title_with_license(self._license_reason, self._license_info)
 
     # -----------------------------------------------------------------------
@@ -717,7 +728,7 @@ class MainWindow(QWidget):
         editor.setMinimumHeight(
             self._calculate_editor_height(editor, max(6, scale_px(INPUT_VISIBLE_LINES, min_value=6)))
         )
-        editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         return editor
 
     def _create_review_button(self, text):
@@ -773,7 +784,7 @@ class MainWindow(QWidget):
             scale_px(SETUP_SECTION_PADDING, min_value=8),
             scale_px(SETUP_SECTION_PADDING, min_value=8),
         )
-        layout.setSpacing(scale_px(SETUP_SECTION_SPACING, min_value=6))
+        layout.setSpacing(self._standard_layout_spacing())
         if title:
             layout.addWidget(self._create_setup_section_label(title), 0, Qt.AlignLeft)
         layout.addWidget(content)
@@ -782,38 +793,38 @@ class MainWindow(QWidget):
     def _build_setup_content(self):
         """构建系统配置与订单获取组合区域。"""
         content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, scale_px(10, min_value=6), 0, scale_px(8, min_value=6))
-        layout.setSpacing(scale_px(24, min_value=16))
+        self.setup_content_layout = QVBoxLayout(content)
+        self.setup_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.setup_content_layout.setSpacing(self._standard_layout_spacing())
 
         config_content = self._build_config_content()
         config_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        layout.addWidget(self._build_setup_section_card("配置目录", config_content))
+        self.setup_content_layout.addWidget(self._build_setup_section_card("配置目录", config_content))
 
         review_content = self._build_review_content()
         review_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        layout.addWidget(self._build_setup_section_card(None, review_content))
+        self.setup_content_layout.addWidget(self._build_setup_section_card(None, review_content))
         return content
 
     def _build_config_content(self):
         """构建配置卡片内容。"""
         content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(14, min_value=10))
+        self.config_content_layout = QVBoxLayout(content)
+        self.config_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.config_content_layout.setSpacing(self._standard_layout_spacing())
 
-        path_panel = QFrame()
-        path_panel.setObjectName("ConfigPathPanel")
-        path_panel.setMinimumHeight(scale_px(CONFIG_PATH_MIN_HEIGHT, min_value=48))
-        path_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        path_layout = QVBoxLayout(path_panel)
+        self.config_path_panel = QFrame()
+        self.config_path_panel.setObjectName("ConfigPathPanel")
+        self.config_path_panel.setMinimumHeight(scale_px(CONFIG_PATH_MIN_HEIGHT, min_value=48))
+        self.config_path_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        path_layout = QVBoxLayout(self.config_path_panel)
         path_layout.setContentsMargins(
             scale_px(12, min_value=8),
             scale_px(12, min_value=8),
             scale_px(12, min_value=8),
             scale_px(12, min_value=8),
         )
-        path_layout.setSpacing(scale_px(8, min_value=5))
+        path_layout.setSpacing(self._standard_layout_spacing())
 
         self.config_path_label = QLabel()
         self.config_path_label.setObjectName("ConfigPath")
@@ -832,32 +843,32 @@ class MainWindow(QWidget):
         self.config_note_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         path_layout.addWidget(self.config_note_label)
 
-        layout.addWidget(path_panel, 1)
+        self.config_content_layout.addWidget(self.config_path_panel, 1)
 
         actions = QWidget()
         actions_layout = QVBoxLayout(actions)
         actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(scale_px(16, min_value=10))
+        actions_layout.setSpacing(self._standard_layout_spacing())
 
         self.auto_cookie_button = self._create_review_button("自动获取 cookie 并保存")
         self.auto_cookie_button.clicked.connect(self.open_cookie_capture_dialog)
         actions_layout.addWidget(self.auto_cookie_button, 1)
 
-        layout.addWidget(actions)
+        self.config_content_layout.addWidget(actions)
 
         return content
 
     def _build_review_content(self):
         """构建中差评卡片内容。"""
         content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(16, min_value=10))
+        self.review_content_layout = QVBoxLayout(content)
+        self.review_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.review_content_layout.setSpacing(self._standard_layout_spacing())
 
         days_row = QWidget()
         days_row_layout = QHBoxLayout(days_row)
         days_row_layout.setContentsMargins(0, 0, 0, 0)
-        days_row_layout.setSpacing(scale_px(6, min_value=3))
+        days_row_layout.setSpacing(self._standard_layout_spacing())
 
         self.review_days_label = QLabel("选择订单查询天数")
         self.review_days_label.setFont(build_font(FONT_SIZES["body"], bold=True))
@@ -886,7 +897,7 @@ class MainWindow(QWidget):
             }}"""
         )
         days_row_layout.addWidget(self.review_days_spin, 0, Qt.AlignVCenter)
-        layout.addWidget(days_row)
+        self.review_content_layout.addWidget(days_row)
 
         self.review_find_button = self._create_review_button("获取差评订单")
         self.review_find_button.clicked.connect(self.on_review_find_clicked)
@@ -899,32 +910,39 @@ class MainWindow(QWidget):
 
         self.order_cache_button = self._create_review_button("订单缓存管理")
         self.order_cache_button.clicked.connect(self.on_order_cache_manage_clicked)
+        self.review_buttons = [
+            self.auto_cookie_button,
+            self.review_find_button,
+            self.quality_refund_button,
+            self.review_full_scan_button,
+            self.order_cache_button,
+        ]
 
         first_button_row = QWidget()
         first_button_row_layout = QHBoxLayout(first_button_row)
         first_button_row_layout.setContentsMargins(0, 0, 0, 0)
-        first_button_row_layout.setSpacing(scale_px(12, min_value=8))
+        first_button_row_layout.setSpacing(self._standard_layout_spacing())
         first_button_row_layout.addWidget(self.review_find_button, 1)
         first_button_row_layout.addWidget(self.quality_refund_button, 1)
-        layout.addWidget(first_button_row)
+        self.review_content_layout.addWidget(first_button_row)
 
         second_button_row = QWidget()
         second_button_row_layout = QHBoxLayout(second_button_row)
         second_button_row_layout.setContentsMargins(0, 0, 0, 0)
-        second_button_row_layout.setSpacing(scale_px(12, min_value=8))
+        second_button_row_layout.setSpacing(self._standard_layout_spacing())
         second_button_row_layout.addWidget(self.review_full_scan_button, 1)
         second_button_row_layout.addWidget(self.order_cache_button, 1)
-        layout.addWidget(second_button_row)
+        self.review_content_layout.addWidget(second_button_row)
 
-        layout.addStretch(1)
+        self.review_content_layout.addStretch(1)
         return content
 
     def _build_action_content(self):
         """构建执行控制卡片内容。"""
         content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(12, min_value=8))
+        self.action_content_layout = QVBoxLayout(content)
+        self.action_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_content_layout.setSpacing(self._standard_layout_spacing())
 
         self.start_button = QPushButton("开始批量处理")
         self.start_button.setObjectName("PrimaryButton")
@@ -934,7 +952,7 @@ class MainWindow(QWidget):
         self.start_button.setMinimumWidth(scale_px(140, min_value=120))
         self.start_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.start_button.clicked.connect(self.on_start_clicked)
-        layout.addWidget(self.start_button)
+        self.action_content_layout.addWidget(self.start_button)
 
         self.pause_button = QPushButton("暂停批量处理")
         self.pause_button.setObjectName("PauseButton")
@@ -944,21 +962,22 @@ class MainWindow(QWidget):
         self.pause_button.setMinimumWidth(scale_px(140, min_value=120))
         self.pause_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.pause_button.clicked.connect(self.on_pause_clicked)
-        layout.addWidget(self.pause_button)
+        self.action_content_layout.addWidget(self.pause_button)
+        self.action_buttons = [self.start_button, self.pause_button]
         return content
 
     def _build_license_content(self):
         """构建激活状态卡片内容。"""
         content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(10, min_value=4))
+        self.license_content_layout = QVBoxLayout(content)
+        self.license_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.license_content_layout.setSpacing(self._standard_layout_spacing())
 
         body_wrap = QWidget()
         body_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         body_layout = QVBoxLayout(body_wrap)
         body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(scale_px(10, min_value=4))
+        body_layout.setSpacing(self._standard_layout_spacing())
 
         info_panel = QFrame()
         info_panel.setObjectName("LicenseInfoPanel")
@@ -969,7 +988,7 @@ class MainWindow(QWidget):
             scale_px(14, min_value=8),
             scale_px(14, min_value=8),
         )
-        panel_layout.setSpacing(scale_px(8, min_value=4))
+        panel_layout.setSpacing(self._standard_layout_spacing())
 
         self.license_summary_label = QLabel()
         self.license_summary_label.setObjectName("LicenseSummary")
@@ -984,9 +1003,9 @@ class MainWindow(QWidget):
         panel_layout.addWidget(self.license_meta_label)
 
         body_layout.addWidget(info_panel)
-        layout.addStretch(1)
-        layout.addWidget(body_wrap)
-        layout.addStretch(1)
+        self.license_content_layout.addStretch(1)
+        self.license_content_layout.addWidget(body_wrap)
+        self.license_content_layout.addStretch(1)
         return content
 
     # -----------------------------------------------------------------------
@@ -1000,6 +1019,110 @@ class MainWindow(QWidget):
         frame = editor.frameWidth() * 2
         padding = scale_px(INPUT_EDIT_PADDING, min_value=8) + 2
         return line_height * visible_lines + document_margin + frame + padding
+
+    @staticmethod
+    def _resolve_height_profile(viewport_height):
+        """根据当前可用高度返回垂直紧凑模式。"""
+        if viewport_height <= 620:
+            return "dense"
+        if viewport_height <= 720:
+            return "compact"
+        return "comfortable"
+
+    def _sync_responsive_component_heights(self, viewport_height):
+        """窗口高度变化时同步关键控件高度，优先压缩非关键留白与编辑区。"""
+        profile = self._resolve_height_profile(viewport_height)
+        if profile == self._last_responsive_profile:
+            return
+
+        base_editor_lines = max(6, scale_px(INPUT_VISIBLE_LINES, min_value=6))
+        base_log_min_height = scale_px(LOG_PANEL_MIN_HEIGHT, min_value=128)
+        base_path_panel_height = scale_px(CONFIG_PATH_MIN_HEIGHT, min_value=48)
+        metrics_by_profile = {
+            "comfortable": {
+                "editor_lines": base_editor_lines,
+                "log_min_height": base_log_min_height,
+                "days_spin_height": scale_px(36, min_value=28),
+                "path_panel_height": base_path_panel_height,
+                "hero_padding_x": scale_px(HERO_PADDING_X, min_value=14),
+                "hero_padding_y": scale_px(HERO_PADDING_Y, min_value=6),
+                "hero_gap": scale_px(12, min_value=6),
+                "title_gap": scale_px(4, min_value=2),
+            },
+            "compact": {
+                "editor_lines": 16,
+                "log_min_height": scale_px(156, min_value=132),
+                "days_spin_height": scale_px(34, min_value=30),
+                "path_panel_height": scale_px(68, min_value=56),
+                "hero_padding_x": scale_px(max(HERO_PADDING_X - 6, 16), min_value=12),
+                "hero_padding_y": scale_px(max(HERO_PADDING_Y - 8, 12), min_value=6),
+                "hero_gap": scale_px(10, min_value=5),
+                "title_gap": scale_px(3, min_value=2),
+            },
+            "dense": {
+                "editor_lines": 12,
+                "log_min_height": scale_px(140, min_value=120),
+                "days_spin_height": scale_px(32, min_value=28),
+                "path_panel_height": scale_px(60, min_value=48),
+                "hero_padding_x": scale_px(max(HERO_PADDING_X - 10, 14), min_value=10),
+                "hero_padding_y": scale_px(max(HERO_PADDING_Y - 12, 10), min_value=6),
+                "hero_gap": scale_px(8, min_value=4),
+                "title_gap": scale_px(2, min_value=1),
+            },
+        }
+        metrics = metrics_by_profile[profile]
+        self._last_responsive_profile = profile
+
+        editor_height = self._calculate_editor_height(self.order_edit, metrics["editor_lines"])
+        self.order_edit.setMinimumHeight(editor_height)
+        self.tracking_edit.setMinimumHeight(editor_height)
+        self.log_view.setMinimumHeight(metrics["log_min_height"])
+
+        if hasattr(self, "config_path_panel"):
+            self.config_path_panel.setMinimumHeight(metrics["path_panel_height"])
+
+        self.review_days_spin.setFixedHeight(metrics["days_spin_height"])
+        self.header_box.setContentsMargins(
+            metrics["hero_padding_x"],
+            metrics["hero_padding_y"],
+            metrics["hero_padding_x"],
+            metrics["hero_padding_y"],
+        )
+        self.header_box.setSpacing(metrics["hero_gap"])
+        self.title_box.setSpacing(metrics["title_gap"])
+
+        for widget in [
+            getattr(self, "config_path_panel", None),
+            self.order_edit,
+            self.tracking_edit,
+            self.log_view,
+            self.order_card,
+            self.tracking_card,
+            self.log_card,
+            self.config_card,
+            self.action_card,
+            self.license_card,
+            self.main_content,
+            self.header_card,
+            self.page_widget,
+        ]:
+            if widget is not None:
+                widget.updateGeometry()
+
+        for layout in [
+            self.input_row_layout,
+            self.right_column_layout,
+            self.left_column_layout,
+            self.main_content_layout,
+            self.page_layout,
+            self.setup_content_layout,
+            self.config_content_layout,
+            self.review_content_layout,
+            self.action_content_layout,
+            self.license_content_layout,
+        ]:
+            layout.invalidate()
+            layout.activate()
 
     def _fit_window_to_screen(self):
         """首次打开时确保窗口在屏幕内，不超出可用区域。"""
@@ -1081,17 +1204,56 @@ class MainWindow(QWidget):
         """窗口变化时同步页面边距。"""
         viewport = self.scroll_area.viewport()
         viewport_width = viewport.width()
-        if not viewport_width:
+        viewport_height = viewport.height()
+        if not viewport_width or not viewport_height:
             return
         ratio = min(1.0, max(0.6, viewport_width / 960))
         base_margin = scale_px(PAGE_MARGIN, min_value=10)
         margin = max(scale_px(10, min_value=8), int(round(base_margin * ratio)))
         self.page_layout.setContentsMargins(margin, margin, margin, margin)
+        self._sync_responsive_component_heights(viewport_height)
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
         self._sync_responsive_metrics()
         super().resizeEvent(event)
+
+    def showEvent(self, event):
+        """首次展示时按内容自然高度收口，避免底部出现大块空白。"""
+        super().showEvent(event)
+        self._sync_responsive_metrics()
+        if self._initial_height_fit_applied:
+            return
+        self._fit_window_height_to_content()
+        self._initial_height_fit_applied = True
+
+    def _fit_window_height_to_content(self):
+        """仅在窗口偏高时按当前内容自然高度收口。"""
+        if not hasattr(self, "page_widget") or not hasattr(self, "scroll_area"):
+            return
+
+        root_layout = self.layout()
+        if root_layout is not None:
+            root_layout.activate()
+        self.page_layout.activate()
+
+        viewport_height = self.scroll_area.viewport().height()
+        if viewport_height <= 0:
+            return
+
+        chrome_height = max(0, self.height() - viewport_height)
+        content_height = self.page_widget.sizeHint().height() + chrome_height
+        target_height = max(self.minimumHeight(), content_height)
+
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            available_height = screen.availableGeometry().height()
+            max_ratio = 0.97 if sys.platform.startswith("win") else 0.92
+            target_height = min(target_height, int(available_height * max_ratio))
+
+        shrink_tolerance = scale_px(12, min_value=8)
+        if self.height() > target_height + shrink_tolerance:
+            self.resize(self.width(), target_height)
 
     # -----------------------------------------------------------------------
     # 输入 / 日志
@@ -1236,53 +1398,53 @@ class MainWindow(QWidget):
         dialog.setModal(True)
         dialog.setMinimumWidth(min_width)
 
-        root = QVBoxLayout(dialog)
-        root.setContentsMargins(22, 18, 22, 18)
-        root.setSpacing(16)
+        dialog.root_layout = QVBoxLayout(dialog)
+        dialog.root_layout.setContentsMargins(*get_dialog_content_margins())
+        dialog.root_layout.setSpacing(get_dialog_section_spacing())
 
-        body = QHBoxLayout()
-        body.setSpacing(14)
+        dialog.body_layout = QHBoxLayout()
+        dialog.body_layout.setSpacing(get_dialog_section_spacing())
 
         icon_label = QLabel()
         icon_label.setPixmap(self._message_icon_pixmap(level))
         icon_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
         icon_label.setFixedWidth(56)
-        body.addWidget(icon_label, 0, Qt.AlignTop)
+        dialog.body_layout.addWidget(icon_label, 0, Qt.AlignTop)
 
         text_wrap = QWidget()
-        text_layout = QVBoxLayout(text_wrap)
-        text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(8)
+        dialog.text_layout = QVBoxLayout(text_wrap)
+        dialog.text_layout.setContentsMargins(0, 0, 0, 0)
+        dialog.text_layout.setSpacing(get_dialog_text_spacing())
 
         title_label = QLabel(title)
         title_label.setObjectName("MessageTitle")
         title_label.setWordWrap(True)
-        text_layout.addWidget(title_label)
+        dialog.text_layout.addWidget(title_label)
 
         text_label = QLabel(text)
         text_label.setObjectName("MessageText")
         text_label.setWordWrap(True)
         text_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        text_layout.addWidget(text_label)
+        dialog.text_layout.addWidget(text_label)
 
         if informative_text:
             info_label = QLabel(informative_text)
             info_label.setObjectName("MessageInfo")
             info_label.setWordWrap(True)
             info_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-            text_layout.addWidget(info_label)
+            dialog.text_layout.addWidget(info_label)
 
-        body.addWidget(text_wrap, 1)
-        root.addLayout(body, 1)
+        dialog.body_layout.addWidget(text_wrap, 1)
+        dialog.root_layout.addLayout(dialog.body_layout, 1)
 
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setSpacing(10)
-        actions.addStretch(1)
-        root.addLayout(actions)
+        dialog.actions_layout = QHBoxLayout()
+        dialog.actions_layout.setContentsMargins(0, 0, 0, 0)
+        dialog.actions_layout.setSpacing(get_dialog_action_spacing())
+        dialog.actions_layout.addStretch(1)
+        dialog.root_layout.addLayout(dialog.actions_layout)
 
         self._style_message_box(dialog)
-        return dialog, actions
+        return dialog, dialog.actions_layout
 
     def _add_message_action(self, actions_layout, text, object_name, callback):
         """向弹窗动作栏添加按钮。"""

@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import normalize_batch_text
-from ..constants import APP_COLORS, AUTHOR_WECHAT, get_ui_scale
+from ..constants import APP_COLORS, AUTHOR_WECHAT, get_ui_scale, scale_px
 from ..core.license import activate_license
 
 
@@ -52,6 +52,31 @@ def reset_font_caches():
     """缩放系数变化后清理字体缓存。"""
     build_font.cache_clear()
     build_fixed_font.cache_clear()
+
+
+def get_dialog_content_margins():
+    """统一弹窗内容区外边距。"""
+    return (
+        scale_px(22, min_value=16),
+        scale_px(18, min_value=14),
+        scale_px(22, min_value=16),
+        scale_px(18, min_value=14),
+    )
+
+
+def get_dialog_section_spacing():
+    """统一弹窗主内容分组间距。"""
+    return scale_px(14, min_value=10)
+
+
+def get_dialog_text_spacing():
+    """统一弹窗文案堆叠间距。"""
+    return scale_px(8, min_value=6)
+
+
+def get_dialog_action_spacing():
+    """统一弹窗按钮区间距。"""
+    return scale_px(10, min_value=8)
 
 
 # ---------------------------------------------------------------------------
@@ -186,52 +211,52 @@ class LicenseDialog(QDialog):
             """
         )
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(22, 18, 22, 18)
-        root.setSpacing(14)
+        self.root_layout = QVBoxLayout(self)
+        self.root_layout.setContentsMargins(*get_dialog_content_margins())
+        self.root_layout.setSpacing(get_dialog_section_spacing())
 
         title = QLabel("请输入卡密激活软件")
         title.setObjectName("LicenseTitle")
-        root.addWidget(title)
+        self.root_layout.addWidget(title)
 
         desc = QLabel(get_license_reason_text(self.reason))
         desc.setObjectName("LicenseDesc")
         desc.setWordWrap(True)
-        root.addWidget(desc)
+        self.root_layout.addWidget(desc)
 
         self.wechat_label = QLabel(f"联系作者微信：{AUTHOR_WECHAT}（点击复制）")
         self.wechat_label.setObjectName("LicenseHint")
         self.wechat_label.setCursor(Qt.PointingHandCursor)
         self.wechat_label.mousePressEvent = self._copy_wechat
-        root.addWidget(self.wechat_label)
+        self.root_layout.addWidget(self.wechat_label)
 
         self.key_input = QLineEdit()
         self.key_input.setObjectName("LicenseInput")
         self.key_input.setPlaceholderText("例如：TLS-XXXX-XXXX-XXXX-XXXX")
         self.key_input.returnPressed.connect(self._on_activate_clicked)
-        root.addWidget(self.key_input)
+        self.root_layout.addWidget(self.key_input)
 
         self.message_label = QLabel("")
         self.message_label.setObjectName("LicenseMessage")
         self.message_label.setWordWrap(True)
         self.message_label.setStyleSheet("color: " + APP_COLORS["red"] + ";")
-        root.addWidget(self.message_label)
+        self.root_layout.addWidget(self.message_label)
 
-        action_row = QHBoxLayout()
-        action_row.setContentsMargins(0, 0, 0, 0)
-        action_row.setSpacing(10)
-        action_row.addStretch(1)
-        root.addLayout(action_row)
+        self.action_row_layout = QHBoxLayout()
+        self.action_row_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_row_layout.setSpacing(get_dialog_action_spacing())
+        self.action_row_layout.addStretch(1)
+        self.root_layout.addLayout(self.action_row_layout)
 
         cancel_button = QPushButton("取消")
         cancel_button.setObjectName("LicenseSecondary")
         cancel_button.clicked.connect(self.reject)
-        action_row.addWidget(cancel_button)
+        self.action_row_layout.addWidget(cancel_button)
 
         activate_button = QPushButton("激活")
         activate_button.setObjectName("LicensePrimary")
         activate_button.clicked.connect(self._on_activate_clicked)
-        action_row.addWidget(activate_button)
+        self.action_row_layout.addWidget(activate_button)
 
         self.key_input.setFocus()
 
