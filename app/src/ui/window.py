@@ -429,7 +429,7 @@ class MainWindow(QWidget):
         self.title_box.setContentsMargins(0, 0, 0, 0)
         self.title_box.setSpacing(scale_px(4, min_value=2))
 
-        title_label = QLabel("驼铃视频小店中差评处理")
+        title_label = QLabel("驼铃·视频小店差评处理")
         title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(FONT_SIZES["title"], bold=True))
         self.hero_title_label = title_label
