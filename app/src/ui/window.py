@@ -890,19 +890,32 @@ class MainWindow(QWidget):
 
         self.review_find_button = self._create_review_button("获取差评订单")
         self.review_find_button.clicked.connect(self.on_review_find_clicked)
-        layout.addWidget(self.review_find_button)
 
         self.review_full_scan_button = self._create_review_button("完整补查订单")
         self.review_full_scan_button.clicked.connect(self.on_review_full_scan_clicked)
-        layout.addWidget(self.review_full_scan_button)
 
         self.quality_refund_button = self._create_review_button("获取品退订单")
         self.quality_refund_button.clicked.connect(self.on_quality_refund_clicked)
-        layout.addWidget(self.quality_refund_button)
 
         self.order_cache_button = self._create_review_button("订单缓存管理")
         self.order_cache_button.clicked.connect(self.on_order_cache_manage_clicked)
-        layout.addWidget(self.order_cache_button)
+
+        first_button_row = QWidget()
+        first_button_row_layout = QHBoxLayout(first_button_row)
+        first_button_row_layout.setContentsMargins(0, 0, 0, 0)
+        first_button_row_layout.setSpacing(scale_px(12, min_value=8))
+        first_button_row_layout.addWidget(self.review_find_button, 1)
+        first_button_row_layout.addWidget(self.quality_refund_button, 1)
+        layout.addWidget(first_button_row)
+
+        second_button_row = QWidget()
+        second_button_row_layout = QHBoxLayout(second_button_row)
+        second_button_row_layout.setContentsMargins(0, 0, 0, 0)
+        second_button_row_layout.setSpacing(scale_px(12, min_value=8))
+        second_button_row_layout.addWidget(self.review_full_scan_button, 1)
+        second_button_row_layout.addWidget(self.order_cache_button, 1)
+        layout.addWidget(second_button_row)
+
         layout.addStretch(1)
         return content
 
