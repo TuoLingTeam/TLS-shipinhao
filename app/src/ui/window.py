@@ -3,8 +3,9 @@
 
 import os
 import sys
+import time
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -59,6 +60,7 @@ from ..constants import (
     INPUT_EDIT_PADDING,
     INPUT_EDIT_RADIUS,
     INPUT_VISIBLE_LINES,
+    LICENSE_STATUS_CACHE_TTL_SECONDS,
     LOG_EDIT_PADDING,
     LOG_EDIT_RADIUS,
     LOG_PANEL_MIN_HEIGHT,
@@ -84,7 +86,7 @@ from ..constants import (
     scale_px,
     set_ui_scale,
 )
-from ..core.license import check_stored_license
+from ..core.license import check_stored_license, check_stored_license_local
 from .widgets import (
     BatchInputEdit,
     LicenseDialog,
@@ -111,6 +113,22 @@ from .review_worker import (
 )
 
 
+class LicenseRefreshWorker(QObject):
+    """后台授权状态刷新器。"""
+
+    finished = Signal(object, str)
+    failed = Signal(str)
+
+    def run(self):
+        """在线刷新授权状态。"""
+        try:
+            info, reason = check_stored_license()
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+            return
+        self.finished.emit(info or {}, reason)
+
+
 class MainWindow(QWidget):
     """主窗口。"""
 
@@ -122,9 +140,17 @@ class MainWindow(QWidget):
         self.review_worker_thread = None
         self.review_worker = None
         self.review_task_type = None
+        self.license_refresh_thread = None
+        self.license_refresh_worker = None
         self._batch_rows = []
         self._license_reason = license_reason
         self._license_info = license_info or {}
+        self._license_state_cache = {
+            "info": self._license_info,
+            "reason": self._license_reason,
+            "checked_at": time.monotonic(),
+            "source": "initial",
+        }
         self._initial_height_fit_applied = False
         self._last_responsive_profile = None
         default_w, default_h = self._resolve_initial_window_size()
@@ -1739,13 +1765,77 @@ class MainWindow(QWidget):
     # 授权
     # -----------------------------------------------------------------------
 
-    def _refresh_license_state(self):
-        """刷新本地授权状态。"""
-        info, reason = check_stored_license()
+    def _store_license_state(self, info, reason, *, source):
+        """更新当前授权状态与短时缓存。"""
         self._license_reason = reason
         self._license_info = info or {}
+        self._license_state_cache = {
+            "info": self._license_info,
+            "reason": reason,
+            "checked_at": time.monotonic(),
+            "source": source,
+        }
         self._sync_window_title_with_license(reason, info)
+
+    def _refresh_license_state(self):
+        """在线刷新授权状态。"""
+        return self._refresh_license_state_with_mode(local_only=False)
+
+    def _refresh_license_state_with_mode(self, *, local_only):
+        """按模式刷新授权状态。"""
+        checker = check_stored_license_local if local_only else check_stored_license
+        info, reason = checker()
+        self._store_license_state(info, reason, source="local" if local_only else "online")
         return info, reason
+
+    def _get_cached_license_state(self, *, max_age_seconds=LICENSE_STATUS_CACHE_TTL_SECONDS):
+        """返回短时缓存命中的授权状态。"""
+        cache = self._license_state_cache
+        if not cache:
+            return None
+        if max_age_seconds is not None:
+            age = time.monotonic() - cache.get("checked_at", 0.0)
+            if age > max_age_seconds:
+                return None
+        return cache
+
+    def _clear_license_refresh_refs(self):
+        """清理后台授权刷新线程引用。"""
+        self.license_refresh_worker = None
+        self.license_refresh_thread = None
+
+    def _on_license_refresh_finished(self, info, reason):
+        """后台授权刷新完成后更新授权状态。"""
+        previous = self._license_state_cache or {}
+        self._store_license_state(info, reason, source="online")
+        if previous.get("reason") != reason:
+            self.append_result_log(f"授权状态已更新：{get_license_reason_text(reason)}")
+
+    def _on_license_refresh_failed(self, error_message):
+        """后台授权刷新失败时保留当前状态。"""
+        if error_message:
+            self.append_result_log(f"授权在线刷新失败，已继续使用本地授权状态：{error_message}")
+
+    def _schedule_license_refresh(self, *, force=False):
+        """在后台线程中刷新授权状态，避免阻塞主线程。"""
+        if self.license_refresh_thread is not None:
+            return
+        if not force and self._get_cached_license_state() is not None:
+            return
+
+        self.license_refresh_thread = QThread(self)
+        self.license_refresh_worker = LicenseRefreshWorker()
+        self.license_refresh_worker.moveToThread(self.license_refresh_thread)
+        self.license_refresh_worker.finished.connect(self._on_license_refresh_finished)
+        self.license_refresh_worker.finished.connect(lambda *_: self.license_refresh_thread.quit())
+        self.license_refresh_worker.failed.connect(self._on_license_refresh_failed)
+        self.license_refresh_worker.failed.connect(lambda *_: self.license_refresh_thread.quit())
+        self._bind_thread_lifecycle(
+            self.license_refresh_thread,
+            self.license_refresh_worker,
+            self._clear_license_refresh_refs,
+        )
+        self.license_refresh_thread.start()
 
     def _sync_window_title_with_license(self, license_reason=None, license_info=None):
         """同步窗口标题与授权状态卡片。"""
@@ -1803,14 +1893,14 @@ class MainWindow(QWidget):
     def _prompt_license_activation(self, reason=None):
         """弹出激活窗口，返回是否激活成功。"""
         if reason is None:
-            _, reason = self._refresh_license_state()
+            _, reason = self._refresh_license_state_with_mode(local_only=True)
         self.append_result_log(f"授权状态：{get_license_reason_text(reason)}")
         self.append_result_log("正在打开卡密激活窗口...")
 
         dialog = LicenseDialog(self, reason=reason)
         result = dialog.exec()
         if result == QDialog.Accepted and dialog.activated:
-            info, refreshed_reason = self._refresh_license_state()
+            info, refreshed_reason = self._refresh_license_state_with_mode(local_only=True)
             if refreshed_reason == "ok":
                 self.append_result_log("卡密激活成功，已解锁批量处理功能。")
                 expires = str((info or {}).get("expires_at", ""))[:10]
@@ -1822,14 +1912,19 @@ class MainWindow(QWidget):
             self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
             return False
 
-        _, refreshed_reason = self._refresh_license_state()
+        _, refreshed_reason = self._refresh_license_state_with_mode(local_only=True)
         self.append_result_log("卡密激活未完成。")
         self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
         return False
 
     def prompt_license_on_startup(self):
         """启动后提示激活（仅在未激活时弹出）。"""
-        info, reason = self._refresh_license_state()
+        cache = self._get_cached_license_state(max_age_seconds=None)
+        if cache is not None:
+            info = cache.get("info") or {}
+            reason = cache.get("reason", "invalid")
+        else:
+            info, reason = self._refresh_license_state_with_mode(local_only=True)
         if reason == "ok":
             self.append_result_log("授权状态：已激活。")
             expires = str((info or {}).get("expires_at", ""))[:10]
@@ -1856,9 +1951,7 @@ class MainWindow(QWidget):
         if self.worker is not None:
             return
 
-        _, reason = self._refresh_license_state()
-        if reason != "ok" and not self._prompt_license_activation(reason):
-            self._show_activation_required("批量处理")
+        if not self._ensure_task_license("批量处理"):
             return
 
         self.normalize_inputs()
@@ -1944,6 +2037,7 @@ class MainWindow(QWidget):
         if self.review_worker is not None:
             self.review_worker.stop()
         self._shutdown_thread(self.review_worker_thread)
+        self._shutdown_thread(self.license_refresh_thread)
         super().closeEvent(event)
 
     def _on_worker_started(self, total_count):
@@ -2017,10 +2111,18 @@ class MainWindow(QWidget):
             )
         )
 
-    def _ensure_review_task_license(self, task_label):
-        """校验查找类任务的激活状态。"""
-        _, reason = self._refresh_license_state()
-        if reason == "ok" or self._prompt_license_activation(reason):
+    def _ensure_task_license(self, task_label):
+        """使用短时缓存 + 本地快检校验任务授权状态。"""
+        cached = self._get_cached_license_state()
+        if cached is not None and cached.get("reason") == "ok":
+            return True
+
+        _, reason = self._refresh_license_state_with_mode(local_only=True)
+        if reason == "ok":
+            self._schedule_license_refresh(force=True)
+            return True
+
+        if self._prompt_license_activation(reason):
             return True
 
         self._show_activation_required(task_label)
@@ -2091,7 +2193,7 @@ class MainWindow(QWidget):
         if self.review_worker is not None:
             return
 
-        if not self._ensure_review_task_license("中差评查找"):
+        if not self._ensure_task_license("中差评查找"):
             return
 
         days = self.review_days_spin.value()
@@ -2106,7 +2208,7 @@ class MainWindow(QWidget):
         if self.review_worker is not None:
             return
 
-        if not self._ensure_review_task_license("品质退款订单获取"):
+        if not self._ensure_task_license("品质退款订单获取"):
             return
 
         days = self.review_days_spin.value()
@@ -2121,7 +2223,7 @@ class MainWindow(QWidget):
         if self.review_worker is not None:
             return
 
-        if not self._ensure_review_task_license("完整补查订单"):
+        if not self._ensure_task_license("完整补查订单"):
             return
 
         days = self.review_days_spin.value()
@@ -2136,7 +2238,7 @@ class MainWindow(QWidget):
         if self.review_worker is not None:
             return
 
-        if not self._ensure_review_task_license("订单缓存同步"):
+        if not self._ensure_task_license("订单缓存同步"):
             return
 
         task_type = self._show_order_cache_manage_dialog()

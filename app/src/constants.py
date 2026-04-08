@@ -162,6 +162,7 @@ LICENSE_API_BASE_URLS = [
     "https://sphapi.tuoling.eu.cc",
 ]
 LICENSE_API_TIMEOUT = 10                                              # 单个 API 地址超时时间（秒）
+LICENSE_STATUS_CACHE_TTL_SECONDS = 60                                # UI 授权状态短时缓存（秒）
 
 
 _UI_SCALE = 1.0                      # 全局 UI 缩放系数（运行时）

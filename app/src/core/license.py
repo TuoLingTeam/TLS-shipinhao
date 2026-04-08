@@ -260,18 +260,12 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
 
     优先通过后端 /api/verify 在线校验，网络不可用时回退到本地缓存校验。
     """
-    lpath = _license_path()
-    if not os.path.isfile(lpath):
-        return None, "not_found"
-
-    info = _read_license_file()
-    if info is None:
-        return None, "invalid"
+    info, base_reason = _read_local_license_state()
+    if base_reason != "ok":
+        return info, base_reason
 
     key = info.get("key", "")
     device_id = info.get("device_id", "")
-    if not key or not device_id:
-        return None, "invalid"
 
     # 在线校验（优先，多地址故障切换）
     try:
@@ -291,6 +285,34 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
         return info, "invalid"
     except (ValueError, requests.RequestException):
         logger.debug("在线校验失败，回退到本地缓存校验")
+
+    return check_stored_license_local()
+
+
+def _read_local_license_state() -> Tuple[Optional[dict], str]:
+    """读取本地授权文件基础状态，不做签名/设备/到期校验。"""
+    lpath = _license_path()
+    if not os.path.isfile(lpath):
+        return None, "not_found"
+
+    info = _read_license_file()
+    if info is None:
+        return None, "invalid"
+
+    key = info.get("key", "")
+    device_id = info.get("device_id", "")
+    if not key or not device_id:
+        return None, "invalid"
+
+    return info, "ok"
+
+
+def check_stored_license_local() -> Tuple[Optional[dict], str]:
+    """仅使用本地缓存快速校验授权状态，不触发任何网络请求。"""
+    info, base_reason = _read_local_license_state()
+    if base_reason != "ok":
+        return info, base_reason
+    device_id = info.get("device_id", "")
 
     # 离线回退：先验证本地文件的 HMAC 签名完整性
     if not _verify_signature(info):
