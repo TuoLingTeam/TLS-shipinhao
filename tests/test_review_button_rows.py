@@ -137,8 +137,8 @@ class ReviewButtonRowsTests(unittest.TestCase):
 
         self.assertEqual(
             (helper_width, helper_height),
-            (880, 820),
-            "Mac/Windows 统一默认尺寸为 880×820。",
+            (880, 830),
+            "Mac/Windows 统一默认尺寸为 880×830。",
         )
 
         self.assertEqual(
