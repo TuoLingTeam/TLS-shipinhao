@@ -210,11 +210,12 @@ def _post_with_fallback(path: str, payload: dict) -> requests.Response:
             resp = requests.post(url, json=payload, timeout=LICENSE_API_TIMEOUT)
             return resp
         except requests.RequestException as exc:
-            logger.debug("API 请求失败 %s: %s", url, exc)
+            logger.warning("API 请求失败 %s: %s", url, exc)
             last_exc = exc
+    detail = str(last_exc) if last_exc else "未知错误"
     if isinstance(last_exc, requests.Timeout):
-        raise ValueError("请求失败：所有服务器均响应超时，请稍后重试。")
-    raise ValueError("请求失败：无法连接服务器，请检查网络后重试。")
+        raise ValueError(f"请求失败：服务器响应超时（{detail}）")
+    raise ValueError(f"请求失败：无法连接服务器（{detail}）")
 
 
 def activate_license(key: str) -> dict:

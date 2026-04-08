@@ -712,6 +712,19 @@ class BadReviewOrderFinder:
         return None
 
     @staticmethod
+    def _parse_timestamp(raw_value: Any) -> int:
+        """将原始时间值转为秒级时间戳，自动处理毫秒。"""
+        if raw_value is None:
+            return 0
+        raw_text = str(raw_value).strip()
+        if not raw_text.isdigit():
+            return 0
+        ts = int(raw_text)
+        if ts > 9_999_999_999:
+            ts //= 1000
+        return ts
+
+    @staticmethod
     def _normalize_product_text(text: str | None) -> str:
         """标准化商品字段值，便于跨字段名比较。"""
         if not text:
@@ -832,12 +845,11 @@ class BadReviewOrderFinder:
         if raw_order_id is None:
             return None
 
-        raw_create_time = self._first_non_empty(order_info, ("createTime", "create_time"))
-        create_time = 0
-        if raw_create_time is not None:
-            raw_text = str(raw_create_time).strip()
-            if raw_text.isdigit():
-                create_time = int(raw_text)
+        time_keys = ("createTime", "create_time", "createTs", "orderCreateTime", "refundTime")
+        raw_create_time = self._first_non_empty(order_info, time_keys)
+        if raw_create_time is None:
+            raw_create_time = self._first_non_empty(item, time_keys)
+        create_time = self._parse_timestamp(raw_create_time)
 
         product_fields = self._extract_product_fields(
             order_info,
@@ -910,13 +922,10 @@ class BadReviewOrderFinder:
         if on_progress:
             total_count = len(quality_refund_orders)
             filtered_count = len(filtered_orders)
-            if earliest_time > 0 and filtered_count != total_count:
-                on_progress(
-                    f"[品退] 获取到 {total_count} 个订单，"
-                    f"按时间窗口保留 {filtered_count} 个。"
-                )
-            else:
-                on_progress(f"[品退] 获取到 {filtered_count} 个订单。")
+            on_progress(
+                f"[品退] 接口返回 {total_count} 个订单，"
+                f"近期匹配 {filtered_count} 个。"
+            )
 
         return filtered_orders
 

@@ -355,7 +355,10 @@ class ReviewMatcherWorker(QObject):
             return
 
         if not orders:
-            self._emit_empty_results(progress, "未找到品质退款订单。")
+            self._emit_empty_results(
+                progress,
+                f"近 {self.days} 天没有品质退款订单。",
+            )
             return
 
         order_ids = self._collect_unique_order_ids(orders)
