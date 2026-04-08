@@ -135,18 +135,11 @@ class ReviewButtonRowsTests(unittest.TestCase):
         helper_width, helper_height = get_platform_default_window_size()
         expected_width, initial_height = self.window._resolve_initial_window_size()
 
-        if sys.platform.startswith("win"):
-            self.assertEqual(
-                (helper_width, helper_height),
-                (930, 850),
-                "Windows 默认尺寸应调整为略窄、适度加高的新规格。",
-            )
-        else:
-            self.assertEqual(
-                (helper_width, helper_height),
-                (810, 800),
-                "非 Windows 默认尺寸应调整为略窄、适度加高的新规格。",
-            )
+        self.assertEqual(
+            (helper_width, helper_height),
+            (880, 820),
+            "Mac/Windows 统一默认尺寸为 880×820。",
+        )
 
         self.assertEqual(
             self.window.width(),

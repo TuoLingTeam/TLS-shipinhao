@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 全局常量。"""
 
-import sys
-
 # 批量处理 & 网络
 MAX_BATCH_SIZE = 100              # 批量处理最大订单数
 REQUEST_TIMEOUT = 30              # 网络请求超时时间（秒）
@@ -12,10 +10,8 @@ APP_VERSION = "3.0"                # 应用版本号（Mac 简介/Windows 属性
 WINDOW_TITLE = f"驼铃视频小店中差评处理 {APP_VERSION}"  # 窗口标题
 AUTHOR_WECHAT = "TLS-801"         # 作者微信（用于授权联系）
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"  # 教程链接
-DEFAULT_WINDOW_WIDTH = 810        # 非 Windows 系统默认窗口宽度，略收紧
-DEFAULT_WINDOW_HEIGHT = 800       # 非 Windows 系统默认窗口高度，适度增加
-WINDOWS_DEFAULT_WINDOW_WIDTH = 930  # Windows 系统默认窗口宽度，略收紧
-WINDOWS_DEFAULT_WINDOW_HEIGHT = 850  # Windows 系统默认窗口高度，适度增加
+DEFAULT_WINDOW_WIDTH = 880        # 默认窗口宽度（Mac/Windows 统一）
+DEFAULT_WINDOW_HEIGHT = 820       # 默认窗口高度（Mac/Windows 统一）
 MIN_WINDOW_WIDTH = 800            # 窗口最小宽度
 MIN_WINDOW_HEIGHT = 700           # 窗口最小高度
 MIN_UI_SCALE = 0.82               # UI 最小缩放系数
@@ -197,11 +193,9 @@ def scale_px(value, *, min_value=0):
 
 
 def get_platform_default_window_size():
-    """按平台返回默认窗口尺寸。
+    """返回默认窗口尺寸（Mac/Windows 统一）。
 
     Returns:
         (宽度, 高度) 元组
     """
-    if sys.platform.startswith("win"):
-        return WINDOWS_DEFAULT_WINDOW_WIDTH, WINDOWS_DEFAULT_WINDOW_HEIGHT
     return DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
