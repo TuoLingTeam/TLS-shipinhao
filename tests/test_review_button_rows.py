@@ -10,10 +10,9 @@ APP_ROOT = ROOT / "app"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMessageBox, QSizePolicy
 
-from src.constants import ROW_GAP, scale_px
+from src.constants import ROW_GAP, get_platform_default_window_size, scale_px
 from src.ui.window import MainWindow
 from src.ui import widgets as widgets_module
 from src.ui.widgets import LicenseDialog
@@ -132,97 +131,88 @@ class ReviewButtonRowsTests(unittest.TestCase):
             "左列最后一个布局项应为底部 spacer，而不是让授权卡纵向撑高。",
         )
 
-    def test_enlarging_window_keeps_hero_and_input_panels_near_natural_height(self):
-        baseline_header_height = self.window.header_card.height()
-        baseline_order_card_height = self.window.order_card.height()
-        baseline_tracking_card_height = self.window.tracking_card.height()
-        baseline_log_card_height = self.window.log_card.height()
+    def test_window_uses_locked_default_size(self):
+        helper_width, helper_height = get_platform_default_window_size()
+        expected_width, initial_height = self.window._resolve_initial_window_size()
 
-        target_width = max(self.window.width(), scale_px(1400, min_value=1200))
-        target_height = self.window.height() + scale_px(220, min_value=180)
-        self.window.resize(target_width, target_height)
-        self.app.processEvents()
-
-        natural_tolerance = scale_px(16, min_value=12)
-        free_space_below_main = (
-            self.window.scroll_area.viewport().height()
-            - (self.window.main_content.y() + self.window.main_content.height())
-        )
-
-        self.assertLessEqual(
-            self.window.header_card.height(),
-            baseline_header_height + natural_tolerance,
-            "窗口拉高后，Hero 卡片应保持接近自然高度，不应继续吞掉额外高度。",
-        )
-        self.assertLessEqual(
-            self.window.order_card.height(),
-            baseline_order_card_height + natural_tolerance,
-            "窗口拉高后，订单输入区应保持接近自然高度。",
-        )
-        self.assertLessEqual(
-            self.window.tracking_card.height(),
-            baseline_tracking_card_height + natural_tolerance,
-            "窗口拉高后，物流输入区应保持接近自然高度。",
-        )
-        self.assertGreaterEqual(
-            self.window.log_card.height(),
-            baseline_log_card_height,
-            "窗口拉高后，右侧额外高度应优先交给日志区或主内容下方留白。",
-        )
-        self.assertGreaterEqual(
-            free_space_below_main,
-            scale_px(48, min_value=32),
-            "窗口拉高后，额外高度应落在主内容区下方，而不是反向撑大顶部卡片。",
-        )
-
-    def test_shorter_window_preserves_button_heights_and_keeps_bottom_cards_scrollable(self):
-        baseline_review_button_height = self.window.review_find_button.height()
-        baseline_action_button_height = self.window.start_button.height()
-        baseline_order_min_height = self.window.order_edit.minimumHeight()
-        baseline_log_min_height = self.window.log_view.minimumHeight()
-
-        self.window.resize(max(self.window.width(), scale_px(1200, min_value=1000)), self.window.minimumHeight())
-        self.app.processEvents()
-
-        scroll_bar = self.window.scroll_area.verticalScrollBar()
-        scroll_bar.setValue(scroll_bar.maximum())
-        self.app.processEvents()
-
-        license_bottom = self.window.license_card.mapTo(
-            self.window.scroll_area.viewport(),
-            QPoint(0, self.window.license_card.height()),
-        ).y()
+        if sys.platform.startswith("win"):
+            self.assertEqual(
+                (helper_width, helper_height),
+                (930, 850),
+                "Windows 默认尺寸应调整为略窄、适度加高的新规格。",
+            )
+        else:
+            self.assertEqual(
+                (helper_width, helper_height),
+                (810, 800),
+                "非 Windows 默认尺寸应调整为略窄、适度加高的新规格。",
+            )
 
         self.assertEqual(
-            self.window.review_find_button.height(),
-            baseline_review_button_height,
-            "紧凑模式不应继续压缩中差评按钮高度，避免点击区域变差。",
+            self.window.width(),
+            expected_width,
+            "主窗口宽度应锁定为解析后的初始宽度。",
         )
         self.assertEqual(
-            self.window.start_button.height(),
-            baseline_action_button_height,
-            "紧凑模式不应继续压缩执行按钮高度，避免点击区域变差。",
+            self.window.height(),
+            self.window.minimumHeight(),
+            "主窗口高度应锁定为最终收口后的固定高度。",
         )
-        self.assertLess(
-            self.window.order_edit.minimumHeight(),
-            baseline_order_min_height,
-            "窗口缩小时，允许优先压缩输入区高度。",
+        self.assertEqual(
+            self.window.minimumWidth(),
+            expected_width,
+            "禁止缩放后，最小宽度应锁定为默认宽度。",
         )
-        self.assertLess(
-            self.window.log_view.minimumHeight(),
-            baseline_log_min_height,
-            "窗口缩小时，允许优先压缩日志区最小高度。",
+        self.assertEqual(
+            self.window.maximumWidth(),
+            expected_width,
+            "禁止缩放后，最大宽度应锁定为默认宽度。",
         )
-        self.assertGreater(
-            scroll_bar.maximum(),
-            0,
-            "极小高度下应进入垂直滚动，而不是假装一屏装下全部内容。",
+        self.assertEqual(
+            self.window.minimumHeight(),
+            self.window.maximumHeight(),
+            "禁止缩放后，高度上下限应锁定为同一个最终值。",
         )
         self.assertLessEqual(
-            license_bottom,
-            self.window.scroll_area.viewport().height() + scale_px(8, min_value=6),
-            "滚动到底部后，授权卡必须完整可达，不能被裁切却无法显示。",
+            self.window.height(),
+            initial_height,
+            "最终固定高度不应高于解析后的初始高度。",
         )
+
+    def test_window_cannot_be_resized_after_creation(self):
+        baseline_size = self.window.size()
+
+        self.window.resize(baseline_size.width() + 120, baseline_size.height() + 120)
+        self.app.processEvents()
+
+        self.assertEqual(
+            self.window.size(),
+            baseline_size,
+            "窗口创建后不应再允许放大或缩小。",
+        )
+
+    def test_oversized_default_height_is_shrunk_before_window_is_locked(self):
+        class OversizedWindow(MainWindow):
+            def _resolve_initial_window_size(self):
+                return 810, 920
+
+        oversized_window = OversizedWindow(license_reason="ok", license_info={})
+        oversized_window.show()
+        self.app.processEvents()
+
+        self.assertLess(
+            oversized_window.height(),
+            920,
+            "如果默认高度明显高于内容，首次展示时应先收口，再锁定窗口尺寸。",
+        )
+        self.assertEqual(
+            oversized_window.minimumHeight(),
+            oversized_window.maximumHeight(),
+            "收口完成后，高度应被锁定。",
+        )
+
+        oversized_window.close()
+        self.app.processEvents()
 
 
 class DialogSpacingTests(unittest.TestCase):

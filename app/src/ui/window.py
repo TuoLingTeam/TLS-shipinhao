@@ -1125,12 +1125,10 @@ class MainWindow(QWidget):
             layout.activate()
 
     def _fit_window_to_screen(self):
-        """首次打开时确保窗口在屏幕内，不超出可用区域。"""
+        """首次打开时先锁定默认宽度，允许高度按内容收口后再最终锁定。"""
         default_w, default_h = self._resolve_initial_window_size()
-        self.setMinimumSize(
-            scale_px(MIN_WINDOW_WIDTH, min_value=640),
-            scale_px(MIN_WINDOW_HEIGHT, min_value=560),
-        )
+        self.setMinimumWidth(default_w)
+        self.setMaximumWidth(default_w)
         self.resize(default_w, default_h)
 
     @staticmethod
@@ -1225,6 +1223,7 @@ class MainWindow(QWidget):
         if self._initial_height_fit_applied:
             return
         self._fit_window_height_to_content()
+        self.setFixedSize(self.width(), self.height())
         self._initial_height_fit_applied = True
 
     def _fit_window_height_to_content(self):
