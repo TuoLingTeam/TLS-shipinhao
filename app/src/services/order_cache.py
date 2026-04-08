@@ -3,6 +3,7 @@
 
 import os
 import sqlite3
+import threading
 import time
 
 from ..config import get_home_config_dir, normalize_nickname
@@ -10,27 +11,29 @@ from ..constants import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
 
 
 class OrderCacheRepository:
-    """订单缓存仓库（SQLite）。"""
+    """订单缓存仓库（SQLite，线程安全）。"""
 
     def __init__(self, db_path: str | None = None):
         base_dir = get_home_config_dir()
         self.db_path = db_path or os.path.join(base_dir, ORDER_CACHE_DB_NAME)
         self._connection = None
         self._initialized = False
+        self._lock = threading.Lock()
 
     def _connect(self):
         if self._connection is not None:
             return self._connection
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
-        self._connection = sqlite3.connect(self.db_path)
+        self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA journal_mode=WAL")
         return self._connection
 
     def initialize(self) -> None:
         """初始化缓存数据库结构（幂等，重复调用自动跳过）。"""
         if self._initialized:
             return
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS orders (
@@ -163,7 +166,7 @@ class OrderCacheRepository:
     def has_dirty_sale_param(self) -> bool:
         """检测是否存在 str(list) 污染的 sale_param 历史数据。"""
         self.initialize()
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             row = connection.execute(
                 "SELECT COUNT(*) AS cnt FROM order_products WHERE sale_param LIKE '[%'"
             ).fetchone()
@@ -172,7 +175,7 @@ class OrderCacheRepository:
     def clear_all(self) -> None:
         """清空全部缓存表。"""
         self.initialize()
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             connection.execute("DELETE FROM order_products")
             connection.execute("DELETE FROM orders")
             connection.execute("DELETE FROM sync_state")
@@ -195,7 +198,7 @@ class OrderCacheRepository:
         if not order_rows:
             return 0
 
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             connection.executemany(
                 "DELETE FROM order_products WHERE order_id = ?",
                 [(order_id,) for order_id in order_ids],
@@ -239,7 +242,7 @@ class OrderCacheRepository:
     def get_state(self, scope: str = ORDER_CACHE_SCOPE) -> dict | None:
         """读取同步状态。"""
         self.initialize()
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM sync_state WHERE scope = ?",
                 (scope,),
@@ -260,7 +263,7 @@ class OrderCacheRepository:
     ):
         """写入同步状态。"""
         self.initialize()
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO sync_state (
@@ -290,7 +293,7 @@ class OrderCacheRepository:
         """标记某个时间窗口已完整写入缓存。"""
         self.initialize()
         now_ts = int(time.time())
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO cache_segments (
@@ -314,7 +317,7 @@ class OrderCacheRepository:
         self.initialize()
         start_timestamp = int(start_timestamp or 0)
         end_timestamp = int(end_timestamp or 0)
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             rows = connection.execute(
                 """
                 SELECT scope, start_ts, end_ts, status, updated_at
@@ -384,7 +387,7 @@ class OrderCacheRepository:
         """删除缓存范围外的旧订单。"""
         self.initialize()
         cutoff_timestamp = int(cutoff_timestamp or 0)
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             expired_order_rows = connection.execute(
                 "SELECT order_id FROM orders WHERE create_time < ?",
                 (cutoff_timestamp,),
@@ -427,7 +430,7 @@ class OrderCacheRepository:
         self.initialize()
         start_timestamp = int(start_timestamp or 0)
         end_timestamp = int(end_timestamp or 0)
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             order_rows = connection.execute(
                 """
                 SELECT *
