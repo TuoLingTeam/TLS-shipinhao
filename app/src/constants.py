@@ -153,11 +153,14 @@ EVALUATION_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeev
 ORDER_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"  # 订单搜索接口
 QUALITY_REFUND_ORDER_URL = "https://store.weixin.qq.com/shop-faas/statistic/dsr/product/refund/order"  # 品质退款订单接口
 
-# 卡密验证后端 API
-LICENSE_API_BASE_URL = "https://sphapi.199908.top"  # 授权 API 基础地址
-LICENSE_ACTIVATE_URL = f"{LICENSE_API_BASE_URL}/api/activate"  # 激活接口
-LICENSE_VERIFY_URL = f"{LICENSE_API_BASE_URL}/api/verify"     # 验证接口
-LICENSE_API_TIMEOUT = 15                                              # 授权 API 超时时间（秒）
+# 卡密验证后端 API（多地址故障切换，按优先级排列）
+LICENSE_API_BASE_URLS = [
+    "https://sphapi.199908.top",
+    "https://sphapi.tuoling.ccwu.cc",
+    "https://sphapi.tuoling.us.ci",
+    "https://sphapi.tuoling.eu.cc",
+]
+LICENSE_API_TIMEOUT = 10                                              # 单个 API 地址超时时间（秒）
 
 
 _UI_SCALE = 1.0                      # 全局 UI 缩放系数（运行时）

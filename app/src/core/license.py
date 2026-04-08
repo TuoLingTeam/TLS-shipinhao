@@ -199,15 +199,26 @@ def _invalidate_license_file() -> None:
         pass
 
 
+def _post_with_fallback(path: str, payload: dict) -> requests.Response:
+    """依次尝试每个 API 地址发送 POST 请求，首个成功即返回。"""
+    from ..constants import LICENSE_API_BASE_URLS, LICENSE_API_TIMEOUT
+
+    last_exc: Optional[Exception] = None
+    for base_url in LICENSE_API_BASE_URLS:
+        url = f"{base_url}{path}"
+        try:
+            resp = requests.post(url, json=payload, timeout=LICENSE_API_TIMEOUT)
+            return resp
+        except requests.RequestException as exc:
+            logger.debug("API 请求失败 %s: %s", url, exc)
+            last_exc = exc
+    if isinstance(last_exc, requests.Timeout):
+        raise ValueError("请求失败：所有服务器均响应超时，请稍后重试。")
+    raise ValueError("请求失败：无法连接服务器，请检查网络后重试。")
+
+
 def activate_license(key: str) -> dict:
-    """激活许可证（在线验证 + 设备绑定 + 写入 license.json）。
-
-    流程：
-    1. 调用后端 API 验证卡密并绑定设备
-    2. 后端通过后写入本地 license.json
-    """
-    from ..constants import LICENSE_ACTIVATE_URL, LICENSE_API_TIMEOUT
-
+    """激活许可证（在线验证 + 设备绑定 + 写入 license.json）。"""
     key = key.strip()
     if not key:
         raise ValueError("请输入卡密")
@@ -215,23 +226,11 @@ def activate_license(key: str) -> dict:
     device_id = get_device_id()
     raw_fingerprint = _collect_raw_fingerprint()
 
-    # 1. 调用后端 API 验证卡密并绑定设备
-    try:
-        resp = requests.post(
-            LICENSE_ACTIVATE_URL,
-            json={
-                "key": key.upper(),
-                "device_id": device_id,
-                "device_fingerprint": raw_fingerprint,
-            },
-            timeout=LICENSE_API_TIMEOUT,
-        )
-    except requests.ConnectionError:
-        raise ValueError("激活失败：无法连接服务器，请检查网络后重试。")
-    except requests.Timeout:
-        raise ValueError("激活失败：服务器响应超时，请稍后重试。")
-    except requests.RequestException as exc:
-        raise ValueError(f"激活失败：网络错误 - {exc}")
+    resp = _post_with_fallback("/api/activate", {
+        "key": key.upper(),
+        "device_id": device_id,
+        "device_fingerprint": raw_fingerprint,
+    })
 
     try:
         result = resp.json()
@@ -242,7 +241,6 @@ def activate_license(key: str) -> dict:
         message = result.get("message", "未知错误")
         raise ValueError(f"激活失败：{message}")
 
-    # 2. 后端验证通过，写入本地 license.json（含 HMAC 签名）
     info = {
         "key": key.upper(),
         "activated_at": result.get("activated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
@@ -261,10 +259,8 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
 
     优先通过后端 /api/verify 在线校验，网络不可用时回退到本地缓存校验。
     """
-    from ..constants import LICENSE_API_TIMEOUT, LICENSE_VERIFY_URL
-
-    path = _license_path()
-    if not os.path.isfile(path):
+    lpath = _license_path()
+    if not os.path.isfile(lpath):
         return None, "not_found"
 
     info = _read_license_file()
@@ -276,20 +272,15 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
     if not key or not device_id:
         return None, "invalid"
 
-    # 在线校验（优先）
+    # 在线校验（优先，多地址故障切换）
     try:
-        resp = requests.post(
-            LICENSE_VERIFY_URL,
-            json={"key": key, "device_id": device_id},
-            timeout=LICENSE_API_TIMEOUT,
-        )
+        resp = _post_with_fallback("/api/verify", {"key": key, "device_id": device_id})
         result = resp.json()
         if result.get("success"):
             refreshed = _refresh_license_fields(info, result)
             if refreshed or not _verify_signature(info):
                 _save_license_file(info)
             return info, "ok"
-        # 后端明确返回失败，同时失效本地缓存防止离线绕过
         _invalidate_license_file()
         message = result.get("message", "")
         if "过期" in message or result.get("expired"):
@@ -297,8 +288,7 @@ def check_stored_license() -> Tuple[Optional[dict], str]:
         if "设备" in message:
             return info, "device_mismatch"
         return info, "invalid"
-    except (requests.RequestException, ValueError):
-        # 网络不可用，回退到本地缓存校验
+    except (ValueError, requests.RequestException):
         logger.debug("在线校验失败，回退到本地缓存校验")
 
     # 离线回退：先验证本地文件的 HMAC 签名完整性
