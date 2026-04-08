@@ -232,7 +232,7 @@ class OrderSyncService:
             on_window_completed=None,
         )
         warnings.extend(temp_warnings)
-        combined_orders = self.finder._deduplicate_orders_by_id(temporary_orders + recent_orders)
+        combined_orders = self.finder.deduplicate_orders_by_id(temporary_orders + recent_orders)
         self._progress(
             on_progress,
             f"[缓存] 完整补查已合并最近 30 天缓存与历史临时订单，共 {len(combined_orders)} 个订单。",

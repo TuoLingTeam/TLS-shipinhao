@@ -303,14 +303,14 @@ class BadReviewOrderFinder:
                 filtered.append(order)
         return filtered
 
-    def _merge_quality_refund_orders(
+    def merge_quality_refund_orders(
         self,
         orders: JsonList,
         earliest_time: int = 0,
         on_progress: ProgressCallback | None = None,
     ) -> JsonList:
         """将品质退款订单并入订单列表。"""
-        base_orders = self._deduplicate_orders_by_id(orders)
+        base_orders = self.deduplicate_orders_by_id(orders)
         quality_refund_orders = self.get_quality_refund_orders(
             earliest_time=earliest_time,
             on_progress=on_progress,
@@ -318,7 +318,7 @@ class BadReviewOrderFinder:
         if not quality_refund_orders:
             return base_orders
 
-        merged_orders = self._deduplicate_orders_by_id(base_orders + quality_refund_orders)
+        merged_orders = self.deduplicate_orders_by_id(base_orders + quality_refund_orders)
         added_count = len(merged_orders) - len(base_orders)
         if on_progress:
             on_progress(
@@ -490,10 +490,10 @@ class BadReviewOrderFinder:
         if risk_message:
             raise OrderRiskControlError(
                 risk_message[0],
-                partial_orders=self._deduplicate_orders_by_id(collected),
+                partial_orders=self.deduplicate_orders_by_id(collected),
             )
 
-        deduped = self._deduplicate_orders_by_id(collected)
+        deduped = self.deduplicate_orders_by_id(collected)
         if on_progress:
             on_progress(
                 f"[订单] 页码并行抓取完成：共 {shared_page['next'] - 1} 页，"
@@ -547,10 +547,10 @@ class BadReviewOrderFinder:
                 merged_warnings = list(exc.warnings)
                 merged_warnings.append(risk_warning)
                 merged_warnings.extend(risk_warnings)
-                merged_orders = self._deduplicate_orders_by_id(exc.partial_orders + risk_orders)
+                merged_orders = self.deduplicate_orders_by_id(exc.partial_orders + risk_orders)
                 return merged_orders, merged_warnings
             except OrderRiskControlError as risk_exc:
-                merged_orders = self._deduplicate_orders_by_id(exc.partial_orders + risk_exc.partial_orders)
+                merged_orders = self.deduplicate_orders_by_id(exc.partial_orders + risk_exc.partial_orders)
                 merged_warnings = list(exc.warnings)
                 merged_warnings.append(risk_warning)
                 merged_warnings.extend(risk_exc.warnings)
@@ -685,7 +685,7 @@ class BadReviewOrderFinder:
         return "fallback"
 
     @staticmethod
-    def _deduplicate_orders_by_id(orders: JsonList) -> JsonList:
+    def deduplicate_orders_by_id(orders: JsonList) -> JsonList:
         """按 orderId 去重并保持原顺序。"""
         seen = set()
         merged = []

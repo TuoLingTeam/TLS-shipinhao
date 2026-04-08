@@ -12,18 +12,24 @@ from ..constants import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
 class OrderCacheRepository:
     """订单缓存仓库（SQLite）。"""
 
-    def __init__(self, db_path=None):
+    def __init__(self, db_path: str | None = None):
         base_dir = get_home_config_dir()
         self.db_path = db_path or os.path.join(base_dir, ORDER_CACHE_DB_NAME)
+        self._connection = None
+        self._initialized = False
 
     def _connect(self):
+        if self._connection is not None:
+            return self._connection
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+        self._connection = sqlite3.connect(self.db_path)
+        self._connection.row_factory = sqlite3.Row
+        return self._connection
 
-    def initialize(self):
-        """初始化缓存数据库结构。"""
+    def initialize(self) -> None:
+        """初始化缓存数据库结构（幂等，重复调用自动跳过）。"""
+        if self._initialized:
+            return
         with self._connect() as connection:
             connection.executescript(
                 """
@@ -83,6 +89,7 @@ class OrderCacheRepository:
                 ON cache_segments(scope, start_ts, end_ts);
                 """
             )
+        self._initialized = True
 
     @staticmethod
     def _first_non_empty(data, keys):
@@ -153,7 +160,7 @@ class OrderCacheRepository:
             )
         return order_row, product_rows
 
-    def has_dirty_sale_param(self):
+    def has_dirty_sale_param(self) -> bool:
         """检测是否存在 str(list) 污染的 sale_param 历史数据。"""
         self.initialize()
         with self._connect() as connection:
@@ -162,7 +169,7 @@ class OrderCacheRepository:
             ).fetchone()
         return (row["cnt"] if row else 0) > 0
 
-    def clear_all(self):
+    def clear_all(self) -> None:
         """清空全部缓存表。"""
         self.initialize()
         with self._connect() as connection:
@@ -171,7 +178,7 @@ class OrderCacheRepository:
             connection.execute("DELETE FROM sync_state")
             connection.execute("DELETE FROM cache_segments")
 
-    def upsert_orders(self, orders, *, raw_source="order_api"):
+    def upsert_orders(self, orders: list[dict], *, raw_source: str = "order_api") -> int:
         """写入或更新订单缓存。返回成功落库的订单数。"""
         self.initialize()
         order_rows = []
@@ -229,7 +236,7 @@ class OrderCacheRepository:
 
         return len(order_rows)
 
-    def get_state(self, scope=ORDER_CACHE_SCOPE):
+    def get_state(self, scope: str = ORDER_CACHE_SCOPE) -> dict | None:
         """读取同步状态。"""
         self.initialize()
         with self._connect() as connection:
@@ -373,7 +380,7 @@ class OrderCacheRepository:
                 missing.append((cursor, end_timestamp))
         return missing
 
-    def delete_older_than(self, cutoff_timestamp):
+    def delete_older_than(self, cutoff_timestamp: int) -> int:
         """删除缓存范围外的旧订单。"""
         self.initialize()
         cutoff_timestamp = int(cutoff_timestamp or 0)
@@ -415,7 +422,7 @@ class OrderCacheRepository:
             )
         return len(order_ids)
 
-    def fetch_orders_in_range(self, start_timestamp, end_timestamp):
+    def fetch_orders_in_range(self, start_timestamp: int, end_timestamp: int) -> list[dict]:
         """按时间范围读取订单并回组装为匹配器可消费的结构。"""
         self.initialize()
         start_timestamp = int(start_timestamp or 0)

@@ -177,7 +177,7 @@ class ReviewMatcherWorker(QObject):
                 earliest_time=earliest_time,
                 on_progress=progress,
             )
-            merged_orders = finder._merge_quality_refund_orders(
+            merged_orders = finder.merge_quality_refund_orders(
                 orders,
                 earliest_time=earliest_time,
                 on_progress=progress,
@@ -197,7 +197,7 @@ class ReviewMatcherWorker(QObject):
                 earliest_time=earliest_time,
                 on_progress=progress,
             )
-            merged_orders = finder._merge_quality_refund_orders(
+            merged_orders = finder.merge_quality_refund_orders(
                 orders,
                 earliest_time=earliest_time,
                 on_progress=progress,
