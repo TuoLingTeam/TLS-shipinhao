@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from ..config import extract_biz_magic_from_cookie
 from ..constants import APP_COLORS, BUTTON_HEIGHT
-from ..ui.widgets import build_font
+from .widgets import build_font
 
 try:
     from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile

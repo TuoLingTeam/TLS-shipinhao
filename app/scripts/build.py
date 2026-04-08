@@ -84,19 +84,19 @@ CYTHON_MODULES = [
     "src.config",
     "src.constants",
     "src.core",
-    "src.core.api",
-    "src.core.cookie_browser",
     "src.core.http_utils",
     "src.core.license",
     "src.services",
+    "src.services.delivery_api",
     "src.services.order_cache",
     "src.services.order_sync",
     "src.services.review_matcher",
     "src.ui",
+    "src.ui.batch_worker",
+    "src.ui.cookie_dialog",
     "src.ui.review_worker",
     "src.ui.widgets",
     "src.ui.window",
-    "src.ui.worker",
 ]
 
 # Cython 模块依赖的标准库（使用混淆源时需要）

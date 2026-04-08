@@ -97,7 +97,7 @@ from .widgets import (
     get_license_reason_text,
     reset_font_caches,
 )
-from .worker import BatchWorker
+from .batch_worker import BatchWorker
 from .review_worker import (
     ReviewMatcherWorker,
     TERMINAL_STATUS_CANCELLED,
@@ -1638,7 +1638,7 @@ class MainWindow(QWidget):
         """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
         # 延迟导入 QtWebEngine 相关模块，避免启动时加载
         try:
-            from ..core.cookie_browser import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
+            from .cookie_dialog import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
         except ImportError as exc:
             self.show_message(
                 QMessageBox.Warning,

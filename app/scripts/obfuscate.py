@@ -115,7 +115,7 @@ def collect_python_sources() -> list[Path]:
 def module_name_from_path(path: Path) -> str:
     """从源文件路径提取点分模块名（相对于 SRC_DIR 的父目录）。
 
-    例如 src/core/api.py -> core.api，src/config.py -> config
+    例如 src/services/delivery_api.py -> services.delivery_api，src/config.py -> config
     """
     rel = path.relative_to(SRC_DIR)
     parts = list(rel.parent.parts) + [rel.stem]
@@ -125,7 +125,7 @@ def module_name_from_path(path: Path) -> str:
 def verify_compiled_modules(module_names: Iterable[str]) -> None:
     """校验每个源模块都已生成对应的二进制扩展。
 
-    module_names 使用点分格式，如 "core.api"、"config"。
+    module_names 使用点分格式，如 "services.delivery_api"、"config"。
     """
     module_names = list(module_names)
     compiled_dir = DIST_SRC / "src"

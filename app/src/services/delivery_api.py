@@ -12,7 +12,7 @@ from ..constants import (
     ORDER_DETAIL_URL,
     REQUEST_TIMEOUT,
 )
-from .http_utils import (
+from ..core.http_utils import (
     build_headers,
     build_request_params,
     get_payload_error,

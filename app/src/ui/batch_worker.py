@@ -6,7 +6,7 @@ import time
 
 from PySide6.QtCore import QObject, Signal
 
-from ..core.api import create_session, update_single_order
+from ..services.delivery_api import create_session, update_single_order
 from ..config import ConfigNotFoundError
 
 
