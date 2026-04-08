@@ -1227,7 +1227,7 @@ class MainWindow(QWidget):
         self._initial_height_fit_applied = True
 
     def _fit_window_height_to_content(self):
-        """仅在窗口偏高时按当前内容自然高度收口。"""
+        """按内容实际高度调整窗口（双向：偏高则缩、偏矮则扩），防止出现滚动条或大块空白。"""
         if not hasattr(self, "page_widget") or not hasattr(self, "scroll_area"):
             return
 
@@ -1241,7 +1241,8 @@ class MainWindow(QWidget):
             return
 
         chrome_height = max(0, self.height() - viewport_height)
-        content_height = self.page_widget.sizeHint().height() + chrome_height
+        scroll_guard = scale_px(8, min_value=4)
+        content_height = self.page_widget.sizeHint().height() + chrome_height + scroll_guard
         target_height = max(self.minimumHeight(), content_height)
 
         screen = self.screen() or QApplication.primaryScreen()
@@ -1250,8 +1251,8 @@ class MainWindow(QWidget):
             max_ratio = 0.97 if sys.platform.startswith("win") else 0.92
             target_height = min(target_height, int(available_height * max_ratio))
 
-        shrink_tolerance = scale_px(12, min_value=8)
-        if self.height() > target_height + shrink_tolerance:
+        tolerance = scale_px(8, min_value=4)
+        if abs(self.height() - target_height) > tolerance:
             self.resize(self.width(), target_height)
 
     # -----------------------------------------------------------------------

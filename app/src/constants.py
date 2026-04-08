@@ -18,7 +18,7 @@ MIN_UI_SCALE = 0.82               # UI 最小缩放系数
 MAX_UI_SCALE = 1.0                # UI 最大缩放系数
 WIDE_LAYOUT_MIN_WIDTH = 1320      # 宽屏布局最小宽度
 WIDE_LAYOUT_MIN_HEIGHT = 780      # 宽屏布局最小高度
-COMPACT_LAYOUT_MIN_WIDTH = 980    # 紧凑布局最小宽度
+COMPACT_LAYOUT_MIN_WIDTH = 860    # 紧凑布局最小宽度
 HIGH_DPI_COMPACT_THRESHOLD = 120  # 高 DPI 紧凑布局阈值
 VERY_HIGH_DPI_COMPACT_THRESHOLD = 140  # 极高 DPI 紧凑布局阈值
 
