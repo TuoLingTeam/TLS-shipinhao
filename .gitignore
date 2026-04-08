@@ -55,6 +55,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+tests/
+decompiled_from_exe/
 
 # Selenium
 *.crdownload

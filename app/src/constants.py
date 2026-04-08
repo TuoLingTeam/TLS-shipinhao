@@ -147,7 +147,8 @@ USER_CONFIG_POINTER = "selected_config_dir.txt"  # 用户配置的目录指针�
 
 # 微信小商店 API
 ORDER_DETAIL_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail"  # 订单详情接口
-ORDER_DELIVERY_UPDATE_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateOrderDeliveryInfo"  # 物流更新接口
+ORDER_INIT_SHIP_DATA_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/initShipData"  # 发货初始化数据接口
+ORDER_DELIVERY_UPDATE_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo"  # 物流更新接口
 DELIVERY_MISMATCH_MESSAGE = "快递单号与所选物流商不匹配"  # 物流不匹配错误提示
 EVALUATION_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeevaluation/cgi/search"  # 评价搜索接口
 ORDER_SEARCH_URL = "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"  # 订单搜索接口
