@@ -612,7 +612,7 @@ class MainWindow(QWidget):
 
         self.action_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.config_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -622,8 +622,7 @@ class MainWindow(QWidget):
         self.left_column_layout.setSpacing(self._standard_layout_spacing())
         self.left_column_layout.addWidget(self.config_card)
         self.left_column_layout.addWidget(self.action_card)
-        self.left_column_layout.addWidget(self.license_card)
-        self.left_column_layout.addStretch(1)
+        self.left_column_layout.addWidget(self.license_card, 1)
 
         self.right_column_layout = QVBoxLayout()
         self.right_column_layout.setContentsMargins(0, 0, 0, 0)
@@ -1186,10 +1185,9 @@ class MainWindow(QWidget):
         w, h = default_width, default_height
         if available is not None:
             if sys.platform.startswith("win"):
-                max_w = int(available.width() * 0.96)
-                max_h = int(available.height() * 0.97)
-                target_w = max(default_width, int(available.width() * 0.55))
-                w = min(target_w, max_w)
+                max_w = int(available.width() * 0.92)
+                max_h = int(available.height() * 0.95)
+                w = min(default_width, max_w)
                 h = min(default_height, max_h)
             else:
                 max_w = int(available.width() * 0.92)
