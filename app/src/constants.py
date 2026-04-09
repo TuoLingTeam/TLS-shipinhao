@@ -82,6 +82,7 @@ EDUCATION_ORDER_MAX_DAYS = 60           # 教育订单评价有效天数
 # API 请求参数
 FETCH_PAGE_INTERVAL_SECONDS = 0.3       # 翻页请求间隔（秒）
 ORDER_PAGE_SIZE = 100                    # 订单每页大小
+EVALUATION_PAGE_SIZE = 10               # 差评接口每页大小
 EVALUATION_MAX_PAGES = 10               # 差评搜索最大页数
 RATE_LIMIT_RETRY_COUNT = 3              # 频率限制重试次数
 ORDER_WINDOW_WORKERS = 3                # 订单时间分片并发 worker 数

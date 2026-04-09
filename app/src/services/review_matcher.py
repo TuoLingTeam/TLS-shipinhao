@@ -17,6 +17,7 @@ from ..constants import (
     EDUCATION_ORDER_MAX_DAYS,
     EVALUATION_MAX_DAYS,
     EVALUATION_MAX_PAGES,
+    EVALUATION_PAGE_SIZE,
     EVALUATION_SEARCH_URL,
     FETCH_PAGE_INTERVAL_SECONDS,
     MATCH_MIN_SCORE,
@@ -583,8 +584,9 @@ class BadReviewOrderFinder:
 
         all_bad_reviews = []
         page = 1
+        effective_max_pages = EVALUATION_MAX_PAGES
 
-        while page <= EVALUATION_MAX_PAGES:
+        while page <= effective_max_pages:
             if self._stopped:
                 break
 
@@ -610,6 +612,18 @@ class BadReviewOrderFinder:
                 raise RuntimeError(f"差评API错误: {result}")
 
             evaluations = result.get("finderProductEvaluationInfoList", [])
+            total_count = result.get("totalCnt")
+            if total_count is not None:
+                try:
+                    total_count = max(0, int(total_count))
+                except (TypeError, ValueError):
+                    total_count = None
+                if total_count is not None:
+                    total_pages = max(
+                        1,
+                        (total_count + EVALUATION_PAGE_SIZE - 1) // EVALUATION_PAGE_SIZE,
+                    )
+                    effective_max_pages = min(EVALUATION_MAX_PAGES, total_pages)
 
             page_bad_reviews = []
             for evaluation in evaluations:
