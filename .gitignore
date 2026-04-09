@@ -40,6 +40,9 @@ screenshot.png
 # PyInstaller
 *.spec
 
+# Cython 混淆产物（CI 构建时自动生成）
+app-dist/
+
 # Build logs
 logs_*/
 logs/
