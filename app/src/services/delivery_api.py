@@ -28,6 +28,10 @@ _SNAPSHOT_MISSING_MARKERS = (
     "缺少承运商信息",
     "缺少商品信息",
 )
+_DELIVERY_MISMATCH_MARKERS = (
+    DELIVERY_MISMATCH_MESSAGE,
+    "快递单号有误",
+)
 
 
 def _post_session_json_payload(
@@ -214,6 +218,11 @@ def _is_missing_snapshot_error(exc):
     return any(marker in str(exc) for marker in _SNAPSHOT_MISSING_MARKERS)
 
 
+def _is_delivery_mismatch_error(exc):
+    """判断是否为快递公司不匹配类错误（可通过切换 deliveryId 重试）。"""
+    return any(marker in str(exc) for marker in _DELIVERY_MISMATCH_MARKERS)
+
+
 def fetch_current_delivery_context(order_id, session):
     """优先通过 initShipData 获取旧物流上下文，失败后回退到 orderDetail。"""
     init_error = None
@@ -272,9 +281,7 @@ def build_delivery_candidates(order_id, tracking_number, delivery_product_info, 
 
 
 def build_update_delivery_payload(order_id, tracking_number, old_delivery_product_info, delivery_override=None):
-    """按 exe 行为组装物流修改请求体。"""
-    _extract_delivery_snapshot(old_delivery_product_info)
-
+    """组装物流修改请求体（与 exe 行为对齐，仅修改 waybillId）。"""
     old_info = copy.deepcopy(old_delivery_product_info)
     new_info = copy.deepcopy(old_delivery_product_info)
     new_info["waybillId"] = str(tracking_number).strip()
@@ -324,27 +331,33 @@ def update_delivery_info(order_id, tracking_number, delivery_product_info, sessi
 
 
 def update_single_order(order_id, tracking_number, session):
-    """顺序执行单个订单更新。"""
-    delivery_context = fetch_current_delivery_context(order_id, session)
-    delivery_snapshot = delivery_context["snapshot"]
-    delivery_product_info = delivery_context["raw"]
-    old_waybill = delivery_snapshot.get("waybillId", "")
-    last_error = None
+    """顺序执行单个订单更新。
 
-    for delivery_option in build_delivery_candidates(order_id, tracking_number, delivery_snapshot, session):
-        try:
-            override = None
-            current_delivery_id = str(delivery_snapshot.get("deliveryId") or "")
-            if delivery_option.get("deliveryId") != current_delivery_id:
-                override = delivery_option
-            update_delivery_info(order_id, tracking_number, delivery_product_info, session, override)
-            return old_waybill
-        except RuntimeError as exc:
-            last_error = exc
-            if DELIVERY_MISMATCH_MESSAGE in str(exc):
-                continue
+    使用 orderDetail 获取原始物流信息后只修改 waybillId，
+    不主动改 deliveryId/deliveryName（与平台手动操作行为一致）。
+    仅当服务器明确返回快递公司不匹配错误时，才用单号前缀重试。
+    """
+    detail = fetch_order_detail_payload(order_id, session)
+    info_list = detail.get("expressInfo", {}).get("deliveryProductInfo") or []
+    if not info_list:
+        raise RuntimeError("获取订单详情失败：订单详情中没有可更新的物流信息。")
+    delivery_product_info = info_list[0]
+    old_waybill = str(delivery_product_info.get("waybillId") or "")
+
+    try:
+        update_delivery_info(order_id, tracking_number, delivery_product_info, session)
+        return old_waybill
+    except RuntimeError as exc:
+        if not _is_delivery_mismatch_error(exc):
             raise
 
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("更新物流信息失败：未识别到可用的物流公司映射。")
+    tracking_prefix = str(tracking_number).strip()[:2]
+    current_delivery_id = str(delivery_product_info.get("deliveryId") or "")
+    if tracking_prefix and tracking_prefix != current_delivery_id:
+        override = {"deliveryId": tracking_prefix, "deliveryName": ""}
+        update_delivery_info(
+            order_id, tracking_number, delivery_product_info, session, override,
+        )
+        return old_waybill
+
+    raise RuntimeError("更新物流信息失败：快递单号与物流商不匹配，且无法自动映射。")
