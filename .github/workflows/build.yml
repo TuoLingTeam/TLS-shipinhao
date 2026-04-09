@@ -41,8 +41,13 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = python -c "import re; m = re.search(r'APP_VERSION\s*=\s*[`\`"'\'']([^`\`"'\'']+)[`\`"'\'']', (Get-Content app/src/constants.py -Raw)); print(m.group(1) if m else '0.0')"
-          echo "app_version=$version" >> $env:GITHUB_OUTPUT
+          $raw = Get-Content -Path 'app/src/constants.py' -Raw
+          if ($raw -notmatch 'APP_VERSION\s*=\s*"([^"]+)"') {
+            $version = '0.0'
+          } else {
+            $version = $Matches[1].Trim()
+          }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "app_version=$version"
 
       - name: Obfuscate code
         shell: pwsh
