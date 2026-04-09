@@ -691,29 +691,32 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, 
 
 
 def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str, use_dist: bool = False) -> Path:
-    """构建 Windows 应用（onedir 模式 + 自动压缩为 zip）。"""
+    """构建 Windows 应用（onefile 模式 + 自动压缩为 zip）。"""
     print(f"开始打包 Windows 应用: {app_name}")
     cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_WINDOWS, profile, use_dist)
     version = get_app_version()
     version_file = prepare_windows_version_file(version)
-    cmd.extend(["--windowed", "--name", app_name, "--version-file", str(version_file), str(entry_file)])
+    cmd.extend(["--windowed", "--onefile", "--name", app_name, "--version-file", str(version_file), str(entry_file)])
     run(cmd)
 
-    app_dir = DIST_DIR / app_name
-    exe_file = app_dir / f"{app_name}.exe"
-    if not app_dir.exists() or not exe_file.exists():
+    exe_file = DIST_DIR / f"{app_name}.exe"
+    if not exe_file.exists():
         raise FileNotFoundError(f"未找到 Windows 构建产物: {exe_file}")
 
     cleanup_temp_files(app_name)
+    package_dir = DIST_DIR / app_name
+    shutil.rmtree(package_dir, ignore_errors=True)
+    package_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(exe_file, package_dir / exe_file.name)
     if profile == PROFILE_MAIN:
-        copy_runtime_files(app_dir)
+        copy_runtime_files(package_dir)
 
     zip_path = DIST_DIR / f"{app_name}-win"
     shutil.make_archive(str(zip_path), "zip", DIST_DIR, app_name)
-    print(f"打包完成。\n应用目录: {app_dir}\n压缩包: {zip_path}.zip")
+    print(f"打包完成。\n应用文件: {exe_file}\n压缩包: {zip_path}.zip")
     if profile == PROFILE_MAIN:
         print("使用前：解压后运行目录内的 exe，可点击「自动获取 Cookie」完成登录。")
-    return app_dir
+    return exe_file
 
 
 # =========================
