@@ -99,24 +99,13 @@ CYTHON_MODULES = [
     "src.ui.window",
 ]
 
-# Cython 模块依赖的标准库（使用混淆源时需要）
+# Cython 模块依赖中 PyInstaller 可能无法自动检测到的库
+# （内置标准库如 os/json/re 等已由 PyInstaller 默认包含，无需重复声明）
 CYTHON_STDLIB_DEPS = [
     "charset_normalizer",
     "concurrent.futures",
-    "datetime",
-    "functools",
-    "hmac",
-    "hashlib",
-    "json",
-    "logging",
-    "os",
-    "re",
     "sqlite3",
-    "threading",
     "requests",
-    "subprocess",
-    "time",
-    "typing",
 ]
 
 # 业务不使用的 Qt 模块，显式排除可显著减小体积。
@@ -577,7 +566,6 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
                 cmd.extend(["--hidden-import", module])
             for module in CYTHON_STDLIB_DEPS:
                 cmd.extend(["--hidden-import", module])
-            cmd.extend(["--collect-submodules", "src"])
             for init_file in (APP_DIST / "src").rglob("__init__.py"):
                 dest = str(init_file.parent.relative_to(APP_DIST))
                 cmd.extend(["--add-data", f"{init_file}{os.pathsep}{dest}"])
@@ -703,26 +691,29 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, 
 
 
 def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str, use_dist: bool = False) -> Path:
-    """构建 Windows .exe。"""
+    """构建 Windows 应用（onedir 模式 + 自动压缩为 zip）。"""
     print(f"开始打包 Windows 应用: {app_name}")
     cmd = build_pyinstaller_base_cmd(python_bin, SYSTEM_WINDOWS, profile, use_dist)
     version = get_app_version()
     version_file = prepare_windows_version_file(version)
-    cmd.extend(["--onefile", "--windowed", "--name", app_name, "--version-file", str(version_file), str(entry_file)])
+    cmd.extend(["--windowed", "--name", app_name, "--version-file", str(version_file), str(entry_file)])
     run(cmd)
 
-    exe_file = DIST_DIR / f"{app_name}.exe"
-    if not exe_file.exists():
+    app_dir = DIST_DIR / app_name
+    exe_file = app_dir / f"{app_name}.exe"
+    if not app_dir.exists() or not exe_file.exists():
         raise FileNotFoundError(f"未找到 Windows 构建产物: {exe_file}")
 
     cleanup_temp_files(app_name)
     if profile == PROFILE_MAIN:
-        copy_runtime_files(DIST_DIR)
+        copy_runtime_files(app_dir)
 
-    print(f"打包完成。\n可执行文件: {exe_file}")
+    zip_path = DIST_DIR / f"{app_name}-win"
+    shutil.make_archive(str(zip_path), "zip", DIST_DIR, app_name)
+    print(f"打包完成。\n应用目录: {app_dir}\n压缩包: {zip_path}.zip")
     if profile == PROFILE_MAIN:
-        print("使用前：可点击「自动获取 Cookie」完成登录并生成 cookie.txt，或手动选择配置目录。")
-    return exe_file
+        print("使用前：解压后运行目录内的 exe，可点击「自动获取 Cookie」完成登录。")
+    return app_dir
 
 
 # =========================
