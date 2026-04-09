@@ -55,6 +55,6 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: tls-shipinhao-windows
-          path: dist/TLS-shipinhao.exe
+          path: dist/TLS-shipinhao-win.zip
           if-no-files-found: error
           retention-days: 14
