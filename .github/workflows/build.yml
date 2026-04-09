@@ -18,9 +18,8 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
-    outputs:
-      app_version: ${{ steps.version.outputs.app_version }}
-      artifact_cache_key: ${{ steps.cache_key.outputs.key }}
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -52,12 +51,6 @@ jobs:
           }
           Add-Content -Path $env:GITHUB_OUTPUT -Value "app_version=$version"
 
-      - name: Compute artifact cache key
-        id: cache_key
-        shell: pwsh
-        run: |
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "key=windows-dist-${{ github.run_id }}-${{ github.run_attempt }}"
-
       - name: Obfuscate code
         shell: pwsh
         run: python app/scripts/obfuscate.py
@@ -66,45 +59,47 @@ jobs:
         shell: pwsh
         run: python app/scripts/build.py windows --dist
 
-      - name: Save build archive to cache
-        uses: actions/cache/save@v4
-        with:
-          path: dist/TLS-shipinhao-win.zip
-          key: ${{ steps.cache_key.outputs.key }}
+      - name: Publish versioned release asset
+        id: publish_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.version.outputs.app_version }}"
+          $tag = "v$version"
+          $assetName = "TLS-shipinhao-v$version-windows.zip"
+          $assetPath = "dist/TLS-shipinhao-win.zip"
 
-  upload-windows-artifact:
-    name: Upload Windows Artifact
-    runs-on: windows-latest
-    needs: build-windows
-    if: ${{ always() && needs.build-windows.result == 'success' }}
-    continue-on-error: true
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag `
+              --repo "${{ github.repository }}" `
+              --title $tag `
+              --notes "Automated Windows build for $tag."
+          }
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+          gh release upload $tag "$assetPath#$assetName" `
+            --repo "${{ github.repository }}" `
+            --clobber
 
-      - name: Restore build archive from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: dist/TLS-shipinhao-win.zip
-          key: ${{ needs.build-windows.outputs.artifact_cache_key }}
-          fail-on-cache-miss: true
-
-      - name: Upload artifact
-        id: upload_artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: TLS-shipinhao-v${{ needs.build-windows.outputs.app_version }}-windows
-          path: dist/TLS-shipinhao-win.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Summarize artifact upload failure
-        if: ${{ always() && steps.upload_artifact.outcome == 'failure' }}
+      - name: Summarize release upload
+        if: ${{ always() }}
         shell: pwsh
         run: |
-          @"
-          Artifact 上传失败，但构建已完成，工作流不会因此整体失败。
-          可在配额恢复后单独重跑当前 Upload Windows Artifact job。
-          当前缓存键：${{ needs.build-windows.outputs.artifact_cache_key }}
+          $version = "${{ steps.version.outputs.app_version }}"
+          $tag = "v$version"
+          $releaseUrl = "https://github.com/${{ github.repository }}/releases/tag/$tag"
+          if ("${{ steps.publish_release.outcome }}" -eq "success") {
+            @"
+          已上传/更新 GitHub Release 资产：
+          - Release: $tag
+          - Asset: TLS-shipinhao-v$version-windows.zip
+          - URL: $releaseUrl
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          } else {
+            @"
+          GitHub Release 资产上传失败。
+          目标 Release: $tag
+          预期资产名：TLS-shipinhao-v$version-windows.zip
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
