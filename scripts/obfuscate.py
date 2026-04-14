@@ -25,8 +25,8 @@ from typing import Iterable
 # =========================
 # 路径常量
 # =========================
-APP_ROOT = Path(__file__).resolve().parent.parent       # app/
-REPO_ROOT = APP_ROOT.parent                              # 仓库根目录
+REPO_ROOT = Path(__file__).resolve().parent.parent       # 仓库根目录
+APP_ROOT = REPO_ROOT / "app"                             # app/
 DIST_SRC = REPO_ROOT / "app-dist"                        # 混淆输出目录
 
 SRC_DIR = APP_ROOT
@@ -148,7 +148,7 @@ def verify_compiled_modules(module_names: Iterable[str]) -> None:
 
 
 def compile_with_cython() -> None:
-    """使用 Cython 将 src/ 下所有 .py 编译为 .so/.pyd（支持子包）。"""
+    """使用 Cython 将 app/ 下所有 .py 编译为 .so/.pyd（支持子包）。"""
     ensure_cython()
     python_bin = _project_python()
 
@@ -222,7 +222,7 @@ def compile_with_cython() -> None:
 def fix_cython_imports() -> None:
     """删除编译后残留的 .py 源文件，只保留 .so/.pyd 和 __init__.py。"""
     print("Fixing Cython import issues...")
-    for py_file in (DIST_SRC / "src").rglob("*.py"):
+    for py_file in DIST_SRC.rglob("*.py"):
         if py_file.name != "__init__.py":
             py_file.unlink()
             print(f"  Removed {py_file.relative_to(DIST_SRC)} (using .so version)")

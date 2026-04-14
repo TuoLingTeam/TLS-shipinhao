@@ -36,8 +36,8 @@ BUNDLE_ID = "com.tuoling.tls-shipinhao"
 SYSTEM_MACOS = "Darwin"
 SYSTEM_WINDOWS = "Windows"
 
-APP_ROOT = Path(__file__).resolve().parent.parent      # app/
-REPO_ROOT = APP_ROOT.parent                             # 仓库根目录
+REPO_ROOT = Path(__file__).resolve().parent.parent      # 仓库根目录
+APP_ROOT = REPO_ROOT / "app"                            # app/
 APP_DIST = REPO_ROOT / "app-dist"                       # 混淆分发目录
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
@@ -80,7 +80,8 @@ HIDDEN_IMPORTS = [
 
 # Cython 编译后的模块（使用混淆源时需要）
 CYTHON_MODULES = [
-    "app",
+    "bootstrap",
+    "settings",
     "core",
     "core.http_utils",
     "core.license",
@@ -536,7 +537,7 @@ def _generate_runtime_hook() -> Path:
     BUILD_DIR.mkdir(exist_ok=True)
     hook_path = BUILD_DIR / "_rthook_init_packages.py"
     hook_path.write_text(
-        "import app\n"
+        "import settings\n"
         "import core\n"
         "import services\n"
         "import ui\n",
@@ -564,7 +565,7 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
                 cmd.extend(["--hidden-import", module])
             for module in CYTHON_STDLIB_DEPS:
                 cmd.extend(["--hidden-import", module])
-            for init_file in (APP_DIST / "src").rglob("__init__.py"):
+            for init_file in APP_DIST.rglob("__init__.py"):
                 dest = str(init_file.parent.relative_to(APP_DIST))
                 cmd.extend(["--add-data", f"{init_file}{os.pathsep}{dest}"])
             # runtime hook：在 frozen 环境启动前预先初始化包层级，
@@ -584,13 +585,12 @@ def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_d
 
 def resolve_cython_modules() -> list[str]:
     """解析混淆产物中的 Cython 模块列表（递归扫描子包）。"""
-    dist_src_dir = APP_DIST / "src"
-    if not dist_src_dir.exists():
+    if not APP_DIST.exists():
         return list(CYTHON_MODULES)
 
     modules: list[str] = []
     seen: set[str] = set()
-    for artifact in sorted(dist_src_dir.rglob("*")):
+    for artifact in sorted(APP_DIST.rglob("*")):
         if artifact.suffix.lower() not in {".so", ".pyd"}:
             continue
         module_stem = artifact.name.split(".", 1)[0]
