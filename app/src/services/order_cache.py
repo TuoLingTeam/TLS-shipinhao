@@ -6,7 +6,7 @@ import sqlite3
 import threading
 import time
 
-from ..config import get_home_config_dir, normalize_nickname
+from ..config import get_home_config_dir
 from ..constants import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
 
 
@@ -133,7 +133,7 @@ class OrderCacheRepository:
         order_row = (
             order_id,
             buyer_nickname,
-            normalize_nickname(buyer_nickname),
+            buyer_nickname,
             int(common_info.get("createTime", 0) or 0),
             confirm_receipt_timestamp,
             1 if auto_confirm_info.get("isWaybillReceived", False) else 0,

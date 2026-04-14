@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-"""TLS-shipinhao  订单查找器（核心逻辑）。"""
+"""TLS-shipinhao 订单查找器（核心逻辑）。"""
 
 import re
 import threading
 import time
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Callable
 
 import requests
 
-from ..config import normalize_nickname as _normalize_nickname
 from ..constants import (
     AUTO_FILL_SCORE_THRESHOLD,
     EDUCATION_ORDER_MAX_DAYS,
@@ -21,8 +20,6 @@ from ..constants import (
     EVALUATION_SEARCH_URL,
     FETCH_PAGE_INTERVAL_SECONDS,
     MATCH_MIN_SCORE,
-    MULTI_ORDER_PENALTY_FACTOR,
-    MULTI_ORDER_PENALTY_MAX,
     ORDER_PAGE_SIZE,
     ORDER_RISK_PAGE_INTERVAL_SECONDS,
     ORDER_RISK_WINDOW_WORKERS,
@@ -31,9 +28,10 @@ from ..constants import (
     QUALITY_REFUND_ORDER_URL,
     RATE_LIMIT_RETRY_COUNT,
     REQUEST_TIMEOUT,
-    SCORE_WEIGHTS,
 )
+from ..core.day_window import recent_day_range_timestamps
 from ..core.http_utils import build_request_params
+from .order_match_scoring import compute_match_score
 
 ProgressCallback = Callable[[str], None]
 JsonDict = dict[str, Any]
@@ -579,8 +577,7 @@ class BadReviewOrderFinder:
         Returns:
             差评评价列表。
         """
-        end_time = int(time.time())
-        start_time = int((datetime.now() - timedelta(days=days)).timestamp())
+        start_time, end_time = recent_day_range_timestamps(days)
 
         all_bad_reviews = []
         page = 1
@@ -690,9 +687,9 @@ class BadReviewOrderFinder:
     @staticmethod
     def _match_strategy_by_score(score: int) -> str:
         """根据匹配分数映射策略名称。"""
-        if score >= AUTO_FILL_SCORE_THRESHOLD:
+        if score >= 100:
             return "exact_match"
-        if score >= 65:
+        if score >= AUTO_FILL_SCORE_THRESHOLD:
             return "high_confidence"
         if score >= MATCH_MIN_SCORE:
             return "probable_match"
@@ -808,7 +805,6 @@ class BadReviewOrderFinder:
         return {
             "orderId": order.get("commonInfo", {}).get("orderId"),
             "buyerNickname": buyer_nickname,
-            "normalizedNickname": _normalize_nickname(buyer_nickname),
             "createTime": order.get("commonInfo", {}).get("createTime", 0),
             "confirmReceiptTime": confirm_receipt_timestamp,
             "isWaybillReceived": bool(auto_confirm_info.get("isWaybillReceived", False)),
@@ -1044,7 +1040,6 @@ class BadReviewOrderFinder:
             "sku_name": product_fields["skuText"],
             "product_name": product_fields["productName"],
             "buyer_nickname": buyer_nickname,
-            "normalized_buyer_nickname": _normalize_nickname(buyer_nickname),
             "eval_time": eval_time,
         }
 
@@ -1084,176 +1079,64 @@ class BadReviewOrderFinder:
             and set(left_tokens) == set(right_tokens)
         )
 
-    def _score_nickname_dimension(
-        self,
-        normalized_eval_nickname: str,
-        normalized_order_nickname: str,
-    ) -> tuple[int, str]:
-        """昵称维度（辅助项）。"""
-        weight = SCORE_WEIGHTS["nickname"]
-
-        if self._is_generic_nickname(normalized_eval_nickname):
-            return 0, f"昵称为通用名(+0/{weight})"
-
-        if not normalized_order_nickname:
-            return 0, f"订单昵称缺失(+0/{weight})"
-
-        if normalized_eval_nickname == normalized_order_nickname:
-            return weight, f"昵称完全匹配(+{weight}/{weight})"
-
-        if (
-            len(normalized_eval_nickname) >= 2
-            and len(normalized_order_nickname) >= 2
-            and (
-                normalized_eval_nickname in normalized_order_nickname
-                or normalized_order_nickname in normalized_eval_nickname
-            )
-        ):
-            partial_score = round(weight * 0.73)
-            return partial_score, f"昵称强相关(+{partial_score}/{weight})"
-
-        shared_chars = len(
-            set(normalized_eval_nickname) & set(normalized_order_nickname)
-        )
-        if shared_chars >= 2:
-            weak_score = round(weight * 0.47)
-            return weak_score, f"昵称弱相关(+{weak_score}/{weight})"
-
-        return 0, f"昵称不一致(可能改名,+0/{weight})"
-
-    def _score_sku_dimension(self, sku_name: str, sale_param: str) -> tuple[int, str]:
-        """规格维度（主项，严格一致）。"""
-        weight = SCORE_WEIGHTS["sku"]
-
-        if self._is_sku_exact_matched(sku_name, sale_param):
-            return weight, f"规格完全一致(+{weight}/{weight})"
-
-        return 0, f"规格不一致(淘汰,+0/{weight})"
-
-    @staticmethod
-    def _score_reference_time_dimension(confirm_diff_seconds: int) -> tuple[int, str]:
-        """评价时间与收货时间贴合度（主项）。"""
-        weight = SCORE_WEIGHTS["reference_time"]
-        diff_hours = confirm_diff_seconds / 3600
-
-        if diff_hours <= 6:
-            return weight, f"评价紧邻收货(+{weight}/{weight})"
-        if diff_hours <= 24:
-            score = round(weight * 0.88)
-            return score, f"评价与收货同日(+{score}/{weight})"
-        if diff_hours <= 72:
-            score = round(weight * 0.72)
-            return score, f"评价与收货间隔较短(+{score}/{weight})"
-        if diff_hours <= 24 * 7:
-            score = round(weight * 0.52)
-            return score, f"评价与收货间隔一周内(+{score}/{weight})"
-        if diff_hours <= 24 * 15:
-            score = round(weight * 0.32)
-            return score, f"评价与收货间隔偏长(+{score}/{weight})"
-        if diff_hours <= 24 * 30:
-            score = round(weight * 0.16)
-            return score, f"评价与收货间隔较远(+{score}/{weight})"
-        return 0, f"评价与收货间隔过远(+0/{weight})"
-
-    @staticmethod
-    def _score_create_time_dimension(create_diff_seconds: int) -> tuple[int, str]:
-        """评价时间与下单时间合理性（主项）。"""
-        weight = SCORE_WEIGHTS["create_time"]
-        diff_days = create_diff_seconds / 86400
-
-        if diff_days <= 1:
-            return weight, f"下单后很快评价(+{weight}/{weight})"
-        if diff_days <= 3:
-            score = round(weight * 0.8)
-            return score, f"下单后短期评价(+{score}/{weight})"
-        if diff_days <= 7:
-            score = round(weight * 0.6)
-            return score, f"下单后一周内评价(+{score}/{weight})"
-        if diff_days <= 15:
-            score = round(weight * 0.4)
-            return score, f"下单后两周内评价(+{score}/{weight})"
-        if diff_days <= 30:
-            score = round(weight * 0.2)
-            return score, f"下单后一个月内评价(+{score}/{weight})"
-        return 0, f"下单后评价间隔偏长(+0/{weight})"
-
-    @staticmethod
-    def _score_order_status_dimension(order_status: int) -> tuple[int, str]:
-        """订单状态可靠性（5分）。"""
-        weight = SCORE_WEIGHTS["order_status"]
-        if order_status >= 100:
-            return weight, f"订单已完成(+{weight}/{weight})"
-        if order_status >= 60:
-            score = round(weight * 0.6)
-            return score, f"订单已发货/待评价(+{score}/{weight})"
-        if order_status >= 40:
-            score = 1
-            return score, f"订单处理中(+{score}/{weight})"
-        return 0, f"订单状态弱相关(+0/{weight})"
-
     def _score_candidate_order(
         self,
         order_data: JsonDict,
-        normalized_buyer_nickname: str,
-        sku_name: str,
+        evaluation_context: JsonDict,
         eval_time: int,
     ) -> JsonDict | None:
         """对单个候选订单评分，返回候选匹配结果或 None。"""
-        score = 0
         reasons: list[str] = []
 
         reference_time = self._resolve_reference_time(order_data)
-        if reference_time <= 0:
-            return None
-
-        if eval_time <= 0 or eval_time < reference_time:
-            return None
-
-        max_eval_days = 60 if order_data["isEducationOrder"] else 30
-        time_diff_days = (eval_time - reference_time) / 86400
-        if time_diff_days > max_eval_days:
-            return None
 
         create_time = int(order_data.get("createTime", 0) or 0)
-        if create_time > 0 and eval_time < create_time:
+        if eval_time > 0 and create_time > 0 and eval_time < create_time:
             return None
 
-        nickname_score, nickname_reason = self._score_nickname_dimension(
-            normalized_buyer_nickname,
-            order_data["normalizedNickname"],
+        match_result = compute_match_score(
+            evaluation_buyer_nickname=evaluation_context["buyer_nickname"],
+            evaluation_product_id=evaluation_context["product_id"],
+            evaluation_sku_id=evaluation_context["sku_id"],
+            evaluation_title=evaluation_context["product_name"],
+            order_buyer_nickname=order_data.get("buyerNickname", ""),
+            order_product_id=order_data.get("productId", ""),
+            order_sku_id=order_data.get("skuId", ""),
+            order_title=order_data.get("productName", ""),
         )
-        score += nickname_score
-        reasons.append(nickname_reason)
+        score = int(match_result["score"])
 
-        sku_score, sku_reason = self._score_sku_dimension(sku_name, order_data["saleParam"])
-        score += sku_score
-        reasons.append(sku_reason)
-        if sku_score <= 0:
-            return None
-
-        confirm_diff = eval_time - reference_time
-        reference_score, reference_reason = self._score_reference_time_dimension(confirm_diff)
-        score += reference_score
-        reasons.append(reference_reason)
-
-        if create_time > 0:
-            create_diff = eval_time - create_time
-            create_score, create_reason = self._score_create_time_dimension(create_diff)
+        if bool(match_result["buyerNicknameExact"]):
+            reasons.append("买家昵称完全匹配")
         else:
-            create_score = 0
-            create_reason = f"订单下单时间缺失(+0/{SCORE_WEIGHTS['create_time']})"
-        score += create_score
-        reasons.append(create_reason)
+            reasons.append(
+                self._build_nickname_reason(
+                    evaluation_context["buyer_nickname"],
+                    order_data.get("buyerNickname", ""),
+                    int(match_result["buyerNicknameSimilarity"]),
+                    int(match_result["buyerNicknamePenalty"]),
+                )
+            )
 
-        status_score, status_reason = self._score_order_status_dimension(
-            int(order_data.get("orderStatus", 0) or 0)
-        )
-        score += status_score
-        reasons.append(status_reason)
+        if bool(match_result["productExact"]):
+            reasons.append("商品标题/商品ID/SKU 完全匹配")
+        else:
+            reasons.append(
+                "商品信息相似度 "
+                f"{match_result['productSimilarity']}%(标题 {match_result['titleSimilarity']}%，"
+                f"ID {'命中' if match_result['productIdExact'] else '未命中'}，"
+                f"SKU {'命中' if match_result['skuIdExact'] else '未命中'})"
+                f"(扣 {match_result['productPenalty']} 分)"
+            )
 
         if score < MATCH_MIN_SCORE:
             return None
 
+        confirm_diff = (
+            eval_time - reference_time
+            if eval_time > 0 and reference_time > 0
+            else float("inf")
+        )
         return {
             "order_data": order_data,
             "score": score,
@@ -1271,27 +1154,31 @@ class BadReviewOrderFinder:
         }
 
     @staticmethod
+    def _build_nickname_reason(
+        evaluation_buyer_nickname: str,
+        order_buyer_nickname: str,
+        similarity: int,
+        penalty: int,
+    ) -> str:
+        """根据昵称关系生成更贴近业务的原因文案。"""
+        eval_name = str(evaluation_buyer_nickname or "").strip()
+        order_name = str(order_buyer_nickname or "").strip()
+        shorter, longer = (eval_name, order_name) if len(eval_name) <= len(order_name) else (order_name, eval_name)
+
+        if len(shorter) == 1 and shorter and shorter in longer:
+            return (
+                "昵称仅单字重合，歧义较高！"
+                f"(相似度 {similarity}%，扣 {penalty} 分)"
+            )
+
+        return (
+            "昵称相似度较高，疑似改名！"
+            f"(相似度 {similarity}%，扣 {penalty} 分)"
+        )
+
+    @staticmethod
     def _apply_multi_order_penalty(best_matches: JsonList) -> JsonList:
-        """多候选时按时效偏差扣分并做二次过滤。"""
-        if len(best_matches) <= 1:
-            return best_matches
-
-        best_confirm_diff = min(bm["confirm_diff"] for bm in best_matches)
-
-        for bm in best_matches:
-            extra_diff_days = max(0.0, (bm["confirm_diff"] - best_confirm_diff) / 86400)
-            # 候选订单存在竞争时，仅对比“相对最优候选”的时效差做惩罚
-            penalty = min(12, round(extra_diff_days * 1.5))
-            if penalty > 0:
-                bm["score"] -= penalty
-                bm["reasons"].append(f"多单竞争时效劣势(-{penalty})")
-
-        # 扣分后二次过滤：仅保留分数仍满足最低匹配阈值的候选
-        filtered = [bm for bm in best_matches if bm["score"] >= MATCH_MIN_SCORE]
-        if filtered:
-            return filtered
-
-        # 若全部跌破阈值，保留原列表并取分数最高者（避免误删最后候选）
+        """多候选不再额外扣分，仅保留原列表，后续靠排序择优。"""
         return best_matches
 
     @staticmethod
@@ -1309,18 +1196,17 @@ class BadReviewOrderFinder:
         self,
         evaluation_context: JsonDict,
         product_index: dict[str, JsonList],
-    ) -> tuple[JsonDict | None, str | None, int]:
+    ) -> tuple[JsonDict | None, str | None, int, list[str]]:
         """执行单条评价的候选收集、评分和最佳匹配选择。"""
         candidate_orders = self._collect_candidate_orders(product_index, evaluation_context)
         if not candidate_orders:
-            return None, None, 0
+            return None, None, 0, []
 
         best_matches = []
         for order_data in candidate_orders:
             candidate = self._score_candidate_order(
                 order_data,
-                evaluation_context["normalized_buyer_nickname"],
-                evaluation_context["sku_name"],
+                evaluation_context,
                 evaluation_context["eval_time"],
             )
             if candidate:
@@ -1329,12 +1215,12 @@ class BadReviewOrderFinder:
         best_matches = self._apply_multi_order_penalty(best_matches)
         best_match = self._pick_best_match(best_matches)
         if best_match is None:
-            return None, None, 0
+            return None, None, 0, []
 
         matched_order = best_match["order_data"]
         match_score = best_match["score"]
         match_strategy = self._match_strategy_by_score(match_score)
-        return matched_order, match_strategy, match_score
+        return matched_order, match_strategy, match_score, list(best_match.get("reasons", []))
 
     @staticmethod
     def _build_match_result(
@@ -1342,6 +1228,7 @@ class BadReviewOrderFinder:
         matched_order: JsonDict | None,
         match_strategy: str | None,
         match_score: int,
+        match_reasons: list[str],
     ) -> JsonDict:
         """组装最终匹配结果结构。"""
         eval_info = evaluation_context["eval_info"]
@@ -1365,6 +1252,7 @@ class BadReviewOrderFinder:
             "orderBuyerNickname": matched_order["buyerNickname"] if matched_order else "",
             "matchStrategy": match_strategy if matched_order else None,
             "matchScore": match_score if matched_order else 0,
+            "matchReasons": match_reasons if matched_order else [],
             "timeDiffHours": (
                 (eval_time - matched_order["createTime"]) / 3600
                 if matched_order and eval_time > 0 and matched_order["createTime"] > 0
@@ -1439,15 +1327,15 @@ class BadReviewOrderFinder:
             matched_order = None
             match_strategy = None
             match_score = 0
+            match_reasons: list[str] = []
 
-            matched_order, match_strategy, match_score = self._match_single_evaluation(
+            matched_order, match_strategy, match_score, match_reasons = self._match_single_evaluation(
                 evaluation_context,
                 product_index,
             )
             if matched_order and on_progress:
                 on_progress(
-                    f"  ✅ 匹配成功 (得分: {match_score}, "
-                    f"策略: {match_strategy}) → 订单 {matched_order['orderId']}"
+                    f"  ✅ 匹配成功 (得分: {match_score}) → 订单 {matched_order['orderId']}"
                 )
 
             if not matched_order and on_progress:
@@ -1459,6 +1347,7 @@ class BadReviewOrderFinder:
                     matched_order,
                     match_strategy,
                     match_score,
+                    match_reasons,
                 )
             )
 

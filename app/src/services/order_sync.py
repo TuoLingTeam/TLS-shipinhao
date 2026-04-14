@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 订单缓存同步服务。"""
 
-import time
-
+from ..core.day_window import end_of_day_timestamp, recent_day_range_timestamps
 from ..constants import (
     ORDER_CACHE_COVERAGE_DAYS,
     ORDER_CACHE_INCREMENTAL_DAYS,
@@ -31,10 +30,11 @@ class OrderSyncService:
 
     @staticmethod
     def _now():
-        return int(time.time())
+        return end_of_day_timestamp()
 
     def _retention_start(self):
-        return self._now() - ORDER_CACHE_COVERAGE_DAYS * 86400
+        start_ts, _ = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
+        return start_ts
 
     def _save_state(self, *, mode, last_error="", coverage_start=None, coverage_end=None, incremental_start=None, incremental_end=None):
         now_ts = self._now()
@@ -105,8 +105,7 @@ class OrderSyncService:
         if self._stopped:
             return 0, []
 
-        end_timestamp = self._now()
-        start_timestamp = end_timestamp - ORDER_CACHE_COVERAGE_DAYS * 86400
+        start_timestamp, end_timestamp = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
         self._progress(on_progress, "[缓存] 正在重建最近 30 天订单缓存...")
         self.repository.clear_all()
         written_count, warnings = self._sync_range(
@@ -162,8 +161,7 @@ class OrderSyncService:
     def _ensure_recent_cache(self, on_progress=None):
         """确保最近 30 天缓存可用，并只补齐缺口。"""
         self.repository.initialize()
-        end_timestamp = self._now()
-        start_timestamp = end_timestamp - ORDER_CACHE_COVERAGE_DAYS * 86400
+        start_timestamp, end_timestamp = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
         warnings = []
 
         state = self.repository.get_state(scope=ORDER_CACHE_SCOPE)

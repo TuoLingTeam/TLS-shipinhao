@@ -59,6 +59,9 @@ Thumbs.db
 .coverage
 htmlcov/
 tests/
+!tests/
+tests/*
+!tests/test_order_match_scoring.py
 decompiled_from_exe/
 
 # Selenium

@@ -2,13 +2,13 @@
 """TLS-shipinhao 中差评查找后台执行器。"""
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QObject, Signal
 
 from ..config import ConfigNotFoundError, get_cookie, get_magic, serialize_cookie_data
 from ..constants import ORDER_CACHE_COVERAGE_DAYS
+from ..core.day_window import recent_day_range_timestamps
 from ..services.order_sync import OrderSyncService
 from ..services.review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
 
@@ -136,16 +136,19 @@ class ReviewMatcherWorker(QObject):
         return serialize_cookie_data(cookie_data), magic
 
     def _build_order_earliest_time(self):
-        """计算订单抓取的时间窗口下限。"""
-        return int(time.time()) - (self.days + ORDER_FETCH_BUFFER_DAYS) * 86400
+        """计算订单抓取的时间窗口下限（自然日 00:00:00）。"""
+        start_ts, _ = recent_day_range_timestamps(self.days + ORDER_FETCH_BUFFER_DAYS)
+        return start_ts
 
     def _build_cache_order_earliest_time(self):
-        """自动查单默认只读取最近 30 天持久缓存。"""
-        return int(time.time()) - ORDER_CACHE_COVERAGE_DAYS * 86400
+        """自动查单默认只读取最近 30 天持久缓存（自然日 00:00:00 起）。"""
+        start_ts, _ = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
+        return start_ts
 
     def _build_quality_refund_earliest_time(self):
-        """计算品质退款订单筛选下限。"""
-        return int(time.time()) - self.days * 86400
+        """计算品质退款订单筛选下限（自然日 00:00:00）。"""
+        start_ts, _ = recent_day_range_timestamps(self.days)
+        return start_ts
 
     def _fetch_active_evaluations(self, cookie_str, magic, progress):
         """获取并过滤有效主动评价。"""
@@ -177,12 +180,7 @@ class ReviewMatcherWorker(QObject):
                 earliest_time=earliest_time,
                 on_progress=progress,
             )
-            merged_orders = finder.merge_quality_refund_orders(
-                orders,
-                earliest_time=earliest_time,
-                on_progress=progress,
-            )
-            return merged_orders, warnings
+            return orders, warnings
         finally:
             self._set_active_order_sync_service(None)
             self._release_finder(finder)
@@ -197,12 +195,7 @@ class ReviewMatcherWorker(QObject):
                 earliest_time=earliest_time,
                 on_progress=progress,
             )
-            merged_orders = finder.merge_quality_refund_orders(
-                orders,
-                earliest_time=earliest_time,
-                on_progress=progress,
-            )
-            return merged_orders, warnings
+            return orders, warnings
         finally:
             self._set_active_order_sync_service(None)
             self._release_finder(finder)
@@ -299,20 +292,33 @@ class ReviewMatcherWorker(QObject):
             f"({AUTO_FILL_SCORE_THRESHOLD}分)已自动填入，"
             f"{manual_review_count} 个需人工核对。"
         )
-        progress("\n匹配成功的订单明细:")
-        for item in matched_results:
-            score = item["matchScore"]
-            mark = (
-                "✅ 自动填入"
-                if score >= AUTO_FILL_SCORE_THRESHOLD
-                else "⚠️ 需人工核对"
-            )
-            progress(
-                f"  {mark} | 得分: {score} | "
-                f"订单: {item['orderId']} | "
-                f"买家: {item['buyerNickname']} | "
-                f"商品: {item['productName']}"
-            )
+        progress("匹配进度明细已在上方 [i/n] 匹配日志输出。")
+
+        need_review_items = [
+            item for item in matched_results
+            if int(item.get("matchScore", 0) or 0) < 100
+        ]
+        if not need_review_items:
+            return
+
+        progress("\n⚠️ 重点核对明细（仅展示 <100 分）:")
+        need_review_items.sort(key=lambda x: int(x.get("matchScore", 0) or 0))
+
+        for index, item in enumerate(need_review_items, 1):
+            score = int(item.get("matchScore", 0) or 0)
+            order_id = item.get("orderId") or "-"
+            eval_nickname = item.get("buyerNickname") or ""
+            order_nickname = item.get("orderBuyerNickname") or ""
+            reasons = item.get("matchReasons") or []
+
+            progress(f"  [{index}] 订单: {order_id} | 得分: {score}")
+            progress(f"      评价的买家昵称: {eval_nickname}")
+            progress(f"      订单的买家昵称: {order_nickname}")
+
+            if reasons:
+                progress("      扣分/判定原因:")
+                for reason in reasons:
+                    progress(f"        - {reason}")
 
     def _emit_quality_refund_summary(self, orders, order_ids, progress):
         """输出品质退款订单获取汇总日志。"""
