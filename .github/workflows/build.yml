@@ -1,4 +1,4 @@
-name: Build Windows App
+name: Build Desktop Apps
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "scripts/**"
       - ".github/workflows/build.yml"
 
 permissions:
@@ -15,9 +16,60 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  extract-version:
+    name: Extract Version
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import os
+
+          text = Path('app/settings.py').read_text(encoding='utf-8')
+          match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
+          version = match.group(1).strip() if match else '0.0.0'
+          output = Path(os.environ['GITHUB_OUTPUT'])
+          with output.open('a', encoding='utf-8') as fh:
+              fh.write(f'app_version={version}\n')
+              fh.write(f'release_tag=v{version}\n')
+          PY
+
+  prepare-release:
+    name: Prepare GitHub Release
+    runs-on: ubuntu-latest
+    needs: extract-version
+    permissions:
+      contents: write
+
+    steps:
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ needs.extract-version.outputs.release_tag }}'
+          gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1 || \
+          gh release create "$tag" \
+            --repo "${{ github.repository }}" \
+            --title "$tag" \
+            --notes "Automated desktop build for $tag."
+
   build-windows:
     name: Build Windows
     runs-on: windows-latest
+    needs: [extract-version, prepare-release]
     permissions:
       contents: write
 
@@ -39,18 +91,6 @@ jobs:
           python -m pip install -r app/requirements.txt
           python -m pip install cython setuptools
 
-      - name: Extract version
-        id: version
-        shell: pwsh
-        run: |
-          $raw = Get-Content -Path 'app/settings.py' -Raw
-          if ($raw -notmatch 'APP_VERSION\s*=\s*"([^"]+)"') {
-            $version = '0.0'
-          } else {
-            $version = $Matches[1].Trim()
-          }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "app_version=$version"
-
       - name: Obfuscate code
         shell: pwsh
         run: python scripts/obfuscate.py
@@ -59,47 +99,101 @@ jobs:
         shell: pwsh
         run: python scripts/build.py windows --dist
 
-      - name: Publish versioned release asset
-        id: publish_release
+      - name: Upload Windows release asset
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = "${{ steps.version.outputs.app_version }}"
-          $tag = "v$version"
+          $version = "${{ needs.extract-version.outputs.app_version }}"
+          $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $assetName = "TLS-shipinhao-v$version-windows.zip"
           $assetPath = "dist/TLS-shipinhao-win.zip"
-
-          gh release view $tag --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag `
-              --repo "${{ github.repository }}" `
-              --title $tag `
-              --notes "Automated Windows build for $tag."
-          }
 
           gh release upload $tag "$assetPath#$assetName" `
             --repo "${{ github.repository }}" `
             --clobber
 
-      - name: Summarize release upload
+      - name: Summarize Windows release upload
         if: ${{ always() }}
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.app_version }}"
-          $tag = "v$version"
+          $version = "${{ needs.extract-version.outputs.app_version }}"
+          $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $releaseUrl = "https://github.com/${{ github.repository }}/releases/tag/$tag"
-          if ("${{ steps.publish_release.outcome }}" -eq "success") {
-            @"
+          @"
           已上传/更新 GitHub Release 资产：
+          - 平台: Windows
           - Release: $tag
           - Asset: TLS-shipinhao-v$version-windows.zip
           - URL: $releaseUrl
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          } else {
-            @"
-          GitHub Release 资产上传失败。
-          目标 Release: $tag
-          预期资产名：TLS-shipinhao-v$version-windows.zip
-          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          }
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: [extract-version, prepare-release]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r app/requirements.txt
+          python -m pip install cython setuptools
+
+      - name: Obfuscate code
+        shell: bash
+        run: python scripts/obfuscate.py
+
+      - name: Build macOS app
+        shell: bash
+        run: python scripts/build.py mac --dist
+
+      - name: Package macOS app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f dist/TLS-shipinhao-mac.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/TLS-shipinhao.app dist/TLS-shipinhao-mac.zip
+
+      - name: Upload macOS release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version='${{ needs.extract-version.outputs.app_version }}'
+          tag='${{ needs.extract-version.outputs.release_tag }}'
+          asset_name="TLS-shipinhao-v${version}-mac.zip"
+          asset_path='dist/TLS-shipinhao-mac.zip'
+
+          gh release upload "$tag" "$asset_path#$asset_name" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Summarize macOS release upload
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          tag='${{ needs.extract-version.outputs.release_tag }}'
+          version='${{ needs.extract-version.outputs.app_version }}'
+          release_url="https://github.com/${{ github.repository }}/releases/tag/$tag"
+          {
+            echo '已上传/更新 GitHub Release 资产：'
+            echo '- 平台: macOS'
+            echo "- Release: $tag"
+            echo "- Asset: TLS-shipinhao-v${version}-mac.zip"
+            echo "- URL: $release_url"
+          } >> "$GITHUB_STEP_SUMMARY"
