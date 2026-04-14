@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 # =============================================================================
@@ -11,6 +12,7 @@ from pathlib import Path
 # =============================================================================
 
 CONFIG_DIR_NAME = ".tls-shipinhao"
+APP_DATA_DIR_NAME = "TLS-shipinhao"
 COOKIE_FILE_NAME = "cookie.txt"
 COOKIE_FILE_STEM = "cookie"
 USER_CONFIG_POINTER = "selected_config_dir.txt"
@@ -106,6 +108,7 @@ ORDER_CACHE_COVERAGE_DAYS = 30
 ORDER_CACHE_INCREMENTAL_DAYS = 3
 ORDER_CACHE_INCREMENTAL_OVERLAP_DAYS = 1
 ORDER_CACHE_DB_NAME = "order_cache.sqlite3"
+ORDER_CACHE_DIR_NAME = "cache"
 
 # =============================================================================
 # 字体方案
@@ -195,6 +198,38 @@ _CONFIG_DIR_CACHE: str | None = None
 
 def get_home_config_dir() -> Path:
     return Path.home() / CONFIG_DIR_NAME
+
+
+def get_app_runtime_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def get_user_data_dir() -> Path:
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif os.name == "nt":
+        local_appdata = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        base = Path(local_appdata) if local_appdata else (Path.home() / "AppData" / "Local")
+    else:
+        xdg = os.environ.get("XDG_DATA_HOME")
+        base = Path(xdg) if xdg else (Path.home() / ".local" / "share")
+    data_dir = base / APP_DATA_DIR_NAME
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
+def get_order_cache_dir() -> Path:
+    cache_dir = get_user_data_dir() / ORDER_CACHE_DIR_NAME
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def get_internal_order_cache_dir() -> Path:
+    cache_dir = get_app_runtime_dir() / ORDER_CACHE_DIR_NAME
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
 
 
 class ConfigNotFoundError(FileNotFoundError):

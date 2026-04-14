@@ -2,11 +2,12 @@
 """TLS-shipinhao 订单本地缓存存取。"""
 
 import os
+import shutil
 import sqlite3
 import threading
 import time
 
-from settings import get_home_config_dir
+from settings import get_home_config_dir, get_internal_order_cache_dir, get_order_cache_dir
 from settings import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
 
 
@@ -14,11 +15,35 @@ class OrderCacheRepository:
     """订单缓存仓库（SQLite，线程安全）。"""
 
     def __init__(self, db_path: str | None = None):
-        base_dir = get_home_config_dir()
+        base_dir = get_order_cache_dir()
         self.db_path = db_path or os.path.join(base_dir, ORDER_CACHE_DB_NAME)
         self._connection = None
         self._initialized = False
         self._lock = threading.Lock()
+        if db_path is None:
+            self._migrate_legacy_cache_if_needed()
+
+    def _migrate_legacy_cache_if_needed(self) -> None:
+        legacy_candidates = [
+            os.path.join(get_home_config_dir(), ORDER_CACHE_DB_NAME),
+            os.path.join(get_internal_order_cache_dir(), ORDER_CACHE_DB_NAME),
+        ]
+        os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
+        if os.path.exists(self.db_path):
+            return
+
+        for legacy_db in legacy_candidates:
+            if os.path.abspath(legacy_db) == os.path.abspath(self.db_path):
+                continue
+            if not os.path.exists(legacy_db):
+                continue
+            shutil.move(legacy_db, self.db_path)
+            for suffix in ('-wal', '-shm'):
+                legacy_sidecar = f"{legacy_db}{suffix}"
+                target_sidecar = f"{self.db_path}{suffix}"
+                if os.path.exists(legacy_sidecar) and not os.path.exists(target_sidecar):
+                    shutil.move(legacy_sidecar, target_sidecar)
+            break
 
     def _connect(self):
         if self._connection is not None:
