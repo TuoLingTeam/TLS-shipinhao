@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 import requests
 
-from ..constants import (
+from settings import (
     AUTO_FILL_SCORE_THRESHOLD,
     EDUCATION_ORDER_MAX_DAYS,
     EVALUATION_MAX_DAYS,
@@ -29,9 +29,9 @@ from ..constants import (
     RATE_LIMIT_RETRY_COUNT,
     REQUEST_TIMEOUT,
 )
-from ..core.day_window import recent_day_range_timestamps
-from ..core.http_utils import build_request_params
-from .order_match_scoring import compute_match_score
+from core.day_window import recent_day_range_timestamps
+from core.http_utils import build_request_params
+from services.order_match_scoring import compute_match_score
 
 ProgressCallback = Callable[[str], None]
 JsonDict = dict[str, Any]

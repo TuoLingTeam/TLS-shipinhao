@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 订单缓存同步服务。"""
 
-from ..core.day_window import end_of_day_timestamp, recent_day_range_timestamps
-from ..constants import (
+from core.day_window import end_of_day_timestamp, recent_day_range_timestamps
+from settings import (
     ORDER_CACHE_COVERAGE_DAYS,
     ORDER_CACHE_INCREMENTAL_DAYS,
     ORDER_CACHE_INCREMENTAL_OVERLAP_DAYS,
     ORDER_CACHE_SCOPE,
 )
-from .order_cache import OrderCacheRepository
+from services.order_cache import OrderCacheRepository
 
 
 class OrderSyncService:

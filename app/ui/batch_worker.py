@@ -6,8 +6,8 @@ import time
 
 from PySide6.QtCore import QObject, Signal
 
-from ..services.delivery_api import create_session, update_single_order
-from ..config import ConfigNotFoundError
+from services.delivery_api import create_session, update_single_order
+from settings import ConfigNotFoundError
 
 
 class BatchWorker(QObject):

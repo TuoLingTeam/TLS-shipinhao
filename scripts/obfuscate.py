@@ -7,8 +7,8 @@
 混淆后的代码可直接用于 PyInstaller 打包。
 
 用法：
-    python app/scripts/obfuscate.py          # 编译
-    python app/scripts/obfuscate.py --clean   # 仅清理输出目录
+    python scripts/obfuscate.py          # 编译
+    python scripts/obfuscate.py --clean   # 仅清理输出目录
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent       # app/
 REPO_ROOT = APP_ROOT.parent                              # 仓库根目录
 DIST_SRC = REPO_ROOT / "app-dist"                        # 混淆输出目录
 
-SRC_DIR = APP_ROOT / "src"
+SRC_DIR = APP_ROOT
 MAIN_FILE = APP_ROOT / "main.py"
 
 
@@ -104,7 +104,7 @@ def ensure_cython() -> None:
 
 
 def collect_python_sources() -> list[Path]:
-    """按稳定顺序递归收集 src/ 下需要编译的 Python 文件。"""
+    """按稳定顺序递归收集 app/ 下需要编译的 Python 文件。"""
     return sorted(
         path
         for path in SRC_DIR.rglob("*.py")
@@ -113,9 +113,9 @@ def collect_python_sources() -> list[Path]:
 
 
 def module_name_from_path(path: Path) -> str:
-    """从源文件路径提取点分模块名（相对于 SRC_DIR 的父目录）。
+    """从源文件路径提取点分模块名（相对于 APP_ROOT）。
 
-    例如 src/services/delivery_api.py -> services.delivery_api，src/config.py -> config
+    例如 services/delivery_api.py -> services.delivery_api，settings.py -> settings
     """
     rel = path.relative_to(SRC_DIR)
     parts = list(rel.parent.parts) + [rel.stem]
@@ -128,7 +128,7 @@ def verify_compiled_modules(module_names: Iterable[str]) -> None:
     module_names 使用点分格式，如 "services.delivery_api"、"config"。
     """
     module_names = list(module_names)
-    compiled_dir = DIST_SRC / "src"
+    compiled_dir = DIST_SRC
     missing_modules: list[str] = []
 
     for module_name in module_names:
@@ -161,7 +161,7 @@ def compile_with_cython() -> None:
 
     print(f"Files to compile: {len(py_files)}")
     for module_name, source_file in zip(module_names, py_files):
-        print(f"  {source_file} -> src.{module_name}")
+        print(f"  {source_file} -> {module_name}")
 
     setup_content = textwrap.dedent(f"""\
         from setuptools import setup
@@ -205,7 +205,7 @@ def compile_with_cython() -> None:
     # 复制所有 __init__.py 以保持包/子包结构
     for init_file in SRC_DIR.rglob("__init__.py"):
         rel = init_file.relative_to(SRC_DIR)
-        init_dst = DIST_SRC / "src" / rel
+        init_dst = DIST_SRC / rel
         init_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(init_file, init_dst)
 

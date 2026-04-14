@@ -3,7 +3,7 @@
  * Cloudflare Workers + D1
  */
 
-import ADMIN_HTML from "./admin.html";
+import ADMIN_HTML from "../admin/admin.html";
 
 // ---------------------------------------------------------------------------
 // 工具函数

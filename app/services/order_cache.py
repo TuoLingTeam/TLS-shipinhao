@@ -6,8 +6,8 @@ import sqlite3
 import threading
 import time
 
-from ..config import get_home_config_dir
-from ..constants import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
+from settings import get_home_config_dir
+from settings import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
 
 
 class OrderCacheRepository:

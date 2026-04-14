@@ -7,30 +7,28 @@
 ```text
 TLS-shipinhao/
 ├── app/                          # 桌面客户端（Python + PySide6）
-│   ├── main.py                   # 入口，启动 src.app.main
+│   ├── main.py                   # 入口，调用 bootstrap.main()
+│   ├── bootstrap.py              # 程序启动入口（QApplication 初始化）
+│   ├── settings.py               # 全局配置与常量（URL、窗口尺寸、抓取参数、匹配权重等）
 │   ├── requirements.txt          # Python 依赖
-│   ├── src/
-│   │   ├── __init__.py
-│   │   ├── app.py                # 程序入口（main 函数、QApplication 初始化）
-│   │   ├── constants.py          # 全局常量（URL、窗口尺寸、抓取参数、匹配权重等）
-│   │   ├── config.py             # 配置管理（cookie/biz_magic 读写、昵称标准化）
-│   │   ├── core/                 # 核心基础层
-│   │   │   ├── api.py            # 微信小商店 API 交互（订单查询、物流更新）
-│   │   │   ├── http_utils.py     # HTTP 工具（请求头构建、响应解析）
-│   │   │   ├── cookie_browser.py # Cookie 浏览器弹窗（WebEngine 登录采集）
-│   │   │   └── license.py        # 在线授权（卡密激活、设备绑定、离线校验）
-│   │   ├── services/             # 业务服务层
-│   │   │   ├── review_matcher.py # 中差评订单查找（多线程抓取、评价匹配）
-│   │   │   ├── order_cache.py    # 订单本地缓存（SQLite 持久化）
-│   │   │   └── order_sync.py     # 订单增量同步（缓存+远程协调）
-│   │   └── ui/                   # 界面层
-│   │       ├── window.py         # MainWindow 主窗口（UI 布局、事件处理）
-│   │       ├── widgets.py        # 自定义控件（批量输入框、授权弹窗、字体）
-│   │       ├── worker.py         # BatchWorker 后台批量任务执行器
-│   │       └── review_worker.py  # ReviewWorker 中差评查找后台线程
-│   └── scripts/
-│       ├── obfuscate.py          # Cython 混淆编译脚本
-│       └── build.py              # PyInstaller 打包构建脚本
+│   ├── assets/                   # 静态资源
+│   │   └── favicon.png
+│   ├── core/                     # 核心基础层
+│   │   ├── day_window.py         # 自然日时间窗口工具
+│   │   ├── http_utils.py         # HTTP 工具（请求头构建、响应解析）
+│   │   └── license.py            # 在线授权（卡密激活、设备绑定、离线校验）
+│   ├── services/                 # 业务服务层
+│   │   ├── delivery_api.py       # 发货/物流接口
+│   │   ├── order_cache.py        # 订单本地缓存（SQLite 持久化）
+│   │   ├── order_match_scoring.py# 订单匹配评分
+│   │   ├── order_sync.py         # 订单增量同步（缓存+远程协调）
+│   │   └── review_matcher.py     # 中差评订单查找（抓取、匹配、汇总）
+│   └── ui/                       # 界面层
+│       ├── batch_worker.py       # 批量任务后台执行器
+│       ├── cookie_dialog.py      # Cookie 浏览器弹窗
+│       ├── review_worker.py      # 中差评/品退任务后台执行器
+│       ├── widgets.py            # 自定义控件与通用 UI 组件
+│       └── window.py             # MainWindow 主窗口
 ├── backend/                      # 卡密授权后端（Cloudflare Workers + D1）
 │   ├── src/
 │   │   ├── index.js              # Worker 入口（API 路由、卡密生成/校验）
@@ -38,18 +36,22 @@ TLS-shipinhao/
 │   ├── schema.sql                # D1 数据库建表语句
 │   ├── wrangler.toml             # Workers 部署配置
 │   └── README.md                 # 后端详细文档
+├── scripts/                      # 构建/混淆脚本
+│   ├── obfuscate.py              # Cython 混淆编译脚本
+│   └── build.py                  # PyInstaller 打包构建脚本
 └── README.md
 ```
 
 ## 模块依赖关系
 
 ```text
-constants ← config ← core/api ← services/review_matcher
-                    ← core/http_utils      ↓
-                    ← core/license    services/order_cache ← services/order_sync
-                                           ↓
-              ui/widgets + ui/worker ← ui/window ← app（入口）
-                        ui/review_worker ↗
+settings ← core ← services/review_matcher
+               ← services/order_cache ← services/order_sync
+               ← services/delivery_api
+               ← core/http_utils
+               ← core/license
+
+ui/widgets + ui/*worker ← ui/window ← app/main.py
 ```
 
 ## 功能特性
@@ -74,11 +76,6 @@ constants ← config ← core/api ← services/review_matcher
 # 安装依赖
 pip install -r app/requirements.txt
 
-#激活虚拟环境
-source .venv/bin/activate
-#激退出虚拟环境
-deactivate .venv/bin/activate
-
 # 运行
 python app/main.py
 ```
@@ -87,10 +84,10 @@ python app/main.py
 
 ```bash
 # Cython 混淆编译
-python app/scripts/obfuscate.py
+python scripts/obfuscate.py
 
 # PyInstaller 打包（使用混淆后的代码）
-python app/scripts/build.py --dist
+python scripts/build.py --dist
 ```
 
 ### 后端部署

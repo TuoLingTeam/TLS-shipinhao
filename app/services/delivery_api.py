@@ -7,15 +7,15 @@ import logging
 
 import requests
 
-from ..config import get_cookie, get_magic
-from ..constants import (
+from settings import get_cookie, get_magic
+from settings import (
     DELIVERY_MISMATCH_MESSAGE,
     ORDER_DELIVERY_UPDATE_URL,
     ORDER_DETAIL_URL,
     ORDER_INIT_SHIP_DATA_URL,
     REQUEST_TIMEOUT,
 )
-from ..core.http_utils import (
+from core.http_utils import (
     build_headers,
     build_request_params,
     get_payload_error,

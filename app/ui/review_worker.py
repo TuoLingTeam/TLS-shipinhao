@@ -6,11 +6,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QObject, Signal
 
-from ..config import ConfigNotFoundError, get_cookie, get_magic, serialize_cookie_data
-from ..constants import ORDER_CACHE_COVERAGE_DAYS
-from ..core.day_window import recent_day_range_timestamps
-from ..services.order_sync import OrderSyncService
-from ..services.review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
+from settings import ConfigNotFoundError, get_cookie, get_magic, serialize_cookie_data
+from settings import ORDER_CACHE_COVERAGE_DAYS
+from core.day_window import recent_day_range_timestamps
+from services.order_sync import OrderSyncService
+from services.review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
 
 ORDER_FETCH_BUFFER_DAYS = 30
 TASK_REVIEW_MATCH = "review_match"

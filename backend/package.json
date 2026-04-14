@@ -1,12 +1,12 @@
 {
-  "name": "tls-shipinhao-license-api",
+  "name": "tls-shipinhao",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute tls-license-db --file=schema.sql",
-    "db:init:local": "wrangler d1 execute tls-license-db --local --file=schema.sql"
+    "db:init": "wrangler d1 execute tls-license-db --file=db/schema.sql",
+    "db:init:local": "wrangler d1 execute tls-license-db --local --file=db/schema.sql"
   },
   "devDependencies": {
     "wrangler": "^4"

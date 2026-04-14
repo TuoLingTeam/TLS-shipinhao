@@ -19,11 +19,15 @@ https://sphapi.199908.top/admin
 ```text
 backend/
 ├── src/
-│   ├── index.js          # Worker 入口（API 路由、卡密生成/校验、管理员接口）
-│   └── admin.html        # 管理后台页面（构建时以 Text 方式导入 Worker）
-├── schema.sql            # D1 数据库建表语句
+│   ├── worker/
+│   │   └── index.js      # Worker 入口（API 路由、卡密生成/校验、管理员接口）
+│   └── admin/
+│       └── admin.html    # 管理后台页面（构建时以 Text 方式导入 Worker）
+├── db/
+│   └── schema.sql        # D1 数据库建表语句
 ├── wrangler.toml         # Cloudflare Workers 部署配置
 ├── package.json          # npm 脚本与依赖
+├── package-lock.json
 └── README.md
 ```
 
@@ -56,11 +60,11 @@ Worker 入口与路由定义在 [wrangler.toml](./wrangler.toml)。
 本项目依赖两个 Secret：
 
 - `HMAC_SECRET`
-  用于卡密签名校验，必须与客户端 [app/src/core/license.py](../app/src/core/license.py) 中使用的密钥保持一致。
+  用于卡密签名校验，必须与客户端 [app/core/license.py](../app/core/license.py) 中使用的密钥保持一致。
 - `ADMIN_SECRET`
   用于 `/admin` 管理后台登录和管理员接口鉴权。
 
-客户端当前使用的后端地址定义在 [app/src/constants.py](../app/src/constants.py)：
+客户端当前使用的后端地址定义在 [app/settings.py](../app/settings.py)：
 
 ```python
 LICENSE_API_BASE_URL = "https://sphapi.199908.top"
@@ -134,7 +138,7 @@ npm run dev
 
 ## 管理后台
 
-管理后台页面位于 `src/admin.html`，通过 esbuild Text import 在构建时内联到 Worker 中。管理接口仅允许同源访问，不开放 CORS。
+管理后台页面位于 `src/admin/admin.html`，通过 esbuild Text import 在构建时内联到 Worker 中。管理接口仅允许同源访问，不开放 CORS。
 
 登录后支持：
 

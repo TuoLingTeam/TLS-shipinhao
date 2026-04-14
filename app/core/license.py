@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 
 import requests
 
-from ..constants import CONFIG_DIR_NAME
+from settings import CONFIG_DIR_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,7 @@ def _invalidate_license_file() -> None:
 
 def _post_with_fallback(path: str, payload: dict) -> requests.Response:
     """依次尝试每个 API 地址发送 POST 请求，首个成功即返回。"""
-    from ..constants import LICENSE_API_BASE_URLS, LICENSE_API_TIMEOUT
+    from settings import LICENSE_API_BASE_URLS, LICENSE_API_TIMEOUT
 
     last_exc: Optional[Exception] = None
     for base_url in LICENSE_API_BASE_URLS:

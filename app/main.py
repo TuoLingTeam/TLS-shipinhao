@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao工具入口。"""
 
-from src.app import main
+from app.app import main
 
 
 if __name__ == "__main__":

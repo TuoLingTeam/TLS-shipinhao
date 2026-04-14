@@ -43,11 +43,11 @@ DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
 MAIN_FILE = APP_ROOT / "main.py"
 COOKIE_FILE = REPO_ROOT / "cookie.txt"
-SOURCE_ICON_FILE = APP_ROOT / "src" / "favicon.png"
+SOURCE_ICON_FILE = APP_ROOT / "assets" / "favicon.png"
 MACOS_ICON_FILE = BUILD_DIR / "app_icon.icns"
 WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
 PYINSTALLER_CACHE_DIR = REPO_ROOT / ".pyinstaller"
-CONSTANTS_PY = APP_ROOT / "src" / "constants.py"
+SETTINGS_PY = APP_ROOT / "settings.py"
 
 # 构建时需要的最小依赖集合（避免漏装导致中断）。
 BUILD_REQUIREMENTS = [
@@ -80,23 +80,21 @@ HIDDEN_IMPORTS = [
 
 # Cython 编译后的模块（使用混淆源时需要）
 CYTHON_MODULES = [
-    "src.app",
-    "src.config",
-    "src.constants",
-    "src.core",
-    "src.core.http_utils",
-    "src.core.license",
-    "src.services",
-    "src.services.delivery_api",
-    "src.services.order_cache",
-    "src.services.order_sync",
-    "src.services.review_matcher",
-    "src.ui",
-    "src.ui.batch_worker",
-    "src.ui.cookie_dialog",
-    "src.ui.review_worker",
-    "src.ui.widgets",
-    "src.ui.window",
+    "app",
+    "core",
+    "core.http_utils",
+    "core.license",
+    "services",
+    "services.delivery_api",
+    "services.order_cache",
+    "services.order_sync",
+    "services.review_matcher",
+    "ui",
+    "ui.batch_worker",
+    "ui.cookie_dialog",
+    "ui.review_worker",
+    "ui.widgets",
+    "ui.window",
 ]
 
 # Cython 模块依赖中 PyInstaller 可能无法自动检测到的库
@@ -245,13 +243,13 @@ QT_KEEP_FRAMEWORKS = {
 
 
 # =========================
-# 版本号（与 app/src/constants.py 中 APP_VERSION 保持一致）
+# 版本号（与 app/settings.py 中 APP_VERSION 保持一致）
 # =========================
 def get_app_version() -> str:
-    """从 constants.py 读取 APP_VERSION。"""
-    if not CONSTANTS_PY.exists():
+    """从 settings.py 读取 APP_VERSION。"""
+    if not SETTINGS_PY.exists():
         return "0.0.0"
-    text = CONSTANTS_PY.read_text(encoding="utf-8")
+    text = SETTINGS_PY.read_text(encoding="utf-8")
     match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
     return match.group(1).strip() if match else "0.0.0"
 
@@ -538,10 +536,10 @@ def _generate_runtime_hook() -> Path:
     BUILD_DIR.mkdir(exist_ok=True)
     hook_path = BUILD_DIR / "_rthook_init_packages.py"
     hook_path.write_text(
-        "import src\n"
-        "import src.core\n"
-        "import src.services\n"
-        "import src.ui\n",
+        "import app\n"
+        "import core\n"
+        "import services\n"
+        "import ui\n",
         encoding="utf-8",
     )
     return hook_path
@@ -755,7 +753,7 @@ def resolve_profile(profile: str, use_dist: bool = False) -> tuple[str, Path]:
             if not entry.exists():
                 raise SystemExit(
                     f"混淆分发目录不存在: {APP_DIST}\n"
-                    "请先运行: python app/scripts/obfuscate.py"
+                    "请先运行: python scripts/obfuscate.py"
                 )
             return MAIN_APP_NAME, entry
         return MAIN_APP_NAME, MAIN_FILE

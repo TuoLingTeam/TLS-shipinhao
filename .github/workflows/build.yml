@@ -43,7 +43,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $raw = Get-Content -Path 'app/src/constants.py' -Raw
+          $raw = Get-Content -Path 'app/settings.py' -Raw
           if ($raw -notmatch 'APP_VERSION\s*=\s*"([^"]+)"') {
             $version = '0.0'
           } else {
@@ -53,11 +53,11 @@ jobs:
 
       - name: Obfuscate code
         shell: pwsh
-        run: python app/scripts/obfuscate.py
+        run: python scripts/obfuscate.py
 
       - name: Build Windows app
         shell: pwsh
-        run: python app/scripts/build.py windows --dist
+        run: python scripts/build.py windows --dist
 
       - name: Publish versioned release asset
         id: publish_release

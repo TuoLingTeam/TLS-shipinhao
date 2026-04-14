@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..config import (
+from settings import (
     ConfigNotFoundError,
     extract_biz_magic_from_cookie,
     get_config_dir_cache,
@@ -37,7 +37,7 @@ from ..config import (
     save_cookie_data,
     save_user_config_dir,
 )
-from ..constants import (
+from settings import (
     APP_COLORS,
     AUTHOR_WECHAT,
     BADGE_HEIGHT,
@@ -86,8 +86,8 @@ from ..constants import (
     scale_px,
     set_ui_scale,
 )
-from ..core.license import check_stored_license, check_stored_license_local
-from .widgets import (
+from core.license import check_stored_license, check_stored_license_local
+from ui.widgets import (
     BatchInputEdit,
     LicenseDialog,
     build_fixed_font,
@@ -99,8 +99,8 @@ from .widgets import (
     get_license_reason_text,
     reset_font_caches,
 )
-from .batch_worker import BatchWorker
-from .review_worker import (
+from ui.batch_worker import BatchWorker
+from ui.review_worker import (
     ReviewMatcherWorker,
     TERMINAL_STATUS_CANCELLED,
     TERMINAL_STATUS_ERROR,
@@ -1663,7 +1663,7 @@ class MainWindow(QWidget):
         """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
         # 延迟导入 QtWebEngine 相关模块，避免启动时加载
         try:
-            from .cookie_dialog import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
+            from ui.cookie_dialog import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
         except ImportError as exc:
             self.show_message(
                 QMessageBox.Warning,

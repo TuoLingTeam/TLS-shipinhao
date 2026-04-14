@@ -10,8 +10,8 @@ APP_ROOT = ROOT / "app"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from src.services.order_match_scoring import compute_match_score
-from src.services.review_matcher import BadReviewOrderFinder
+from services.order_match_scoring import compute_match_score
+from services.review_matcher import BadReviewOrderFinder
 
 
 def build_evaluation(*, buyer_nickname, product_id, sku_id, product_name, eval_time, evaluation_id="eval-1"):

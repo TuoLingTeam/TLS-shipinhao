@@ -16,9 +16,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..config import normalize_batch_text
-from ..constants import APP_COLORS, AUTHOR_WECHAT, get_ui_scale, scale_px
-from ..core.license import activate_license
+from settings import normalize_batch_text
+from settings import APP_COLORS, AUTHOR_WECHAT, get_ui_scale, scale_px
+from core.license import activate_license
 
 
 # ---------------------------------------------------------------------------
