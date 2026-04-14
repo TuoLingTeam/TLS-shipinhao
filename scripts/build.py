@@ -83,11 +83,13 @@ CYTHON_MODULES = [
     "bootstrap",
     "settings",
     "core",
+    "core.day_window",
     "core.http_utils",
     "core.license",
     "services",
     "services.delivery_api",
     "services.order_cache",
+    "services.order_match_scoring",
     "services.order_sync",
     "services.review_matcher",
     "ui",
@@ -537,7 +539,6 @@ def _generate_runtime_hook() -> Path:
     BUILD_DIR.mkdir(exist_ok=True)
     hook_path = BUILD_DIR / "_rthook_init_packages.py"
     hook_path.write_text(
-        "import settings\n"
         "import core\n"
         "import services\n"
         "import ui\n",
@@ -549,6 +550,8 @@ def _generate_runtime_hook() -> Path:
 def build_pyinstaller_base_cmd(python_bin: str, system: str, profile: str, use_dist: bool = False) -> list[str]:
     """组装 PyInstaller 公共参数。"""
     cmd = [python_bin, "-m", "PyInstaller", "--clean", "--noconfirm"]
+    if use_dist:
+        cmd.extend(["--paths", str(APP_DIST)])
 
     icon_file = prepare_icon(system, python_bin)
     if icon_file:

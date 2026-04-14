@@ -163,19 +163,26 @@ def compile_with_cython() -> None:
     for module_name, source_file in zip(module_names, py_files):
         print(f"  {source_file} -> {module_name}")
 
-    setup_content = textwrap.dedent(f"""\
-        from setuptools import setup
-        from Cython.Build import cythonize
+    extension_entries = "\n".join(
+        f"    Extension({module_name!r}, [{source_file!r}]),"
+        for module_name, source_file in zip(module_names, py_files)
+    )
 
-        setup(
-            ext_modules=cythonize(
-                {py_files!r},
-                compiler_directives={{
-                    "language_level": "3",
-                }},
-            ),
-        )
-    """)
+    setup_content = (
+        "from setuptools import setup, Extension\n"
+        "from Cython.Build import cythonize\n\n"
+        "extensions = [\n"
+        f"{extension_entries}\n"
+        "]\n\n"
+        "setup(\n"
+        "    ext_modules=cythonize(\n"
+        "        extensions,\n"
+        "        compiler_directives={\n"
+        '            "language_level": "3",\n'
+        "        },\n"
+        "    ),\n"
+        ")\n"
+    )
 
     setup_file = APP_ROOT / "_cython_setup.py"
     build_temp = APP_ROOT / "_cython_temp"
@@ -222,8 +229,9 @@ def compile_with_cython() -> None:
 def fix_cython_imports() -> None:
     """删除编译后残留的 .py 源文件，只保留 .so/.pyd 和 __init__.py。"""
     print("Fixing Cython import issues...")
+    keep_files = {DIST_SRC / "main.py"}
     for py_file in DIST_SRC.rglob("*.py"):
-        if py_file.name != "__init__.py":
+        if py_file.name != "__init__.py" and py_file not in keep_files:
             py_file.unlink()
             print(f"  Removed {py_file.relative_to(DIST_SRC)} (using .so version)")
 
