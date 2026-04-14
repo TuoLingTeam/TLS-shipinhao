@@ -261,40 +261,87 @@ jobs:
           fi
           git clone --depth 1 "https://${GITEE_USERNAME}:${GITEE_TOKEN}@gitee.com/tuolingshe/tuoling-shipinhao.git" /tmp/gitee-sync-repo
 
-      - name: Upload release assets to Gitee Release and rewrite version.json
+      - name: Resolve Gitee release id
         id: gitee_release
         env:
-          GITEE_USERNAME: ${{ secrets.GITEE_USERNAME }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: tuolingshe
           GITEE_REPO: tuoling-shipinhao
           RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
-          VERSION: ${{ needs.extract-version.outputs.app_version }}
-          BUILD_DATE: ${{ github.run_number }}
-          MAC_ASSET: ${{ steps.assets.outputs.mac_asset }}
-          WIN_ASSET: ${{ steps.assets.outputs.win_asset }}
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          from pathlib import Path
-          import json
           import os
           import requests
+          from pathlib import Path
 
           token = os.environ['GITEE_TOKEN']
           owner = os.environ['GITEE_OWNER']
           repo = os.environ['GITEE_REPO']
           tag = os.environ['RELEASE_TAG']
-          version = os.environ['VERSION']
-          build_date = int(os.environ['BUILD_DATE'])
-          mac_asset = Path(os.environ['MAC_ASSET'])
-          win_asset = Path(os.environ['WIN_ASSET'])
           output_path = Path(os.environ['GITHUB_OUTPUT'])
-          version_file = Path('/tmp/gitee-sync-repo/version.json')
           session = requests.Session()
           session.headers.update({'Accept': 'application/json'})
           api_base = f'https://gitee.com/api/v5/repos/{owner}/{repo}'
+
+          def request(method, url, **kwargs):
+              params = kwargs.pop('params', {}) or {}
+              data = kwargs.pop('data', None)
+              if data is None:
+                  data = {}
+              data.setdefault('access_token', token)
+              response = session.request(method, url, params=params, data=data, timeout=180, **kwargs)
+              response.raise_for_status()
+              return response.json() if response.text else None
+
+          releases = request('GET', f'{api_base}/releases', params={'access_token': token, 'per_page': 100})
+          release = next((item for item in releases if item.get('tag_name') == tag), None)
+          if release is None:
+              release = request(
+                  'POST',
+                  f'{api_base}/releases',
+                  data={
+                      'tag_name': tag,
+                      'name': tag,
+                      'body': f'Automated sync for {tag}',
+                      'target_commitish': 'master',
+                      'prerelease': 'false',
+                  },
+              )
+
+          with output_path.open('a', encoding='utf-8') as fh:
+              fh.write(f"release_id={release['id']}\n")
+          PY
+
+      - name: Upload Windows zip to Gitee Release
+        id: upload_win
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: tuolingshe
+          GITEE_REPO: tuoling-shipinhao
+          RELEASE_ID: ${{ steps.gitee_release.outputs.release_id }}
+          VERSION: ${{ needs.extract-version.outputs.app_version }}
+          WIN_ASSET: ${{ steps.assets.outputs.win_asset }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import requests
+          from pathlib import Path
+
+          token = os.environ['GITEE_TOKEN']
+          owner = os.environ['GITEE_OWNER']
+          repo = os.environ['GITEE_REPO']
+          release_id = os.environ['RELEASE_ID']
+          version = os.environ['VERSION']
+          asset_path = Path(os.environ['WIN_ASSET'])
+          output_path = Path(os.environ['GITHUB_OUTPUT'])
+          target_name = f'TLS-shipinhao-{version}-win.zip'
+          session = requests.Session()
+          session.headers.update({'Accept': 'application/json'})
+          api_base = f'https://gitee.com/api/v5/repos/{owner}/{repo}/releases/{release_id}'
 
           def request(method, url, **kwargs):
               params = kwargs.pop('params', {}) or {}
@@ -306,63 +353,118 @@ jobs:
                   data.setdefault('access_token', token)
               else:
                   params.setdefault('access_token', token)
-              response = session.request(method, url, params=params, data=data, files=files, timeout=180, **kwargs)
+              response = session.request(method, url, params=params, data=data, files=files, timeout=900, **kwargs)
               response.raise_for_status()
               return response.json() if response.text else None
 
-          releases = request('GET', f'{api_base}/releases', params={'access_token': token, 'per_page': 100})
-          release = next((item for item in releases if item.get('tag_name') == tag), None)
-          if release is None:
-              payload = {
-                  'tag_name': tag,
-                  'name': tag,
-                  'body': f'Automated sync for {tag}',
-                  'target_commitish': 'master',
-                  'prerelease': 'false',
-              }
-              release = request('POST', f'{api_base}/releases', data=payload)
+          existing_files = request('GET', f'{api_base}/attach_files', params={'access_token': token, 'per_page': 100}) or []
+          existing = next((item for item in existing_files if item.get('name') == target_name), None)
+          if existing and existing.get('id'):
+              request('DELETE', f"{api_base}/attach_files/{existing['id']}", params={'access_token': token})
 
-          release_id = release['id']
-          existing_files = request('GET', f'{api_base}/releases/{release_id}/attach_files', params={'access_token': token, 'per_page': 100}) or []
-          existing_by_name = {item.get('name'): item for item in existing_files}
+          with asset_path.open('rb') as fh:
+              uploaded = request(
+                  'POST',
+                  f'{api_base}/attach_files',
+                  files={'file': (target_name, fh, 'application/zip')},
+              )
 
-          def upload_asset(file_path: Path, target_name: str) -> str:
-              existing = existing_by_name.get(target_name)
-              if existing is not None:
-                  attach_id = existing.get('id')
-                  if attach_id:
-                      request('DELETE', f'{api_base}/releases/{release_id}/attach_files/{attach_id}', params={'access_token': token})
-              with file_path.open('rb') as fh:
-                  uploaded = request(
-                      'POST',
-                      f'{api_base}/releases/{release_id}/attach_files',
-                      files={'file': (target_name, fh, 'application/zip')},
-                  )
-              url = uploaded.get('browser_download_url') or uploaded.get('download_url') or uploaded.get('url')
-              if not url:
-                  raise RuntimeError(f'Gitee 附件上传成功，但未返回下载地址: {target_name}')
-              return url
+          url = uploaded.get('browser_download_url') or uploaded.get('download_url') or uploaded.get('url')
+          if not url:
+              raise RuntimeError('Windows 附件上传成功，但未返回下载地址。')
+          with output_path.open('a', encoding='utf-8') as fh:
+              fh.write(f'win_url={url}\n')
+          PY
 
-          mac_name = f'TLS-shipinhao-{version}-mac.zip'
-          win_name = f'TLS-shipinhao-{version}-win.zip'
-          mac_url = upload_asset(mac_asset, mac_name)
-          win_url = upload_asset(win_asset, win_name)
+      - name: Upload Mac zip to Gitee Release
+        id: upload_mac
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: tuolingshe
+          GITEE_REPO: tuoling-shipinhao
+          RELEASE_ID: ${{ steps.gitee_release.outputs.release_id }}
+          VERSION: ${{ needs.extract-version.outputs.app_version }}
+          MAC_ASSET: ${{ steps.assets.outputs.mac_asset }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import requests
+          from pathlib import Path
+
+          token = os.environ['GITEE_TOKEN']
+          owner = os.environ['GITEE_OWNER']
+          repo = os.environ['GITEE_REPO']
+          release_id = os.environ['RELEASE_ID']
+          version = os.environ['VERSION']
+          asset_path = Path(os.environ['MAC_ASSET'])
+          output_path = Path(os.environ['GITHUB_OUTPUT'])
+          target_name = f'TLS-shipinhao-{version}-mac.zip'
+          session = requests.Session()
+          session.headers.update({'Accept': 'application/json'})
+          api_base = f'https://gitee.com/api/v5/repos/{owner}/{repo}/releases/{release_id}'
+
+          def request(method, url, **kwargs):
+              params = kwargs.pop('params', {}) or {}
+              data = kwargs.pop('data', None)
+              files = kwargs.pop('files', None)
+              if files is None:
+                  if data is None:
+                      data = {}
+                  data.setdefault('access_token', token)
+              else:
+                  params.setdefault('access_token', token)
+              response = session.request(method, url, params=params, data=data, files=files, timeout=900, **kwargs)
+              response.raise_for_status()
+              return response.json() if response.text else None
+
+          existing_files = request('GET', f'{api_base}/attach_files', params={'access_token': token, 'per_page': 100}) or []
+          existing = next((item for item in existing_files if item.get('name') == target_name), None)
+          if existing and existing.get('id'):
+              request('DELETE', f"{api_base}/attach_files/{existing['id']}", params={'access_token': token})
+
+          with asset_path.open('rb') as fh:
+              uploaded = request(
+                  'POST',
+                  f'{api_base}/attach_files',
+                  files={'file': (target_name, fh, 'application/zip')},
+              )
+
+          url = uploaded.get('browser_download_url') or uploaded.get('download_url') or uploaded.get('url')
+          if not url:
+              raise RuntimeError('Mac 附件上传成功，但未返回下载地址。')
+          with output_path.open('a', encoding='utf-8') as fh:
+              fh.write(f'mac_url={url}\n')
+          PY
+
+      - name: Rewrite version.json for Gitee
+        env:
+          VERSION: ${{ needs.extract-version.outputs.app_version }}
+          BUILD_DATE: ${{ github.run_number }}
+          MAC_URL: ${{ steps.upload_mac.outputs.mac_url }}
+          WIN_URL: ${{ steps.upload_win.outputs.win_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
           payload = {
               'app': 'TLS-shipinhao',
-              'version': version,
-              'build': build_date,
+              'version': os.environ['VERSION'],
+              'build': int(os.environ['BUILD_DATE']),
               'mandatory': False,
-              'mac': {'url': mac_url},
-              'windows': {'url': win_url},
+              'mac': {'url': os.environ['MAC_URL']},
+              'windows': {'url': os.environ['WIN_URL']},
           }
-          version_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-
-          with output_path.open('a', encoding='utf-8') as fh:
-              fh.write(f'mac_url={mac_url}\n')
-              fh.write(f'win_url={win_url}\n')
+          Path('/tmp/gitee-sync-repo/version.json').write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
           PY
-
       - name: Commit and push version.json to Gitee
         shell: bash
         env:
