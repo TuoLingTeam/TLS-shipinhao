@@ -76,6 +76,9 @@ ui/widgets + ui/*worker ← ui/window ← app/main.py
 # 安装依赖
 pip install -r app/requirements.txt
 
+#激活虚拟环境
+source .venv/bin/activate
+
 # 运行
 python app/main.py
 ```
