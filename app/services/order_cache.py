@@ -14,6 +14,8 @@ from settings import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
 class OrderCacheRepository:
     """订单缓存仓库（SQLite，线程安全）。"""
 
+    _LEGACY_SIDECAR_SUFFIXES = ('-wal', '-shm')
+
     def __init__(self, db_path: str | None = None):
         base_dir = get_order_cache_dir()
         self.db_path = db_path or os.path.join(base_dir, ORDER_CACHE_DB_NAME)
@@ -23,26 +25,32 @@ class OrderCacheRepository:
         if db_path is None:
             self._migrate_legacy_cache_if_needed()
 
-    def _migrate_legacy_cache_if_needed(self) -> None:
-        legacy_candidates = [
+    @staticmethod
+    def _legacy_cache_candidates():
+        return [
             os.path.join(get_home_config_dir(), ORDER_CACHE_DB_NAME),
             os.path.join(get_internal_order_cache_dir(), ORDER_CACHE_DB_NAME),
         ]
+
+    def _move_sidecar_files(self, legacy_db: str) -> None:
+        for suffix in self._LEGACY_SIDECAR_SUFFIXES:
+            legacy_sidecar = f"{legacy_db}{suffix}"
+            target_sidecar = f"{self.db_path}{suffix}"
+            if os.path.exists(legacy_sidecar) and not os.path.exists(target_sidecar):
+                shutil.move(legacy_sidecar, target_sidecar)
+
+    def _migrate_legacy_cache_if_needed(self) -> None:
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
         if os.path.exists(self.db_path):
             return
 
-        for legacy_db in legacy_candidates:
+        for legacy_db in self._legacy_cache_candidates():
             if os.path.abspath(legacy_db) == os.path.abspath(self.db_path):
                 continue
             if not os.path.exists(legacy_db):
                 continue
             shutil.move(legacy_db, self.db_path)
-            for suffix in ('-wal', '-shm'):
-                legacy_sidecar = f"{legacy_db}{suffix}"
-                target_sidecar = f"{self.db_path}{suffix}"
-                if os.path.exists(legacy_sidecar) and not os.path.exists(target_sidecar):
-                    shutil.move(legacy_sidecar, target_sidecar)
+            self._move_sidecar_files(legacy_db)
             break
 
     def _connect(self):
@@ -450,6 +458,20 @@ class OrderCacheRepository:
             )
         return len(order_ids)
 
+    @staticmethod
+    def _deserialize_sale_param(raw_value: str) -> str:
+        """兼容旧格式 sale_param 序列化数据。"""
+        raw_sp = raw_value or ""
+        if raw_sp.startswith("[") and raw_sp.endswith("]"):
+            try:
+                import ast
+                parsed = ast.literal_eval(raw_sp)
+                if isinstance(parsed, list):
+                    return "|".join(str(v).strip() for v in parsed if str(v).strip())
+            except (ValueError, SyntaxError):
+                pass
+        return raw_sp
+
     def fetch_orders_in_range(self, start_timestamp: int, end_timestamp: int) -> list[dict]:
         """按时间范围读取订单并回组装为匹配器可消费的结构。"""
         self.initialize()
@@ -478,15 +500,7 @@ class OrderCacheRepository:
 
         products_by_order = {}
         for row in product_rows:
-            raw_sp = row["sale_param"] or ""
-            if raw_sp.startswith("[") and raw_sp.endswith("]"):
-                try:
-                    import ast
-                    parsed = ast.literal_eval(raw_sp)
-                    if isinstance(parsed, list):
-                        raw_sp = "|".join(str(v).strip() for v in parsed if str(v).strip())
-                except (ValueError, SyntaxError):
-                    pass
+            raw_sp = self._deserialize_sale_param(row["sale_param"])
             products_by_order.setdefault(row["order_id"], []).append(
                 {
                     "productId": row["product_id"],

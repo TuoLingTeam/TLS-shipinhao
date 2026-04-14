@@ -214,19 +214,21 @@ class CookieCaptureDialog(QDialog):
             return
         self.accept()
 
+    def _set_status_suffix(self, suffix):
+        """统一更新页面状态附加文案。"""
+        self._status_suffix = suffix
+        self._refresh_cookie_state()
+
     def _on_load_started(self):
         """页面开始加载时刷新状态。"""
-        self._status_suffix = "页面加载中，请稍候…"
-        self._refresh_cookie_state()
+        self._set_status_suffix("页面加载中，请稍候…")
 
     def _on_load_finished(self, ok):
         """页面加载完成后刷新状态。"""
         if ok:
-            self._status_suffix = ""
-            self._refresh_cookie_state()
+            self._set_status_suffix("")
             return
-        self._status_suffix = "页面加载失败，请检查网络后重试。"
-        self._refresh_cookie_state()
+        self._set_status_suffix("页面加载失败，请检查网络后重试。")
 
     def _on_cookie_added(self, cookie):
         """记录目标域名下新增的 Cookie。"""

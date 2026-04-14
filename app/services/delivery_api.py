@@ -34,6 +34,15 @@ _DELIVERY_MISMATCH_MARKERS = (
 )
 
 
+def _ensure_payload_success(payload, default_message):
+    """统一校验业务响应是否成功。"""
+    if payload.get("success") is False:
+        raise RuntimeError(f"获取订单详情失败：{get_payload_error(payload, default_message)}")
+
+    if payload.get("code") not in (None, 0):
+        raise RuntimeError(f"获取订单详情失败：{get_payload_error(payload, default_message)}")
+
+
 def _post_session_json_payload(
     session,
     url,
@@ -119,17 +128,7 @@ def fetch_init_ship_data_payload(order_id, session):
         order_id=str(order_id),
         log_label="init ship data",
     )
-
-    if payload.get("success") is False:
-        raise RuntimeError(
-            f"获取订单详情失败：{get_payload_error(payload, '发货初始化接口返回失败。')}"
-        )
-
-    if payload.get("code") not in (None, 0):
-        raise RuntimeError(
-            f"获取订单详情失败：{get_payload_error(payload, '发货初始化接口返回失败。')}"
-        )
-
+    _ensure_payload_success(payload, "发货初始化接口返回失败。")
     return payload
 
 
@@ -143,17 +142,7 @@ def fetch_order_detail_payload(order_id, session):
         order_id=str(order_id),
         log_label="order detail",
     )
-
-    if detail_payload.get("success") is False:
-        raise RuntimeError(
-            f"获取订单详情失败：{get_payload_error(detail_payload, '订单详情接口返回失败。')}"
-        )
-
-    if detail_payload.get("code") not in (None, 0):
-        raise RuntimeError(
-            f"获取订单详情失败：{get_payload_error(detail_payload, '订单详情接口返回失败。')}"
-        )
-
+    _ensure_payload_success(detail_payload, "订单详情接口返回失败。")
     return detail_payload
 
 
@@ -175,6 +164,13 @@ def _extract_delivery_snapshot(delivery_product_info):
     }
 
 
+def _extract_first_delivery_product_info(delivery_product_list):
+    """提取第一条物流对象，保持旧行为。"""
+    if not delivery_product_list:
+        raise RuntimeError("获取订单详情失败：订单详情中没有可更新的物流信息。")
+    return delivery_product_list[0]
+
+
 def _extract_raw_delivery_product_info_from_init_ship_data(payload):
     """从 initShipData 响应中提取原始物流对象。"""
     delivery_product_list = (
@@ -183,17 +179,13 @@ def _extract_raw_delivery_product_info_from_init_ship_data(payload):
         .get("deliveryProductInfo")
         or []
     )
-    if not delivery_product_list:
-        raise RuntimeError("获取订单详情失败：订单详情中没有可更新的物流信息。")
-    return delivery_product_list[0]
+    return _extract_first_delivery_product_info(delivery_product_list)
 
 
 def _extract_raw_delivery_product_info_from_order_detail(payload):
     """从 orderDetail 响应中提取原始物流对象。"""
     delivery_product_list = payload.get("expressInfo", {}).get("deliveryProductInfo") or []
-    if not delivery_product_list:
-        raise RuntimeError("获取订单详情失败：订单详情中没有可更新的物流信息。")
-    return delivery_product_list[0]
+    return _extract_first_delivery_product_info(delivery_product_list)
 
 
 def _build_delivery_context(delivery_product_info):
@@ -333,16 +325,13 @@ def update_delivery_info(order_id, tracking_number, delivery_product_info, sessi
 def update_single_order(order_id, tracking_number, session):
     """顺序执行单个订单更新。
 
-    使用 orderDetail 获取原始物流信息后只修改 waybillId，
+    使用当前物流上下文获取原始物流信息后只修改 waybillId，
     不主动改 deliveryId/deliveryName（与平台手动操作行为一致）。
     仅当服务器明确返回快递公司不匹配错误时，才用单号前缀重试。
     """
-    detail = fetch_order_detail_payload(order_id, session)
-    info_list = detail.get("expressInfo", {}).get("deliveryProductInfo") or []
-    if not info_list:
-        raise RuntimeError("获取订单详情失败：订单详情中没有可更新的物流信息。")
-    delivery_product_info = info_list[0]
-    old_waybill = str(delivery_product_info.get("waybillId") or "")
+    context = fetch_current_delivery_context(order_id, session)
+    delivery_product_info = context["raw"]
+    old_waybill = str(context["snapshot"].get("waybillId") or "")
 
     try:
         update_delivery_info(order_id, tracking_number, delivery_product_info, session)

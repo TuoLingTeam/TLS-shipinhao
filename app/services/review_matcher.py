@@ -1079,6 +1079,19 @@ class BadReviewOrderFinder:
             and set(left_tokens) == set(right_tokens)
         )
 
+    @staticmethod
+    def _build_product_reason(match_result: JsonDict) -> str:
+        """根据商品匹配结果构建文案。"""
+        if bool(match_result["productExact"]):
+            return "商品标题/商品ID/SKU 完全匹配"
+        return (
+            "商品信息相似度 "
+            f"{match_result['productSimilarity']}%(标题 {match_result['titleSimilarity']}%，"
+            f"ID {'命中' if match_result['productIdExact'] else '未命中'}，"
+            f"SKU {'命中' if match_result['skuIdExact'] else '未命中'})"
+            f"(扣 {match_result['productPenalty']} 分)"
+        )
+
     def _score_candidate_order(
         self,
         order_data: JsonDict,
@@ -1118,16 +1131,7 @@ class BadReviewOrderFinder:
                 )
             )
 
-        if bool(match_result["productExact"]):
-            reasons.append("商品标题/商品ID/SKU 完全匹配")
-        else:
-            reasons.append(
-                "商品信息相似度 "
-                f"{match_result['productSimilarity']}%(标题 {match_result['titleSimilarity']}%，"
-                f"ID {'命中' if match_result['productIdExact'] else '未命中'}，"
-                f"SKU {'命中' if match_result['skuIdExact'] else '未命中'})"
-                f"(扣 {match_result['productPenalty']} 分)"
-            )
+        reasons.append(self._build_product_reason(match_result))
 
         if score < MATCH_MIN_SCORE:
             return None

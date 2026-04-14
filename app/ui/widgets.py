@@ -16,8 +16,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from settings import normalize_batch_text
-from settings import APP_COLORS, AUTHOR_WECHAT, get_ui_scale, scale_px
+from settings import (
+    APP_COLORS,
+    AUTHOR_WECHAT,
+    get_ui_scale,
+    normalize_batch_text,
+    scale_px,
+)
 from core.license import activate_license
 
 
@@ -64,19 +69,24 @@ def get_dialog_content_margins():
     )
 
 
+def _scaled_dialog_spacing(base: int, *, min_value: int) -> int:
+    """统一弹窗间距换算。"""
+    return scale_px(base, min_value=min_value)
+
+
 def get_dialog_section_spacing():
     """统一弹窗主内容分组间距。"""
-    return scale_px(14, min_value=10)
+    return _scaled_dialog_spacing(14, min_value=10)
 
 
 def get_dialog_text_spacing():
     """统一弹窗文案堆叠间距。"""
-    return scale_px(8, min_value=6)
+    return _scaled_dialog_spacing(8, min_value=6)
 
 
 def get_dialog_action_spacing():
     """统一弹窗按钮区间距。"""
-    return scale_px(10, min_value=8)
+    return _scaled_dialog_spacing(10, min_value=8)
 
 
 # ---------------------------------------------------------------------------

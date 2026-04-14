@@ -33,6 +33,16 @@ def _resolve_data_root() -> str:
 # ---------------------------------------------------------------------------
 
 
+def _extract_first_non_header_line(output: str, *headers: str) -> str | None:
+    """从命令输出中提取第一条有效标识行。"""
+    ignored = {header.upper() for header in headers}
+    for line in output.strip().splitlines():
+        normalized = line.strip()
+        if normalized and normalized.upper() not in ignored:
+            return normalized
+    return None
+
+
 def get_device_id() -> str:
     """采集跨平台设备指纹，返回 SHA-256 前 16 位。"""
     raw = _collect_raw_fingerprint()
@@ -65,10 +75,11 @@ def _fingerprint_macos() -> str:
 
 
 def _fingerprint_windows() -> str:
-    for cmd in (
+    commands = (
         ["wmic", "csproduct", "get", "UUID"],
         ["powershell", "-Command", "(Get-CimInstance Win32_ComputerSystemProduct).UUID"],
-    ):
+    )
+    for cmd in commands:
         try:
             kwargs = {
                 "text": True,
@@ -79,10 +90,9 @@ def _fingerprint_windows() -> str:
             if sys.platform == "win32":
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
             output = subprocess.run(cmd, **kwargs).stdout
-            for line in output.strip().splitlines():
-                line = line.strip()
-                if line and line.upper() != "UUID":
-                    return line
+            candidate = _extract_first_non_header_line(output, "UUID")
+            if candidate:
+                return candidate
         except Exception:
             continue
     return _fallback_fingerprint()
@@ -220,15 +230,15 @@ def _post_with_fallback(path: str, payload: dict) -> requests.Response:
 
 def activate_license(key: str) -> dict:
     """激活许可证（在线验证 + 设备绑定 + 写入 license.json）。"""
-    key = key.strip()
-    if not key:
+    normalized_key = key.strip().upper()
+    if not normalized_key:
         raise ValueError("请输入卡密")
 
     device_id = get_device_id()
     raw_fingerprint = _collect_raw_fingerprint()
 
     resp = _post_with_fallback("/api/activate", {
-        "key": key.upper(),
+        "key": normalized_key,
         "device_id": device_id,
         "device_fingerprint": raw_fingerprint,
     })
@@ -243,7 +253,7 @@ def activate_license(key: str) -> dict:
         raise ValueError(f"激活失败：{message}")
 
     info = {
-        "key": key.upper(),
+        "key": normalized_key,
         "activated_at": result.get("activated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
         "expires_at": result.get("expires_at", ""),
         "device_id": device_id,

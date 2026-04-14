@@ -28,11 +28,10 @@ SIMILARITY_PENALTY_BANDS: tuple[tuple[int, int], ...] = (
     (0, 50),
 )
 
-PRODUCT_SIMILARITY_WEIGHTS = {
-    "product_id": 40,
-    "sku_id": 40,
-    "title": 20,
-}
+PRODUCT_ID_WEIGHT = 40
+PRODUCT_SKU_WEIGHT = 40
+PRODUCT_TITLE_WEIGHT = 20
+PRODUCT_SIMILARITY_WEIGHT_TOTAL = PRODUCT_ID_WEIGHT + PRODUCT_SKU_WEIGHT + PRODUCT_TITLE_WEIGHT
 
 MIN_MATCH_SCORE = 50
 TRAILING_DIGIT_CHARS = "0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉"
@@ -47,16 +46,13 @@ def clamp_percent(value: float | int) -> int:
     return max(0, min(100, numeric))
 
 
-def similarity_percent(left: str | None, right: str | None) -> int:
-    """昵称相似度（0~100）。
+def _sequence_similarity(left: str, right: str) -> int:
+    """基于 SequenceMatcher 计算百分比相似度。"""
+    return clamp_percent(SequenceMatcher(None, left, right).ratio() * 100)
 
-    规则：
-    1. 原样完全一致 = 100
-    2. 去首尾空白后完全一致 = 95
-    3. 一方为另一方“核心昵称 + 数字尾巴” = 95
-    4. 短昵称被长昵称完整包含 / 按顺序覆盖时，按长度给较高分
-    5. 兜底走 SequenceMatcher
-    """
+
+def similarity_percent(left: str | None, right: str | None) -> int:
+    """昵称相似度（0~100）。"""
     left_text = "" if left is None else str(left)
     right_text = "" if right is None else str(right)
     if left_text == right_text:
@@ -73,7 +69,7 @@ def similarity_percent(left: str | None, right: str | None) -> int:
     if stripped_similarity is not None:
         return stripped_similarity
 
-    return clamp_percent(SequenceMatcher(None, left_text, right_text).ratio() * 100)
+    return _sequence_similarity(left_text, right_text)
 
 
 def _strip_trailing_digit_tail(text: str) -> str:
@@ -100,6 +96,18 @@ def _single_char_containment_similarity(longer: str) -> int:
     """单字命中时使用保守相似度，避免被误判为高相似改名。"""
     normalized_length = max(len(longer or ""), 3)
     return clamp_percent(100 / normalized_length)
+
+
+def _subsequence_similarity_by_length(text: str) -> int | None:
+    """按较短文本长度返回子序列改名场景相似度。"""
+    length = len(text)
+    if length >= 4:
+        return 85
+    if length == 3:
+        return 80
+    if length == 2:
+        return 70
+    return None
 
 
 def _nickname_similarity_by_rename_patterns(left: str, right: str) -> int | None:
@@ -132,21 +140,13 @@ def _nickname_similarity_by_rename_patterns(left: str, right: str) -> int | None
             return 80
         return _single_char_containment_similarity(longer_core)
 
-    if _is_subsequence(shorter, longer):
-        if len(shorter) >= 4:
-            return 85
-        if len(shorter) == 3:
-            return 80
-        if len(shorter) == 2:
-            return 70
+    direct_similarity = _subsequence_similarity_by_length(shorter)
+    if direct_similarity is not None and _is_subsequence(shorter, longer):
+        return direct_similarity
 
-    if _is_subsequence(shorter_core, longer_core):
-        if len(shorter_core) >= 4:
-            return 85
-        if len(shorter_core) == 3:
-            return 80
-        if len(shorter_core) == 2:
-            return 70
+    core_similarity = _subsequence_similarity_by_length(shorter_core)
+    if core_similarity is not None and _is_subsequence(shorter_core, longer_core):
+        return core_similarity
 
     return None
 
@@ -170,7 +170,7 @@ def title_similarity_percent(left: str | None, right: str | None) -> int:
         return 0
     if left_norm == right_norm:
         return 100
-    return clamp_percent(SequenceMatcher(None, left_norm, right_norm).ratio() * 100)
+    return _sequence_similarity(left_norm, right_norm)
 
 
 def penalty_from_similarity(similarity: int) -> int:
@@ -180,6 +180,16 @@ def penalty_from_similarity(similarity: int) -> int:
         if value >= minimum:
             return penalty
     return 50
+
+
+def _weighted_product_similarity(product_id_similarity: int, sku_id_similarity: int, title_similarity: int) -> int:
+    """按约定权重计算商品综合相似度。"""
+    weighted = (
+        product_id_similarity * PRODUCT_ID_WEIGHT
+        + sku_id_similarity * PRODUCT_SKU_WEIGHT
+        + title_similarity * PRODUCT_TITLE_WEIGHT
+    ) / PRODUCT_SIMILARITY_WEIGHT_TOTAL
+    return clamp_percent(weighted)
 
 
 def compute_product_similarity(
@@ -207,10 +217,10 @@ def compute_product_similarity(
     sku_id_similarity = 100 if sku_id_exact else 0
     title_similarity = title_similarity_percent(eval_title, order_title)
 
-    weighted_similarity = clamp_percent(
-        (product_id_similarity * PRODUCT_SIMILARITY_WEIGHTS["product_id"] / 100)
-        + (sku_id_similarity * PRODUCT_SIMILARITY_WEIGHTS["sku_id"] / 100)
-        + (title_similarity * PRODUCT_SIMILARITY_WEIGHTS["title"] / 100)
+    weighted_similarity = _weighted_product_similarity(
+        product_id_similarity,
+        sku_id_similarity,
+        title_similarity,
     )
 
     product_exact = product_id_exact and sku_id_exact and title_exact

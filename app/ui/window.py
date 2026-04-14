@@ -638,7 +638,7 @@ class MainWindow(QWidget):
 
         self.action_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.config_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -648,7 +648,8 @@ class MainWindow(QWidget):
         self.left_column_layout.setSpacing(self._standard_layout_spacing())
         self.left_column_layout.addWidget(self.config_card)
         self.left_column_layout.addWidget(self.action_card)
-        self.left_column_layout.addWidget(self.license_card, 1)
+        self.left_column_layout.addWidget(self.license_card)
+        self.left_column_layout.addStretch(1)
 
         self.right_column_layout = QVBoxLayout()
         self.right_column_layout.setContentsMargins(0, 0, 0, 0)

@@ -4,11 +4,15 @@
 封装微信小商店 API 常用的请求构建、响应解析等功能。
 """
 
+from __future__ import annotations
+
 import platform
 from typing import Any
 
 import requests
 
+_PAYLOAD_MESSAGE_KEYS: tuple[str, ...] = ("errmsg", "message", "msg")
+_PAYLOAD_CODE_KEYS: tuple[str, ...] = ("code", "errcode", "ret")
 
 # 检测当前平台，用于构建合适的请求头
 _CURRENT_PLATFORM = platform.system()
@@ -45,6 +49,15 @@ _SEC_CH_UA_PLATFORM_WINDOWS = '"Windows"'
 _SEC_CH_UA_PLATFORM_MACOS = '"macOS"'
 
 
+def _extract_payload_message(payload: dict[str, Any]) -> str | None:
+    """从响应载荷中按约定字段提取首个可读消息。"""
+    for key in _PAYLOAD_MESSAGE_KEYS:
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return None
+
+
 def get_user_agent() -> str:
     """获取当前平台对应的 User-Agent。"""
     if _IS_MACOS:
@@ -60,15 +73,7 @@ def get_sec_ch_ua_platform() -> str:
 
 
 def build_headers(magic: str, referer: str = "") -> dict[str, str]:
-    """根据 magic 构建 HTTP 请求头。
-
-    Args:
-        magic: 微信商店 biz_magic 值
-        referer: Referer 头（可选）
-
-    Returns:
-        完整的请求头字典
-    """
+    """根据 magic 构建 HTTP 请求头。"""
     headers = {
         **_BASE_HEADERS,
         "User-Agent": get_user_agent(),
@@ -93,14 +98,7 @@ def build_request_params() -> dict[str, str]:
 
 
 def get_response_error(response: requests.Response) -> str:
-    """从 HTTP 响应中提取可读错误信息。
-
-    Args:
-        response: requests 响应对象
-
-    Returns:
-        错误描述字符串
-    """
+    """从 HTTP 响应中提取可读错误信息。"""
     try:
         payload = response.json()
     except ValueError:
@@ -112,10 +110,9 @@ def get_response_error(response: requests.Response) -> str:
     if not isinstance(payload, dict):
         return f"HTTP {response.status_code}"
 
-    for key in ("errmsg", "message", "msg"):
-        value = payload.get(key)
-        if value:
-            return str(value)
+    message = _extract_payload_message(payload)
+    if message:
+        return message
 
     errcode = payload.get("errcode")
     if errcode not in (None, 0):
@@ -125,28 +122,17 @@ def get_response_error(response: requests.Response) -> str:
 
 
 def get_payload_error(payload: dict[str, Any], default_message: str) -> str:
-    """从业务响应负载中提取更具体的错误信息。
-
-    Args:
-        payload: 业务响应 JSON 解析后的字典
-        default_message: 默认错误信息
-
-    Returns:
-        具体错误描述字符串
-    """
+    """从业务响应负载中提取更具体的错误信息。"""
     if not isinstance(payload, dict):
         return default_message
 
-    for key in ("errmsg", "message", "msg"):
-        value = payload.get(key)
-        if value:
-            return str(value)
+    message = _extract_payload_message(payload)
+    if message:
+        return message
 
-    for key in ("code", "errcode", "ret"):
+    for key in _PAYLOAD_CODE_KEYS:
         value = payload.get(key)
         if value not in (None, 0):
             return f"{default_message}（错误码 {value}）"
 
     return default_message
-
-

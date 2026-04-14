@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 后台批量任务执行器。"""
 
+from __future__ import annotations
+
 import threading
 import time
 
@@ -43,7 +45,6 @@ class BatchWorker(QObject):
     def stop(self):
         """请求终止任务（安全退出）。"""
         self._stopped = True
-        # 同时唤醒暂停中的 wait，使线程能够退出
         self._resume_event.set()
 
     def _wait_for_resume(self):
@@ -53,15 +54,14 @@ class BatchWorker(QObject):
                 return False
         return not self._stopped
 
+    def _sleep_between_steps(self, index: int, total_count: int) -> None:
+        """步骤之间统一节流，保持与原行为一致。"""
+        if index < total_count and not self._stopped:
+            time.sleep(self._STEP_INTERVAL)
+
     def _emit_step_failure(self, index, total_count, order_id, tracking_number, error):
         """统一发送单条失败信号。"""
-        self.step_failed.emit(
-            index,
-            total_count,
-            order_id,
-            tracking_number,
-            str(error),
-        )
+        self.step_failed.emit(index, total_count, order_id, tracking_number, str(error))
 
     def _emit_step_success(self, index, total_count, order_id, tracking_number, old_waybill):
         """统一发送单条成功信号。"""
@@ -99,27 +99,13 @@ class BatchWorker(QObject):
                         old_waybill = update_single_order(order_id, tracking_number, session)
                     except Exception as exc:  # noqa: BLE001
                         failure_count += 1
-                        self._emit_step_failure(
-                            index,
-                            total_count,
-                            order_id,
-                            tracking_number,
-                            exc,
-                        )
-                        if index < total_count and not self._stopped:
-                            time.sleep(self._STEP_INTERVAL)
+                        self._emit_step_failure(index, total_count, order_id, tracking_number, exc)
+                        self._sleep_between_steps(index, total_count)
                         continue
 
                     success_count += 1
-                    self._emit_step_success(
-                        index,
-                        total_count,
-                        order_id,
-                        tracking_number,
-                        old_waybill,
-                    )
-                    if index < total_count and not self._stopped:
-                        time.sleep(self._STEP_INTERVAL)
+                    self._emit_step_success(index, total_count, order_id, tracking_number, old_waybill)
+                    self._sleep_between_steps(index, total_count)
         except Exception as exc:  # noqa: BLE001
             failure_count += total_count - success_count - failure_count
             self.fatal_error.emit(str(exc))
