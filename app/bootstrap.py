@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
-"""TLS-shipinhao工具入口。"""
+"""TLS-shipinhao 工具启动入口。"""
 
 import sys
 
-# 预加载顶层模块，确保 frozen 环境中子包的相对 import 能正确解析
-import settings as _constants  # noqa: F401
-import settings as _config  # noqa: F401
+try:
+    import settings as _settings  # noqa: F401
+    from ui.window import MainWindow
+    from core.license import check_stored_license
+except ModuleNotFoundError:
+    from app import settings as _settings  # noqa: F401
+    from app.ui.window import MainWindow
+    from app.core.license import check_stored_license
 
 from PySide6.QtWidgets import QApplication
-
-from ui.window import MainWindow
-from core.license import check_stored_license
 
 
 def main():

@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""TLS-shipinhao工具入口。"""
+"""TLS-shipinhao 工具入口。"""
 
-from app.app import main
+import sys
+from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
+from bootstrap import main
 
 
 if __name__ == "__main__":

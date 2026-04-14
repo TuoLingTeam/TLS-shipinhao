@@ -26,7 +26,7 @@ REQUEST_TIMEOUT = 30
 # 窗口 & 品牌
 # =============================================================================
 
-APP_VERSION = "4.2"
+APP_VERSION = "4.3"
 WINDOW_TITLE = f"驼铃·视频小店差评处理 {APP_VERSION}"
 AUTHOR_WECHAT = "TLS-801"
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
@@ -188,54 +188,156 @@ LICENSE_STATUS_CACHE_TTL_SECONDS = 60
 # 配置读取 / Cookie 工具
 # =============================================================================
 
-class ConfigNotFoundError(FileNotFoundError):
-    def __init__(self, searched_dirs):
-        self.searched_dirs = list(searched_dirs)
-        super().__init__("未找到可用的配置目录")
+import re
+
+_CONFIG_DIR_CACHE: str | None = None
 
 
 def get_home_config_dir() -> Path:
     return Path.home() / CONFIG_DIR_NAME
 
 
-def _candidate_config_dirs():
-    dirs = []
+class ConfigNotFoundError(FileNotFoundError):
+    def __init__(self, searched_dirs):
+        self.searched_dirs = [str(item) for item in searched_dirs]
+        super().__init__("未找到可用的配置目录")
+
+
+
+def get_default_config_dir() -> str:
+    path = get_home_config_dir()
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
+
+def get_config_dir_cache() -> str | None:
+    return _CONFIG_DIR_CACHE
+
+
+def get_saved_user_config_dir() -> str | None:
     pointer = get_home_config_dir() / USER_CONFIG_POINTER
-    if pointer.exists():
-        try:
-            selected = pointer.read_text(encoding='utf-8').strip()
-            if selected:
-                dirs.append(Path(selected).expanduser())
-        except Exception:
-            pass
+    if not pointer.exists():
+        return None
+    try:
+        value = pointer.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None
+    return value or None
+
+
+def save_user_config_dir(config_dir: str) -> str:
+    global _CONFIG_DIR_CACHE
+    target = Path(config_dir).expanduser().resolve()
+    target.mkdir(parents=True, exist_ok=True)
+    home_dir = get_home_config_dir()
+    home_dir.mkdir(parents=True, exist_ok=True)
+    (home_dir / USER_CONFIG_POINTER).write_text(str(target), encoding="utf-8")
+    _CONFIG_DIR_CACHE = str(target)
+    return str(target)
+
+
+def _candidate_config_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    if _CONFIG_DIR_CACHE:
+        dirs.append(Path(_CONFIG_DIR_CACHE).expanduser())
+    saved = get_saved_user_config_dir()
+    if saved:
+        dirs.append(Path(saved).expanduser())
     dirs.append(get_home_config_dir())
-    return dirs
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for item in dirs:
+        normalized = str(item.resolve()) if item.exists() else str(item)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(item)
+    return unique
 
 
-def get_cookie() -> str:
+def normalize_batch_text(text: str) -> str:
+    items = parse_batch_input(text)
+    return "\n".join(items)
+
+
+def parse_batch_input(text: str) -> list[str]:
+    if not text:
+        return []
+    parts = re.split(r"[\s,，;；]+", text.strip())
+    return [item for item in parts if item]
+
+
+def serialize_cookie_data(cookie_data) -> str:
+    if isinstance(cookie_data, dict):
+        return "; ".join(f"{key}={value}" for key, value in cookie_data.items() if key)
+    return str(cookie_data or "")
+
+
+def read_cookie_data(cookie_path: str | os.PathLike[str]):
+    raw = Path(cookie_path).read_text(encoding="utf-8").strip()
+    cookie_map = {}
+    for chunk in raw.split(';'):
+        part = chunk.strip()
+        if not part or '=' not in part:
+            continue
+        key, value = part.split('=', 1)
+        key = key.strip()
+        if key:
+            cookie_map[key] = value.strip()
+    return cookie_map or raw
+
+
+def save_cookie_data(cookie_data, config_dir: str | os.PathLike[str] | None = None, remember_dir: bool = False) -> str:
+    target_dir = Path(config_dir or get_default_config_dir()).expanduser().resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    cookie_path = target_dir / COOKIE_FILE_NAME
+    cookie_path.write_text(serialize_cookie_data(cookie_data), encoding="utf-8")
+    if remember_dir:
+        save_user_config_dir(str(target_dir))
+    return str(cookie_path)
+
+
+def extract_biz_magic_from_cookie(cookie_data) -> str:
+    if isinstance(cookie_data, dict):
+        return str(cookie_data.get('biz_magic') or cookie_data.get('magic') or '').strip()
+    raw = serialize_cookie_data(cookie_data)
+    for pattern in (r'biz_magic=([^;\s]+)', r'magic=([^;\s]+)'):
+        match = re.search(pattern, raw)
+        if match:
+            return match.group(1).strip()
+    return ''
+
+
+def get_magic(cookie_data) -> str:
+    return extract_biz_magic_from_cookie(cookie_data)
+
+
+def resolve_config_files_in_dir(config_dir: str | os.PathLike[str]) -> dict[str, str]:
+    target = Path(config_dir).expanduser().resolve()
+    result: dict[str, str] = {}
+    cookie_file = target / COOKIE_FILE_NAME
+    if cookie_file.exists():
+        result['cookie'] = str(cookie_file)
+    return result
+
+
+def resolve_config_dir() -> str:
     searched = []
     for cfg_dir in _candidate_config_dirs():
-        searched.append(str(cfg_dir))
-        cookie_file = cfg_dir / COOKIE_FILE_NAME
-        if cookie_file.exists():
-            return cookie_file.read_text(encoding='utf-8').strip()
+        searched.append(cfg_dir)
+        resolved_files = resolve_config_files_in_dir(cfg_dir)
+        if 'cookie' in resolved_files:
+            return str(Path(cfg_dir).expanduser().resolve())
     raise ConfigNotFoundError(searched)
 
 
-def serialize_cookie_data(cookie_data):
-    if isinstance(cookie_data, dict):
-        return cookie_data.get('cookie', '') or cookie_data.get('cookie_str', '') or ''
-    return str(cookie_data or '')
-
-
-def get_magic(cookie_data: str) -> str:
-    # 兼容旧逻辑：从 cookie 文本中提取 biz_magic / magic。
-    import re
-    for pattern in (r'biz_magic=([^;\s]+)', r'magic=([^;\s]+)'):
-        match = re.search(pattern, cookie_data or '')
-        if match:
-            return match.group(1)
-    return ''
+def get_cookie():
+    resolved_dir = resolve_config_dir()
+    cookie_path = resolve_config_files_in_dir(resolved_dir).get('cookie')
+    if not cookie_path:
+        raise ConfigNotFoundError([resolved_dir])
+    return read_cookie_data(cookie_path)
 
 # =============================================================================
 # 运行时 UI 缩放
@@ -264,6 +366,3 @@ def scale_px(value, *, min_value=0):
 def get_platform_default_window_size():
     return DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
 
-
-def get_home_config_dir() -> Path:
-    return Path.home() / CONFIG_DIR_NAME
