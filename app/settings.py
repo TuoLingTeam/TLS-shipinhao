@@ -28,8 +28,10 @@ REQUEST_TIMEOUT = 30
 # 窗口 & 品牌
 # =============================================================================
 
-APP_VERSION = "4.3"
+APP_VERSION = "4.3.0"
 WINDOW_TITLE = f"驼铃·视频小店差评处理 {APP_VERSION}"
+UPDATE_VERSION_URL = "https://gitee.com/tuolingshe/tuoling-shipinhao/raw/master/version.json"
+UPDATE_CHECK_DELAY_MS = 1200
 AUTHOR_WECHAT = "TLS-801"
 TUTORIAL_URL = "https://tuolingshe.feishu.cn/docx/BHiIdOUKxomqVgxIb1zcmIr8nLe"
 DEFAULT_WINDOW_WIDTH = 880

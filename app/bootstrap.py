@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 
@@ -29,7 +30,9 @@ def main():
     info, reason = check_stored_license()
     window = MainWindow(license_reason=reason, license_info=info)
     window.show()
-    if reason != "ok":
+    if reason == "ok":
+        QTimer.singleShot(1200, window.trigger_background_update_check)
+    else:
         window.prompt_license_on_startup()
     sys.exit(app.exec())
 

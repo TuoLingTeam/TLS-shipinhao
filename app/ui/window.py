@@ -6,6 +6,8 @@ import sys
 import time
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -78,6 +80,8 @@ from settings import (
     ROW_GAP,
     SETUP_SECTION_PADDING,
     TUTORIAL_URL,
+    UPDATE_CHECK_DELAY_MS,
+    APP_VERSION,
     VERY_HIGH_DPI_COMPACT_THRESHOLD,
     WIDE_LAYOUT_MIN_HEIGHT,
     WIDE_LAYOUT_MIN_WIDTH,
@@ -100,6 +104,7 @@ from ui.widgets import (
     reset_font_caches,
 )
 from ui.batch_worker import BatchWorker
+from ui.update_worker import UpdateCheckWorker
 from ui.review_worker import (
     ReviewMatcherWorker,
     TERMINAL_STATUS_CANCELLED,
@@ -142,6 +147,9 @@ class MainWindow(QWidget):
         self.review_task_type = None
         self.license_refresh_thread = None
         self.license_refresh_worker = None
+        self.update_check_thread = None
+        self.update_check_worker = None
+        self._update_prompt_version = None
         self._batch_rows = []
         self._license_reason = license_reason
         self._license_info = license_info or {}
@@ -520,6 +528,13 @@ class MainWindow(QWidget):
         )
         self.tutorial_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         badge_layout.addWidget(self.tutorial_badge, 0, Qt.AlignVCenter)
+
+        self.update_button = QPushButton("检查更新")
+        self.update_button.setObjectName("SecondaryButton")
+        self.update_button.setCursor(Qt.PointingHandCursor)
+        self.update_button.clicked.connect(lambda: self.trigger_background_update_check(manual=True))
+        self.update_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        badge_layout.addWidget(self.update_button, 0, Qt.AlignVCenter)
 
         self.header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._sync_window_title_with_license(self._license_reason)
@@ -1837,6 +1852,79 @@ class MainWindow(QWidget):
             self._clear_license_refresh_refs,
         )
         self.license_refresh_thread.start()
+
+    def _clear_update_check_refs(self):
+        """清理后台更新检查线程引用。"""
+        self.update_check_worker = None
+        self.update_check_thread = None
+
+    def trigger_background_update_check(self, *, manual=False):
+        """后台检查更新，避免阻塞主线程。"""
+        if self.update_check_thread is not None:
+            return
+        if manual:
+            self.append_result_log("正在检查软件更新...")
+
+        self.update_check_thread = QThread(self)
+        self.update_check_worker = UpdateCheckWorker(APP_VERSION)
+        self.update_check_worker.moveToThread(self.update_check_thread)
+        self.update_check_worker.finished.connect(lambda info: self._on_update_check_finished(info, manual=manual))
+        self.update_check_worker.finished.connect(lambda *_: self.update_check_thread.quit())
+        self.update_check_worker.failed.connect(lambda message: self._on_update_check_failed(message, manual=manual))
+        self.update_check_worker.failed.connect(lambda *_: self.update_check_thread.quit())
+        self._bind_thread_lifecycle(
+            self.update_check_thread,
+            self.update_check_worker,
+            self._clear_update_check_refs,
+        )
+        self.update_check_thread.start()
+
+    def _on_update_check_finished(self, info, *, manual):
+        """更新检查完成。"""
+        if not info.has_update:
+            if manual:
+                self.show_message(QMessageBox.Information, "检查更新", f"当前已是最新版本：{APP_VERSION}")
+            return
+
+        if not manual and self._update_prompt_version == info.version:
+            return
+
+        self._update_prompt_version = info.version
+        self.append_result_log(f"发现新版本：{info.version}")
+        self._show_update_dialog(info)
+
+    def _on_update_check_failed(self, error_message, *, manual):
+        """更新检查失败。"""
+        if manual:
+            self.show_message(QMessageBox.Warning, "检查更新失败", error_message or "无法获取更新信息，请稍后重试。")
+        elif error_message:
+            self.append_result_log(f"检查更新失败：{error_message}")
+
+    def _show_update_dialog(self, info):
+        """显示更新提示弹窗。"""
+        notes = info.notes or ["本次版本包含若干优化与修复。"]
+        informative_text = "当前版本：{}\n最新版本：{}\n\n更新内容：\n{}".format(
+            APP_VERSION,
+            info.version,
+            "\n".join(f"- {item}" for item in notes),
+        )
+        dialog, actions = self._create_message_dialog_base(
+            QMessageBox.Information,
+            f"发现新版本 {info.version}",
+            "检测到可用更新，是否立即前往下载？",
+            informative_text,
+            min_width=620,
+        )
+        self._add_message_action(actions, "稍后再说", "MessageSecondary", dialog.reject)
+
+        def _open_download():
+            if info.download_url:
+                QDesktopServices.openUrl(QUrl(info.download_url))
+                self.append_result_log(f"已打开更新下载链接：{info.download_url}")
+            dialog.accept()
+
+        self._add_message_action(actions, "立即下载", "MessagePrimary", _open_download)
+        dialog.exec()
 
     def _sync_window_title_with_license(self, license_reason=None, license_info=None):
         """同步窗口标题与授权状态卡片。"""
