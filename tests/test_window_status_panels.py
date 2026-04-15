@@ -66,6 +66,40 @@ class WindowStatusPanelTests(unittest.TestCase):
         self.assertIn("高置信度：3", self.window.result_insight_view.toPlainText())
         self.assertTrue(self.window.export_task_button.isEnabled())
 
+    def test_review_results_should_render_result_table(self):
+        self.window.review_task_type = "review_match"
+        sample_results = [
+            {
+                "evaluationId": "E1",
+                "orderId": "O1001",
+                "matchScore": 100,
+                "matchStrategy": "exact",
+                "buyerNickname": "alice",
+                "matchReasons": ["标题完全匹配"],
+                "matched": True,
+                "productName": "课程A",
+            },
+            {
+                "evaluationId": "E2",
+                "orderId": "",
+                "matchScore": 0,
+                "matchStrategy": "",
+                "buyerNickname": "bob",
+                "matchReasons": [],
+                "matched": False,
+                "productName": "课程B",
+            },
+        ]
+
+        self.window._on_review_results_ready(sample_results)
+
+        self.assertEqual(self.window.result_table.rowCount(), 2)
+        self.assertEqual(self.window.result_table.columnCount(), 7)
+        self.assertEqual(self.window.result_table.item(0, 0).text(), "高置信度")
+        self.assertEqual(self.window.result_table.item(0, 1).text(), "O1001")
+        self.assertEqual(self.window.result_table.item(1, 0).text(), "未匹配")
+        self.assertIn("建议完整补查", self.window.result_table.item(1, 6).text())
+
 
 if __name__ == "__main__":
     unittest.main()
