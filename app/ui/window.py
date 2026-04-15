@@ -1547,18 +1547,76 @@ class MainWindow(QWidget):
         actions_layout.addWidget(button)
         return button
 
+    def _add_message_actions(self, actions_layout, action_specs):
+        """批量向弹窗动作栏添加按钮。"""
+        buttons = []
+        for text, object_name, callback in action_specs:
+            buttons.append(self._add_message_action(actions_layout, text, object_name, callback))
+        return buttons
+
+    def _show_action_dialog(
+        self,
+        level,
+        title,
+        text,
+        informative_text="",
+        *,
+        min_width=560,
+        action_specs=(),
+    ):
+        """按声明式动作配置构建并显示通用操作弹窗。"""
+        dialog, actions = self._create_message_dialog_base(
+            level, title, text, informative_text, min_width=min_width,
+        )
+
+        def _wrap_callback(callback):
+            def _handler():
+                result = callback()
+                if result in (QDialog.Accepted, QDialog.Rejected):
+                    dialog.done(result)
+                else:
+                    dialog.accept()
+
+            return _handler
+
+        wrapped_specs = [
+            (button_text, object_name, _wrap_callback(callback))
+            for button_text, object_name, callback in action_specs
+        ]
+        self._add_message_actions(actions, wrapped_specs)
+        return dialog.exec()
+
     def _build_message_dialog(self, level, title, text, informative_text=""):
         """构建普通提示弹窗（单确定按钮）。"""
         dialog, actions = self._create_message_dialog_base(
             level, title, text, informative_text, min_width=560,
         )
-        self._add_message_action(actions, "确定", "MessagePrimary", dialog.accept)
+        self._add_message_actions(actions, (("确定", "MessagePrimary", dialog.accept),))
         return dialog
 
     def show_message(self, level, title, text, informative_text=""):
         """显示统一样式的提示弹窗。"""
         dialog = self._build_message_dialog(level, title, text, informative_text)
         dialog.exec()
+
+    def _append_logs(self, *messages):
+        """按顺序追加多条日志，自动跳过空值。"""
+        for message in messages:
+            if message:
+                self._append_logs(message)
+
+    def _log_and_show_message(
+        self,
+        level,
+        title,
+        text,
+        informative_text="",
+        *,
+        log_messages=(),
+    ):
+        """统一处理“追加日志 + 显示弹窗”组合。"""
+        self._append_logs(*log_messages)
+        self.show_message(level, title, text, informative_text)
 
     @staticmethod
     def _shutdown_thread(thread, *, graceful_timeout=3000, terminate_timeout=1000):
@@ -1675,17 +1733,37 @@ class MainWindow(QWidget):
     # 按钮状态
     # -----------------------------------------------------------------------
 
+    def _apply_button_updates(self, button_updates):
+        """批量同步按钮禁用态与文案。"""
+        for button, disabled, text in button_updates:
+            button.setDisabled(disabled)
+            if text is not None:
+                button.setText(text)
+
+    def _resolve_action_button_updates(self, *, running):
+        """返回批量处理区按钮的状态描述。"""
+        button_updates = [
+            (
+                self.pause_button,
+                (not running) or self.is_paused,
+                "已暂停" if self.is_paused else "暂停批量处理",
+            ),
+            (
+                self.start_button,
+                running and not self.is_paused,
+                "继续批量处理" if self.is_paused else "开始批量处理",
+            ),
+        ]
+        if hasattr(self, "auto_cookie_button"):
+            button_updates.append((self.auto_cookie_button, running, None))
+        return button_updates
+
     def refresh_action_buttons(self):
         """同步开始/暂停按钮状态。"""
         running = self.worker is not None
         self.order_edit.setReadOnly(running)
         self.tracking_edit.setReadOnly(running)
-        if hasattr(self, "auto_cookie_button"):
-            self.auto_cookie_button.setDisabled(running)
-        self.pause_button.setDisabled((not running) or self.is_paused)
-        self.start_button.setDisabled(running and not self.is_paused)
-        self.start_button.setText("继续批量处理" if self.is_paused else "开始批量处理")
-        self.pause_button.setText("已暂停" if self.is_paused else "暂停批量处理")
+        self._apply_button_updates(self._resolve_action_button_updates(running=running))
 
     def set_submit_running(self, is_running):
         """切换按钮和输入框状态。"""
@@ -1738,7 +1816,7 @@ class MainWindow(QWidget):
                     missing_files.append("cookie 中 biz_magic 键")
 
         if missing_files:
-            self.show_message(
+            self._log_and_show_message(
                 QMessageBox.Warning,
                 "目录不完整",
                 "所选目录缺少以下文件：" + "、".join(missing_files),
@@ -1747,7 +1825,7 @@ class MainWindow(QWidget):
 
         save_user_config_dir(selected_dir)
         self.refresh_config_path_label()
-        self.show_message(
+        self._log_and_show_message(
             QMessageBox.Information,
             "配置目录已更新",
             f"后续将优先使用：\n{selected_dir}",
@@ -1779,7 +1857,7 @@ class MainWindow(QWidget):
             return
 
         initial_dir = get_default_config_dir()
-        self.append_result_log("正在打开内置网页登录窗口，登录成功后点击保存并选择目录即可。")
+        self._append_logs("正在打开内置网页登录窗口，登录成功后点击保存并选择目录即可。")
         try:
             dialog = CookieCaptureDialog(initial_dir, self)
         except Exception as exc:  # noqa: BLE001
@@ -1792,7 +1870,7 @@ class MainWindow(QWidget):
             return
 
         if dialog.exec() != QDialog.Accepted:
-            self.append_result_log("已取消自动获取 Cookie。")
+            self._append_logs("已取消自动获取 Cookie。")
             return
 
         cookie_data = dialog.cookie_data
@@ -1812,7 +1890,7 @@ class MainWindow(QWidget):
             start_dir,
         )
         if not selected_dir:
-            self.append_result_log("已取消选择目录，Cookie 未保存。")
+            self._append_logs("已取消选择目录，Cookie 未保存。")
             return
 
         try:
@@ -1827,13 +1905,15 @@ class MainWindow(QWidget):
             return
 
         self.refresh_config_path_label()
-        self.append_result_log(f"Cookie 已保存到：{cookie_path}")
-        self.append_result_log("已记住该路径，后续将从此目录读取 cookie.txt。")
-        self.show_message(
+        self._log_and_show_message(
             QMessageBox.Information,
             "Cookie 获取成功",
             f"已保存到：\n{cookie_path}",
             "已记住该配置目录，后续获取差评、获取品退和批量处理会直接使用此目录下的 cookie.txt。",
+            log_messages=(
+                f"Cookie 已保存到：{cookie_path}",
+                "已记住该路径，后续将从此目录读取 cookie.txt。",
+            ),
         )
 
     def show_missing_config_error(self, searched_dirs):
@@ -1843,16 +1923,18 @@ class MainWindow(QWidget):
         else:
             details = "\n".join(str(item) for item in searched_dirs)
         info_text = f"错误详情:\n{details}"
-        dialog, actions = self._create_message_dialog_base(
+        result = self._show_action_dialog(
             QMessageBox.Warning,
             "缺少配置文件",
             "当前未找到可用配置目录，请先手动选择目录。",
             info_text,
             min_width=620,
+            action_specs=(
+                ("关闭", "MessageSecondary", lambda: QDialog.Rejected),
+                ("选择配置目录", "MessagePrimary", lambda: QDialog.Accepted),
+            ),
         )
-        self._add_message_action(actions, "关闭", "MessageSecondary", dialog.reject)
-        self._add_message_action(actions, "选择配置目录", "MessagePrimary", dialog.accept)
-        if dialog.exec() == QDialog.Accepted:
+        if result == QDialog.Accepted:
             self.choose_config_dir()
 
     # -----------------------------------------------------------------------
@@ -1899,12 +1981,12 @@ class MainWindow(QWidget):
         previous = self._license_state_cache or {}
         self._store_license_state(info, reason, source="online")
         if previous.get("reason") != reason:
-            self.append_result_log(f"授权状态已更新：{get_license_reason_text(reason)}")
+            self._append_logs(f"授权状态已更新：{get_license_reason_text(reason)}")
 
     def _on_license_refresh_failed(self, error_message):
         """后台授权刷新失败时保留当前状态。"""
         if error_message:
-            self.append_result_log(f"授权在线刷新失败，已继续使用本地授权状态：{error_message}")
+            self._append_logs(f"授权在线刷新失败，已继续使用本地授权状态：{error_message}")
 
     def _schedule_license_refresh(self, *, force=False):
         """在后台线程中刷新授权状态，避免阻塞主线程。"""
@@ -1936,7 +2018,7 @@ class MainWindow(QWidget):
         if self.update_check_thread is not None:
             return
         if manual:
-            self.append_result_log("正在检查软件更新...")
+            self._append_logs("正在检查软件更新...")
 
         worker = UpdateCheckWorker(APP_VERSION)
         self._start_thread_worker(
@@ -1965,7 +2047,7 @@ class MainWindow(QWidget):
             return
 
         self._update_prompt_version = info.version
-        self.append_result_log(f"发现新版本：{info.version}")
+        self._append_logs(f"发现新版本：{info.version}")
         self._show_update_dialog(info)
 
     def _on_update_check_failed(self, error_message, manual):
@@ -1973,7 +2055,7 @@ class MainWindow(QWidget):
         if manual:
             self.show_message(QMessageBox.Warning, "检查更新失败", error_message or "无法获取更新信息，请稍后重试。")
         elif error_message:
-            self.append_result_log(f"检查更新失败：{error_message}")
+            self._append_logs(f"检查更新失败：{error_message}")
 
     def _show_update_dialog(self, info):
         """显示更新提示弹窗。"""
@@ -1983,25 +2065,26 @@ class MainWindow(QWidget):
             info.version,
             "\n".join(f"- {item}" for item in notes),
         )
-        dialog, actions = self._create_message_dialog_base(
+
+        def _open_download():
+            if info.download_url:
+                QDesktopServices.openUrl(QUrl(info.download_url))
+                self._append_logs(f"已打开更新下载链接：{info.download_url}")
+            else:
+                self.show_message(QMessageBox.Warning, "下载链接缺失", "远端配置未提供更新下载链接，请稍后重试。")
+            return QDialog.Accepted
+
+        self._show_action_dialog(
             QMessageBox.Information,
             f"发现新版本 {info.version}",
             "检测到可用更新，是否立即前往网盘下载？",
             informative_text,
             min_width=620,
+            action_specs=(
+                ("稍后再说", "MessageSecondary", lambda: QDialog.Rejected),
+                ("前往下载", "MessagePrimary", _open_download),
+            ),
         )
-        self._add_message_action(actions, "稍后再说", "MessageSecondary", dialog.reject)
-
-        def _open_download():
-            if info.download_url:
-                QDesktopServices.openUrl(QUrl(info.download_url))
-                self.append_result_log(f"已打开更新下载链接：{info.download_url}")
-            else:
-                self.show_message(QMessageBox.Warning, "下载链接缺失", "远端配置未提供更新下载链接，请稍后重试。")
-            dialog.accept()
-
-        self._add_message_action(actions, "前往下载", "MessagePrimary", _open_download)
-        dialog.exec()
 
     def _sync_window_title_with_license(self, license_reason=None, license_info=None):
         """同步窗口标题与授权状态卡片。"""
@@ -2060,27 +2143,34 @@ class MainWindow(QWidget):
         """弹出激活窗口，返回是否激活成功。"""
         if reason is None:
             _, reason = self._refresh_license_state_with_mode(local_only=True)
-        self.append_result_log(f"授权状态：{get_license_reason_text(reason)}")
-        self.append_result_log("正在打开卡密激活窗口...")
+        self._append_logs(
+            f"授权状态：{get_license_reason_text(reason)}",
+            "正在打开卡密激活窗口...",
+        )
 
         dialog = LicenseDialog(self, reason=reason)
         result = dialog.exec()
         if result == QDialog.Accepted and dialog.activated:
             info, refreshed_reason = self._refresh_license_state_with_mode(local_only=True)
             if refreshed_reason == "ok":
-                self.append_result_log("卡密激活成功，已解锁批量处理功能。")
                 expires = str((info or {}).get("expires_at", ""))[:10]
-                if expires:
-                    self.append_result_log(f"授权有效期至：{expires}")
+                self._append_logs(
+                    "卡密激活成功，已解锁批量处理功能。",
+                    f"授权有效期至：{expires}" if expires else "",
+                )
                 return True
 
-            self.append_result_log("卡密激活结果校验失败，请重试。")
-            self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
+            self._append_logs(
+                "卡密激活结果校验失败，请重试。",
+                f"当前状态：{get_license_reason_text(refreshed_reason)}",
+            )
             return False
 
         _, refreshed_reason = self._refresh_license_state_with_mode(local_only=True)
-        self.append_result_log("卡密激活未完成。")
-        self.append_result_log(f"当前状态：{get_license_reason_text(refreshed_reason)}")
+        self._append_logs(
+            "卡密激活未完成。",
+            f"当前状态：{get_license_reason_text(refreshed_reason)}",
+        )
         return False
 
     def prompt_license_on_startup(self):
@@ -2092,13 +2182,14 @@ class MainWindow(QWidget):
         else:
             info, reason = self._refresh_license_state_with_mode(local_only=True)
         if reason == "ok":
-            self.append_result_log("授权状态：已激活。")
             expires = str((info or {}).get("expires_at", ""))[:10]
-            if expires:
-                self.append_result_log(f"授权有效期至：{expires}")
+            self._append_logs(
+                "授权状态：已激活。",
+                f"授权有效期至：{expires}" if expires else "",
+            )
             return True
 
-        self.append_result_log("当前未激活，执行前需先输入卡密。")
+        self._append_logs("当前未激活，执行前需先输入卡密。")
         return self._prompt_license_activation(reason)
 
     # -----------------------------------------------------------------------
@@ -2111,13 +2202,10 @@ class MainWindow(QWidget):
             self.worker.resume()
             self.is_paused = False
             self.refresh_action_buttons()
-            self.append_result_log("已继续执行剩余任务。")
+            self._append_logs("已继续执行剩余任务。")
             return
 
-        if self.worker is not None:
-            return
-
-        if not self._ensure_task_license("批量处理"):
+        if not self._can_start_task(self.worker, "批量处理"):
             return
 
         self.normalize_inputs()
@@ -2155,7 +2243,7 @@ class MainWindow(QWidget):
             for order_id, tracking_number in zip(order_ids, tracking_numbers)
         ]
         self.clear_result_log()
-        self.append_result_log(f"开始执行：共 {len(order_ids)} 条。")
+        self._append_logs(f"开始执行：共 {len(order_ids)} 条。")
         self.set_submit_running(True)
 
         worker = BatchWorker(order_ids, tracking_numbers)
@@ -2184,7 +2272,7 @@ class MainWindow(QWidget):
         self.worker.pause()
         self.is_paused = True
         self.refresh_action_buttons()
-        self.append_result_log("已暂停处理，当前单完成后将停止继续执行。")
+        self._append_logs("已暂停处理，当前单完成后将停止继续执行。")
 
     def _clear_worker_refs(self):
         """清理线程引用。"""
@@ -2207,28 +2295,28 @@ class MainWindow(QWidget):
 
     def _on_worker_started(self, total_count):
         """记录任务开始。"""
-        self.append_result_log(f"任务已创建：共 {total_count} 条，准备顺序执行。")
+        self._append_logs(f"任务已创建：共 {total_count} 条，准备顺序执行。")
 
     def _on_worker_step_started(self, index, total_count, order_id):
         """记录单条开始。"""
-        self.append_result_log(f"[{index}/{total_count}] 开始处理订单 {order_id}")
+        self._append_logs(f"[{index}/{total_count}] 开始处理订单 {order_id}")
 
     def _on_worker_step_succeeded(self, index, total_count, order_id, tracking_number, old_waybill):
         """记录单条成功。"""
         self._mark_batch_row_succeeded(index)
-        self.append_result_log(
+        self._append_logs(
             f"[{index}/{total_count}] 订单 {order_id} 成功：{old_waybill} -> {tracking_number}"
         )
 
     def _on_worker_step_failed(self, index, total_count, order_id, tracking_number, error_message):
         """记录单条失败。"""
-        self.append_result_log(
+        self._append_logs(
             f"[{index}/{total_count}] 订单 {order_id} -> {tracking_number} 失败：{error_message}"
         )
 
     def _on_worker_fatal_error(self, error_message):
         """记录批量中断。"""
-        self.append_result_log(f"批量执行中断：{error_message}")
+        self._append_logs(f"批量执行中断：{error_message}")
 
     def _on_worker_finished(self, success_count, failure_count, total_count, aborted):
         """恢复界面并汇总结果。"""
@@ -2240,40 +2328,52 @@ class MainWindow(QWidget):
         summary = (
             f"批量执行完成：共 {total_count} 条，成功 {success_count} 条，失败 {failure_count} 条。"
         )
-        self.append_result_log(summary)
-
-        if failure_count > 0:
-            self.show_message(QMessageBox.Warning, "批量执行完成", summary)
-        else:
-            self.show_message(QMessageBox.Information, "批量执行完成", summary)
+        self._log_and_show_message(
+            QMessageBox.Warning if failure_count > 0 else QMessageBox.Information,
+            "批量执行完成",
+            summary,
+            log_messages=(summary,),
+        )
 
     # -----------------------------------------------------------------------
     # 中差评查找
     # -----------------------------------------------------------------------
 
+    def _resolve_review_task_button_updates(self, *, running, active_task=None):
+        """返回中差评 / 品退 / 缓存按钮的状态描述。"""
+        return [
+            (
+                self.review_find_button,
+                running,
+                "正在获取..." if running and active_task == TASK_REVIEW_MATCH else "获取差评订单",
+            ),
+            (
+                self.review_full_scan_button,
+                running,
+                "正在完整补查..." if running and active_task == TASK_REVIEW_FULL_SCAN else "完整补查订单",
+            ),
+            (
+                self.quality_refund_button,
+                running,
+                "正在获取..." if running and active_task == TASK_QUALITY_REFUND else "获取品退订单",
+            ),
+            (
+                self.order_cache_button,
+                running,
+                "正在刷新缓存..."
+                if running and active_task == TASK_CACHE_REFRESH
+                else (
+                    "正在重建缓存..."
+                    if running and active_task == TASK_CACHE_REBUILD
+                    else "订单缓存管理"
+                ),
+            ),
+        ]
+
     def _set_review_task_buttons(self, *, running, active_task=None):
         """同步中差评 / 品退按钮状态。"""
-        self.review_find_button.setDisabled(running)
-        self.review_full_scan_button.setDisabled(running)
-        self.quality_refund_button.setDisabled(running)
-        self.order_cache_button.setDisabled(running)
-        self.review_find_button.setText(
-            "正在获取..." if running and active_task == TASK_REVIEW_MATCH else "获取差评订单"
-        )
-        self.review_full_scan_button.setText(
-            "正在完整补查..." if running and active_task == TASK_REVIEW_FULL_SCAN else "完整补查订单"
-        )
-        self.quality_refund_button.setText(
-            "正在获取..." if running and active_task == TASK_QUALITY_REFUND else "获取品退订单"
-        )
-        self.order_cache_button.setText(
-            "正在刷新缓存..."
-            if running and active_task == TASK_CACHE_REFRESH
-            else (
-                "正在重建缓存..."
-                if running and active_task == TASK_CACHE_REBUILD
-                else "订单缓存管理"
-            )
+        self._apply_button_updates(
+            self._resolve_review_task_button_updates(running=running, active_task=active_task)
         )
 
     def _ensure_task_license(self, task_label):
@@ -2293,9 +2393,21 @@ class MainWindow(QWidget):
         self._show_activation_required(task_label)
         return False
 
+    def _can_start_task(self, active_worker, task_label):
+        """统一处理任务启动前的占用与授权校验。"""
+        if active_worker is not None:
+            return False
+        return self._ensure_task_license(task_label)
+
     def _show_order_cache_manage_dialog(self):
         """弹出订单缓存管理对话框，返回选中的任务类型。"""
-        dialog, actions = self._create_message_dialog_base(
+        selected_task = {"task_type": None}
+
+        def _select(task_type):
+            selected_task["task_type"] = task_type
+            return QDialog.Accepted
+
+        result = self._show_action_dialog(
             QMessageBox.Question,
             "订单缓存管理",
             "请选择要执行的订单缓存任务。",
@@ -2304,27 +2416,21 @@ class MainWindow(QWidget):
                 f"重建缓存会清空本地数据并重新抓取最近 {ORDER_CACHE_COVERAGE_DAYS} 天订单。"
             ),
             min_width=640,
+            action_specs=(
+                ("关闭", "MessageSecondary", lambda: QDialog.Rejected),
+                (
+                    f"重建最近 {ORDER_CACHE_COVERAGE_DAYS} 天",
+                    "MessageSecondary",
+                    lambda: _select(TASK_CACHE_REBUILD),
+                ),
+                (
+                    f"增量刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天",
+                    "MessagePrimary",
+                    lambda: _select(TASK_CACHE_REFRESH),
+                ),
+            ),
         )
-        selected_task = {"task_type": None}
-
-        def _accept(task_type):
-            selected_task["task_type"] = task_type
-            dialog.accept()
-
-        self._add_message_action(actions, "关闭", "MessageSecondary", dialog.reject)
-        self._add_message_action(
-            actions,
-            f"重建最近 {ORDER_CACHE_COVERAGE_DAYS} 天",
-            "MessageSecondary",
-            lambda: _accept(TASK_CACHE_REBUILD),
-        )
-        self._add_message_action(
-            actions,
-            f"增量刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天",
-            "MessagePrimary",
-            lambda: _accept(TASK_CACHE_REFRESH),
-        )
-        if dialog.exec() != QDialog.Accepted:
+        if result != QDialog.Accepted:
             return None
         return selected_task["task_type"]
 
@@ -2334,7 +2440,7 @@ class MainWindow(QWidget):
         if clear_order_input:
             self._set_order_input_values([])
         self.clear_result_log()
-        self.append_result_log(start_message)
+        self._append_logs(start_message)
         self._set_review_task_buttons(running=True, active_task=task_type)
 
         worker = ReviewMatcherWorker(days=days, task_type=task_type)
@@ -2354,10 +2460,7 @@ class MainWindow(QWidget):
 
     def on_review_find_clicked(self):
         """开始查找中差评订单。"""
-        if self.review_worker is not None:
-            return
-
-        if not self._ensure_task_license("中差评查找"):
+        if not self._can_start_task(self.review_worker, "中差评查找"):
             return
 
         days = self.review_days_spin.value()
@@ -2369,10 +2472,7 @@ class MainWindow(QWidget):
 
     def on_quality_refund_clicked(self):
         """开始获取品质退款订单。"""
-        if self.review_worker is not None:
-            return
-
-        if not self._ensure_task_license("品质退款订单获取"):
+        if not self._can_start_task(self.review_worker, "品质退款订单获取"):
             return
 
         days = self.review_days_spin.value()
@@ -2384,10 +2484,7 @@ class MainWindow(QWidget):
 
     def on_review_full_scan_clicked(self):
         """开始完整补查订单（最近 30 天用缓存，更早范围临时抓取）。"""
-        if self.review_worker is not None:
-            return
-
-        if not self._ensure_task_license("完整补查订单"):
+        if not self._can_start_task(self.review_worker, "完整补查订单"):
             return
 
         days = self.review_days_spin.value()
@@ -2399,10 +2496,7 @@ class MainWindow(QWidget):
 
     def on_order_cache_manage_clicked(self):
         """打开订单缓存管理入口。"""
-        if self.review_worker is not None:
-            return
-
-        if not self._ensure_task_license("订单缓存同步"):
+        if not self._can_start_task(self.review_worker, "订单缓存同步"):
             return
 
         task_type = self._show_order_cache_manage_dialog()
@@ -2424,7 +2518,7 @@ class MainWindow(QWidget):
 
     def _on_review_progress(self, message):
         """追加中差评查找进度日志。"""
-        self.append_result_log(message)
+        self._append_logs(message)
 
     def _on_review_order_ids(self, order_ids):
         """将匹配到的订单号回填到订单输入框。"""
@@ -2433,7 +2527,7 @@ class MainWindow(QWidget):
     def _append_warning_log(self, warning_text):
         """统一追加提醒日志。"""
         if warning_text:
-            self.append_result_log(f"⚠️ 提醒: {warning_text}")
+            self._append_logs(f"⚠️ 提醒: {warning_text}")
 
     def _show_warning_or_success_message(
         self,
@@ -2459,7 +2553,7 @@ class MainWindow(QWidget):
         """处理订单缓存任务完成后的提示。"""
         action_label = "订单缓存重建" if self.review_task_type == TASK_CACHE_REBUILD else "订单缓存刷新"
         summary = f"{action_label}完成：写入/更新 {matched_count} 个订单。"
-        self.append_result_log(summary)
+        self._append_logs(summary)
         self._show_warning_or_success_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
@@ -2477,7 +2571,7 @@ class MainWindow(QWidget):
             f"品退订单获取完成：共 {total_count} 个订单，"
             f"回填 {matched_count} 个订单号。"
         )
-        self.append_result_log(summary)
+        self._append_logs(summary)
         self._show_warning_or_success_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
@@ -2495,7 +2589,7 @@ class MainWindow(QWidget):
             f"{task_label}完成：共 {total_count} 条差评，"
             f"匹配到 {matched_count} 个订单。"
         )
-        self.append_result_log(summary)
+        self._append_logs(summary)
         self._show_warning_or_success_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
@@ -2514,7 +2608,7 @@ class MainWindow(QWidget):
             return
 
         if status == TERMINAL_STATUS_ERROR:
-            self.append_result_log(f"❌ 错误: {message}")
+            self._append_logs(f"❌ 错误: {message}")
             title = (
                 "缓存任务失败"
                 if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD)
