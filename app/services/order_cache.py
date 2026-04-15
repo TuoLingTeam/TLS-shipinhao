@@ -9,6 +9,7 @@ import time
 
 from settings import get_home_config_dir, get_internal_order_cache_dir, get_order_cache_dir
 from settings import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
+from services.order_field_utils import first_non_empty, normalize_sale_param, parse_confirm_receipt_timestamp
 
 
 class OrderCacheRepository:
@@ -127,27 +128,6 @@ class OrderCacheRepository:
             )
         self._initialized = True
 
-    @staticmethod
-    def _first_non_empty(data, keys):
-        for key in keys:
-            value = data.get(key)
-            if isinstance(value, str):
-                if value.strip():
-                    return value.strip()
-                continue
-            if value not in (None, [], {}):
-                return value
-        return ""
-
-    @staticmethod
-    def _normalize_sale_param(raw_value):
-        """将 saleParam 序列化为纯文本，避免 str(list) 污染。"""
-        if isinstance(raw_value, list):
-            return "|".join(str(v).strip() for v in raw_value if str(v).strip())
-        if raw_value is None:
-            return ""
-        return str(raw_value).strip()
-
     def _normalize_order(self, order, *, raw_source):
         common_info = order.get("commonInfo", {}) or {}
         order_id = str(common_info.get("orderId", "") or "").strip()
@@ -156,10 +136,9 @@ class OrderCacheRepository:
 
         buyer_nickname = str(order.get("buyerInfo", {}).get("nickName", "") or "").strip()
         accept_info = order.get("acceptInfo", {}) or {}
-        confirm_receipt_time = accept_info.get("confirmReceiptTime", "")
-        confirm_receipt_timestamp = 0
-        if confirm_receipt_time and str(confirm_receipt_time).isdigit():
-            confirm_receipt_timestamp = int(confirm_receipt_time)
+        confirm_receipt_timestamp = parse_confirm_receipt_timestamp(
+            accept_info.get("confirmReceiptTime", "")
+        )
 
         auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {}) or {}
         updated_at = int(time.time())
@@ -181,17 +160,17 @@ class OrderCacheRepository:
         product_rows = []
         product_list = order.get("orderProductInfo", []) or order.get("productInfos", []) or []
         for product in product_list:
-            raw_sale_param = self._first_non_empty(
+            raw_sale_param = first_non_empty(
                 product, ("saleParam", "sale_param", "skuName", "specName", "spec"),
             )
             product_rows.append(
                 (
                     order_id,
-                    str(self._first_non_empty(product, ("productId", "product_id", "spuId", "spu_id"))),
-                    str(self._first_non_empty(product, ("skuId", "sku_id"))),
-                    self._normalize_sale_param(raw_sale_param),
-                    str(self._first_non_empty(product, ("title", "spuName", "productName", "name"))),
-                    str(self._first_non_empty(product, ("thumbImg", "imgUrl", "image", "imageUrl"))),
+                    str(first_non_empty(product, ("productId", "product_id", "spuId", "spu_id"))),
+                    str(first_non_empty(product, ("skuId", "sku_id"))),
+                    normalize_sale_param(raw_sale_param),
+                    str(first_non_empty(product, ("title", "spuName", "productName", "name"))),
+                    str(first_non_empty(product, ("thumbImg", "imgUrl", "image", "imageUrl"))),
                 )
             )
         return order_row, product_rows
@@ -281,6 +260,46 @@ class OrderCacheRepository:
                 (scope,),
             ).fetchone()
         return dict(row) if row else None
+
+    def get_summary(self, scope: str = ORDER_CACHE_SCOPE) -> dict:
+        """返回缓存概览，供 UI 状态展示使用。"""
+        self.initialize()
+        with self._lock, self._connect() as connection:
+            stats_row = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS order_count,
+                    MIN(create_time) AS oldest_create_time,
+                    MAX(create_time) AS newest_create_time,
+                    MAX(updated_at) AS last_updated_at
+                FROM orders
+                """
+            ).fetchone()
+        state = self.get_state(scope=scope) or {}
+        coverage_start = int(state.get("coverage_start", 0) or 0)
+        coverage_end = int(state.get("coverage_end", 0) or 0)
+        missing_segments = []
+        if coverage_start > 0 and coverage_end > 0 and coverage_start <= coverage_end:
+            missing_segments = self.get_missing_segments(
+                coverage_start,
+                coverage_end,
+                scope=scope,
+            )
+        return {
+            "order_count": int((stats_row["order_count"] if stats_row else 0) or 0),
+            "oldest_create_time": int((stats_row["oldest_create_time"] if stats_row else 0) or 0),
+            "newest_create_time": int((stats_row["newest_create_time"] if stats_row else 0) or 0),
+            "last_updated_at": int((stats_row["last_updated_at"] if stats_row else 0) or 0),
+            "coverage_start": coverage_start,
+            "coverage_end": coverage_end,
+            "last_incremental_start": int(state.get("last_incremental_start", 0) or 0),
+            "last_incremental_end": int(state.get("last_incremental_end", 0) or 0),
+            "last_success_at": int(state.get("last_success_at", 0) or 0),
+            "last_mode": str(state.get("last_mode", "") or ""),
+            "last_error": str(state.get("last_error", "") or ""),
+            "missing_segment_count": len(missing_segments),
+            "has_dirty_sale_param": self.has_dirty_sale_param(),
+        }
 
     def save_state(
         self,

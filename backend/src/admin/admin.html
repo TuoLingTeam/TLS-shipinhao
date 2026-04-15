@@ -710,7 +710,45 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <button class="btn btn-ghost btn-sm" onclick="loadList()">刷新列表</button>
         </div>
         <div id="statsArea" class="stats"></div>
+        <div id="healthArea" class="stats" style="margin-top:16px;"></div>
       </article>
+    </section>
+
+    <section class="card">
+      <div class="panel-head panel-head-tight">
+        <div>
+          <span class="eyebrow">Support Console</span>
+          <h2>搜索 / 设备迁移 / 审计</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAudit()">刷新审计</button>
+      </div>
+      <div class="field-grid field-grid-generate">
+        <label class="field">
+          <span>搜索卡密 / 备注 / 设备 ID</span>
+          <input type="text" id="searchQuery" placeholder="输入关键字后回车或点击搜索">
+        </label>
+        <div class="field-action">
+          <button class="btn btn-secondary btn-fill" onclick="doSearch()">搜索记录</button>
+        </div>
+        <div class="field-action">
+          <button class="btn btn-ghost btn-fill" onclick="loadList()">清空筛选</button>
+        </div>
+      </div>
+      <div id="searchMsg"></div>
+      <div id="auditArea" class="table-wrap" style="margin-top:16px;">
+        <table>
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>操作</th>
+              <th>卡密</th>
+              <th>原因</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody id="auditList"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card table-card">
@@ -723,6 +761,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <span class="legend-item"><span class="dot"></span>未使用</span>
           <span class="legend-item"><span class="dot dot-green"></span>已激活</span>
           <span class="legend-item"><span class="dot dot-amber"></span>已过期</span>
+          <span class="legend-item"><span class="dot" style="background:#fca5a5;"></span>已吊销</span>
         </div>
       </div>
       <div class="table-wrap">
@@ -737,6 +776,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
               <th>设备 ID</th>
               <th>激活时间</th>
               <th>过期时间</th>
+              <th>支持动作</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -758,6 +798,13 @@ function api(path, body) {
   }).then(res => res.json());
 }
 
+function apiGet(path) {
+  return fetch(API + path, {
+    method: "GET",
+    headers: { "X-Admin-Secret": SECRET }
+  }).then(res => res.json());
+}
+
 function doLogin() {
   SECRET = document.getElementById("adminSecret").value;
   if (!SECRET) {
@@ -773,7 +820,9 @@ function doLogin() {
     document.getElementById("appHeader").classList.remove("hidden");
     document.getElementById("loginView").classList.add("hidden");
     document.getElementById("mainView").classList.remove("hidden");
+    loadHealth();
     renderList(res);
+    renderAudit(res.audit || []);
   }).catch(() => {
     showMsg("loginMsg", "登录请求失败，请稍后重试", true);
     SECRET = "";
@@ -810,8 +859,21 @@ function copyKeys() {
 }
 
 function doRevoke(key) {
-  if (!confirm("确定要吊销卡密 " + key + " 吗？此操作不可逆！")) return;
-  api("/api/admin/revoke", { key }).then(res => {
+  const reason = prompt("请输入吊销原因（会保留审计记录）", "人工吊销");
+  if (reason === null) return;
+  api("/api/admin/revoke", { key, reason }).then(res => {
+    if (!res.success) {
+      alert(res.message);
+      return;
+    }
+    loadList();
+  });
+}
+
+function doResetDevice(key) {
+  const reason = prompt("请输入设备重置原因", "设备迁移 / 误绑定");
+  if (reason === null) return;
+  api("/api/admin/device/reset", { key, reason }).then(res => {
     if (!res.success) {
       alert(res.message);
       return;
@@ -822,25 +884,63 @@ function doRevoke(key) {
 
 function loadList() {
   api("/api/admin/list", {}).then(res => {
-    if (res.success) renderList(res);
+    if (res.success) {
+      renderList(res);
+      renderAudit(res.audit || []);
+      showMsg("searchMsg", "已恢复默认列表", false);
+    }
+  });
+}
+
+function doSearch() {
+  const query = document.getElementById("searchQuery").value.trim();
+  api("/api/admin/search", { query }).then(res => {
+    if (!res.success) {
+      showMsg("searchMsg", res.message, true);
+      return;
+    }
+    renderList(res);
+    showMsg("searchMsg", query ? ("已搜索：" + query) : "请输入关键字后搜索", !query);
+  }).catch(() => {
+    showMsg("searchMsg", "搜索失败，请稍后重试", true);
+  });
+}
+
+function loadAudit() {
+  api("/api/admin/audit/list", {}).then(res => {
+    if (res.success) renderAudit(res.audit || []);
+  });
+}
+
+function loadHealth() {
+  apiGet("/api/health").then(res => {
+    const html = [
+      stat(res.success ? "正常" : "异常", "服务状态"),
+      stat(res.db_ok ? "已连接" : "失败", "D1"),
+      stat(res.secrets_ok ? "已配置" : "缺失", "密钥"),
+    ].join("");
+    document.getElementById("healthArea").innerHTML = html;
+  }).catch(() => {
+    document.getElementById("healthArea").innerHTML = stat("未知", "服务状态");
   });
 }
 
 function renderList(res) {
-  const stats = res.stats || [];
-  const total = stats.reduce((sum, row) => sum + row.cnt, 0);
-  const unused = stats.find(row => row.status === "unused")?.cnt || 0;
-  const activated = stats.find(row => row.status === "activated")?.cnt || 0;
+  const stats = res.stats || {};
   document.getElementById("statsArea").innerHTML = [
-    stat(total, "总计"),
-    stat(unused, "未使用"),
-    stat(activated, "已激活")
+    stat(stats.total || 0, "总计"),
+    stat(stats.unused || 0, "未使用"),
+    stat(stats.activated || 0, "已激活"),
+    stat(stats.revoked || 0, "已吊销"),
+    stat(stats.expired || 0, "已过期"),
+    stat(stats.verify_today || 0, "今日校验"),
+    stat(stats.verify_fail_today || 0, "今日失败")
   ].join("");
 
   const rows = res.keys || [];
   const tbody = document.getElementById("keysList");
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">当前还没有卡密记录，生成后会在这里立即展示。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">当前还没有匹配记录，可先生成卡密或调整搜索条件。</td></tr>';
     return;
   }
 
@@ -855,6 +955,9 @@ function renderList(res) {
     const revokeBtn = row.status !== "revoked"
       ? '<button class="btn btn-danger btn-sm" onclick="doRevoke(&quot;' + esc(row.license_key) + '&quot;)">吊销</button>'
       : "-";
+    const supportBtn = row.status === "activated"
+      ? '<button class="btn btn-secondary btn-sm" onclick="doResetDevice(&quot;' + esc(row.license_key) + '&quot;)">重置设备</button>'
+      : "-";
 
     return '<tr>'
       + '<td class="mono">' + esc(row.license_key) + '</td>'
@@ -865,7 +968,28 @@ function renderList(res) {
       + '<td class="mono">' + esc(row.device_id || "-") + '</td>'
       + '<td>' + fmt(row.activated_at) + '</td>'
       + '<td>' + fmt(row.expires_at) + '</td>'
+      + '<td>' + supportBtn + '</td>'
       + '<td>' + revokeBtn + '</td>'
+      + '</tr>';
+  }).join("");
+}
+
+function renderAudit(rows) {
+  const tbody = document.getElementById("auditList");
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">最近没有审计记录。</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(row => {
+    const detail = typeof row.detail === "object" && row.detail
+      ? Object.keys(row.detail).slice(0, 3).map(key => key + ':' + String(row.detail[key]).slice(0, 24)).join(' / ')
+      : '-';
+    return '<tr>'
+      + '<td>' + fmt(row.created_at) + '</td>'
+      + '<td>' + esc(row.action || '-') + '</td>'
+      + '<td class="mono">' + esc(row.license_key || '-') + '</td>'
+      + '<td>' + esc(row.reason || '-') + '</td>'
+      + '<td>' + esc(detail) + '</td>'
       + '</tr>';
   }).join("");
 }
@@ -893,6 +1017,10 @@ function showMsg(id, msg, err) {
 
 document.getElementById("adminSecret").addEventListener("keydown", event => {
   if (event.key === "Enter") doLogin();
+});
+
+document.getElementById("searchQuery").addEventListener("keydown", event => {
+  if (event.key === "Enter") doSearch();
 });
 </script>
 </body>
