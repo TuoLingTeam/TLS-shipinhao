@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+from services.order_field_utils import normalize_product_text
+
 SIMILARITY_PENALTY_BANDS: tuple[tuple[int, int], ...] = (
     (100, 0),
     (90, 5),
@@ -153,9 +155,7 @@ def _nickname_similarity_by_rename_patterns(left: str, right: str) -> int | None
 
 def normalize_product_title_for_similarity(title: str | None) -> str:
     """仅用于商品标题相似度计算的轻量规范化。"""
-    if not title:
-        return ""
-    return re.sub(r"[\s，,、/\-_|（）()]+", "", str(title)).lower()
+    return normalize_product_text(title)
 
 
 def title_similarity_percent(left: str | None, right: str | None) -> int:

@@ -13,8 +13,6 @@ import requests
 
 from settings import (
     AUTO_FILL_SCORE_THRESHOLD,
-    EDUCATION_ORDER_MAX_DAYS,
-    EVALUATION_MAX_DAYS,
     EVALUATION_MAX_PAGES,
     EVALUATION_PAGE_SIZE,
     EVALUATION_SEARCH_URL,
@@ -31,6 +29,13 @@ from settings import (
 )
 from core.day_window import recent_day_range_timestamps
 from core.http_utils import build_request_params
+from services.order_field_utils import (
+    first_non_empty,
+    normalize_product_text,
+    normalize_sale_param,
+    parse_confirm_receipt_timestamp,
+    parse_timestamp,
+)
 from services.order_match_scoring import compute_match_score
 
 ProgressCallback = Callable[[str], None]
@@ -46,6 +51,8 @@ QUALITY_REFUND_REFERER = (
 ORDER_PROGRESS_PAGE_INTERVAL = 5
 QUALITY_REFUND_REQUEST_METHODS = ("GET", "POST")
 _CACHE_FETCH_BATCH_ORDERS = 1000  # 每积累多少订单触发一次持久化回调
+_BAD_REVIEW_RECENT_WINDOW_DAYS = 30
+_EVALUATION_TERMINATOR_THRESHOLD = 10
 
 
 @dataclass(frozen=True)
@@ -299,30 +306,6 @@ class BadReviewOrderFinder:
             if create_time >= earliest_time:
                 filtered.append(order)
         return filtered
-
-    def merge_quality_refund_orders(
-        self,
-        orders: JsonList,
-        earliest_time: int = 0,
-        on_progress: ProgressCallback | None = None,
-    ) -> JsonList:
-        """将品质退款订单并入订单列表。"""
-        base_orders = self.deduplicate_orders_by_id(orders)
-        quality_refund_orders = self.get_quality_refund_orders(
-            earliest_time=earliest_time,
-            on_progress=on_progress,
-        )
-        if not quality_refund_orders:
-            return base_orders
-
-        merged_orders = self.deduplicate_orders_by_id(base_orders + quality_refund_orders)
-        added_count = len(merged_orders) - len(base_orders)
-        if on_progress:
-            on_progress(
-                f"[品退] 已并入 {added_count} 个订单"
-                f"（接口返回 {len(quality_refund_orders)} 个）。"
-            )
-        return merged_orders
 
     # -------------------------------------------------------------------
     # 订单抓取（页码并行方案）
@@ -627,7 +610,7 @@ class BadReviewOrderFinder:
                 if attitude_name == "不够好":
                     expire_date = datetime.fromtimestamp(can_reply_expire_time)
                     days_until_expire = (expire_date - datetime.now()).days
-                    if days_until_expire >= -30:
+                    if days_until_expire >= -_BAD_REVIEW_RECENT_WINDOW_DAYS:
                         page_bad_reviews.append(evaluation)
 
             all_bad_reviews.extend(page_bad_reviews)
@@ -638,7 +621,7 @@ class BadReviewOrderFinder:
                     f"（累计: {len(all_bad_reviews)}）"
                 )
 
-            if len(evaluations) < 10:
+            if len(evaluations) < _EVALUATION_TERMINATOR_THRESHOLD:
                 break
 
             page += 1
@@ -650,24 +633,6 @@ class BadReviewOrderFinder:
     # -------------------------------------------------------------------
     # 昵称标准化
     # -------------------------------------------------------------------
-
-    # 通用昵称前缀列表（以这些开头的均视为无效昵称，得 0 分）
-    _GENERIC_NICKNAME_PREFIXES: tuple[str, ...] = ("匿名", "微信用户", "默认昵称")
-
-    @classmethod
-    def _is_generic_nickname(cls, name: str) -> bool:
-        """判断昵称是否为通用名（空昵称或以通用前缀开头的均视为通用名）。"""
-        if not name:
-            return True
-        return any(name.startswith(prefix) for prefix in cls._GENERIC_NICKNAME_PREFIXES)
-
-
-    @staticmethod
-    def _parse_confirm_receipt_timestamp(confirm_receipt_time: Any) -> int:
-        """解析 confirmReceiptTime（字符串秒级时间戳）为 int。"""
-        if confirm_receipt_time and str(confirm_receipt_time).isdigit():
-            return int(confirm_receipt_time)
-        return 0
 
     @staticmethod
     def _resolve_reference_time(order_data: JsonDict) -> int:
@@ -704,51 +669,6 @@ class BadReviewOrderFinder:
         return merged
 
     @staticmethod
-    def _first_non_empty(data: JsonDict, keys: tuple[str, ...]) -> Any:
-        """从多个候选字段中取第一个非空值。"""
-        for key in keys:
-            if key not in data:
-                continue
-            value = data.get(key)
-            if isinstance(value, str):
-                if value.strip():
-                    return value.strip()
-                continue
-            if value not in (None, [], {}):
-                return value
-        return None
-
-    @staticmethod
-    def _parse_timestamp(raw_value: Any) -> int:
-        """将原始时间值转为秒级时间戳，自动处理毫秒。"""
-        if raw_value is None:
-            return 0
-        raw_text = str(raw_value).strip()
-        if not raw_text.isdigit():
-            return 0
-        ts = int(raw_text)
-        if ts > 9_999_999_999:
-            ts //= 1000
-        return ts
-
-    @staticmethod
-    def _normalize_product_text(text: str | None) -> str:
-        """标准化商品字段值，便于跨字段名比较。"""
-        if not text:
-            return ""
-        return re.sub(r"[\s，,、/\-_|（）()]+", "", str(text)).lower()
-
-    @classmethod
-    def _normalize_sale_param_value(cls, raw_value: Any) -> str:
-        """将 saleParam / skuName 等规格字段统一为字符串。"""
-        if isinstance(raw_value, list):
-            tokens = [str(v).strip() for v in raw_value if str(v).strip()]
-            return "|".join(tokens)
-        if raw_value is None:
-            return ""
-        return str(raw_value).strip()
-
-    @staticmethod
     def _build_product_id_key(product_id: str, sku_id: str) -> str | None:
         """构建 ID 维度索引键。"""
         if not product_id or not sku_id:
@@ -758,8 +678,8 @@ class BadReviewOrderFinder:
     @classmethod
     def _build_product_value_key(cls, product_name: str, sku_text: str) -> str | None:
         """构建值维度索引键（商品名 + 规格）。"""
-        name_norm = cls._normalize_product_text(product_name)
-        sku_norm = cls._normalize_product_text(sku_text)
+        name_norm = normalize_product_text(product_name)
+        sku_norm = normalize_product_text(sku_text)
         if not name_norm or not sku_norm:
             return None
         return f"value::{name_norm}::{sku_norm}"
@@ -775,16 +695,16 @@ class BadReviewOrderFinder:
         image_keys: tuple[str, ...] = (),
     ) -> JsonDict:
         """按字段别名提取商品匹配字段。"""
-        raw_product_id = self._first_non_empty(data, product_id_keys)
-        raw_sku_id = self._first_non_empty(data, sku_id_keys)
-        raw_sku_text = self._first_non_empty(data, sku_text_keys)
-        raw_product_name = self._first_non_empty(data, product_name_keys)
-        raw_image = self._first_non_empty(data, image_keys) if image_keys else ""
+        raw_product_id = first_non_empty(data, product_id_keys, default=None)
+        raw_sku_id = first_non_empty(data, sku_id_keys, default=None)
+        raw_sku_text = first_non_empty(data, sku_text_keys, default="")
+        raw_product_name = first_non_empty(data, product_name_keys, default="")
+        raw_image = first_non_empty(data, image_keys, default="") if image_keys else ""
 
         return {
             "productId": str(raw_product_id).strip() if raw_product_id is not None else "",
             "skuId": str(raw_sku_id).strip() if raw_sku_id is not None else "",
-            "skuText": self._normalize_sale_param_value(raw_sku_text),
+            "skuText": normalize_sale_param(raw_sku_text),
             "productName": str(raw_product_name).strip() if raw_product_name else "",
             "imageUrl": str(raw_image).strip() if raw_image else "",
         }
@@ -793,9 +713,7 @@ class BadReviewOrderFinder:
         """提取订单级公共字段。"""
         buyer_nickname = order.get("buyerInfo", {}).get("nickName", "")
         confirm_receipt_time = order.get("acceptInfo", {}).get("confirmReceiptTime", "")
-        confirm_receipt_timestamp = self._parse_confirm_receipt_timestamp(
-            confirm_receipt_time
-        )
+        confirm_receipt_timestamp = parse_confirm_receipt_timestamp(confirm_receipt_time)
         auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {})
 
         return {
@@ -847,15 +765,15 @@ class BadReviewOrderFinder:
     def _build_quality_refund_order_stub(self, item: JsonDict) -> JsonDict | None:
         """将品退接口返回项转换为统一订单结构。"""
         order_info = item.get("orderInfo", {}) or {}
-        raw_order_id = self._first_non_empty(order_info, ("orderId", "order_id"))
+        raw_order_id = first_non_empty(order_info, ("orderId", "order_id"), default=None)
         if raw_order_id is None:
             return None
 
         time_keys = ("createTime", "create_time", "createTs", "orderCreateTime", "refundTime")
-        raw_create_time = self._first_non_empty(order_info, time_keys)
+        raw_create_time = first_non_empty(order_info, time_keys, default=None)
         if raw_create_time is None:
-            raw_create_time = self._first_non_empty(item, time_keys)
-        create_time = self._parse_timestamp(raw_create_time)
+            raw_create_time = first_non_empty(item, time_keys, default=None)
+        create_time = parse_timestamp(raw_create_time)
 
         product_fields = self._extract_product_fields(
             order_info,
@@ -1038,42 +956,6 @@ class BadReviewOrderFinder:
             "buyer_nickname": buyer_nickname,
             "eval_time": eval_time,
         }
-
-    @staticmethod
-    def _split_sku_tokens(raw_text: str) -> list[str]:
-        """按常见分隔符拆分规格文本。"""
-        if not raw_text:
-            return []
-        return [t.strip() for t in re.split(r"[，,、/\-_ |]+", raw_text) if t.strip()]
-
-    @classmethod
-    def _is_sku_exact_matched(cls, sku_name: str, sale_param: str) -> bool:
-        """规格严格一致校验（用于一票否决）。"""
-        if not sku_name or not sale_param:
-            return False
-
-        left = sku_name.strip()
-        right = sale_param.strip()
-        if left == right:
-            return True
-
-        # 同义格式兼容：忽略常见分隔符与空白后比较
-        normalize_pattern = r"[，,、/\-_ |（）()]+"
-        normalized_left = re.sub(normalize_pattern, "", left)
-        normalized_right = re.sub(normalize_pattern, "", right)
-        if normalized_left and normalized_left == normalized_right:
-            return True
-
-        # 兜底：分词后需双向完全覆盖，避免“部分重叠”误判为一致
-        left_tokens = cls._split_sku_tokens(left)
-        right_tokens = cls._split_sku_tokens(right)
-        if not left_tokens or not right_tokens:
-            return False
-
-        return (
-            len(left_tokens) == len(right_tokens)
-            and set(left_tokens) == set(right_tokens)
-        )
 
     @staticmethod
     def _build_product_reason(match_result: JsonDict) -> str:

@@ -100,6 +100,44 @@ class WindowStatusPanelTests(unittest.TestCase):
         self.assertEqual(self.window.result_table.item(1, 0).text(), "未匹配")
         self.assertIn("建议完整补查", self.window.result_table.item(1, 6).text())
 
+    def test_result_table_filter_should_reduce_visible_rows(self):
+        self.window._set_latest_result_table(
+            columns=[("confidence_bucket", "分组"), ("order_id", "订单号")],
+            rows=[
+                {"confidence_bucket": "高置信度", "order_id": "A1"},
+                {"confidence_bucket": "低置信度", "order_id": "A2"},
+                {"confidence_bucket": "未匹配", "order_id": ""},
+            ],
+        )
+
+        self.window.result_filter_combo.setCurrentText("仅看低置信度")
+        self.window._apply_result_table_filter()
+
+        self.assertEqual(self.window.result_table.rowCount(), 1)
+        self.assertEqual(self.window.result_table.item(0, 0).text(), "低置信度")
+
+    def test_copy_result_table_selection_should_write_clipboard_text(self):
+        self.window._set_latest_result_table(
+            columns=[("confidence_bucket", "分组"), ("order_id", "订单号")],
+            rows=[{"confidence_bucket": "高置信度", "order_id": "A1"}],
+        )
+        self.window.result_table.selectRow(0)
+
+        self.window.copy_selected_result_row()
+
+        self.assertIn("高置信度", self.app.clipboard().text())
+        self.assertIn("A1", self.app.clipboard().text())
+
+    def test_click_result_row_should_backfill_order_id(self):
+        self.window._set_latest_result_table(
+            columns=[("confidence_bucket", "分组"), ("order_id", "订单号")],
+            rows=[{"confidence_bucket": "高置信度", "order_id": "ORDER-1"}],
+        )
+
+        self.window._apply_result_row_to_order_input(0)
+
+        self.assertIn("ORDER-1", self.window.order_edit.toPlainText())
+
 
 if __name__ == "__main__":
     unittest.main()

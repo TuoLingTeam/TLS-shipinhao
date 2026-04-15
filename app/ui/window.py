@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -167,6 +168,7 @@ class MainWindow(QWidget):
         self._latest_result_insight = "执行查单或批量处理后，这里会展示更直观的结果解读。"
         self._latest_result_table_rows = []
         self._latest_result_table_columns = []
+        self._visible_result_table_rows = []
         self._last_review_results = []
         self._update_status = {
             "checked": False,
@@ -1150,7 +1152,30 @@ class MainWindow(QWidget):
         self.result_table.verticalHeader().setVisible(False)
         self.result_table.horizontalHeader().setStretchLastSection(True)
         self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.result_table.cellDoubleClicked.connect(self._apply_result_row_to_order_input)
         task_layout.addWidget(self.result_table)
+
+        result_action_row = QWidget()
+        result_action_layout = QHBoxLayout(result_action_row)
+        result_action_layout.setContentsMargins(0, 0, 0, 0)
+        result_action_layout.setSpacing(self._standard_layout_spacing())
+
+        self.result_filter_combo = QComboBox()
+        self.result_filter_combo.addItems(["全部结果", "仅看高置信度", "仅看低置信度", "仅看未匹配"])
+        self.result_filter_combo.currentIndexChanged.connect(self._apply_result_table_filter)
+        result_action_layout.addWidget(self.result_filter_combo, 1)
+
+        self.copy_result_button = QPushButton("复制选中行")
+        self.copy_result_button.setObjectName("SecondaryButton")
+        self.copy_result_button.clicked.connect(self.copy_selected_result_row)
+        result_action_layout.addWidget(self.copy_result_button, 1)
+
+        self.fill_result_button = QPushButton("回填选中订单号")
+        self.fill_result_button.setObjectName("SecondaryButton")
+        self.fill_result_button.clicked.connect(self.apply_selected_result_order_id)
+        result_action_layout.addWidget(self.fill_result_button, 1)
+
+        task_layout.addWidget(result_action_row)
 
         task_button_row = QWidget()
         task_button_row_layout = QHBoxLayout(task_button_row)
@@ -1399,6 +1424,11 @@ class MainWindow(QWidget):
         """记录最近任务的结果表格数据。"""
         self._latest_result_table_columns = list(columns or [])
         self._latest_result_table_rows = list(rows or [])
+        self._visible_result_table_rows = list(rows or [])
+        if hasattr(self, "result_filter_combo"):
+            self.result_filter_combo.blockSignals(True)
+            self.result_filter_combo.setCurrentIndex(0)
+            self.result_filter_combo.blockSignals(False)
         self.refresh_product_status_panels()
 
     def _refresh_result_table(self):
@@ -1406,7 +1436,7 @@ class MainWindow(QWidget):
         if not hasattr(self, "result_table"):
             return
         columns = self._latest_result_table_columns or []
-        rows = self._latest_result_table_rows or []
+        rows = self._visible_result_table_rows or []
         self.result_table.clear()
         self.result_table.setColumnCount(len(columns))
         self.result_table.setHorizontalHeaderLabels([title for _, title in columns])
@@ -1417,6 +1447,51 @@ class MainWindow(QWidget):
                 self.result_table.setItem(row_index, column_index, item)
         if rows:
             self.result_table.resizeRowsToContents()
+
+    def _apply_result_table_filter(self):
+        """按当前筛选项刷新结果表格。"""
+        filter_label = self.result_filter_combo.currentText() if hasattr(self, "result_filter_combo") else "全部结果"
+        rows = list(self._latest_result_table_rows or [])
+        if filter_label == "仅看高置信度":
+            rows = [row for row in rows if str(row.get("confidence_bucket", "")) == "高置信度"]
+        elif filter_label == "仅看低置信度":
+            rows = [row for row in rows if str(row.get("confidence_bucket", "")) == "低置信度"]
+        elif filter_label == "仅看未匹配":
+            rows = [row for row in rows if str(row.get("confidence_bucket", "")) == "未匹配"]
+        self._visible_result_table_rows = rows
+        self._refresh_result_table()
+
+    def copy_selected_result_row(self):
+        """复制选中结果行。"""
+        selected_row = self.result_table.currentRow() if hasattr(self, "result_table") else -1
+        if selected_row < 0 or selected_row >= len(self._visible_result_table_rows):
+            self.show_message(QMessageBox.Information, "未选择结果", "请先在结果表格中选择一行。")
+            return
+        row = self._visible_result_table_rows[selected_row]
+        text = "\n".join(
+            f"{title}：{row.get(key, '')}"
+            for key, title in (self._latest_result_table_columns or [])
+        )
+        QApplication.clipboard().setText(text)
+        self._append_logs("已复制选中结果行。")
+
+    def _apply_result_row_to_order_input(self, row_index, _column=None):
+        """将结果行中的订单号回填到订单输入框。"""
+        if row_index < 0 or row_index >= len(self._visible_result_table_rows):
+            return
+        order_id = str(self._visible_result_table_rows[row_index].get("order_id", "") or "").strip()
+        if not order_id:
+            self._append_logs("所选结果没有可回填的订单号。")
+            return
+        current_order_ids = parse_batch_input(self.order_edit.toPlainText())
+        if order_id not in current_order_ids:
+            current_order_ids.append(order_id)
+        self._set_order_input_values(current_order_ids)
+        self._append_logs(f"已从结果表回填订单号：{order_id}")
+
+    def apply_selected_result_order_id(self):
+        """回填当前选中的结果行订单号。"""
+        self._apply_result_row_to_order_input(self.result_table.currentRow())
 
     def refresh_product_status_panels(self):
         """刷新启动检查、缓存状态与历史摘要。"""

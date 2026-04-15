@@ -28,10 +28,17 @@ class OrderSyncService:
         if on_progress:
             on_progress(message)
 
+    @staticmethod
+    def _retention_start():
+        return recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)[0]
+
+    @staticmethod
+    def _now():
+        return end_of_day_timestamp()
 
     def _save_state(self, *, mode, last_error="", coverage_start=None, coverage_end=None, incremental_start=None, incremental_end=None):
-        now_ts = end_of_day_timestamp()
-        retention_start, _ = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
+        now_ts = self._now()
+        retention_start = self._retention_start()
         self.repository.save_state(
             scope=ORDER_CACHE_SCOPE,
             coverage_start=int(coverage_start if coverage_start is not None else retention_start),
@@ -70,7 +77,7 @@ class OrderSyncService:
                     f"写入 {len(window_orders)} 个订单。",
                 )
 
-            orders, warnings = self.finder.get_orders_for_cache(
+            _, warnings = self.finder.get_orders_for_cache(
                 earliest_time=start_timestamp,
                 create_time_start=start_timestamp,
                 create_time_end=end_timestamp,
@@ -83,8 +90,8 @@ class OrderSyncService:
             written_count = len({order.get("commonInfo", {}).get("orderId") for order in persisted_orders if order.get("commonInfo", {}).get("orderId")})
             self._save_state(
                 mode=mode,
-                coverage_start=recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)[0],
-                coverage_end=end_of_day_timestamp(),
+                coverage_start=self._retention_start(),
+                coverage_end=self._now(),
                 incremental_start=start_timestamp if mode in ("incremental", "rebuild") else 0,
                 incremental_end=end_timestamp if mode in ("incremental", "rebuild") else 0,
             )
