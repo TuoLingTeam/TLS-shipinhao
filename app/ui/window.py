@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFrame,
-    QHeaderView,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -23,8 +22,6 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStyle,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -165,8 +162,6 @@ class MainWindow(QWidget):
         self._latest_task_export_name = "tls-task-history.csv"
         self._latest_task_guidance = ""
         self._latest_result_insight = "执行查单或批量处理后，这里会展示更直观的结果解读。"
-        self._latest_result_table_rows = []
-        self._latest_result_table_columns = []
         self._last_review_results = []
         self._update_status = {
             "checked": False,
@@ -1139,19 +1134,6 @@ class MainWindow(QWidget):
         self.result_insight_view.setMaximumHeight(scale_px(170, min_value=128))
         task_layout.addWidget(self.result_insight_view)
 
-        self.result_table = QTableWidget(0, 0)
-        self.result_table.setObjectName("LogEdit")
-        self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.result_table.setSelectionMode(QTableWidget.SingleSelection)
-        self.result_table.setAlternatingRowColors(True)
-        self.result_table.setMinimumHeight(scale_px(180, min_value=132))
-        self.result_table.setMaximumHeight(scale_px(260, min_value=180))
-        self.result_table.verticalHeader().setVisible(False)
-        self.result_table.horizontalHeader().setStretchLastSection(True)
-        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        task_layout.addWidget(self.result_table)
-
         task_button_row = QWidget()
         task_button_row_layout = QHBoxLayout(task_button_row)
         task_button_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1372,7 +1354,6 @@ class MainWindow(QWidget):
             self.task_history_label.setText("首次执行查单、缓存同步或批量处理后，会在这里展示最近任务摘要。")
             self.export_task_button.setDisabled(True)
             self.result_insight_view.setPlainText(self._latest_result_insight)
-            self._refresh_result_table()
             return
 
         latest = entries[0]
@@ -1393,30 +1374,6 @@ class MainWindow(QWidget):
         self.task_history_label.setText("\n".join(lines))
         self.export_task_button.setDisabled(not self._latest_task_rows)
         self.result_insight_view.setPlainText(self._latest_result_insight)
-        self._refresh_result_table()
-
-    def _set_latest_result_table(self, *, columns, rows):
-        """记录最近任务的结果表格数据。"""
-        self._latest_result_table_columns = list(columns or [])
-        self._latest_result_table_rows = list(rows or [])
-        self.refresh_product_status_panels()
-
-    def _refresh_result_table(self):
-        """刷新结果表格面板。"""
-        if not hasattr(self, "result_table"):
-            return
-        columns = self._latest_result_table_columns or []
-        rows = self._latest_result_table_rows or []
-        self.result_table.clear()
-        self.result_table.setColumnCount(len(columns))
-        self.result_table.setHorizontalHeaderLabels([title for _, title in columns])
-        self.result_table.setRowCount(len(rows))
-        for row_index, row in enumerate(rows):
-            for column_index, (key, _) in enumerate(columns):
-                item = QTableWidgetItem(str(row.get(key, "") or ""))
-                self.result_table.setItem(row_index, column_index, item)
-        if rows:
-            self.result_table.resizeRowsToContents()
 
     def refresh_product_status_panels(self):
         """刷新启动检查、缓存状态与历史摘要。"""
@@ -2945,16 +2902,6 @@ class MainWindow(QWidget):
             f"- 失败：{failure_count}\n"
             f"- 建议：{'可继续下一批处理' if failure_count == 0 else '优先导出失败清单并逐条重试'}"
         )
-        self._set_latest_result_table(
-            columns=[
-                ("order_id", "订单号"),
-                ("tracking_number", "新物流单号"),
-                ("status", "状态"),
-                ("old_waybill", "原物流单号"),
-                ("error_message", "失败原因"),
-            ],
-            rows=export_rows,
-        )
         self._set_latest_task_rows(
             export_rows,
             export_name=f"batch-task-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
@@ -3205,15 +3152,6 @@ class MainWindow(QWidget):
                     f"{index}. {row['order_id']}｜{row['product_name']}｜{row['refund_reason'] or '未标注原因'}"
                 )
             self._latest_result_insight = "\n".join(preview_lines)
-            self._set_latest_result_table(
-                columns=[
-                    ("order_id", "订单号"),
-                    ("product_name", "商品"),
-                    ("sale_param", "规格"),
-                    ("refund_reason", "退款原因"),
-                ],
-                rows=export_rows,
-            )
             self._set_latest_task_rows(
                 export_rows,
                 export_name=f"quality-refund-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
@@ -3237,11 +3175,6 @@ class MainWindow(QWidget):
             else:
                 confidence = "未匹配"
                 unmatched += 1
-            recommendation = (
-                "可直接处理"
-                if confidence == "高置信度"
-                else ("建议人工核对" if confidence == "低置信度" else "建议完整补查或人工确认")
-            )
             export_rows.append(
                 {
                     "evaluation_id": item.get("evaluationId", ""),
@@ -3256,7 +3189,6 @@ class MainWindow(QWidget):
                     "match_reasons": " | ".join(item.get("matchReasons", []) or []),
                     "evaluation_content": item.get("evaluationContent", ""),
                     "matched": "是" if matched else "否",
-                    "recommendation": recommendation,
                 }
             )
         guidance = (
@@ -3279,18 +3211,6 @@ class MainWindow(QWidget):
                     f"{index}. {row['confidence_bucket']}｜订单 {row['order_id'] or '-'}｜得分 {row['match_score']}｜{row['match_reasons'] or '建议完整补查'}"
                 )
         self._latest_result_insight = "\n".join(preview_lines)
-        self._set_latest_result_table(
-            columns=[
-                ("confidence_bucket", "分组"),
-                ("order_id", "订单号"),
-                ("match_score", "得分"),
-                ("match_strategy", "策略"),
-                ("buyer_nickname", "评价昵称"),
-                ("match_reasons", "匹配依据"),
-                ("recommendation", "建议"),
-            ],
-            rows=export_rows,
-        )
         self._append_logs(f"结果解读：{guidance}")
         self._set_latest_task_rows(
             export_rows,
@@ -3335,20 +3255,6 @@ class MainWindow(QWidget):
             f"- 状态：{'有提醒' if warning_text else '正常完成'}\n"
             f"- 建议：{'先查看提醒后再查单' if warning_text else '可直接开始查单'}"
         )
-        self._set_latest_result_table(
-            columns=[
-                ("task", "任务"),
-                ("written_count", "写入量"),
-                ("warning_text", "提醒"),
-            ],
-            rows=[
-                {
-                    "task": action_label,
-                    "written_count": matched_count,
-                    "warning_text": warning_text or "-",
-                }
-            ],
-        )
         self._show_task_summary_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
@@ -3364,7 +3270,6 @@ class MainWindow(QWidget):
                 f"- 查询范围：最近 {self.review_days_spin.value()} 天\n"
                 "- 结果：未找到符合条件的订单"
             )
-            self._set_latest_result_table(columns=[], rows=[])
             self._record_task_history(
                 self._build_task_history_entry(
                     task_label="获取品退订单",
@@ -3414,7 +3319,6 @@ class MainWindow(QWidget):
                 f"- 查询范围：最近 {self.review_days_spin.value()} 天\n"
                 "- 结果：未发现差评数据"
             )
-            self._set_latest_result_table(columns=[], rows=[])
             self._record_task_history(
                 self._build_task_history_entry(
                     task_label="完整补查" if self.review_task_type == TASK_REVIEW_FULL_SCAN else "中差评查找",
