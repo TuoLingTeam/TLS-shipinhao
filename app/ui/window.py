@@ -88,12 +88,23 @@ from settings import (
     set_ui_scale,
 )
 from core.license import check_stored_license, check_stored_license_local
-from ui.message_helpers import MessagePresenter
-from ui.sections.batch_section import build_batch_section
-from ui.sections.header_section import build_header_section, set_tutorial_badge_link
-from ui.sections.license_section import build_license_section
-from ui.sections.setup_section import build_setup_section
-from ui.sections.shared_widgets import standard_layout_spacing
+from ui.window_dialogs import MessagePresenter
+from ui.window_view import (
+    build_badge_style,
+    build_batch_section,
+    build_header_section,
+    build_license_section,
+    build_main_window_stylesheet,
+    build_setup_section,
+    calculate_editor_height,
+    resolve_height_profile,
+    resolve_initial_window_size,
+    resolve_layout_mode,
+    resolve_ui_scale_for_size,
+    scaled_padding,
+    set_tutorial_badge_link,
+    standard_layout_spacing,
+)
 from ui.widgets import (
     BatchInputEdit,
     LicenseDialog,
@@ -102,14 +113,6 @@ from ui.widgets import (
     get_license_reason_text,
     reset_font_caches,
 )
-from ui.window_layout import (
-    calculate_editor_height,
-    resolve_height_profile,
-    resolve_initial_window_size,
-    resolve_layout_mode,
-    resolve_ui_scale_for_size,
-)
-from ui.window_styles import build_badge_style, build_main_window_stylesheet, scaled_padding
 from ui.batch_worker import BatchWorker
 from ui.update_worker import UpdateCheckWorker
 from ui.review_worker import (
