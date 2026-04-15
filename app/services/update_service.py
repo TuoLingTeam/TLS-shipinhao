@@ -22,6 +22,7 @@ class UpdateInfo:
     mandatory: bool
     platform: str
     download_url: str
+    tutorial_url: str
     notes: list[str]
     has_update: bool
     raw_payload: dict[str, Any]
@@ -48,23 +49,31 @@ def _normalize_notes(payload: dict[str, Any]) -> list[str]:
     return []
 
 
+def _resolve_download_url(payload: dict[str, Any]) -> str:
+    return str(payload.get('download_url') or '').strip()
+
+
+def _resolve_tutorial_url(payload: dict[str, Any]) -> str:
+    return str(payload.get('tutorial_url') or '').strip()
+
+
 def fetch_latest_version_info(current_version: str | None = None) -> UpdateInfo:
     response = requests.get(UPDATE_VERSION_URL, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     payload = response.json()
     platform = detect_platform()
-    platform_info = payload.get(platform) or {}
     latest_version = str(payload.get('version') or '').strip()
     resolved_current_version = current_version or get_current_version()
-    download_url = str(platform_info.get('url') or '').strip()
+    has_update = bool(latest_version and is_newer_version(resolved_current_version, latest_version))
     return UpdateInfo(
         app=str(payload.get('app') or 'TLS-shipinhao'),
         version=latest_version,
         build=int(payload.get('build') or 0),
         mandatory=bool(payload.get('mandatory')),
         platform=platform,
-        download_url=download_url,
+        download_url=_resolve_download_url(payload),
+        tutorial_url=_resolve_tutorial_url(payload),
         notes=_normalize_notes(payload),
-        has_update=bool(download_url and latest_version and is_newer_version(resolved_current_version, latest_version)),
+        has_update=has_update,
         raw_payload=payload,
     )

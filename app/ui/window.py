@@ -79,7 +79,6 @@ from settings import (
     PAGE_MARGIN,
     ROW_GAP,
     SETUP_SECTION_PADDING,
-    TUTORIAL_URL,
     UPDATE_CHECK_DELAY_MS,
     APP_VERSION,
     VERY_HIGH_DPI_COMPACT_THRESHOLD,
@@ -137,6 +136,9 @@ class LicenseRefreshWorker(QObject):
 class MainWindow(QWidget):
     """主窗口。"""
 
+    update_check_finished_signal = Signal(object, bool)
+    update_check_failed_signal = Signal(str, bool)
+
     def __init__(self, license_reason="ok", license_info=None):
         super().__init__()
         self.worker_thread = None
@@ -160,6 +162,8 @@ class MainWindow(QWidget):
             "source": "initial",
         }
         self._initial_height_fit_applied = False
+        self.update_check_finished_signal.connect(self._on_update_check_finished)
+        self.update_check_failed_signal.connect(self._on_update_check_failed)
         self._last_responsive_profile = None
         default_w, default_h = self._resolve_initial_window_size()
         self._ui_scale = self._resolve_ui_scale_for_size(default_w, default_h)
@@ -366,7 +370,7 @@ class MainWindow(QWidget):
                 color: {c["blue_deep"]};
                 border: 1px solid {c["blue_tint"]};
                 border-radius: {button_radius}px;
-                padding: {scale_px(10, min_value=7)}px {scale_px(16, min_value=12)}px;
+                padding: {scale_px(7, min_value=5)}px {scale_px(12, min_value=8)}px;
                 font-weight: 700;
             }}
             QPushButton#SecondaryButton:hover {{
@@ -487,10 +491,8 @@ class MainWindow(QWidget):
         self.author_badge = QLabel(f"微信：{AUTHOR_WECHAT}")
         self.author_badge.setAlignment(Qt.AlignCenter)
         self.author_badge.setFont(build_font(FONT_SIZES["badge"], bold=True))
-        self.author_badge.setMinimumSize(
-            scale_px(BADGE_MIN_WIDTH, min_value=64),
-            scale_px(BADGE_HEIGHT, min_value=28),
-        )
+        self.author_badge.setMinimumWidth(scale_px(BADGE_MIN_WIDTH, min_value=64))
+        self.author_badge.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
         self.author_badge.setStyleSheet(
             self._build_badge_style(
                 APP_COLORS["blue_soft"],
@@ -510,13 +512,10 @@ class MainWindow(QWidget):
         self.tutorial_badge.setOpenExternalLinks(True)
         self.tutorial_badge.setCursor(Qt.PointingHandCursor)
         self.tutorial_badge.setFont(build_font(FONT_SIZES["badge"], bold=True))
-        self.tutorial_badge.setMinimumSize(
-            scale_px(BADGE_MIN_WIDTH, min_value=64),
-            scale_px(BADGE_HEIGHT, min_value=28),
-        )
-        self.tutorial_badge.setText(
-            f'<a href="{TUTORIAL_URL}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
-        )
+        self.tutorial_badge.setMinimumWidth(scale_px(BADGE_MIN_WIDTH, min_value=64))
+        self.tutorial_badge.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
+        self._tutorial_url = ""
+        self._set_tutorial_badge_link(self._tutorial_url)
         self.tutorial_badge.setStyleSheet(
             self._build_badge_style(
                 APP_COLORS["surface_soft"],
@@ -532,12 +531,29 @@ class MainWindow(QWidget):
         self.update_button = QPushButton("检查更新")
         self.update_button.setObjectName("SecondaryButton")
         self.update_button.setCursor(Qt.PointingHandCursor)
+        self.update_button.setFont(build_font(FONT_SIZES["badge"], bold=True))
+        self.update_button.setMinimumWidth(scale_px(BADGE_MIN_WIDTH, min_value=64))
+        self.update_button.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
         self.update_button.clicked.connect(lambda: self.trigger_background_update_check(manual=True))
         self.update_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         badge_layout.addWidget(self.update_button, 0, Qt.AlignVCenter)
 
         self.header_box.addWidget(badge_wrap, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._sync_window_title_with_license(self._license_reason)
+
+    def _set_tutorial_badge_link(self, url):
+        """刷新教程入口链接。"""
+        self._tutorial_url = (url or '').strip()
+        if self._tutorial_url:
+            self.tutorial_badge.setOpenExternalLinks(True)
+            self.tutorial_badge.setText(
+                f'<a href="{self._tutorial_url}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
+            )
+        else:
+            self.tutorial_badge.setOpenExternalLinks(False)
+            self.tutorial_badge.setText(
+                f'<span style="color: {APP_COLORS["blue_deep"]};">查看使用教程</span>'
+            )
 
     @staticmethod
     def _build_badge_style(
@@ -1035,12 +1051,14 @@ class MainWindow(QWidget):
         self.license_summary_label.setObjectName("LicenseSummary")
         self.license_summary_label.setFont(build_font(FONT_SIZES["badge"], bold=True))
         self.license_summary_label.setWordWrap(True)
+        self.license_summary_label.setAlignment(Qt.AlignCenter)
         panel_layout.addWidget(self.license_summary_label)
 
         self.license_meta_label = QLabel()
         self.license_meta_label.setObjectName("LicenseMeta")
         self.license_meta_label.setFont(build_font(FONT_SIZES["secondary"]))
         self.license_meta_label.setWordWrap(True)
+        self.license_meta_label.setAlignment(Qt.AlignCenter)
         panel_layout.addWidget(self.license_meta_label)
 
         body_layout.addWidget(info_panel)
@@ -1868,10 +1886,10 @@ class MainWindow(QWidget):
         self.update_check_thread = QThread(self)
         self.update_check_worker = UpdateCheckWorker(APP_VERSION)
         self.update_check_worker.moveToThread(self.update_check_thread)
-        self.update_check_worker.finished.connect(lambda info: self._on_update_check_finished(info, manual=manual))
-        self.update_check_worker.finished.connect(lambda *_: self.update_check_thread.quit())
-        self.update_check_worker.failed.connect(lambda message: self._on_update_check_failed(message, manual=manual))
-        self.update_check_worker.failed.connect(lambda *_: self.update_check_thread.quit())
+        self.update_check_worker.finished.connect(lambda info, m=manual: self.update_check_finished_signal.emit(info, m))
+        self.update_check_worker.finished.connect(self.update_check_thread.quit)
+        self.update_check_worker.failed.connect(lambda message, m=manual: self.update_check_failed_signal.emit(message, m))
+        self.update_check_worker.failed.connect(self.update_check_thread.quit)
         self._bind_thread_lifecycle(
             self.update_check_thread,
             self.update_check_worker,
@@ -1879,8 +1897,11 @@ class MainWindow(QWidget):
         )
         self.update_check_thread.start()
 
-    def _on_update_check_finished(self, info, *, manual):
+    def _on_update_check_finished(self, info, manual):
         """更新检查完成。"""
+        if getattr(info, 'tutorial_url', None):
+            self._set_tutorial_badge_link(info.tutorial_url)
+
         if not info.has_update:
             if manual:
                 self.show_message(QMessageBox.Information, "检查更新", f"当前已是最新版本：{APP_VERSION}")
@@ -1893,7 +1914,7 @@ class MainWindow(QWidget):
         self.append_result_log(f"发现新版本：{info.version}")
         self._show_update_dialog(info)
 
-    def _on_update_check_failed(self, error_message, *, manual):
+    def _on_update_check_failed(self, error_message, manual):
         """更新检查失败。"""
         if manual:
             self.show_message(QMessageBox.Warning, "检查更新失败", error_message or "无法获取更新信息，请稍后重试。")
@@ -1911,7 +1932,7 @@ class MainWindow(QWidget):
         dialog, actions = self._create_message_dialog_base(
             QMessageBox.Information,
             f"发现新版本 {info.version}",
-            "检测到可用更新，是否立即前往下载？",
+            "检测到可用更新，是否立即前往网盘下载？",
             informative_text,
             min_width=620,
         )
@@ -1921,9 +1942,11 @@ class MainWindow(QWidget):
             if info.download_url:
                 QDesktopServices.openUrl(QUrl(info.download_url))
                 self.append_result_log(f"已打开更新下载链接：{info.download_url}")
+            else:
+                self.show_message(QMessageBox.Warning, "下载链接缺失", "远端配置未提供更新下载链接，请稍后重试。")
             dialog.accept()
 
-        self._add_message_action(actions, "立即下载", "MessagePrimary", _open_download)
+        self._add_message_action(actions, "前往下载", "MessagePrimary", _open_download)
         dialog.exec()
 
     def _sync_window_title_with_license(self, license_reason=None, license_info=None):

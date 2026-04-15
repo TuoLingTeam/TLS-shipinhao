@@ -37,8 +37,8 @@ class UpdateServiceTests(unittest.TestCase):
             'version': '4.4.0',
             'build': 20260414,
             'mandatory': False,
-            'mac': {'url': 'https://example.com/mac.zip'},
-            'windows': {'url': 'https://example.com/win.zip'},
+            'download_url': 'https://www.123912.com/s/6asHvd-t8WVh',
+            'tutorial_url': 'https://example.com/tutorial',
         }
         fake_response.raise_for_status.return_value = None
 
@@ -51,10 +51,31 @@ class UpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(info.version, '4.4.0')
         self.assertEqual(info.platform, 'mac')
-        self.assertEqual(info.download_url, 'https://example.com/mac.zip')
+        self.assertEqual(info.download_url, 'https://www.123912.com/s/6asHvd-t8WVh')
+        self.assertEqual(info.tutorial_url, 'https://example.com/tutorial')
         self.assertTrue(info.has_update)
         get_mock.assert_called_once()
 
+
+    def test_fetch_latest_version_info_allows_missing_remote_urls(self):
+        fake_response = mock.Mock()
+        fake_response.json.return_value = {
+            'app': 'TLS-shipinhao',
+            'version': '4.4.0',
+            'build': 20260414,
+            'mandatory': False,
+        }
+        fake_response.raise_for_status.return_value = None
+
+        with mock.patch.object(update_service.requests, 'get', return_value=fake_response), mock.patch.object(
+            update_service,
+            'detect_platform',
+            return_value='mac',
+        ):
+            info = update_service.fetch_latest_version_info('4.3')
+
+        self.assertEqual(info.download_url, '')
+        self.assertEqual(info.tutorial_url, '')
 
 if __name__ == '__main__':
     unittest.main()
