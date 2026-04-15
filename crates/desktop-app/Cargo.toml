@@ -3,8 +3,12 @@ name = "desktop-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+build = "build.rs"
 
 [dependencies]
 anyhow.workspace = true
 slint = "1.8"
 desktop-services = { path = "../desktop-services" }
+
+[build-dependencies]
+slint-build = "1.8"

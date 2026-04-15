@@ -7,15 +7,10 @@ license.workspace = true
 [dependencies]
 base64 = "0.22"
 ed25519-dalek = "2.1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 
 [lib]
 name = "security_core"
 crate-type = ["cdylib"]
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true

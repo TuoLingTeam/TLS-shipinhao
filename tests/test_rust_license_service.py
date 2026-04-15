@@ -14,12 +14,17 @@ class RustLicenseServiceTests(unittest.TestCase):
             "pub trait LicenseRepository",
             "pub struct LicenseService",
             "pub struct LicenseRecord",
+            "pub struct GeneratedKeyRecord",
+            "pub struct DeviceRegistration",
+            "pub struct LicenseServiceResponse",
             "pub struct ActivationInput",
             "pub struct VerifyInput",
             "pub fn issue_license_lease",
             "pub fn activate",
             "pub fn verify",
             "pub struct AuditEvent",
+            "pub const LEASE_RENEWAL_HOURS",
+            "pub const LEASE_HARD_EXPIRY_HOURS",
         ):
             self.assertIn(symbol, text)
 
@@ -31,7 +36,7 @@ class RustLicenseServiceTests(unittest.TestCase):
         cargo_text = cargo_toml.read_text(encoding="utf-8")
         self.assertIn('license-service = { path = "../../crates/license-service" }', cargo_text)
         lib_text = lib_rs.read_text(encoding="utf-8")
-        for symbol in ("pub fn handle_activate", "pub fn handle_verify", "pub fn route_request"):
+        for symbol in ("pub fn handle_activate", "pub fn handle_verify", "pub fn route_request", "pub fn handle_json_request", "pub enum WorkerRoute"):
             self.assertIn(symbol, lib_text)
 
     def test_desktop_app_manifest_exists_for_future_slint_migration(self):

@@ -75,3 +75,5 @@ image/
 !tests/test_security_runtime.py
 !backend/test/
 !backend/test/*.mjs
+# Rust
+target/
