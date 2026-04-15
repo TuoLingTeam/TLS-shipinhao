@@ -15,6 +15,8 @@ class RustBuildToolsTests(unittest.TestCase):
             "pub struct ManifestSignature",
             "pub fn generate_integrity_manifest",
             "pub fn sign_manifest",
+            "pub fn attach_signature",
+            "pub fn verify_manifest_signature",
             "pub fn inject_version",
         ):
             self.assertIn(symbol, text)
