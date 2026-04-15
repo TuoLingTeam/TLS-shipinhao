@@ -10,6 +10,7 @@ members = [
   "crates/security-core",
   "apps/desktop",
   "apps/license-worker",
+  "xtask",
 ]
 
 [workspace.package]
