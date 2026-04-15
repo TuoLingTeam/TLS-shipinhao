@@ -603,7 +603,7 @@ class MainWindow(QWidget):
         self.tracking_edit.normalized.connect(self.refresh_input_metrics)
 
         self.config_card = self.create_card(
-            "第1步:系统配置与订单获取",
+            "1. 系统配置与订单获取",
             self._create_config_badge(),
             self._build_setup_content(),
             "ConfigCard",
@@ -611,20 +611,20 @@ class MainWindow(QWidget):
         self.config_title_label = self.config_card.title_label
 
         self.order_card = self.create_card(
-            "第2步:填写订单号",
+            "2. 填写订单号",
             self.order_count_badge,
             self.order_edit,
             "OrderCard",
         )
         self.tracking_card = self.create_card(
-            "第3步:填写物流单号",
+            "3. 填写物流单号",
             self.tracking_count_badge,
             self.tracking_edit,
             "TrackingCard",
         )
 
         self.action_card = self.create_card(
-            "第4步:执行批量处理",
+            "4. 执行批量处理",
             None,
             self._build_action_content(),
             "ActionCard",
@@ -650,10 +650,10 @@ class MainWindow(QWidget):
         self.log_view.setFont(build_fixed_font(11))
         self.log_view.setMinimumHeight(scale_px(LOG_PANEL_MIN_HEIGHT, min_value=128))
         self.log_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.log_view.setPlaceholderText("执行日志会显示在这里")
+        self.log_view.setPlaceholderText("运行日志会显示在这里")
 
         self.log_card = self.create_card(
-            "执行日志",
+            "运行日志",
             self.log_hint_label,
             self.log_view,
             "LogCard",
@@ -701,10 +701,9 @@ class MainWindow(QWidget):
         self.right_column_layout.addWidget(self.input_wrap, 1)
         self.right_column_layout.addWidget(self.log_card, 1)
 
-        self.main_content_layout.addLayout(self.left_column_layout, 4)
-        self.main_content_layout.addLayout(self.right_column_layout, 7)
+        self.main_content_layout.addLayout(self.left_column_layout, 1)
+        self.main_content_layout.addLayout(self.right_column_layout, 2)
         self.page_layout.addWidget(self.main_content, 0, Qt.AlignTop)
-        self.page_layout.addStretch(1)
         self._sync_window_title_with_license(self._license_reason, self._license_info)
 
     # -----------------------------------------------------------------------
@@ -862,7 +861,7 @@ class MainWindow(QWidget):
 
         config_content = self._build_config_content()
         config_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.setup_content_layout.addWidget(self._build_setup_section_card("配置目录", config_content))
+        self.setup_content_layout.addWidget(self._build_setup_section_card("1.1. 系统配置", config_content))
 
         review_content = self._build_review_content()
         review_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -933,7 +932,7 @@ class MainWindow(QWidget):
         days_row_layout.setContentsMargins(0, 0, 0, 0)
         days_row_layout.setSpacing(self._standard_layout_spacing())
 
-        self.review_days_label = QLabel("选择订单查询天数")
+        self.review_days_label = QLabel("1.2. 选择订单查询天数")
         self.review_days_label.setFont(build_font(FONT_SIZES["body"], bold=True))
         self.review_days_label.setStyleSheet(f"color: {APP_COLORS['blue_deep']};")
         days_row_layout.addWidget(self.review_days_label, 0, Qt.AlignVCenter)
@@ -1333,12 +1332,13 @@ class MainWindow(QWidget):
         self._apply_right_column_strict_split()
 
     def showEvent(self, event):
-        """首次展示时按内容自然高度收口，避免底部出现大块空白。"""
+        """首次展示时先按内容收口高度，再锁定初始窗口尺寸。"""
         super().showEvent(event)
         self._sync_responsive_metrics()
         if self._initial_height_fit_applied:
             self._apply_right_column_strict_split()
             return
+        self._apply_right_column_strict_split()
         self._fit_window_height_to_content()
         self._apply_right_column_strict_split()
         self.setFixedSize(self.width(), self.height())
@@ -1392,13 +1392,13 @@ class MainWindow(QWidget):
         self.refresh_input_metrics()
 
     def append_result_log(self, text):
-        """追加执行日志。"""
+        """追加运行日志。"""
         self.log_view.appendPlainText(text)
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def clear_result_log(self):
-        """清空执行日志。"""
+        """清空运行日志。"""
         self.log_view.clear()
 
     def _set_order_input_values(self, order_ids):
