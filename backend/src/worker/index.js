@@ -334,19 +334,19 @@ async function issueGrants(env, record, { deviceId, taskType = "bootstrap", sess
   };
 }
 
-async function persistSession(env, { licenseKey, deviceId, sessionId, expiresAt, clientVersion = "" }) {
+async function persistSession(env, { licenseKey, deviceId, sessionId, taskType = "", expiresAt, clientVersion = "" }) {
   const existing = await env.DB.prepare(
     "SELECT id FROM device_sessions WHERE session_id = ?"
   ).bind(sessionId).first();
   if (existing) {
     await env.DB.prepare(
-      "UPDATE device_sessions SET expires_at = ?, revoked_at = NULL, client_version = ? WHERE id = ?"
-    ).bind(expiresAt, clientVersion, existing.id).run();
+      "UPDATE device_sessions SET expires_at = ?, revoked_at = NULL, task_type = ?, client_version = ? WHERE id = ?"
+    ).bind(expiresAt, taskType || "", clientVersion, existing.id).run();
     return;
   }
   await env.DB.prepare(
-    "INSERT INTO device_sessions (license_key, device_id, session_id, issued_at, expires_at, revoked_at, client_version, ip_hash) VALUES (?, ?, ?, ?, ?, NULL, ?, '')"
-  ).bind(licenseKey, deviceId, sessionId, nowISO(), expiresAt, clientVersion).run();
+    "INSERT INTO device_sessions (license_key, device_id, session_id, task_type, issued_at, expires_at, revoked_at, client_version, ip_hash) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, '')"
+  ).bind(licenseKey, deviceId, sessionId, taskType || "", nowISO(), expiresAt, clientVersion).run();
 }
 
 async function handleActivate(request, env) {
@@ -390,6 +390,7 @@ async function handleActivate(request, env) {
     licenseKey: normalizedKey,
     deviceId: device_id,
     sessionId: grants.session_id,
+    taskType: "bootstrap",
     expiresAt: grants.session_token_expires_at,
     clientVersion: client_version || "",
   });
@@ -432,6 +433,7 @@ async function handleVerify(request, env) {
     licenseKey: normalizedKey,
     deviceId: device_id,
     sessionId: grants.session_id,
+    taskType: "bootstrap",
     expiresAt: grants.session_token_expires_at,
     clientVersion: client_version || "",
   });
@@ -463,6 +465,7 @@ async function handleSessionIssue(request, env) {
     licenseKey: normalizedKey,
     deviceId: device_id,
     sessionId: grants.session_id,
+    taskType: task_type,
     expiresAt: grants.session_token_expires_at,
     clientVersion: client_version || "",
   });
@@ -507,6 +510,7 @@ async function handleSessionRefresh(request, env) {
     licenseKey: normalizedKey,
     deviceId: device_id,
     sessionId: tokenPayload.session_id,
+    taskType: task_type,
     expiresAt: grants.session_token_expires_at,
     clientVersion: dbSession.client_version || "",
   });
