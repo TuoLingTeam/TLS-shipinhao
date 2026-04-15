@@ -327,7 +327,7 @@ class MainWindow(QWidget):
         self.input_wrap_layout.setSpacing(0)
         self.input_wrap_layout.addLayout(self.input_row_layout)
 
-        self.right_column_layout.addWidget(self.input_wrap)
+        self.right_column_layout.addWidget(self.input_wrap, 1)
         self.right_column_layout.addWidget(self.log_card, 1)
 
         self.main_content_layout.addLayout(self.left_column_layout, 1)
@@ -363,13 +363,7 @@ class MainWindow(QWidget):
 
         gap = max(0, self.right_column_layout.spacing())
         split_height = max(0, available_height - gap)
-        preferred_top = self.config_card.sizeHint().height() if hasattr(self, "config_card") else 0
-        log_min = scale_px(140, min_value=120)
-        max_top = max(0, split_height - log_min)
-        if preferred_top > 0 and max_top > 0:
-            top_height = min(preferred_top, max_top)
-        else:
-            top_height = split_height // 2
+        top_height = split_height // 2
         bottom_height = split_height - top_height
         if top_height <= 0 or bottom_height <= 0:
             return
