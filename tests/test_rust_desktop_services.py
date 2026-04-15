@@ -51,3 +51,19 @@ class RustDesktopOrderUtilsTests(unittest.TestCase):
             "pub fn split_sku_tokens",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopOrderMatchScoringTests(unittest.TestCase):
+    def test_order_match_scoring_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "order_match_scoring.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/order_match_scoring.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub struct ProductSimilarityResult",
+            "pub struct MatchScoreResult",
+            "pub fn similarity_percent",
+            "pub fn title_similarity_percent",
+            "pub fn compute_product_similarity",
+            "pub fn compute_match_score",
+        ):
+            self.assertIn(symbol, text)
