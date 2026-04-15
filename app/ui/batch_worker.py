@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """TLS-shipinhao 后台批量任务执行器。"""
 
-from __future__ import annotations
-
 import threading
 import time
 

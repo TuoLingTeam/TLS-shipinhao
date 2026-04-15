@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """在线更新检查后台 worker。"""
 
-from __future__ import annotations
-
 from PySide6.QtCore import QObject, Signal
 
 from services.update_service import fetch_latest_version_info

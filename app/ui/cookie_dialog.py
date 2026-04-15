@@ -35,7 +35,6 @@ else:
 
 WECHAT_STORE_HOME_URL = "https://store.weixin.qq.com/"
 TARGET_COOKIE_DOMAIN_KEYWORD = "weixin.qq.com"
-REQUIRED_COOKIE_KEY = "biz_magic"
 
 
 def _decode_cookie_value(value):
@@ -208,9 +207,13 @@ class CookieCaptureDialog(QDialog):
         """打开微信小店首页。"""
         self.web_view.setUrl(QUrl(WECHAT_STORE_HOME_URL))
 
+    def _has_login_cookie(self):
+        """当前是否已抓到可用登录态。"""
+        return bool(extract_biz_magic_from_cookie(self._cookies))
+
     def _accept_with_cookie(self):
         """确认使用当前抓到的 Cookie。"""
-        if not extract_biz_magic_from_cookie(self._cookies):
+        if not self._has_login_cookie():
             return
         self.accept()
 
@@ -230,8 +233,8 @@ class CookieCaptureDialog(QDialog):
             return
         self._set_status_suffix("页面加载失败，请检查网络后重试。")
 
-    def _on_cookie_added(self, cookie):
-        """记录目标域名下新增的 Cookie。"""
+    def _update_cookie_store(self, cookie, *, remove=False):
+        """同步更新目标域名下的 Cookie 缓存。"""
         if not self._is_target_cookie(cookie):
             return
 
@@ -239,20 +242,19 @@ class CookieCaptureDialog(QDialog):
         if not name:
             return
 
-        self._cookies[name] = _decode_cookie_value(cookie.value())
+        if remove:
+            self._cookies.pop(name, None)
+        else:
+            self._cookies[name] = _decode_cookie_value(cookie.value())
         self._refresh_cookie_state()
+
+    def _on_cookie_added(self, cookie):
+        """记录目标域名下新增的 Cookie。"""
+        self._update_cookie_store(cookie)
 
     def _on_cookie_removed(self, cookie):
         """同步删除被移除的 Cookie。"""
-        if not self._is_target_cookie(cookie):
-            return
-
-        name = _decode_cookie_value(cookie.name())
-        if not name:
-            return
-
-        self._cookies.pop(name, None)
-        self._refresh_cookie_state()
+        self._update_cookie_store(cookie, remove=True)
 
     def _is_target_cookie(self, cookie):
         """仅保留微信小店相关域名的 Cookie。"""
@@ -266,8 +268,7 @@ class CookieCaptureDialog(QDialog):
 
     def _refresh_cookie_state(self):
         """刷新 Cookie 捕获状态文案。"""
-        magic_value = extract_biz_magic_from_cookie(self._cookies)
-        if magic_value:
+        if self._has_login_cookie():
             base_text = "已检测到登录态，点击右上角「保存 Cookie」后选择保存目录即可。"
             self.save_button.setEnabled(True)
         else:

@@ -94,15 +94,17 @@ def get_dialog_action_spacing():
 # ---------------------------------------------------------------------------
 
 
+LICENSE_REASON_TEXTS = {
+    "expired": "授权已到期，请购买卡密激活使用。",
+    "device_mismatch": "当前设备与激活授权设备不一致！",
+    "invalid": "本地授权异常，请重新输入卡密激活。",
+    "not_found": "未激活，请购买卡密激活使用。",
+}
+
+
 def get_license_reason_text(reason):
     """将许可证状态码映射为可读提示。"""
-    reason_map = {
-        "expired": "授权已到期，请购买卡密激活使用。",
-        "device_mismatch": "当前设备与激活授权设备不一致！",
-        "invalid": "本地授权异常，请重新输入卡密激活。",
-        "not_found": "未激活，请购买卡密激活使用。",
-    }
-    return reason_map.get(reason, "授权状态未知，请输入卡密激活。")
+    return LICENSE_REASON_TEXTS.get(reason, "授权状态未知，请输入卡密激活。")
 
 
 # ---------------------------------------------------------------------------

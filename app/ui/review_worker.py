@@ -109,11 +109,20 @@ class ReviewMatcherWorker(QObject):
     def _collect_unique_order_ids(orders):
         """从订单列表中提取去重后的 orderId。"""
         order_ids = []
+        seen_order_ids = set()
         for order in orders:
             order_id = order.get("commonInfo", {}).get("orderId")
-            if order_id and order_id not in order_ids:
-                order_ids.append(order_id)
+            if not order_id or order_id in seen_order_ids:
+                continue
+            seen_order_ids.add(order_id)
+            order_ids.append(order_id)
         return order_ids
+
+    @staticmethod
+    def _build_earliest_time(days):
+        """按天数计算时间窗口下限（自然日 00:00:00）。"""
+        start_ts, _ = recent_day_range_timestamps(days)
+        return start_ts
 
     def _load_matcher_credentials(self):
         """读取配置并返回匹配所需凭据。"""
@@ -137,18 +146,15 @@ class ReviewMatcherWorker(QObject):
 
     def _build_order_earliest_time(self):
         """计算订单抓取的时间窗口下限（自然日 00:00:00）。"""
-        start_ts, _ = recent_day_range_timestamps(self.days + ORDER_FETCH_BUFFER_DAYS)
-        return start_ts
+        return self._build_earliest_time(self.days + ORDER_FETCH_BUFFER_DAYS)
 
     def _build_cache_order_earliest_time(self):
         """自动查单默认只读取最近 30 天持久缓存（自然日 00:00:00 起）。"""
-        start_ts, _ = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
-        return start_ts
+        return self._build_earliest_time(ORDER_CACHE_COVERAGE_DAYS)
 
     def _build_quality_refund_earliest_time(self):
         """计算品质退款订单筛选下限（自然日 00:00:00）。"""
-        start_ts, _ = recent_day_range_timestamps(self.days)
-        return start_ts
+        return self._build_earliest_time(self.days)
 
     def _fetch_active_evaluations(self, cookie_str, magic, progress):
         """获取并过滤有效主动评价。"""
@@ -170,35 +176,38 @@ class ReviewMatcherWorker(QObject):
         finally:
             self._release_finder(finder)
 
-    def _fetch_orders(self, cookie_str, magic, earliest_time, progress):
-        """获取订单列表。"""
+    def _run_order_sync_service(self, cookie_str, magic, fetcher):
+        """创建并托管订单同步服务，执行完成后统一释放。"""
         finder = self._register_finder(BadReviewOrderFinder(cookie_str, magic))
         sync_service = OrderSyncService(finder)
         self._set_active_order_sync_service(sync_service)
         try:
-            orders, warnings = sync_service.ensure_orders(
-                earliest_time=earliest_time,
-                on_progress=progress,
-            )
-            return orders, warnings
+            return fetcher(sync_service)
         finally:
             self._set_active_order_sync_service(None)
             self._release_finder(finder)
 
-    def _fetch_full_scan_orders(self, cookie_str, magic, earliest_time, progress):
-        """执行完整补查：最近 30 天命中缓存，更早订单临时抓取。"""
-        finder = self._register_finder(BadReviewOrderFinder(cookie_str, magic))
-        sync_service = OrderSyncService(finder)
-        self._set_active_order_sync_service(sync_service)
-        try:
-            orders, warnings = sync_service.fetch_full_scan_orders(
+    def _fetch_orders(self, cookie_str, magic, earliest_time, progress):
+        """获取订单列表。"""
+        return self._run_order_sync_service(
+            cookie_str,
+            magic,
+            lambda sync_service: sync_service.ensure_orders(
                 earliest_time=earliest_time,
                 on_progress=progress,
-            )
-            return orders, warnings
-        finally:
-            self._set_active_order_sync_service(None)
-            self._release_finder(finder)
+            ),
+        )
+
+    def _fetch_full_scan_orders(self, cookie_str, magic, earliest_time, progress):
+        """执行完整补查：最近 30 天命中缓存，更早订单临时抓取。"""
+        return self._run_order_sync_service(
+            cookie_str,
+            magic,
+            lambda sync_service: sync_service.fetch_full_scan_orders(
+                earliest_time=earliest_time,
+                on_progress=progress,
+            ),
+        )
 
     def _fetch_quality_refund_orders(self, cookie_str, magic, earliest_time, progress):
         """获取品质退款订单列表。"""

@@ -5,9 +5,8 @@ import os
 import sys
 import time
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -45,7 +44,6 @@ from settings import (
     BADGE_HEIGHT,
     BADGE_MIN_WIDTH,
     BADGE_RADIUS,
-    BUTTON_HEIGHT,
     CARD_HEADER_GAP,
     CARD_HEADER_HEIGHT,
     CARD_PADDING,
@@ -79,7 +77,6 @@ from settings import (
     PAGE_MARGIN,
     ROW_GAP,
     SETUP_SECTION_PADDING,
-    UPDATE_CHECK_DELAY_MS,
     APP_VERSION,
     VERY_HIGH_DPI_COMPACT_THRESHOLD,
     WIDE_LAYOUT_MIN_HEIGHT,
@@ -470,16 +467,15 @@ class MainWindow(QWidget):
         title_label = QLabel("驼铃·视频小店差评处理")
         title_label.setObjectName("HeroTitle")
         title_label.setFont(build_font(FONT_SIZES["title"], bold=True))
-        self.hero_title_label = title_label
         self.title_box.addWidget(title_label)
 
-        self.title_description_label = QLabel(
+        title_description_label = QLabel(
             "软件实现自动化批量处理中差评、品质退款订单的功能。"
         )
-        self.title_description_label.setObjectName("HeroSubtitle")
-        self.title_description_label.setWordWrap(True)
-        self.title_description_label.setFont(build_font(FONT_SIZES["badge"]))
-        self.title_box.addWidget(self.title_description_label)
+        title_description_label.setObjectName("HeroSubtitle")
+        title_description_label.setWordWrap(True)
+        title_description_label.setFont(build_font(FONT_SIZES["badge"]))
+        self.title_box.addWidget(title_description_label)
 
         self.header_box.addWidget(title_wrap, 1)
 
@@ -514,8 +510,7 @@ class MainWindow(QWidget):
         self.tutorial_badge.setFont(build_font(FONT_SIZES["badge"], bold=True))
         self.tutorial_badge.setMinimumWidth(scale_px(BADGE_MIN_WIDTH, min_value=64))
         self.tutorial_badge.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
-        self._tutorial_url = ""
-        self._set_tutorial_badge_link(self._tutorial_url)
+        self._set_tutorial_badge_link("")
         self.tutorial_badge.setStyleSheet(
             self._build_badge_style(
                 APP_COLORS["surface_soft"],
@@ -543,11 +538,11 @@ class MainWindow(QWidget):
 
     def _set_tutorial_badge_link(self, url):
         """刷新教程入口链接。"""
-        self._tutorial_url = (url or '').strip()
-        if self._tutorial_url:
+        tutorial_url = (url or '').strip()
+        if tutorial_url:
             self.tutorial_badge.setOpenExternalLinks(True)
             self.tutorial_badge.setText(
-                f'<a href="{self._tutorial_url}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
+                f'<a href="{tutorial_url}" style="color: {APP_COLORS["blue_deep"]}; text-decoration: none;">查看使用教程</a>'
             )
         else:
             self.tutorial_badge.setOpenExternalLinks(False)
@@ -608,7 +603,6 @@ class MainWindow(QWidget):
             self._build_setup_content(),
             "ConfigCard",
         )
-        self.config_title_label = self.config_card.title_label
 
         self.order_card = self.create_card(
             "2. 填写订单号",
@@ -629,7 +623,6 @@ class MainWindow(QWidget):
             self._build_action_content(),
             "ActionCard",
         )
-        self.action_title_label = self.action_card.title_label
         self.license_card = self.create_card(
             None,
             None,
@@ -658,7 +651,6 @@ class MainWindow(QWidget):
             self.log_view,
             "LogCard",
         )
-        self.log_title_label = self.log_card.title_label
 
         self.main_content = QWidget()
         self.main_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -932,10 +924,10 @@ class MainWindow(QWidget):
         days_row_layout.setContentsMargins(0, 0, 0, 0)
         days_row_layout.setSpacing(self._standard_layout_spacing())
 
-        self.review_days_label = QLabel("1.2. 选择订单查询天数")
-        self.review_days_label.setFont(build_font(FONT_SIZES["body"], bold=True))
-        self.review_days_label.setStyleSheet(f"color: {APP_COLORS['blue_deep']};")
-        days_row_layout.addWidget(self.review_days_label, 0, Qt.AlignVCenter)
+        review_days_label = QLabel("1.2. 选择订单查询天数")
+        review_days_label.setFont(build_font(FONT_SIZES["body"], bold=True))
+        review_days_label.setStyleSheet(f"color: {APP_COLORS['blue_deep']};")
+        days_row_layout.addWidget(review_days_label, 0, Qt.AlignVCenter)
         days_row_layout.addStretch(1)
 
         self.review_days_spin = QSpinBox()
@@ -972,14 +964,6 @@ class MainWindow(QWidget):
 
         self.order_cache_button = self._create_review_button("订单缓存管理")
         self.order_cache_button.clicked.connect(self.on_order_cache_manage_clicked)
-        self.review_buttons = [
-            self.auto_cookie_button,
-            self.review_find_button,
-            self.quality_refund_button,
-            self.review_full_scan_button,
-            self.order_cache_button,
-        ]
-
         first_button_row = QWidget()
         first_button_row_layout = QHBoxLayout(first_button_row)
         first_button_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1030,7 +1014,6 @@ class MainWindow(QWidget):
         action_row_layout.addWidget(self.start_button, 1)
         action_row_layout.addWidget(self.pause_button, 1)
         self.action_content_layout.addWidget(action_row)
-        self.action_buttons = [self.start_button, self.pause_button]
         return content
 
     def _build_license_content(self):
@@ -1254,14 +1237,6 @@ class MainWindow(QWidget):
             return "compact"
         return "dense"
 
-    def _resolve_ui_scale(self):
-        """结合缩放模式和逻辑 DPI，计算当前窗口的紧凑缩放系数（基于屏幕可用区域）。"""
-        screen = QApplication.primaryScreen()
-        if screen is None:
-            return 1.0
-        available = screen.availableGeometry()
-        return self._resolve_ui_scale_for_size(available.width(), available.height())
-
     def _resolve_ui_scale_for_size(self, width, height):
         """根据给定窗口尺寸与平台/DPI 计算缩放系数，用于首次打开时与默认窗口匹配。"""
         screen = QApplication.primaryScreen()
@@ -1401,25 +1376,24 @@ class MainWindow(QWidget):
         """清空运行日志。"""
         self.log_view.clear()
 
+    @staticmethod
+    def _set_plain_text_without_signals(editor, text):
+        """在不触发 textChanged 的情况下更新输入框内容。"""
+        editor.blockSignals(True)
+        try:
+            editor.setPlainText(text)
+        finally:
+            editor.blockSignals(False)
+
     def _set_order_input_values(self, order_ids):
         """用给定订单号列表覆盖订单输入框。"""
-        self.order_edit.blockSignals(True)
-        try:
-            self.order_edit.setPlainText("\n".join(order_ids))
-        finally:
-            self.order_edit.blockSignals(False)
+        self._set_plain_text_without_signals(self.order_edit, "\n".join(order_ids))
         self.refresh_input_metrics()
 
     def _set_batch_input_values(self, order_ids, tracking_numbers):
         """同步覆盖订单号和物流单号输入框。"""
-        self.order_edit.blockSignals(True)
-        self.tracking_edit.blockSignals(True)
-        try:
-            self.order_edit.setPlainText("\n".join(order_ids))
-            self.tracking_edit.setPlainText("\n".join(tracking_numbers))
-        finally:
-            self.order_edit.blockSignals(False)
-            self.tracking_edit.blockSignals(False)
+        self._set_plain_text_without_signals(self.order_edit, "\n".join(order_ids))
+        self._set_plain_text_without_signals(self.tracking_edit, "\n".join(tracking_numbers))
         self.refresh_input_metrics()
 
     def _sync_batch_inputs_from_rows(self):
@@ -1672,6 +1646,31 @@ class MainWindow(QWidget):
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(clear_callback)
 
+    def _start_thread_worker(
+        self,
+        *,
+        thread_attr,
+        worker_attr,
+        worker,
+        clear_callback,
+        signal_bindings=(),
+        quit_signals=(),
+    ):
+        """统一创建线程、绑定 worker 信号并启动后台任务。"""
+        thread = QThread(self)
+        setattr(self, thread_attr, thread)
+        setattr(self, worker_attr, worker)
+        worker.moveToThread(thread)
+
+        for signal, slot in signal_bindings:
+            signal.connect(slot)
+        for signal in quit_signals:
+            signal.connect(thread.quit)
+
+        self._bind_thread_lifecycle(thread, worker, clear_callback)
+        thread.start()
+        return thread, worker
+
     # -----------------------------------------------------------------------
     # 按钮状态
     # -----------------------------------------------------------------------
@@ -1872,10 +1871,6 @@ class MainWindow(QWidget):
         }
         self._sync_window_title_with_license(reason, info)
 
-    def _refresh_license_state(self):
-        """在线刷新授权状态。"""
-        return self._refresh_license_state_with_mode(local_only=False)
-
     def _refresh_license_state_with_mode(self, *, local_only):
         """按模式刷新授权状态。"""
         checker = check_stored_license_local if local_only else check_stored_license
@@ -1918,19 +1913,18 @@ class MainWindow(QWidget):
         if not force and self._get_cached_license_state() is not None:
             return
 
-        self.license_refresh_thread = QThread(self)
-        self.license_refresh_worker = LicenseRefreshWorker()
-        self.license_refresh_worker.moveToThread(self.license_refresh_thread)
-        self.license_refresh_worker.finished.connect(self._on_license_refresh_finished)
-        self.license_refresh_worker.finished.connect(lambda *_: self.license_refresh_thread.quit())
-        self.license_refresh_worker.failed.connect(self._on_license_refresh_failed)
-        self.license_refresh_worker.failed.connect(lambda *_: self.license_refresh_thread.quit())
-        self._bind_thread_lifecycle(
-            self.license_refresh_thread,
-            self.license_refresh_worker,
-            self._clear_license_refresh_refs,
+        worker = LicenseRefreshWorker()
+        self._start_thread_worker(
+            thread_attr="license_refresh_thread",
+            worker_attr="license_refresh_worker",
+            worker=worker,
+            clear_callback=self._clear_license_refresh_refs,
+            signal_bindings=(
+                (worker.finished, self._on_license_refresh_finished),
+                (worker.failed, self._on_license_refresh_failed),
+            ),
+            quit_signals=(worker.finished, worker.failed),
         )
-        self.license_refresh_thread.start()
 
     def _clear_update_check_refs(self):
         """清理后台更新检查线程引用。"""
@@ -1944,19 +1938,18 @@ class MainWindow(QWidget):
         if manual:
             self.append_result_log("正在检查软件更新...")
 
-        self.update_check_thread = QThread(self)
-        self.update_check_worker = UpdateCheckWorker(APP_VERSION)
-        self.update_check_worker.moveToThread(self.update_check_thread)
-        self.update_check_worker.finished.connect(lambda info, m=manual: self.update_check_finished_signal.emit(info, m))
-        self.update_check_worker.finished.connect(self.update_check_thread.quit)
-        self.update_check_worker.failed.connect(lambda message, m=manual: self.update_check_failed_signal.emit(message, m))
-        self.update_check_worker.failed.connect(self.update_check_thread.quit)
-        self._bind_thread_lifecycle(
-            self.update_check_thread,
-            self.update_check_worker,
-            self._clear_update_check_refs,
+        worker = UpdateCheckWorker(APP_VERSION)
+        self._start_thread_worker(
+            thread_attr="update_check_thread",
+            worker_attr="update_check_worker",
+            worker=worker,
+            clear_callback=self._clear_update_check_refs,
+            signal_bindings=(
+                (worker.finished, lambda info, m=manual: self.update_check_finished_signal.emit(info, m)),
+                (worker.failed, lambda message, m=manual: self.update_check_failed_signal.emit(message, m)),
+            ),
+            quit_signals=(worker.finished, worker.failed),
         )
-        self.update_check_thread.start()
 
     def _on_update_check_finished(self, info, manual):
         """更新检查完成。"""
@@ -2165,24 +2158,23 @@ class MainWindow(QWidget):
         self.append_result_log(f"开始执行：共 {len(order_ids)} 条。")
         self.set_submit_running(True)
 
-        self.worker_thread = QThread(self)
-        self.worker = BatchWorker(order_ids, tracking_numbers)
-        self.worker.moveToThread(self.worker_thread)
-
-        self.worker.started.connect(self._on_worker_started)
-        self.worker.step_started.connect(self._on_worker_step_started)
-        self.worker.step_succeeded.connect(self._on_worker_step_succeeded)
-        self.worker.step_failed.connect(self._on_worker_step_failed)
-        self.worker.fatal_error.connect(self._on_worker_fatal_error)
-        self.worker.missing_config.connect(self.show_missing_config_error)
-        self.worker.finished.connect(self._on_worker_finished)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self._bind_thread_lifecycle(
-            self.worker_thread,
-            self.worker,
-            self._clear_worker_refs,
+        worker = BatchWorker(order_ids, tracking_numbers)
+        self._start_thread_worker(
+            thread_attr="worker_thread",
+            worker_attr="worker",
+            worker=worker,
+            clear_callback=self._clear_worker_refs,
+            signal_bindings=(
+                (worker.started, self._on_worker_started),
+                (worker.step_started, self._on_worker_step_started),
+                (worker.step_succeeded, self._on_worker_step_succeeded),
+                (worker.step_failed, self._on_worker_step_failed),
+                (worker.fatal_error, self._on_worker_fatal_error),
+                (worker.missing_config, self.show_missing_config_error),
+                (worker.finished, self._on_worker_finished),
+            ),
+            quit_signals=(worker.finished,),
         )
-        self.worker_thread.start()
         self.refresh_action_buttons()
 
     def on_pause_clicked(self):
@@ -2345,21 +2337,20 @@ class MainWindow(QWidget):
         self.append_result_log(start_message)
         self._set_review_task_buttons(running=True, active_task=task_type)
 
-        self.review_worker_thread = QThread(self)
-        self.review_worker = ReviewMatcherWorker(days=days, task_type=task_type)
-        self.review_worker.moveToThread(self.review_worker_thread)
-
-        self.review_worker.progress.connect(self._on_review_progress)
-        self.review_worker.order_ids_ready.connect(self._on_review_order_ids)
-        self.review_worker.missing_config.connect(self.show_missing_config_error)
-        self.review_worker.finished.connect(self._on_review_finished)
-        self.review_worker.finished.connect(lambda *_: self.review_worker_thread.quit())
-        self._bind_thread_lifecycle(
-            self.review_worker_thread,
-            self.review_worker,
-            self._clear_review_worker_refs,
+        worker = ReviewMatcherWorker(days=days, task_type=task_type)
+        self._start_thread_worker(
+            thread_attr="review_worker_thread",
+            worker_attr="review_worker",
+            worker=worker,
+            clear_callback=self._clear_review_worker_refs,
+            signal_bindings=(
+                (worker.progress, self._on_review_progress),
+                (worker.order_ids_ready, self._on_review_order_ids),
+                (worker.missing_config, self.show_missing_config_error),
+                (worker.finished, self._on_review_finished),
+            ),
+            quit_signals=(worker.finished,),
         )
-        self.review_worker_thread.start()
 
     def on_review_find_clicked(self):
         """开始查找中差评订单。"""
@@ -2439,6 +2430,80 @@ class MainWindow(QWidget):
         """将匹配到的订单号回填到订单输入框。"""
         self._set_order_input_values(order_ids)
 
+    def _append_warning_log(self, warning_text):
+        """统一追加提醒日志。"""
+        if warning_text:
+            self.append_result_log(f"⚠️ 提醒: {warning_text}")
+
+    def _show_warning_or_success_message(
+        self,
+        *,
+        summary,
+        warning_text,
+        warning_title,
+        success_title,
+        success_level=QMessageBox.Information,
+    ):
+        """按是否存在提醒信息显示结果弹窗。"""
+        if warning_text:
+            self._append_warning_log(warning_text)
+            self.show_message(
+                QMessageBox.Warning,
+                warning_title,
+                f"{summary}\n\n{warning_text}",
+            )
+            return
+        self.show_message(success_level, success_title, summary)
+
+    def _handle_cache_task_finished(self, *, status, warning_text, matched_count):
+        """处理订单缓存任务完成后的提示。"""
+        action_label = "订单缓存重建" if self.review_task_type == TASK_CACHE_REBUILD else "订单缓存刷新"
+        summary = f"{action_label}完成：写入/更新 {matched_count} 个订单。"
+        self.append_result_log(summary)
+        self._show_warning_or_success_message(
+            summary=summary,
+            warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
+            warning_title="缓存任务提醒",
+            success_title="缓存任务完成",
+        )
+
+    def _handle_quality_refund_finished(self, *, status, warning_text, matched_count, total_count):
+        """处理品质退款任务完成后的提示。"""
+        if total_count <= 0:
+            self.show_message(QMessageBox.Warning, "查找完成", "未找到品质退款订单。")
+            return
+
+        summary = (
+            f"品退订单获取完成：共 {total_count} 个订单，"
+            f"回填 {matched_count} 个订单号。"
+        )
+        self.append_result_log(summary)
+        self._show_warning_or_success_message(
+            summary=summary,
+            warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
+            warning_title="查找提醒",
+            success_title="查找完成",
+        )
+
+    def _handle_review_match_finished(self, *, status, warning_text, matched_count, total_count):
+        """处理中差评/完整补查任务完成后的提示。"""
+        if total_count <= 0:
+            return
+
+        task_label = "完整补查" if self.review_task_type == TASK_REVIEW_FULL_SCAN else "中差评查找"
+        summary = (
+            f"{task_label}完成：共 {total_count} 条差评，"
+            f"匹配到 {matched_count} 个订单。"
+        )
+        self.append_result_log(summary)
+        self._show_warning_or_success_message(
+            summary=summary,
+            warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
+            warning_title="查找提醒",
+            success_title="查找完成",
+            success_level=QMessageBox.Information if matched_count > 0 else QMessageBox.Warning,
+        )
+
     def _on_review_finished(self, status, message, matched_count, total_count):
         """中差评 / 品退查找完成。"""
         task_type = self.review_task_type
@@ -2459,58 +2524,28 @@ class MainWindow(QWidget):
             return
 
         if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD):
-            action_label = "订单缓存重建" if task_type == TASK_CACHE_REBUILD else "订单缓存刷新"
-            summary = f"{action_label}完成：写入/更新 {matched_count} 个订单。"
-            self.append_result_log(summary)
-            if status == TERMINAL_STATUS_WARNING and warning_text:
-                self.append_result_log(f"⚠️ 提醒: {warning_text}")
-                self.show_message(
-                    QMessageBox.Warning,
-                    "缓存任务提醒",
-                    f"{summary}\n\n{warning_text}",
-                )
-            else:
-                self.show_message(QMessageBox.Information, "缓存任务完成", summary)
+            self._handle_cache_task_finished(
+                status=status,
+                warning_text=warning_text,
+                matched_count=matched_count,
+            )
             return
 
         if task_type == TASK_QUALITY_REFUND:
-            summary = (
-                f"品退订单获取完成：共 {total_count} 个订单，"
-                f"回填 {matched_count} 个订单号。"
+            self._handle_quality_refund_finished(
+                status=status,
+                warning_text=warning_text,
+                matched_count=matched_count,
+                total_count=total_count,
             )
-            if total_count > 0:
-                self.append_result_log(summary)
-                if status == TERMINAL_STATUS_WARNING and warning_text:
-                    self.append_result_log(f"⚠️ 提醒: {warning_text}")
-                    self.show_message(
-                        QMessageBox.Warning,
-                        "查找提醒",
-                        f"{summary}\n\n{warning_text}",
-                    )
-                else:
-                    self.show_message(QMessageBox.Information, "查找完成", summary)
-            else:
-                self.show_message(QMessageBox.Warning, "查找完成", "未找到品质退款订单。")
             return
 
-        task_label = "完整补查" if task_type == TASK_REVIEW_FULL_SCAN else "中差评查找"
-        if total_count > 0:
-            summary = (
-                f"{task_label}完成：共 {total_count} 条差评，"
-                f"匹配到 {matched_count} 个订单。"
-            )
-            self.append_result_log(summary)
-            if status == TERMINAL_STATUS_WARNING and warning_text:
-                self.append_result_log(f"⚠️ 提醒: {warning_text}")
-                self.show_message(
-                    QMessageBox.Warning,
-                    "查找提醒",
-                    f"{summary}\n\n{warning_text}",
-                )
-            elif matched_count > 0:
-                self.show_message(QMessageBox.Information, "查找完成", summary)
-            else:
-                self.show_message(QMessageBox.Warning, "查找完成", summary)
+        self._handle_review_match_finished(
+            status=status,
+            warning_text=warning_text,
+            matched_count=matched_count,
+            total_count=total_count,
+        )
 
     def _clear_review_worker_refs(self):
         """清理中差评查找线程引用。"""
