@@ -67,7 +67,7 @@ class SecurityRuntimeTests(unittest.TestCase):
             mock.patch.object(security_runtime, "LICENSE_PUBLIC_KEY", _public_key_b64(), create=True),
             mock.patch.object(security_runtime, "get_home_config_dir", return_value=self.tmpdir),
             mock.patch.object(security_runtime, "get_user_data_dir", return_value=self.tmpdir),
-            mock.patch.object(security_runtime, "get_device_id", return_value=self.device_id),
+            mock.patch.object(security_runtime, "_native_get_device_id", return_value=self.device_id),
         ]
         for patcher in patchers:
             patcher.start()
@@ -128,6 +128,45 @@ class SecurityRuntimeTests(unittest.TestCase):
 
         self.assertNotIn("lease_token", metadata)
         self.assertEqual(metadata["device_id_suffix"], self.device_id[-6:])
+
+    def test_verify_signed_lease_prefers_native_security_core_when_available(self):
+        native_payload = dict(self.payload)
+        with mock.patch.object(
+            security_runtime,
+            "_native_verify_signed_lease",
+            return_value={"ok": True, "reason": "ok", "payload": native_payload},
+        ), mock.patch.object(security_runtime, "_load_public_key", side_effect=AssertionError("should not fallback")):
+            payload = security_runtime.verify_signed_lease("native-token", expected_device_id=self.device_id)
+
+        self.assertEqual(payload["license_key"], self.payload["license_key"])
+
+    def test_get_device_id_prefers_native_security_core_when_available(self):
+        with mock.patch.object(security_runtime, "_native_get_device_id", return_value="abcdef0123456789"), mock.patch.object(
+            security_runtime,
+            "_collect_raw_fingerprint",
+            side_effect=AssertionError("should not fallback"),
+        ):
+            device_id = security_runtime.get_device_id()
+
+        self.assertEqual(device_id, "abcdef0123456789")
+
+    def test_verify_integrity_manifest_prefers_native_security_core_when_available(self):
+        with mock.patch.object(security_runtime.sys, "frozen", True, create=True), mock.patch.object(
+            security_runtime,
+            "_find_integrity_manifest_path",
+            return_value=self.tmpdir / "integrity_manifest.json",
+        ), mock.patch.object(
+            security_runtime,
+            "_native_verify_integrity_manifest",
+            return_value={"status": "compromised", "message": "native mismatch"},
+        ), mock.patch.object(
+            security_runtime,
+            "_verify_integrity_manifest_python",
+            side_effect=AssertionError("should not fallback"),
+        ):
+            result = security_runtime._verify_integrity_manifest()
+
+        self.assertEqual(result["status"], "compromised")
 
 
 if __name__ == "__main__":

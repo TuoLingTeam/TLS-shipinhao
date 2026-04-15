@@ -69,6 +69,8 @@ _TASK_POLICY = [
     LICENSE_TASK_BATCH_DELIVERY,
     LICENSE_TASK_CACHE_MANAGE,
 ]
+_NATIVE_CORE_BINDINGS = None
+_NATIVE_CORE_LOAD_ATTEMPTED = False
 
 
 @dataclass
@@ -210,6 +212,9 @@ def _fallback_fingerprint() -> str:
 
 
 def get_device_id() -> str:
+    native_device_id = _native_get_device_id()
+    if native_device_id:
+        return native_device_id
     raw = _collect_raw_fingerprint()
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
@@ -260,27 +265,45 @@ def _to_iso(dt: datetime | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def verify_signed_lease(token: str, *, expected_device_id: str | None = None, allow_expired: bool = False) -> Optional[dict]:
+def _verify_signed_lease_detailed(token: str, *, expected_device_id: str | None = None, allow_expired: bool = False) -> dict:
+    native_result = _native_verify_signed_lease(
+        token,
+        expected_device_id=expected_device_id,
+        allow_expired=allow_expired,
+    )
+    if native_result is not None:
+        return native_result
     try:
         encoded_payload, encoded_sig = token.split(".", 1)
         signature = _b64url_decode(encoded_sig)
         _load_public_key().verify(signature, encoded_payload.encode("utf-8"))
         payload = json.loads(_b64url_decode(encoded_payload).decode("utf-8"))
     except (ValueError, InvalidSignature, json.JSONDecodeError, TypeError):
-        return None
+        return {"ok": False, "reason": _REASON_INVALID, "payload": None}
 
     if payload.get("kind") != _TOKEN_KIND_LEASE:
-        return None
+        return {"ok": False, "reason": _REASON_INVALID, "payload": None}
     if expected_device_id and payload.get("device_id") != expected_device_id:
-        return None
+        return {"ok": False, "reason": _REASON_DEVICE_MISMATCH, "payload": payload}
     if not allow_expired:
         try:
             exp = int(payload.get("exp", 0) or 0)
         except Exception:
-            return None
+            return {"ok": False, "reason": _REASON_INVALID, "payload": None}
         if exp <= 0 or _now_utc().timestamp() >= exp:
-            return None
-    return payload
+            return {"ok": False, "reason": _REASON_EXPIRED, "payload": payload}
+    return {"ok": True, "reason": _REASON_OK, "payload": payload}
+
+
+def verify_signed_lease(token: str, *, expected_device_id: str | None = None, allow_expired: bool = False) -> Optional[dict]:
+    result = _verify_signed_lease_detailed(
+        token,
+        expected_device_id=expected_device_id,
+        allow_expired=allow_expired,
+    )
+    if result.get("ok"):
+        return result.get("payload")
+    return None
 
 
 
@@ -548,21 +571,136 @@ def _security_core_library_candidates() -> list[Path]:
 
 
 
-def _load_native_backend_name() -> tuple[bool, str]:
+class _NativeSecurityCoreBindings:
+    def __init__(self, library: ctypes.CDLL):
+        self.library = library
+        self.library.security_core_backend_name.restype = ctypes.c_char_p
+        self.library.security_core_free_string.argtypes = [ctypes.c_void_p]
+        self.library.security_core_free_string.restype = None
+        self.library.security_core_collect_device_id.argtypes = []
+        self.library.security_core_collect_device_id.restype = ctypes.c_void_p
+        self.library.security_core_verify_lease.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_longlong,
+            ctypes.c_int,
+        ]
+        self.library.security_core_verify_lease.restype = ctypes.c_void_p
+        self.library.security_core_verify_integrity_manifest.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+        ]
+        self.library.security_core_verify_integrity_manifest.restype = ctypes.c_void_p
+        backend_name = self.library.security_core_backend_name()
+        self.backend_name = backend_name.decode("utf-8") if backend_name else "native"
+
+    def _consume_string(self, pointer: int | None) -> str | None:
+        if not pointer:
+            return None
+        try:
+            raw = ctypes.string_at(pointer)
+            return raw.decode("utf-8") if raw else ""
+        finally:
+            self.library.security_core_free_string(pointer)
+
+    def collect_device_id(self) -> str | None:
+        return self._consume_string(self.library.security_core_collect_device_id())
+
+    def verify_lease(self, *, token: str, public_key: str, expected_device_id: str | None, now_epoch_seconds: int, allow_expired: bool) -> dict | None:
+        raw = self._consume_string(
+            self.library.security_core_verify_lease(
+                token.encode("utf-8"),
+                public_key.encode("utf-8"),
+                (expected_device_id or "").encode("utf-8"),
+                int(now_epoch_seconds),
+                1 if allow_expired else 0,
+            )
+        )
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+
+    def verify_integrity_manifest(self, *, manifest_path: Path, public_key: str) -> dict | None:
+        raw = self._consume_string(
+            self.library.security_core_verify_integrity_manifest(
+                str(manifest_path).encode("utf-8"),
+                public_key.encode("utf-8"),
+            )
+        )
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+
+
+def _get_native_core() -> _NativeSecurityCoreBindings | None:
+    global _NATIVE_CORE_BINDINGS, _NATIVE_CORE_LOAD_ATTEMPTED
+    if _NATIVE_CORE_LOAD_ATTEMPTED:
+        return _NATIVE_CORE_BINDINGS
+    _NATIVE_CORE_LOAD_ATTEMPTED = True
     for candidate in _security_core_library_candidates():
         if not candidate.exists():
             continue
         try:
-            lib = ctypes.CDLL(str(candidate))
-            if hasattr(lib, "security_core_backend_name"):
-                lib.security_core_backend_name.restype = ctypes.c_char_p
-                result = lib.security_core_backend_name()
-                name = result.decode("utf-8") if result else "native"
-                return True, name
-            return True, "native"
+            _NATIVE_CORE_BINDINGS = _NativeSecurityCoreBindings(ctypes.CDLL(str(candidate)))
+            return _NATIVE_CORE_BINDINGS
         except Exception:
             continue
-    return False, "python"
+    _NATIVE_CORE_BINDINGS = None
+    return None
+
+
+def _native_get_device_id() -> str | None:
+    native_core = _get_native_core()
+    if native_core is None:
+        return None
+    try:
+        value = native_core.collect_device_id()
+    except Exception:
+        return None
+    return value or None
+
+
+def _native_verify_signed_lease(token: str, *, expected_device_id: str | None = None, allow_expired: bool = False) -> dict | None:
+    native_core = _get_native_core()
+    if native_core is None:
+        return None
+    try:
+        return native_core.verify_lease(
+            token=token,
+            public_key=LICENSE_PUBLIC_KEY,
+            expected_device_id=expected_device_id,
+            now_epoch_seconds=int(_now_utc().timestamp()),
+            allow_expired=allow_expired,
+        )
+    except Exception:
+        return None
+
+
+def _native_verify_integrity_manifest(manifest_path: Path) -> dict | None:
+    native_core = _get_native_core()
+    if native_core is None or not INTEGRITY_MANIFEST_PUBLIC_KEY:
+        return None
+    try:
+        return native_core.verify_integrity_manifest(
+            manifest_path=manifest_path,
+            public_key=INTEGRITY_MANIFEST_PUBLIC_KEY,
+        )
+    except Exception:
+        return None
+
+
+def _load_native_backend_name() -> tuple[bool, str]:
+    native_core = _get_native_core()
+    if native_core is None:
+        return False, "python"
+    return True, native_core.backend_name
 
 
 
@@ -585,13 +723,12 @@ def _hash_file(path: Path) -> str:
 
 
 
-def _verify_integrity_manifest() -> dict:
-    if not getattr(sys, "frozen", False):
-        return {"status": "dev", "message": "development mode"}
+def _find_integrity_manifest_path() -> Path | None:
+    return next((root / INTEGRITY_MANIFEST_FILE_NAME for root in _iter_runtime_roots() if (root / INTEGRITY_MANIFEST_FILE_NAME).exists()), None)
 
-    manifest_path = next((root / INTEGRITY_MANIFEST_FILE_NAME for root in _iter_runtime_roots() if (root / INTEGRITY_MANIFEST_FILE_NAME).exists()), None)
-    if manifest_path is None:
-        return {"status": "compromised", "message": "manifest missing"}
+
+
+def _verify_integrity_manifest_python(manifest_path: Path) -> dict:
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:
@@ -618,6 +755,20 @@ def _verify_integrity_manifest() -> dict:
         except Exception as exc:
             return {"status": "compromised", "message": f"integrity error: {rel}: {exc}"}
     return {"status": "ok", "message": "integrity ok"}
+
+
+
+def _verify_integrity_manifest() -> dict:
+    if not getattr(sys, "frozen", False):
+        return {"status": "dev", "message": "development mode"}
+
+    manifest_path = _find_integrity_manifest_path()
+    if manifest_path is None:
+        return {"status": "compromised", "message": "manifest missing"}
+    native_result = _native_verify_integrity_manifest(manifest_path)
+    if native_result is not None:
+        return native_result
+    return _verify_integrity_manifest_python(manifest_path)
 
 
 
@@ -658,11 +809,10 @@ def _state_from_metadata(metadata: dict | None, *, reason: str) -> RuntimeState:
 
 
 
-def _payload_to_state(payload: dict, *, risk: dict, integrity: dict, backend_name: str) -> RuntimeState:
+def _payload_to_state(payload: dict, *, risk: dict, integrity: dict, backend_name: str, current_device_id: str) -> RuntimeState:
     reason = _REASON_OK
     status_hint = _REASON_OK
     device_id = str(payload.get("device_id") or "")
-    current_device = get_device_id()
     license_expires_at = str(payload.get("license_expires_at") or "")
     lease_expires_at = str(payload.get("lease_expires_at") or "")
     renew_after = str(payload.get("renew_after") or "")
@@ -673,7 +823,7 @@ def _payload_to_state(payload: dict, *, risk: dict, integrity: dict, backend_nam
 
     if payload.get("license_status") == "revoked":
         reason = status_hint = _REASON_REVOKED
-    elif current_device and device_id and current_device != device_id:
+    elif current_device_id and device_id and current_device_id != device_id:
         reason = status_hint = _REASON_DEVICE_MISMATCH
     elif license_exp_dt and now > license_exp_dt:
         reason = status_hint = _REASON_EXPIRED
@@ -712,12 +862,27 @@ def load_runtime_state() -> RuntimeState:
     bundle = _load_runtime_bundle()
     if not bundle:
         return _state_from_metadata(metadata, reason=_REASON_NOT_FOUND)
-    payload = verify_signed_lease(str(bundle.get("lease_token") or ""), allow_expired=True)
-    if payload is None:
-        return _state_from_metadata(metadata, reason=_REASON_INVALID)
+    current_device_id = get_device_id()
+    verify_result = _verify_signed_lease_detailed(
+        str(bundle.get("lease_token") or ""),
+        expected_device_id=current_device_id,
+        allow_expired=True,
+    )
+    if not verify_result.get("ok"):
+        reason = verify_result.get("reason") or _REASON_INVALID
+        if reason not in {_REASON_INVALID, _REASON_DEVICE_MISMATCH, _REASON_EXPIRED}:
+            reason = _REASON_INVALID
+        return _state_from_metadata(metadata, reason=reason)
+    payload = verify_result.get("payload") or {}
     integrity = _verify_integrity_manifest()
     risk = _collect_risk_signals()
-    return _payload_to_state(payload, risk=risk, integrity=integrity, backend_name=risk.get("backend") or "python")
+    return _payload_to_state(
+        payload,
+        risk=risk,
+        integrity=integrity,
+        backend_name=risk.get("backend") or "python",
+        current_device_id=current_device_id,
+    )
 
 
 
