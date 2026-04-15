@@ -93,7 +93,13 @@ from settings import (
     scale_px,
     set_ui_scale,
 )
-from core.license import check_stored_license, check_stored_license_local, issue_or_refresh_session_token
+from core.license import (
+    authorize_task,
+    check_stored_license,
+    check_stored_license_local,
+    load_runtime_state,
+    validate_runtime_continuity,
+)
 from ui.window_dialogs import MessagePresenter
 from ui.window_view import (
     build_badge_style,
@@ -1282,12 +1288,14 @@ class MainWindow(QWidget):
         info = self._license_info or {}
         status_map = {
             "ok": "已激活",
+            "renewal_due": "待续签",
             "expired": "已过期",
             "device_mismatch": "设备不符",
             "invalid": "状态异常",
             "not_found": "未激活",
             "reactivation_required": "需迁移",
             "online_refresh_required": "需联网",
+            "compromised": "环境异常",
             "revoked": "已吊销",
         }
         status = status_map.get(reason, "未激活")
@@ -1301,24 +1309,30 @@ class MainWindow(QWidget):
         if hasattr(self, "license_summary_label"):
             if reason == "ok":
                 self.license_summary_label.setText("软件已激活，可正常执行批量处理。")
+            elif reason == "renewal_due":
+                self.license_summary_label.setText("授权租约待续签，当前仍可继续执行任务。")
             else:
                 self.license_summary_label.setText(get_license_reason_text(reason))
         if hasattr(self, "license_meta_label"):
-            if reason == "ok":
+            if reason in {"ok", "renewal_due"}:
                 meta_parts = []
                 if expires_at:
                     meta_parts.append(f"有效期至：{expires_at}")
-                offline_exp = str(info.get("offline_grant_expires_at", ""))[:16]
-                if offline_exp:
-                    meta_parts.append(f"离线票据至：{offline_exp}")
-                session_exp = str(info.get("session_token_expires_at", ""))[:16]
-                if session_exp:
-                    meta_parts.append(f"任务令牌至：{session_exp}")
-                device_id = str(info.get("device_id", "")).strip()
+                lease_exp = str(info.get("lease_expires_at", ""))[:16]
+                if lease_exp:
+                    meta_parts.append(f"租约至：{lease_exp}")
+                renew_after = str(info.get("renew_after", ""))[:16]
+                if renew_after:
+                    meta_parts.append(f"建议续签：{renew_after}")
+                device_id = str(info.get("device_id", "")).strip() or str(info.get("device_id_suffix", "")).strip()
                 if device_id:
-                    meta_parts.append(f"设备尾号：{device_id[-6:]}")
+                    suffix = device_id[-6:] if len(device_id) > 6 else device_id
+                    meta_parts.append(f"设备尾号：{suffix}")
+                backend = str(info.get("runtime_backend", "")).strip()
+                if backend:
+                    meta_parts.append(f"安全核：{backend}")
                 self.license_meta_label.setText(
-                    "  |  ".join(meta_parts) or "授权信息已写入本地，可直接开始执行任务。"
+                    "  |  ".join(meta_parts) or "授权租约已写入本地，可直接开始执行任务。"
                 )
             elif reason == "expired" and expires_at:
                 self.license_meta_label.setText(
@@ -1329,9 +1343,11 @@ class MainWindow(QWidget):
                     f"当前设备与原授权绑定设备不一致，请联系微信 {AUTHOR_WECHAT} 处理重绑。"
                 )
             elif reason == "online_refresh_required":
-                self.license_meta_label.setText("当前授权需要联网刷新短期票据后才能继续执行核心任务。")
+                self.license_meta_label.setText("当前授权租约已超出本地硬过期窗口，需要联网续签后才能继续执行核心任务。")
             elif reason == "reactivation_required":
                 self.license_meta_label.setText("授权协议已升级，请联网重新校验卡密以完成迁移。")
+            elif reason == "compromised":
+                self.license_meta_label.setText("检测到安全核或完整性清单异常，已暂停高价值任务，请重新下载安装包。")
             elif reason == "revoked":
                 self.license_meta_label.setText(f"当前卡密已被吊销，请联系微信 {AUTHOR_WECHAT} 处理。")
             else:
@@ -1597,50 +1613,71 @@ class MainWindow(QWidget):
         return mapping.get(task_label, LICENSE_TASK_BATCH_DELIVERY)
 
     def _ensure_task_license(self, task_label):
-        """统一处理任务启动前的授权与会话令牌校验。"""
+        """统一处理任务启动前的授权租约与运行能力校验。"""
         session_task_type = self._session_task_type_for(task_label)
         cached = self._get_cached_license_state()
-        if cached is None or cached.get("reason") != "ok":
+        allowed_local = {"ok", "renewal_due"}
+        if cached is None or cached.get("reason") not in allowed_local:
             _, reason = self._refresh_license_state_with_mode(local_only=True)
             if reason == "online_refresh_required" and LICENSE_REQUIRE_ONLINE_FOR_TASKS:
                 _, reason = self._refresh_license_state_with_mode(local_only=False)
-            if reason != "ok":
+            if reason not in allowed_local:
                 if reason in {"not_found", "invalid", "reactivation_required", "expired", "device_mismatch", "revoked"}:
                     if self._prompt_license_activation(reason):
                         cached = self._get_cached_license_state(max_age_seconds=None)
-                        if cached is None or cached.get("reason") != "ok":
+                        if cached is None or cached.get("reason") not in allowed_local:
                             self._show_activation_required(task_label)
                             return False
                     else:
                         self._show_activation_required(task_label)
                         return False
+                elif reason == "compromised":
+                    self.show_message(
+                        QMessageBox.Warning,
+                        "运行环境异常",
+                        "检测到完整性或安全核异常，当前已暂停高价值任务，请重新下载安装包。",
+                    )
+                    return False
                 else:
                     self.show_message(
                         QMessageBox.Warning,
                         "需要联网刷新授权",
-                        f"执行{task_label}前，需要联网刷新授权票据与任务令牌。",
+                        f"执行{task_label}前，需要联网续签授权租约。",
                     )
                     return False
 
-        info, reason = issue_or_refresh_session_token(session_task_type, force=True)
-        if reason == "ok":
-            self._store_license_state(info, "ok", source="session")
-            self._schedule_license_refresh(force=True)
+        grant = authorize_task(session_task_type)
+        state = grant.state or load_runtime_state()
+        reason = grant.degraded_reason or (grant.state.reason if grant.state else "invalid")
+        if grant.granted and grant.state is not None:
+            self._store_license_state(grant.state.to_info(), grant.state.reason, source="grant")
+            if grant.state.reason == "renewal_due":
+                self._schedule_license_refresh(force=True)
             return True
+
         if reason in {"not_found", "invalid", "reactivation_required", "expired", "device_mismatch", "revoked"}:
-            self._store_license_state(info or {}, reason, source="session")
+            state_info = state.to_info() if hasattr(state, "to_info") else (state if isinstance(state, dict) else {})
+            self._store_license_state(state_info, reason, source="grant")
             if self._prompt_license_activation(reason):
-                info, reason = issue_or_refresh_session_token(session_task_type, force=True)
-                if reason == "ok":
-                    self._store_license_state(info, "ok", source="session")
+                grant = authorize_task(session_task_type)
+                if grant.granted and grant.state is not None:
+                    self._store_license_state(grant.state.to_info(), grant.state.reason, source="grant")
                     return True
             self._show_activation_required(task_label)
+            return False
+
+        if reason == "compromised":
+            self.show_message(
+                QMessageBox.Warning,
+                "运行环境异常",
+                "检测到安全核或关键文件异常，当前已暂停高价值任务。",
+            )
             return False
 
         self.show_message(
             QMessageBox.Warning,
             "需要联网刷新授权",
-            f"执行{task_label}前，需要联网获取新的任务令牌。",
+            f"执行{task_label}前，需要联网续签授权租约。",
         )
         return False
 

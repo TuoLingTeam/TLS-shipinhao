@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import platform
@@ -19,6 +21,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 # Windows 终端默认编码对中文输出不友好，统一切成 UTF-8。
 if platform.system() == "Windows":
@@ -41,6 +46,7 @@ APP_ROOT = REPO_ROOT / "app"                            # app/
 APP_DIST = REPO_ROOT / "app-dist"                       # 混淆分发目录
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
+SECURITY_CORE_DIR = REPO_ROOT / "security-core"
 MAIN_FILE = APP_ROOT / "main.py"
 COOKIE_FILE = REPO_ROOT / "cookie.txt"
 SOURCE_ICON_FILE = APP_ROOT / "assets" / "favicon.png"
@@ -48,6 +54,7 @@ MACOS_ICON_FILE = BUILD_DIR / "app_icon.icns"
 WINDOWS_ICON_FILE = BUILD_DIR / "app_icon.ico"
 PYINSTALLER_CACHE_DIR = REPO_ROOT / ".pyinstaller"
 SETTINGS_PY = APP_ROOT / "settings.py"
+INTEGRITY_MANIFEST_NAME = "integrity_manifest.json"
 
 # 构建时需要的最小依赖集合（避免漏装导致中断）。
 BUILD_REQUIREMENTS = [
@@ -86,6 +93,7 @@ CYTHON_MODULES = [
     "core.day_window",
     "core.http_utils",
     "core.license",
+    "core.security_runtime",
     "services",
     "services.delivery_api",
     "services.order_cache",
@@ -401,6 +409,119 @@ def copy_runtime_files(destination: Path) -> None:
         shutil.copy2(COOKIE_FILE, destination / COOKIE_FILE.name)
 
 
+def security_core_binary_name(system: str) -> str:
+    """返回目标平台的安全核动态库名称。"""
+    if system == SYSTEM_WINDOWS:
+        return "security_core.dll"
+    if system == SYSTEM_MACOS:
+        return "libsecurity_core.dylib"
+    return "libsecurity_core.so"
+
+
+def ensure_security_core_built(system: str) -> Path:
+    """构建 Rust 安全核并返回动态库路径。"""
+    artifact = SECURITY_CORE_DIR / "target" / "release" / security_core_binary_name(system)
+    run(["cargo", "build", "--release"], cwd=SECURITY_CORE_DIR)
+    if not artifact.exists():
+        raise FileNotFoundError(f"未找到安全核产物: {artifact}")
+    return artifact
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _canonical_manifest_payload(payload: dict) -> bytes:
+    normalized = {
+        "version": payload.get("version", 1),
+        "generated_at": payload.get("generated_at", ""),
+        "files": payload.get("files", []),
+    }
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def generate_manifest_signing_keypair() -> dict:
+    """生成 Ed25519 manifest 签名密钥对。"""
+    private_key = Ed25519PrivateKey.generate()
+    private_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_bytes = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return {
+        "private_key_b64": base64.b64encode(private_bytes).decode("ascii"),
+        "public_key_b64url": _b64url(public_bytes),
+    }
+
+
+def _load_manifest_signing_private_key(signing_private_key_b64: str) -> Ed25519PrivateKey:
+    private_bytes = base64.b64decode(signing_private_key_b64)
+    return serialization.load_pem_private_key(private_bytes, password=None)
+
+
+def generate_integrity_manifest(base_dir: Path, files: list[Path], signing_private_key_b64: str) -> Path:
+    """生成并签名完整性清单。"""
+    manifest_files = []
+    for artifact in sorted(files):
+        artifact_path = Path(artifact)
+        if not artifact_path.exists():
+            raise FileNotFoundError(f"完整性清单文件不存在: {artifact_path}")
+        manifest_files.append(
+            {
+                "path": artifact_path.relative_to(base_dir).as_posix(),
+                "sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+            }
+        )
+
+    payload = {
+        "version": 1,
+        "generated_at": get_app_version(),
+        "files": manifest_files,
+    }
+    signer = _load_manifest_signing_private_key(signing_private_key_b64)
+    signature = signer.sign(_canonical_manifest_payload(payload))
+    payload["signature"] = _b64url(signature)
+
+    manifest_path = base_dir / INTEGRITY_MANIFEST_NAME
+    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest_path
+
+
+def _manifest_signing_private_key_from_env() -> str:
+    raw = (
+        os.environ.get("INTEGRITY_MANIFEST_PRIVATE_KEY_B64", "").strip()
+        or os.environ.get("LICENSE_SIGNING_PRIVATE_KEY_B64", "").strip()
+    )
+    if not raw:
+        raise RuntimeError(
+            "缺少 INTEGRITY_MANIFEST_PRIVATE_KEY_B64（或 LICENSE_SIGNING_PRIVATE_KEY_B64），无法生成完整性清单。"
+        )
+    return raw
+
+
+def _install_security_artifacts(target_root: Path, system: str) -> None:
+    """复制安全核并生成完整性清单。"""
+    security_core = ensure_security_core_built(system)
+    target_root.mkdir(parents=True, exist_ok=True)
+    copied_core = target_root / security_core.name
+    shutil.copy2(security_core, copied_core)
+
+    manifest_files = [copied_core]
+    for candidate in (target_root / f"{MAIN_APP_NAME}.exe", target_root / MAIN_APP_NAME):
+        if candidate.exists():
+            manifest_files.append(candidate)
+
+    generate_integrity_manifest(
+        base_dir=target_root,
+        files=manifest_files,
+        signing_private_key_b64=_manifest_signing_private_key_from_env(),
+    )
+
+
 def prune_webengine_resources(root: Path) -> int:
     """裁剪 QtWebEngine 的非核心资源，避免误删运行时依赖。"""
     removed_count = 0
@@ -677,6 +798,7 @@ def build_macos(python_bin: str, app_name: str, entry_file: Path, profile: str, 
     if profile == PROFILE_MAIN:
         prune_macos_bundle(app_bundle)
         patch_macos_bundle_version(app_bundle, get_app_version())
+        _install_security_artifacts(app_bundle / "Contents" / "MacOS", SYSTEM_MACOS)
 
     # PyInstaller --windowed 会同时产出展开目录，只保留 .app bundle
     loose_dir = DIST_DIR / app_name
@@ -711,6 +833,7 @@ def build_windows(python_bin: str, app_name: str, entry_file: Path, profile: str
     shutil.copy2(exe_file, package_dir / exe_file.name)
     if profile == PROFILE_MAIN:
         copy_runtime_files(package_dir)
+        _install_security_artifacts(package_dir, SYSTEM_WINDOWS)
 
     zip_path = DIST_DIR / f"{app_name}-win"
     shutil.make_archive(str(zip_path), "zip", DIST_DIR, app_name)

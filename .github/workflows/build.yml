@@ -91,12 +91,18 @@ jobs:
           python -m pip install -r app/requirements.txt
           python -m pip install cython setuptools
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Obfuscate code
         shell: pwsh
         run: python scripts/obfuscate.py
 
       - name: Build Windows app
         shell: pwsh
+        env:
+          INTEGRITY_MANIFEST_PRIVATE_KEY_B64: ${{ secrets.INTEGRITY_MANIFEST_PRIVATE_KEY_B64 }}
+          LICENSE_SIGNING_PRIVATE_KEY_B64: ${{ secrets.LICENSE_SIGNING_PRIVATE_KEY_B64 }}
         run: python scripts/build.py windows --dist
 
       - name: Upload Windows release asset
@@ -153,12 +159,18 @@ jobs:
           python -m pip install -r app/requirements.txt
           python -m pip install cython setuptools
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Obfuscate code
         shell: bash
         run: python scripts/obfuscate.py
 
       - name: Build macOS app
         shell: bash
+        env:
+          INTEGRITY_MANIFEST_PRIVATE_KEY_B64: ${{ secrets.INTEGRITY_MANIFEST_PRIVATE_KEY_B64 }}
+          LICENSE_SIGNING_PRIVATE_KEY_B64: ${{ secrets.LICENSE_SIGNING_PRIVATE_KEY_B64 }}
         run: python scripts/build.py mac --dist
 
       - name: Package macOS app bundle

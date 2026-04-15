@@ -71,3 +71,7 @@ decompiled_from_exe/
 node_modules/
 .wrangler/
 image/
+
+!tests/test_security_runtime.py
+!backend/test/
+!backend/test/*.mjs

@@ -2,8 +2,10 @@ import base64
 import json
 import os
 import sys
+import tempfile
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import QApplication
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from core import security_runtime
 from core import license as license_module
 from ui.window import MainWindow
 
@@ -27,7 +30,12 @@ def _b64url(data: bytes) -> str:
 
 
 def _make_signing_key():
-    return Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
+    return Ed25519PrivateKey.from_private_bytes(bytes(range(11, 43)))
+
+
+def _public_key_b64() -> str:
+    public_bytes = _make_signing_key().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    return _b64url(public_bytes)
 
 
 def _sign_payload(payload: dict) -> str:
@@ -36,60 +44,40 @@ def _sign_payload(payload: dict) -> str:
     return f"{encoded_payload}.{_b64url(signature)}"
 
 
-def _public_key_b64() -> str:
-    public_bytes = _make_signing_key().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
-    return _b64url(public_bytes)
-
-
-def make_v2_license_info(now_ts: int | None = None):
+def make_lease_payload(now_ts: int | None = None):
     now_ts = now_ts or int(time.time())
-    license_expires_at = "2120-07-18T00:18:13+00:00"
-    offline_payload = {
-        "kind": "offline_grant",
+    return {
+        "kind": "license_lease",
         "issuer": "tls-license-backend",
         "license_key": "TLS-Q2-TEST",
         "device_id": "11223322eacf",
-        "iat": now_ts,
-        "exp": now_ts + 3600,
-        "license_expires_at": license_expires_at,
-    }
-    device_payload = {
-        "kind": "device_claims",
-        "issuer": "tls-license-backend",
-        "license_key": "TLS-Q2-TEST",
-        "device_id": "11223322eacf",
+        "license_status": "active",
+        "license_expires_at": "2120-07-18T00:18:13+00:00",
+        "lease_expires_at": "2120-07-17T00:18:13+00:00",
+        "renew_after": "2120-07-16T00:18:13+00:00",
+        "task_policy": ["review_find", "batch_delivery"],
+        "keyset_version": 1,
+        "binding_version": 3,
+        "issued_at": "2026-03-10T00:18:13+00:00",
         "iat": now_ts,
         "exp": now_ts + 86400,
-        "license_expires_at": license_expires_at,
-        "binding_version": 2,
     }
-    session_payload = {
-        "kind": "session_token",
-        "issuer": "tls-license-backend",
-        "license_key": "TLS-Q2-TEST",
-        "device_id": "11223322eacf",
-        "task_type": "review_find",
-        "session_id": "sess-test",
-        "iat": now_ts,
-        "exp": now_ts + 600,
-    }
+
+
+def make_license_info():
+    payload = make_lease_payload()
     return {
-        "license_version": 2,
-        "key": "TLS-Q2-TEST",
-        "license_key": "TLS-Q2-TEST",
-        "expires_at": license_expires_at,
-        "license_expires_at": license_expires_at,
-        "device_id": "11223322eacf",
-        "activated_at": "2026-03-10T00:18:13+00:00",
-        "plan_days": 34463,
-        "device_claims": _sign_payload(device_payload),
-        "device_claims_expires_at": "2120-07-17T00:18:13+00:00",
-        "offline_grant": _sign_payload(offline_payload),
-        "offline_grant_expires_at": "2120-07-17T00:18:13+00:00",
-        "session_token": _sign_payload(session_payload),
-        "session_token_expires_at": "2120-07-17T00:18:13+00:00",
-        "issuer": "tls-license-backend",
-        "issued_at": "2026-03-10T00:18:13+00:00",
+        "license_version": 3,
+        "license_key": payload["license_key"],
+        "key": payload["license_key"],
+        "license_expires_at": payload["license_expires_at"],
+        "expires_at": payload["license_expires_at"],
+        "lease_expires_at": payload["lease_expires_at"],
+        "renew_after": payload["renew_after"],
+        "device_id": payload["device_id"],
+        "issued_at": payload["issued_at"],
+        "task_policy": payload["task_policy"],
+        "status_hint": "ok",
     }
 
 
@@ -99,10 +87,19 @@ class LicenseFlowTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        patcher = mock.patch.object(license_module, "LICENSE_PUBLIC_KEY", _public_key_b64(), create=True)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.window = MainWindow(license_reason="ok", license_info=make_v2_license_info())
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="license-flow-"))
+        patchers = [
+            mock.patch.object(security_runtime, "LICENSE_PUBLIC_KEY", _public_key_b64(), create=True),
+            mock.patch.object(license_module, "verify_signed_claims", security_runtime.verify_signed_lease),
+            mock.patch.object(security_runtime, "get_home_config_dir", return_value=self.tmpdir),
+            mock.patch.object(security_runtime, "get_user_data_dir", return_value=self.tmpdir),
+            mock.patch.object(security_runtime, "get_device_id", return_value="11223322eacf"),
+        ]
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        self.window = MainWindow(license_reason="ok", license_info=make_license_info())
         self.window.show()
         self.app.processEvents()
 
@@ -110,59 +107,48 @@ class LicenseFlowTests(unittest.TestCase):
         self.window.close()
         self.app.processEvents()
 
-    def test_old_license_file_should_require_online_reactivation(self):
-        old_info = {
-            "key": "TLS-OLD",
-            "device_id": "11223322eacf",
-            "expires_at": "2120-07-18T00:18:13+00:00",
-            "signature": "legacy-signature",
-        }
+    def test_missing_runtime_bundle_should_require_activation(self):
+        _, reason = license_module.check_stored_license_local()
+        self.assertEqual(reason, "not_found")
 
-        with mock.patch.object(license_module.os.path, "isfile", return_value=True), mock.patch.object(
-            license_module,
-            "_read_license_file",
-            return_value=old_info,
-        ):
-            _, reason = license_module.check_stored_license_local()
+    def test_verify_signed_claims_should_accept_valid_lease_token(self):
+        token = _sign_payload(make_lease_payload())
+        payload = license_module.verify_signed_claims(token, expected_device_id="11223322eacf")
+        self.assertEqual(payload["license_key"], "TLS-Q2-TEST")
+        self.assertEqual(payload["device_id"], "11223322eacf")
 
-        self.assertEqual(reason, "reactivation_required")
-
-    def test_verify_signed_claims_should_accept_valid_ed25519_token(self):
-        info = make_v2_license_info()
-
-        payload = license_module.verify_signed_claims(info["offline_grant"], expected_kind="offline_grant")
-
-        self.assertEqual(payload["license_key"], info["license_key"])
-        self.assertEqual(payload["device_id"], info["device_id"])
-
-    def test_review_find_click_should_request_task_session_before_starting_worker(self):
+    def test_review_find_click_should_authorize_task_before_starting_worker(self):
         self.window._license_state_cache = {
-            "info": make_v2_license_info(),
+            "info": make_license_info(),
             "reason": "ok",
             "checked_at": time.monotonic(),
             "source": "initial",
         }
 
-        with mock.patch("ui.window.issue_or_refresh_session_token", create=True, return_value=(make_v2_license_info(), "ok")) as issue_mock, mock.patch.object(
+        fake_state = mock.Mock()
+        fake_state.reason = "ok"
+        fake_state.to_info.return_value = make_license_info()
+        fake_grant = mock.Mock(granted=True, state=fake_state, degraded_reason="", task_type="review_find")
+
+        with mock.patch("ui.window.authorize_task", return_value=fake_grant) as authorize_mock, mock.patch.object(
             self.window,
             "_start_review_worker",
         ) as start_mock:
             self.window.on_review_find_clicked()
 
-        issue_mock.assert_called_once()
+        authorize_mock.assert_called_once()
         start_mock.assert_called_once()
 
     def test_license_expiry_hint_should_warn_when_expiring_soon(self):
-        self.window._license_info = make_v2_license_info() | {
+        self.window._license_info = make_license_info() | {
             "expires_at": "2026-04-20T00:00:00+00:00",
             "license_expires_at": "2026-04-20T00:00:00+00:00",
         }
         self.window._license_reason = "ok"
 
         with mock.patch("ui.window.datetime") as dt_mock:
-            dt_mock.now.return_value = license_module.datetime.fromisoformat("2026-04-15T00:00:00+00:00")
-            dt_mock.fromisoformat.side_effect = license_module.datetime.fromisoformat
-
+            dt_mock.now.return_value = datetime.fromisoformat("2026-04-15T00:00:00+00:00")
+            dt_mock.fromisoformat.side_effect = datetime.fromisoformat
             hint = self.window._build_license_expiry_hint()
 
         self.assertIn("建议提前续费", hint)

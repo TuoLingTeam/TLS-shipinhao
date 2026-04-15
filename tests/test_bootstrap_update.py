@@ -20,6 +20,9 @@ class BootstrapUpdateTests(unittest.TestCase):
             bootstrap,
             '_load_runtime_objects',
             return_value=(lambda **kwargs: fake_window, lambda: ({}, 'ok')),
+        ), mock.patch.object(
+            bootstrap,
+            '_apply_app_icon',
         ), mock.patch.object(bootstrap, 'QTimer') as qtimer_mock, mock.patch.object(
             bootstrap.sys,
             'argv',

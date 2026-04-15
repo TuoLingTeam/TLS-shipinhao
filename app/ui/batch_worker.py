@@ -6,7 +6,7 @@ import time
 
 from PySide6.QtCore import QObject, Signal
 
-from core.license import issue_or_refresh_session_token
+from core.license import authorize_task, validate_runtime_continuity
 from services.delivery_api import create_session, update_single_order
 from settings import ConfigNotFoundError, LICENSE_TASK_BATCH_DELIVERY
 
@@ -72,9 +72,9 @@ class BatchWorker(QObject):
         self.started.emit(total_count)
         last_session_refresh = time.monotonic()
 
-        _, reason = issue_or_refresh_session_token(LICENSE_TASK_BATCH_DELIVERY, force=True)
-        if reason != "ok":
-            self.fatal_error.emit("授权会话已失效，请联网后重试。")
+        runtime_grant = authorize_task(LICENSE_TASK_BATCH_DELIVERY)
+        if not runtime_grant.granted:
+            self.fatal_error.emit("授权租约已失效，请联网后重试。")
             self.finished.emit(0, total_count, total_count, True)
             return
 
@@ -93,9 +93,9 @@ class BatchWorker(QObject):
                     if not self._wait_for_resume():
                         break
                     if index == 1 or (index - 1) % 10 == 0 or (time.monotonic() - last_session_refresh) >= 60:
-                        _, reason = issue_or_refresh_session_token(LICENSE_TASK_BATCH_DELIVERY)
-                        if reason != "ok":
-                            raise RuntimeError("授权会话已失效，请联网后重试。")
+                        state = validate_runtime_continuity(LICENSE_TASK_BATCH_DELIVERY, runtime_grant)
+                        if state.reason not in {"ok", "renewal_due"}:
+                            raise RuntimeError("授权租约已失效，请联网后重试。")
                         last_session_refresh = time.monotonic()
 
                     self.step_started.emit(index, total_count, order_id)

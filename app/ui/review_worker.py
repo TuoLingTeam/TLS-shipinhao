@@ -16,7 +16,7 @@ from settings import (
     ORDER_CACHE_COVERAGE_DAYS,
 )
 from core.day_window import recent_day_range_timestamps
-from core.license import issue_or_refresh_session_token
+from core.license import authorize_task, validate_runtime_continuity
 from services.order_sync import OrderSyncService
 from services.review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
 
@@ -59,6 +59,7 @@ class ReviewMatcherWorker(QObject):
         self._active_order_sync_service = None
         self._session_page_counter = 0
         self._last_session_refresh = 0.0
+        self._runtime_grant = None
 
     def stop(self):
         """请求终止任务（安全退出）。"""
@@ -119,13 +120,18 @@ class ReviewMatcherWorker(QObject):
         if not should_refresh:
             return
 
-        _, reason = issue_or_refresh_session_token(self._session_task_type_for(self.task_type), force=force)
-        if reason != "ok":
-            raise RuntimeError("授权会话已失效，请联网后重试。")
+        if force or not hasattr(self, "_runtime_grant") or self._runtime_grant is None:
+            grant = authorize_task(self._session_task_type_for(self.task_type))
+            if not grant.granted:
+                raise RuntimeError("授权租约不可用，请联网续签后重试。")
+            self._runtime_grant = grant
+        state = validate_runtime_continuity(self._session_task_type_for(self.task_type), getattr(self, "_runtime_grant", None))
+        if state.reason not in {"ok", "renewal_due"}:
+            raise RuntimeError("授权租约已失效，请联网后重试。")
         self._last_session_refresh = time.monotonic()
         self._session_page_counter = 0
         if force:
-            progress("[授权] 已确认短期任务令牌，有效后开始执行任务。")
+            progress(f"[授权] 本地运行能力已确认（{state.reason}）。")
 
     def _progress_emitter(self):
         def _progress(msg):

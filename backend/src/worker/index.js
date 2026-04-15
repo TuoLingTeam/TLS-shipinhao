@@ -4,12 +4,17 @@
  */
 
 import ADMIN_HTML from "../admin/admin.html";
+import {
+  buildLeasePayload,
+  LEASE_HARD_EXPIRY_HOURS,
+  LEASE_RENEWAL_HOURS,
+} from "./lease.mjs";
 
 const B32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const KEY_PREFIX = "TLS-";
 const PAYLOAD_LEN = 10;
 const DEFAULT_PLAN_DAYS = 30;
-const LICENSE_PROTOCOL_VERSION = 2;
+const LICENSE_PROTOCOL_VERSION = 3;
 const OFFLINE_GRANT_HOURS = 24;
 const SESSION_TOKEN_MINUTES = 15;
 const LICENSE_SIGNING_PUBLIC_KEY = "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8";
@@ -124,6 +129,11 @@ function buildResponsePayload(record, overrides = {}) {
     plan_days: record.plan_days,
     issuer: ISSUER,
     issued_at: overrides.issued_at || nowISO(),
+    license_lease: overrides.license_lease || "",
+    lease_expires_at: overrides.lease_expires_at || "",
+    renew_after: overrides.renew_after || "",
+    task_policy: overrides.task_policy || [],
+    keyset_version: overrides.keyset_version || 1,
     device_claims: overrides.device_claims || "",
     device_claims_expires_at: overrides.device_claims_expires_at || "",
     offline_grant: overrides.offline_grant || "",
@@ -134,7 +144,7 @@ function buildResponsePayload(record, overrides = {}) {
     license_state: overrides.license_state || "ok",
     refresh_required: !!overrides.refresh_required,
     server_time: nowISO(),
-    grace_policy: `${OFFLINE_GRANT_HOURS}h offline state cache`,
+    grace_policy: `renew after ${LEASE_RENEWAL_HOURS}h, hard expiry ${LEASE_HARD_EXPIRY_HOURS}h`,
   };
 }
 
@@ -334,6 +344,26 @@ async function issueGrants(env, record, { deviceId, taskType = "bootstrap", sess
   };
 }
 
+async function issueLease(env, record, { deviceId }) {
+  const payload = buildLeasePayload({
+    licenseKey: record.license_key,
+    deviceId,
+    licenseExpiresAt: record.expires_at,
+    licenseStatus: record.status || "active",
+    nowEpochSeconds: epochSeconds(),
+    bindingVersion: LICENSE_PROTOCOL_VERSION,
+  });
+  const licenseLease = await signClaims(payload, env);
+  return {
+    license_lease: licenseLease,
+    issued_at: payload.issued_at,
+    renew_after: payload.renew_after,
+    lease_expires_at: payload.lease_expires_at,
+    task_policy: payload.task_policy,
+    keyset_version: payload.keyset_version,
+  };
+}
+
 async function persistSession(env, { licenseKey, deviceId, sessionId, taskType = "", expiresAt, clientVersion = "" }) {
   const existing = await env.DB.prepare(
     "SELECT id FROM device_sessions WHERE session_id = ?"
@@ -386,6 +416,7 @@ async function handleActivate(request, env) {
 
   await upsertDeviceRegistration(env, normalizedKey, device_id, device_fingerprint || "");
   const grants = await issueGrants(env, record, { deviceId: device_id, taskType: "bootstrap" });
+  const lease = await issueLease(env, record, { deviceId: device_id });
   await persistSession(env, {
     licenseKey: normalizedKey,
     deviceId: device_id,
@@ -401,6 +432,7 @@ async function handleActivate(request, env) {
 
   return jsonResponse(buildResponsePayload(record, {
     message: record.activated_at === now ? "激活成功" : "重新激活成功",
+    ...lease,
     ...grants,
   }));
 }
@@ -429,6 +461,7 @@ async function handleVerify(request, env) {
   }
 
   const grants = await issueGrants(env, record, { deviceId: device_id, taskType: "bootstrap" });
+  const lease = await issueLease(env, record, { deviceId: device_id });
   await persistSession(env, {
     licenseKey: normalizedKey,
     deviceId: device_id,
@@ -441,7 +474,7 @@ async function handleVerify(request, env) {
     "UPDATE activations SET last_verify_at=?, last_session_issued_at=?, last_offline_grant_issued_at=?, status='active' WHERE license_key=?"
   ).bind(nowISO(), grants.session_token_expires_at, grants.offline_grant_expires_at, normalizedKey).run();
   await appendAuditLog(env, { licenseKey: normalizedKey, deviceId: device_id, action: "verify", actionReason: "client_verify", meta: { client_version } });
-  return jsonResponse(buildResponsePayload(record, grants));
+  return jsonResponse(buildResponsePayload(record, { ...lease, ...grants }));
 }
 
 async function handleSessionIssue(request, env) {
