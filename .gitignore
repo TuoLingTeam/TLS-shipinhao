@@ -70,3 +70,4 @@ decompiled_from_exe/
 # Node.js
 node_modules/
 .wrangler/
+image/
