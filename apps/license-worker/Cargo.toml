@@ -1,5 +1,5 @@
 [package]
-name = "license-service"
+name = "license-worker"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,4 +8,5 @@ license.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-api-contracts = { path = "../api-contracts" }
+license-service = { path = "../../crates/license-service" }
+api-contracts = { path = "../../crates/api-contracts" }
