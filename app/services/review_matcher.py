@@ -212,6 +212,34 @@ class BadReviewOrderFinder:
 
         raise RuntimeError("；".join(errors) if errors else "未知错误")
 
+    def _retry_order_search_on_limit(
+        self,
+        data: JsonDict,
+        headers: JsonDict,
+        page_index: int,
+        on_progress: ProgressCallback | None,
+        *,
+        api_level: bool,
+    ) -> requests.Response:
+        """订单接口触发限流后的统一重试逻辑。"""
+        for retry in range(RATE_LIMIT_RETRY_COUNT):
+            wait = self._rate_limit_wait_seconds(retry)
+            if on_progress:
+                limit_type = "(API)" if api_level else ""
+                on_progress(f"第 {page_index} 页触发频率限制{limit_type}，等待 {wait} 秒后重试...")
+            time.sleep(wait)
+            try:
+                response = self._post_json(
+                    ORDER_SEARCH_URL,
+                    data,
+                    headers,
+                )
+            except Exception as exc:
+                raise RuntimeError(f"订单请求异常: {exc}") from exc
+            if response.status_code != 429:
+                return response
+        raise RuntimeError("订单API持续频率限制，请稍后再试")
+
     def _request_order_search_result(
         self,
         data: JsonDict,
@@ -230,64 +258,34 @@ class BadReviewOrderFinder:
             raise RuntimeError(f"订单请求异常: {exc}") from exc
 
         if response.status_code == 429:
-            for retry in range(RATE_LIMIT_RETRY_COUNT):
-                wait = self._rate_limit_wait_seconds(retry)
-                if on_progress:
-                    on_progress(f"第 {page_index} 页触发频率限制，等待 {wait} 秒后重试...")
-                time.sleep(wait)
-                try:
-                    response = self._post_json(
-                        ORDER_SEARCH_URL,
-                        data,
-                        headers,
-                    )
-                except Exception as exc:
-                    raise RuntimeError(f"订单请求异常: {exc}") from exc
-                if response.status_code != 429:
-                    break
-            else:
-                raise RuntimeError("订单API持续频率限制，请稍后再试")
+            response = self._retry_order_search_on_limit(
+                data,
+                headers,
+                page_index,
+                on_progress,
+                api_level=False,
+            )
 
         if response.status_code not in (200, 201):
             raise RuntimeError(f"订单请求失败: HTTP {response.status_code}")
 
         result = response.json()
         if result.get("code") == 429:
-            for retry in range(RATE_LIMIT_RETRY_COUNT):
-                wait = self._rate_limit_wait_seconds(retry)
-                if on_progress:
-                    on_progress(f"第 {page_index} 页触发频率限制(API)，等待 {wait} 秒后重试...")
-                time.sleep(wait)
-                try:
-                    response = self._post_json(
-                        ORDER_SEARCH_URL,
-                        data,
-                        headers,
-                    )
-                except Exception as exc:
-                    raise RuntimeError(f"订单请求异常: {exc}") from exc
-                if response.status_code not in (200, 201):
-                    raise RuntimeError(f"订单请求失败: HTTP {response.status_code}")
-                result = response.json()
-                if result.get("code") != 429:
-                    break
-            else:
+            response = self._retry_order_search_on_limit(
+                data,
+                headers,
+                page_index,
+                on_progress,
+                api_level=True,
+            )
+            if response.status_code not in (200, 201):
+                raise RuntimeError(f"订单请求失败: HTTP {response.status_code}")
+            result = response.json()
+            if result.get("code") == 429:
                 raise RuntimeError("订单API持续频率限制，请稍后再试")
 
         return result
 
-    @staticmethod
-    def _latest_create_time(orders: JsonList) -> int:
-        """返回当前订单列表中的最新下单时间。"""
-        if not orders:
-            return 0
-        return max(o.get("commonInfo", {}).get("createTime", 0) for o in orders)
-
-    def _is_page_outside_earliest_time(self, orders: JsonList, earliest_time: int) -> bool:
-        """判断当前页订单是否全部早于筛选下限。"""
-        if earliest_time <= 0 or not orders:
-            return False
-        return self._latest_create_time(orders) < earliest_time
 
     @staticmethod
     def _filter_orders_by_earliest_time(orders: JsonList, earliest_time: int) -> JsonList:
@@ -439,14 +437,7 @@ class BadReviewOrderFinder:
                     stop_event.set()
                     break
 
-                filtered = (
-                    [
-                        o for o in page_orders
-                        if int(o.get("commonInfo", {}).get("createTime", 0) or 0) >= earliest_time
-                    ]
-                    if earliest_time > 0
-                    else list(page_orders)
-                )
+                filtered = self._filter_orders_by_earliest_time(page_orders, earliest_time)
 
                 batch_info = None
                 with collect_lock:
@@ -462,11 +453,16 @@ class BadReviewOrderFinder:
                         f"（累计约 {len(collected) + len(pending)}）"
                     )
 
-                if self._is_page_outside_earliest_time(page_orders, earliest_time):
-                    if on_progress:
-                        on_progress(f"[订单] 第 {pg} 页订单均早于筛选时间，触发早停。")
-                    stop_event.set()
-                    break
+                if earliest_time > 0 and page_orders:
+                    latest_create_time = max(
+                        int(o.get("commonInfo", {}).get("createTime", 0) or 0)
+                        for o in page_orders
+                    )
+                    if latest_create_time < earliest_time:
+                        if on_progress:
+                            on_progress(f"[订单] 第 {pg} 页订单均早于筛选时间，触发早停。")
+                        stop_event.set()
+                        break
 
                 time.sleep(page_interval_seconds)
 

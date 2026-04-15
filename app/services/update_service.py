@@ -36,10 +36,6 @@ def detect_platform() -> str:
     return 'unknown'
 
 
-def get_current_version() -> str:
-    return APP_VERSION
-
-
 def _normalize_notes(payload: dict[str, Any]) -> list[str]:
     notes = payload.get('notes') or []
     if isinstance(notes, list):
@@ -49,13 +45,6 @@ def _normalize_notes(payload: dict[str, Any]) -> list[str]:
     return []
 
 
-def _resolve_download_url(payload: dict[str, Any]) -> str:
-    return str(payload.get('download_url') or '').strip()
-
-
-def _resolve_tutorial_url(payload: dict[str, Any]) -> str:
-    return str(payload.get('tutorial_url') or '').strip()
-
 
 def fetch_latest_version_info(current_version: str | None = None) -> UpdateInfo:
     response = requests.get(UPDATE_VERSION_URL, timeout=REQUEST_TIMEOUT)
@@ -63,7 +52,7 @@ def fetch_latest_version_info(current_version: str | None = None) -> UpdateInfo:
     payload = response.json()
     platform = detect_platform()
     latest_version = str(payload.get('version') or '').strip()
-    resolved_current_version = current_version or get_current_version()
+    resolved_current_version = current_version or APP_VERSION
     has_update = bool(latest_version and is_newer_version(resolved_current_version, latest_version))
     return UpdateInfo(
         app=str(payload.get('app') or 'TLS-shipinhao'),
@@ -71,8 +60,8 @@ def fetch_latest_version_info(current_version: str | None = None) -> UpdateInfo:
         build=int(payload.get('build') or 0),
         mandatory=bool(payload.get('mandatory')),
         platform=platform,
-        download_url=_resolve_download_url(payload),
-        tutorial_url=_resolve_tutorial_url(payload),
+        download_url=str(payload.get('download_url') or '').strip(),
+        tutorial_url=str(payload.get('tutorial_url') or '').strip(),
         notes=_normalize_notes(payload),
         has_update=has_update,
         raw_payload=payload,

@@ -28,19 +28,13 @@ class OrderSyncService:
         if on_progress:
             on_progress(message)
 
-    @staticmethod
-    def _now():
-        return end_of_day_timestamp()
-
-    def _retention_start(self):
-        start_ts, _ = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
-        return start_ts
 
     def _save_state(self, *, mode, last_error="", coverage_start=None, coverage_end=None, incremental_start=None, incremental_end=None):
-        now_ts = self._now()
+        now_ts = end_of_day_timestamp()
+        retention_start, _ = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)
         self.repository.save_state(
             scope=ORDER_CACHE_SCOPE,
-            coverage_start=int(coverage_start if coverage_start is not None else self._retention_start()),
+            coverage_start=int(coverage_start if coverage_start is not None else retention_start),
             coverage_end=int(coverage_end if coverage_end is not None else now_ts),
             last_incremental_start=int(incremental_start or 0),
             last_incremental_end=int(incremental_end or 0),
@@ -89,8 +83,8 @@ class OrderSyncService:
             written_count = len({order.get("commonInfo", {}).get("orderId") for order in persisted_orders if order.get("commonInfo", {}).get("orderId")})
             self._save_state(
                 mode=mode,
-                coverage_start=self._retention_start(),
-                coverage_end=self._now(),
+                coverage_start=recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)[0],
+                coverage_end=end_of_day_timestamp(),
                 incremental_start=start_timestamp if mode in ("incremental", "rebuild") else 0,
                 incremental_end=end_timestamp if mode in ("incremental", "rebuild") else 0,
             )

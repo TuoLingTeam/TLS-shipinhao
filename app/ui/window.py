@@ -1603,7 +1603,7 @@ class MainWindow(QWidget):
         """按顺序追加多条日志，自动跳过空值。"""
         for message in messages:
             if message:
-                self._append_logs(message)
+                self.append_result_log(message)
 
     def _log_and_show_message(
         self,
@@ -1617,6 +1617,67 @@ class MainWindow(QWidget):
         """统一处理“追加日志 + 显示弹窗”组合。"""
         self._append_logs(*log_messages)
         self.show_message(level, title, text, informative_text)
+
+    def _show_task_terminal_error(self, *, task_type, message):
+        """统一处理任务失败日志与弹窗。"""
+        title = (
+            "缓存任务失败"
+            if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD)
+            else "查找失败"
+        )
+        self._log_and_show_message(
+            QMessageBox.Critical,
+            title,
+            message,
+            log_messages=(f"❌ 错误: {message}",),
+        )
+
+    def _show_task_summary_message(
+        self,
+        *,
+        summary,
+        warning_text,
+        warning_title,
+        success_title,
+        success_level=QMessageBox.Information,
+    ):
+        """统一处理任务完成类结果的日志与弹窗。"""
+        log_messages = [summary]
+        if warning_text:
+            warning_message = f"⚠️ 提醒: {warning_text}"
+            log_messages.append(warning_message)
+            self._append_logs(*log_messages)
+            self.show_message(
+                QMessageBox.Warning,
+                warning_title,
+                f"{summary}\n\n{warning_text}",
+            )
+            return
+        self._log_and_show_message(
+            success_level,
+            success_title,
+            summary,
+            log_messages=tuple(log_messages),
+        )
+
+    def _append_license_status_log(self, reason, *, prefix="授权状态"):
+        """统一追加授权状态日志。"""
+        self._append_logs(f"{prefix}：{get_license_reason_text(reason)}")
+
+    def _append_license_success_logs(self, info):
+        """统一追加授权成功后的日志。"""
+        expires = str((info or {}).get("expires_at", ""))[:10]
+        self._append_logs(
+            "卡密激活成功，已解锁批量处理功能。",
+            f"授权有效期至：{expires}" if expires else "",
+        )
+
+    def _get_startup_license_state(self):
+        """返回启动阶段使用的授权状态。"""
+        cache = self._get_cached_license_state(max_age_seconds=None)
+        if cache is not None:
+            return cache.get("info") or {}, cache.get("reason", "invalid")
+        return self._refresh_license_state_with_mode(local_only=True)
 
     @staticmethod
     def _shutdown_thread(thread, *, graceful_timeout=3000, terminate_timeout=1000):
@@ -1794,117 +1855,109 @@ class MainWindow(QWidget):
             self.config_badge.setText(badge_text)
             self.config_badge.setStyleSheet(badge_style)
 
-    def choose_config_dir(self):
-        """选择配置文件所在目录并记住。"""
-        start_dir = get_config_dir_cache() or get_saved_user_config_dir() or os.path.expanduser("~")
-        selected_dir = QFileDialog.getExistingDirectory(self, "选择配置目录", start_dir)
-        if not selected_dir:
-            return
+    def _resolve_saved_config_start_dir(self):
+        """返回配置目录相关操作的默认起始目录。"""
+        return get_config_dir_cache() or get_saved_user_config_dir() or os.path.expanduser("~")
 
+    def _validate_selected_config_dir(self, selected_dir):
+        """校验用户选择的配置目录，返回缺失项列表。"""
         resolved_files = resolve_config_files_in_dir(selected_dir)
         missing_files = []
         if not resolved_files or "cookie" not in resolved_files:
             missing_files.append("cookie(.txt)")
-        else:
-            try:
-                cookie_data = read_cookie_data(resolved_files["cookie"])
-            except Exception:  # noqa: BLE001
-                missing_files.append("cookie(.txt) 内容不可读")
-            else:
-                magic_from_cookie = extract_biz_magic_from_cookie(cookie_data)
-                if not magic_from_cookie:
-                    missing_files.append("cookie 中 biz_magic 键")
+            return missing_files
 
-        if missing_files:
-            self._log_and_show_message(
-                QMessageBox.Warning,
-                "目录不完整",
-                "所选目录缺少以下文件：" + "、".join(missing_files),
-            )
-            return
+        try:
+            cookie_data = read_cookie_data(resolved_files["cookie"])
+        except Exception:  # noqa: BLE001
+            missing_files.append("cookie(.txt) 内容不可读")
+            return missing_files
 
-        save_user_config_dir(selected_dir)
-        self.refresh_config_path_label()
+        if not extract_biz_magic_from_cookie(cookie_data):
+            missing_files.append("cookie 中 biz_magic 键")
+        return missing_files
+
+    def _show_invalid_config_dir_message(self, missing_files):
+        """提示所选配置目录不完整。"""
+        self._log_and_show_message(
+            QMessageBox.Warning,
+            "目录不完整",
+            "所选目录缺少以下文件：" + "、".join(missing_files),
+        )
+
+    def _show_config_dir_updated_message(self, selected_dir):
+        """提示配置目录已更新。"""
         self._log_and_show_message(
             QMessageBox.Information,
             "配置目录已更新",
             f"后续将优先使用：\n{selected_dir}",
         )
 
-    def open_cookie_capture_dialog(self):
-        """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
-        # 延迟导入 QtWebEngine 相关模块，避免启动时加载
-        try:
-            from ui.cookie_dialog import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
-        except ImportError as exc:
-            self.show_message(
-                QMessageBox.Warning,
-                "当前环境缺少 QtWebEngine",
-                "暂时无法打开内置网页登录窗口。",
-                "请先安装支持 QtWebEngine 的 PySide6 组件后重试。\n"
-                f"错误详情：{exc}",
-            )
-            return
-
-        if not QTWEBENGINE_AVAILABLE:
-            self.show_message(
-                QMessageBox.Warning,
-                "当前环境缺少 QtWebEngine",
-                "暂时无法打开内置网页登录窗口。",
-                "请先安装支持 QtWebEngine 的 PySide6 组件后重试。\n"
-                f"错误详情：{QTWEBENGINE_IMPORT_ERROR or 'QtWebEngine 不可用'}",
-            )
-            return
-
-        initial_dir = get_default_config_dir()
-        self._append_logs("正在打开内置网页登录窗口，登录成功后点击保存并选择目录即可。")
-        try:
-            dialog = CookieCaptureDialog(initial_dir, self)
-        except Exception as exc:  # noqa: BLE001
-            self.show_message(
-                QMessageBox.Critical,
-                "打开网页登录窗口失败",
-                "QtWebEngine 已检测到，但初始化内置浏览器时失败。",
-                str(exc),
-            )
-            return
-
-        if dialog.exec() != QDialog.Accepted:
-            self._append_logs("已取消自动获取 Cookie。")
-            return
-
-        cookie_data = dialog.cookie_data
-        magic_value = extract_biz_magic_from_cookie(cookie_data)
-        if not magic_value:
-            self.show_message(
-                QMessageBox.Warning,
-                "Cookie 尚未准备好",
-                "当前未检测到 biz_magic，请在页面里完成登录后重试。",
-            )
-            return
-
-        start_dir = get_config_dir_cache() or get_saved_user_config_dir() or os.path.expanduser("~")
+    def choose_config_dir(self):
+        """选择配置文件所在目录并记住。"""
         selected_dir = QFileDialog.getExistingDirectory(
             self,
-            "选择 Cookie 保存位置",
-            start_dir,
+            "选择配置目录",
+            self._resolve_saved_config_start_dir(),
         )
         if not selected_dir:
-            self._append_logs("已取消选择目录，Cookie 未保存。")
             return
 
-        try:
-            cookie_path = save_cookie_data(cookie_data, config_dir=selected_dir, remember_dir=True)
-        except Exception as exc:  # noqa: BLE001
-            self.show_message(
-                QMessageBox.Critical,
-                "保存 Cookie 失败",
-                "已抓取到登录态，但写入 cookie.txt 失败。",
-                str(exc),
-            )
+        missing_files = self._validate_selected_config_dir(selected_dir)
+        if missing_files:
+            self._show_invalid_config_dir_message(missing_files)
             return
 
+        save_user_config_dir(selected_dir)
         self.refresh_config_path_label()
+        self._show_config_dir_updated_message(selected_dir)
+
+    def _show_qtwebengine_unavailable(self, error_detail):
+        """提示当前环境无法使用 QtWebEngine。"""
+        self.show_message(
+            QMessageBox.Warning,
+            "当前环境缺少 QtWebEngine",
+            "暂时无法打开内置网页登录窗口。",
+            "请先安装支持 QtWebEngine 的 PySide6 组件后重试。\n"
+            f"错误详情：{error_detail}",
+        )
+
+    def _show_cookie_browser_init_error(self, error_detail):
+        """提示内置网页登录窗口初始化失败。"""
+        self.show_message(
+            QMessageBox.Critical,
+            "打开网页登录窗口失败",
+            "QtWebEngine 已检测到，但初始化内置浏览器时失败。",
+            str(error_detail),
+        )
+
+    def _select_cookie_save_dir(self):
+        """选择 Cookie 保存目录。"""
+        return QFileDialog.getExistingDirectory(
+            self,
+            "选择 Cookie 保存位置",
+            self._resolve_saved_config_start_dir(),
+        )
+
+    def _show_cookie_not_ready_message(self):
+        """提示 Cookie 尚未具备 biz_magic。"""
+        self.show_message(
+            QMessageBox.Warning,
+            "Cookie 尚未准备好",
+            "当前未检测到 biz_magic，请在页面里完成登录后重试。",
+        )
+
+    def _show_cookie_save_error(self, error_detail):
+        """提示 Cookie 保存失败。"""
+        self.show_message(
+            QMessageBox.Critical,
+            "保存 Cookie 失败",
+            "已抓取到登录态，但写入 cookie.txt 失败。",
+            str(error_detail),
+        )
+
+    def _show_cookie_saved_message(self, cookie_path):
+        """提示 Cookie 保存成功。"""
         self._log_and_show_message(
             QMessageBox.Information,
             "Cookie 获取成功",
@@ -1915,6 +1968,49 @@ class MainWindow(QWidget):
                 "已记住该路径，后续将从此目录读取 cookie.txt。",
             ),
         )
+
+    def open_cookie_capture_dialog(self):
+        """打开网页登录窗口并自动抓取 Cookie；保存时选择目录并记住。"""
+        # 延迟导入 QtWebEngine 相关模块，避免启动时加载
+        try:
+            from ui.cookie_dialog import CookieCaptureDialog, QTWEBENGINE_AVAILABLE, QTWEBENGINE_IMPORT_ERROR
+        except ImportError as exc:
+            self._show_qtwebengine_unavailable(exc)
+            return
+
+        if not QTWEBENGINE_AVAILABLE:
+            self._show_qtwebengine_unavailable(QTWEBENGINE_IMPORT_ERROR or "QtWebEngine 不可用")
+            return
+
+        self._append_logs("正在打开内置网页登录窗口，登录成功后点击保存并选择目录即可。")
+        try:
+            dialog = CookieCaptureDialog(get_default_config_dir(), self)
+        except Exception as exc:  # noqa: BLE001
+            self._show_cookie_browser_init_error(exc)
+            return
+
+        if dialog.exec() != QDialog.Accepted:
+            self._append_logs("已取消自动获取 Cookie。")
+            return
+
+        cookie_data = dialog.cookie_data
+        if not extract_biz_magic_from_cookie(cookie_data):
+            self._show_cookie_not_ready_message()
+            return
+
+        selected_dir = self._select_cookie_save_dir()
+        if not selected_dir:
+            self._append_logs("已取消选择目录，Cookie 未保存。")
+            return
+
+        try:
+            cookie_path = save_cookie_data(cookie_data, config_dir=selected_dir, remember_dir=True)
+        except Exception as exc:  # noqa: BLE001
+            self._show_cookie_save_error(exc)
+            return
+
+        self.refresh_config_path_label()
+        self._show_cookie_saved_message(cookie_path)
 
     def show_missing_config_error(self, searched_dirs):
         """提示缺少配置文件，并允许用户直接选择目录。"""
@@ -2013,6 +2109,28 @@ class MainWindow(QWidget):
         self.update_check_worker = None
         self.update_check_thread = None
 
+    def _show_manual_update_latest_message(self):
+        """提示当前已是最新版本。"""
+        self.show_message(QMessageBox.Information, "检查更新", f"当前已是最新版本：{APP_VERSION}")
+
+    def _show_manual_update_failed_message(self, error_message):
+        """提示手动检查更新失败。"""
+        self.show_message(QMessageBox.Warning, "检查更新失败", error_message or "无法获取更新信息，请稍后重试。")
+
+    def _show_missing_download_url_message(self):
+        """提示远端未提供更新下载链接。"""
+        self.show_message(QMessageBox.Warning, "下载链接缺失", "远端配置未提供更新下载链接，请稍后重试。")
+
+    def _open_update_download_url(self, download_url):
+        """打开更新下载链接并记录日志。"""
+        if not download_url:
+            self._show_missing_download_url_message()
+            return QDialog.Accepted
+
+        QDesktopServices.openUrl(QUrl(download_url))
+        self._append_logs(f"已打开更新下载链接：{download_url}")
+        return QDialog.Accepted
+
     def trigger_background_update_check(self, *, manual=False):
         """后台检查更新，避免阻塞主线程。"""
         if self.update_check_thread is not None:
@@ -2040,7 +2158,7 @@ class MainWindow(QWidget):
 
         if not info.has_update:
             if manual:
-                self.show_message(QMessageBox.Information, "检查更新", f"当前已是最新版本：{APP_VERSION}")
+                self._show_manual_update_latest_message()
             return
 
         if not manual and self._update_prompt_version == info.version:
@@ -2053,7 +2171,7 @@ class MainWindow(QWidget):
     def _on_update_check_failed(self, error_message, manual):
         """更新检查失败。"""
         if manual:
-            self.show_message(QMessageBox.Warning, "检查更新失败", error_message or "无法获取更新信息，请稍后重试。")
+            self._show_manual_update_failed_message(error_message)
         elif error_message:
             self._append_logs(f"检查更新失败：{error_message}")
 
@@ -2066,14 +2184,6 @@ class MainWindow(QWidget):
             "\n".join(f"- {item}" for item in notes),
         )
 
-        def _open_download():
-            if info.download_url:
-                QDesktopServices.openUrl(QUrl(info.download_url))
-                self._append_logs(f"已打开更新下载链接：{info.download_url}")
-            else:
-                self.show_message(QMessageBox.Warning, "下载链接缺失", "远端配置未提供更新下载链接，请稍后重试。")
-            return QDialog.Accepted
-
         self._show_action_dialog(
             QMessageBox.Information,
             f"发现新版本 {info.version}",
@@ -2082,7 +2192,7 @@ class MainWindow(QWidget):
             min_width=620,
             action_specs=(
                 ("稍后再说", "MessageSecondary", lambda: QDialog.Rejected),
-                ("前往下载", "MessagePrimary", _open_download),
+                ("前往下载", "MessagePrimary", lambda: self._open_update_download_url(info.download_url)),
             ),
         )
 
@@ -2143,50 +2253,33 @@ class MainWindow(QWidget):
         """弹出激活窗口，返回是否激活成功。"""
         if reason is None:
             _, reason = self._refresh_license_state_with_mode(local_only=True)
-        self._append_logs(
-            f"授权状态：{get_license_reason_text(reason)}",
-            "正在打开卡密激活窗口...",
-        )
+        self._append_license_status_log(reason)
+        self._append_logs("正在打开卡密激活窗口...")
 
         dialog = LicenseDialog(self, reason=reason)
         result = dialog.exec()
         if result == QDialog.Accepted and dialog.activated:
             info, refreshed_reason = self._refresh_license_state_with_mode(local_only=True)
             if refreshed_reason == "ok":
-                expires = str((info or {}).get("expires_at", ""))[:10]
-                self._append_logs(
-                    "卡密激活成功，已解锁批量处理功能。",
-                    f"授权有效期至：{expires}" if expires else "",
-                )
+                self._append_license_success_logs(info)
                 return True
 
-            self._append_logs(
-                "卡密激活结果校验失败，请重试。",
-                f"当前状态：{get_license_reason_text(refreshed_reason)}",
-            )
+            self._append_logs("卡密激活结果校验失败，请重试。")
+            self._append_license_status_log(refreshed_reason, prefix="当前状态")
             return False
 
         _, refreshed_reason = self._refresh_license_state_with_mode(local_only=True)
-        self._append_logs(
-            "卡密激活未完成。",
-            f"当前状态：{get_license_reason_text(refreshed_reason)}",
-        )
+        self._append_logs("卡密激活未完成。")
+        self._append_license_status_log(refreshed_reason, prefix="当前状态")
         return False
 
     def prompt_license_on_startup(self):
         """启动后提示激活（仅在未激活时弹出）。"""
-        cache = self._get_cached_license_state(max_age_seconds=None)
-        if cache is not None:
-            info = cache.get("info") or {}
-            reason = cache.get("reason", "invalid")
-        else:
-            info, reason = self._refresh_license_state_with_mode(local_only=True)
+        info, reason = self._get_startup_license_state()
         if reason == "ok":
+            self._append_license_status_log(reason)
             expires = str((info or {}).get("expires_at", ""))[:10]
-            self._append_logs(
-                "授权状态：已激活。",
-                f"授权有效期至：{expires}" if expires else "",
-            )
+            self._append_logs(f"授权有效期至：{expires}" if expires else "")
             return True
 
         self._append_logs("当前未激活，执行前需先输入卡密。")
@@ -2196,26 +2289,25 @@ class MainWindow(QWidget):
     # 批量处理
     # -----------------------------------------------------------------------
 
-    def on_start_clicked(self):
-        """开始或继续批量处理。"""
-        if self.worker is not None and self.is_paused:
-            self.worker.resume()
-            self.is_paused = False
-            self.refresh_action_buttons()
-            self._append_logs("已继续执行剩余任务。")
-            return
+    def _resume_batch_processing(self):
+        """继续已暂停的批量处理任务。"""
+        self.worker.resume()
+        self.is_paused = False
+        self.refresh_action_buttons()
+        self._append_logs("已继续执行剩余任务。")
 
-        if not self._can_start_task(self.worker, "批量处理"):
-            return
+    def _parse_batch_inputs(self):
+        """解析批量处理输入框内容。"""
+        return (
+            parse_batch_input(self.order_edit.toPlainText()),
+            parse_batch_input(self.tracking_edit.toPlainText()),
+        )
 
-        self.normalize_inputs()
-
-        order_ids = parse_batch_input(self.order_edit.toPlainText())
-        tracking_numbers = parse_batch_input(self.tracking_edit.toPlainText())
-
+    def _validate_batch_inputs(self, order_ids, tracking_numbers):
+        """校验批量处理输入。"""
         if not order_ids or not tracking_numbers:
             self.show_message(QMessageBox.Information, "提示", "请输入订单号和新物流单号。")
-            return
+            return False
 
         if len(order_ids) != len(tracking_numbers):
             self.show_message(
@@ -2224,7 +2316,7 @@ class MainWindow(QWidget):
                 f"订单号共 {len(order_ids)} 个，新物流单号共 {len(tracking_numbers)} 个。\n"
                 "请确保一一对应后再执行。",
             )
-            return
+            return False
 
         if len(order_ids) > MAX_BATCH_SIZE:
             self.show_message(
@@ -2232,8 +2324,12 @@ class MainWindow(QWidget):
                 "超出数量限制",
                 f"一次最多处理 {MAX_BATCH_SIZE} 条，请拆分后再执行。",
             )
-            return
+            return False
 
+        return True
+
+    def _prepare_batch_rows(self, order_ids, tracking_numbers):
+        """根据输入构建批量任务行。"""
         self._batch_rows = [
             {
                 "order_id": order_id,
@@ -2242,10 +2338,9 @@ class MainWindow(QWidget):
             }
             for order_id, tracking_number in zip(order_ids, tracking_numbers)
         ]
-        self.clear_result_log()
-        self._append_logs(f"开始执行：共 {len(order_ids)} 条。")
-        self.set_submit_running(True)
 
+    def _start_batch_worker(self, order_ids, tracking_numbers):
+        """启动批量处理后台任务。"""
         worker = BatchWorker(order_ids, tracking_numbers)
         self._start_thread_worker(
             thread_attr="worker_thread",
@@ -2264,6 +2359,26 @@ class MainWindow(QWidget):
             quit_signals=(worker.finished,),
         )
         self.refresh_action_buttons()
+
+    def on_start_clicked(self):
+        """开始或继续批量处理。"""
+        if self.worker is not None and self.is_paused:
+            self._resume_batch_processing()
+            return
+
+        if not self._can_start_task(self.worker, "批量处理"):
+            return
+
+        self.normalize_inputs()
+        order_ids, tracking_numbers = self._parse_batch_inputs()
+        if not self._validate_batch_inputs(order_ids, tracking_numbers):
+            return
+
+        self._prepare_batch_rows(order_ids, tracking_numbers)
+        self.clear_result_log()
+        self._append_logs(f"开始执行：共 {len(order_ids)} 条。")
+        self.set_submit_running(True)
+        self._start_batch_worker(order_ids, tracking_numbers)
 
     def on_pause_clicked(self):
         """暂停后续批量任务。"""
@@ -2524,37 +2639,11 @@ class MainWindow(QWidget):
         """将匹配到的订单号回填到订单输入框。"""
         self._set_order_input_values(order_ids)
 
-    def _append_warning_log(self, warning_text):
-        """统一追加提醒日志。"""
-        if warning_text:
-            self._append_logs(f"⚠️ 提醒: {warning_text}")
-
-    def _show_warning_or_success_message(
-        self,
-        *,
-        summary,
-        warning_text,
-        warning_title,
-        success_title,
-        success_level=QMessageBox.Information,
-    ):
-        """按是否存在提醒信息显示结果弹窗。"""
-        if warning_text:
-            self._append_warning_log(warning_text)
-            self.show_message(
-                QMessageBox.Warning,
-                warning_title,
-                f"{summary}\n\n{warning_text}",
-            )
-            return
-        self.show_message(success_level, success_title, summary)
-
     def _handle_cache_task_finished(self, *, status, warning_text, matched_count):
         """处理订单缓存任务完成后的提示。"""
         action_label = "订单缓存重建" if self.review_task_type == TASK_CACHE_REBUILD else "订单缓存刷新"
         summary = f"{action_label}完成：写入/更新 {matched_count} 个订单。"
-        self._append_logs(summary)
-        self._show_warning_or_success_message(
+        self._show_task_summary_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
             warning_title="缓存任务提醒",
@@ -2571,8 +2660,7 @@ class MainWindow(QWidget):
             f"品退订单获取完成：共 {total_count} 个订单，"
             f"回填 {matched_count} 个订单号。"
         )
-        self._append_logs(summary)
-        self._show_warning_or_success_message(
+        self._show_task_summary_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
             warning_title="查找提醒",
@@ -2589,8 +2677,7 @@ class MainWindow(QWidget):
             f"{task_label}完成：共 {total_count} 条差评，"
             f"匹配到 {matched_count} 个订单。"
         )
-        self._append_logs(summary)
-        self._show_warning_or_success_message(
+        self._show_task_summary_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
             warning_title="查找提醒",
@@ -2608,13 +2695,7 @@ class MainWindow(QWidget):
             return
 
         if status == TERMINAL_STATUS_ERROR:
-            self._append_logs(f"❌ 错误: {message}")
-            title = (
-                "缓存任务失败"
-                if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD)
-                else "查找失败"
-            )
-            self.show_message(QMessageBox.Critical, title, message)
+            self._show_task_terminal_error(task_type=task_type, message=message)
             return
 
         if task_type in (TASK_CACHE_REFRESH, TASK_CACHE_REBUILD):
