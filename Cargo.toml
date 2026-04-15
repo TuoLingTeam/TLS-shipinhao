@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/api-contracts",
+  "crates/build-tools",
+  "crates/desktop-app",
+  "crates/desktop-services",
+  "crates/domain-core",
+  "crates/license-service",
+  "crates/security-core",
+  "apps/desktop",
+  "apps/license-worker",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "Proprietary"
+authors = ["TLS Team"]
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
