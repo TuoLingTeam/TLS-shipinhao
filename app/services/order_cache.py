@@ -9,7 +9,6 @@ import time
 
 from settings import get_home_config_dir, get_internal_order_cache_dir, get_order_cache_dir
 from settings import ORDER_CACHE_DB_NAME, ORDER_CACHE_SCOPE
-from services.order_field_utils import first_non_empty, normalize_sale_param, parse_confirm_receipt_timestamp
 
 
 class OrderCacheRepository:
@@ -128,6 +127,36 @@ class OrderCacheRepository:
             )
         self._initialized = True
 
+    @staticmethod
+    def _first_non_empty(data, keys):
+        for key in keys:
+            value = data.get(key)
+            if isinstance(value, str):
+                if value.strip():
+                    return value.strip()
+                continue
+            if value not in (None, [], {}):
+                return value
+        return ""
+
+    @staticmethod
+    def _normalize_sale_param(raw_value):
+        """将 saleParam 序列化为纯文本，避免 str(list) 污染。"""
+        if isinstance(raw_value, list):
+            return "|".join(str(v).strip() for v in raw_value if str(v).strip())
+        if raw_value is None:
+            return ""
+        return str(raw_value).strip()
+
+    @staticmethod
+    def _parse_confirm_receipt_timestamp(raw_value):
+        if raw_value in (None, ""):
+            return 0
+        if isinstance(raw_value, (int, float)):
+            return int(raw_value) if raw_value > 0 else 0
+        text = str(raw_value).strip()
+        return int(text) if text.isdigit() else 0
+
     def _normalize_order(self, order, *, raw_source):
         common_info = order.get("commonInfo", {}) or {}
         order_id = str(common_info.get("orderId", "") or "").strip()
@@ -136,7 +165,7 @@ class OrderCacheRepository:
 
         buyer_nickname = str(order.get("buyerInfo", {}).get("nickName", "") or "").strip()
         accept_info = order.get("acceptInfo", {}) or {}
-        confirm_receipt_timestamp = parse_confirm_receipt_timestamp(
+        confirm_receipt_timestamp = self._parse_confirm_receipt_timestamp(
             accept_info.get("confirmReceiptTime", "")
         )
 
@@ -160,17 +189,17 @@ class OrderCacheRepository:
         product_rows = []
         product_list = order.get("orderProductInfo", []) or order.get("productInfos", []) or []
         for product in product_list:
-            raw_sale_param = first_non_empty(
+            raw_sale_param = self._first_non_empty(
                 product, ("saleParam", "sale_param", "skuName", "specName", "spec"),
             )
             product_rows.append(
                 (
                     order_id,
-                    str(first_non_empty(product, ("productId", "product_id", "spuId", "spu_id"))),
-                    str(first_non_empty(product, ("skuId", "sku_id"))),
-                    normalize_sale_param(raw_sale_param),
-                    str(first_non_empty(product, ("title", "spuName", "productName", "name"))),
-                    str(first_non_empty(product, ("thumbImg", "imgUrl", "image", "imageUrl"))),
+                    str(self._first_non_empty(product, ("productId", "product_id", "spuId", "spu_id"))),
+                    str(self._first_non_empty(product, ("skuId", "sku_id"))),
+                    self._normalize_sale_param(raw_sale_param),
+                    str(self._first_non_empty(product, ("title", "spuName", "productName", "name"))),
+                    str(self._first_non_empty(product, ("thumbImg", "imgUrl", "image", "imageUrl"))),
                 )
             )
         return order_row, product_rows
