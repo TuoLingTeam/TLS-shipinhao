@@ -727,11 +727,24 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <span>搜索卡密 / 备注 / 设备 ID</span>
           <input type="text" id="searchQuery" placeholder="输入关键字后回车或点击搜索">
         </label>
+        <label class="field">
+          <span>状态筛选</span>
+          <select id="searchStatus">
+            <option value="all">全部</option>
+            <option value="unused">未使用</option>
+            <option value="activated">已激活</option>
+            <option value="expired">已过期</option>
+            <option value="revoked">已吊销</option>
+          </select>
+        </label>
         <div class="field-action">
           <button class="btn btn-secondary btn-fill" onclick="doSearch()">搜索记录</button>
         </div>
         <div class="field-action">
           <button class="btn btn-ghost btn-fill" onclick="loadList()">清空筛选</button>
+        </div>
+        <div class="field-action">
+          <button class="btn btn-secondary btn-fill" onclick="exportCurrentRows()">导出当前列表 CSV</button>
         </div>
       </div>
       <div id="searchMsg"></div>
@@ -789,6 +802,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
 <script>
 let SECRET = "";
 const API = location.origin;
+let CURRENT_ROWS = [];
 
 function api(path, body) {
   return fetch(API + path, {
@@ -883,6 +897,7 @@ function doResetDevice(key) {
 }
 
 function loadList() {
+  document.getElementById("searchStatus").value = "all";
   api("/api/admin/list", {}).then(res => {
     if (res.success) {
       renderList(res);
@@ -894,13 +909,17 @@ function loadList() {
 
 function doSearch() {
   const query = document.getElementById("searchQuery").value.trim();
-  api("/api/admin/search", { query }).then(res => {
+  const status = document.getElementById("searchStatus").value;
+  api("/api/admin/search", { query, status }).then(res => {
     if (!res.success) {
       showMsg("searchMsg", res.message, true);
       return;
     }
     renderList(res);
-    showMsg("searchMsg", query ? ("已搜索：" + query) : "请输入关键字后搜索", !query);
+    const tips = [];
+    if (query) tips.push("关键字：" + query);
+    if (status && status !== "all") tips.push("状态：" + status);
+    showMsg("searchMsg", tips.length ? ("已筛选 " + tips.join("，")) : "已恢复全部记录", false);
   }).catch(() => {
     showMsg("searchMsg", "搜索失败，请稍后重试", true);
   });
@@ -926,6 +945,7 @@ function loadHealth() {
 }
 
 function renderList(res) {
+  CURRENT_ROWS = res.keys || [];
   const stats = res.stats || {};
   document.getElementById("statsArea").innerHTML = [
     stat(stats.total || 0, "总计"),
@@ -937,7 +957,7 @@ function renderList(res) {
     stat(stats.verify_fail_today || 0, "今日失败")
   ].join("");
 
-  const rows = res.keys || [];
+  const rows = CURRENT_ROWS;
   const tbody = document.getElementById("keysList");
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="10" class="empty-state">当前还没有匹配记录，可先生成卡密或调整搜索条件。</td></tr>';
@@ -974,6 +994,30 @@ function renderList(res) {
   }).join("");
 }
 
+function exportCurrentRows() {
+  if (!CURRENT_ROWS.length) {
+    showMsg("searchMsg", "当前没有可导出的记录", true);
+    return;
+  }
+  const headers = [
+    "license_key", "plan_days", "status", "note", "created_at", "device_id", "activated_at", "expires_at"
+  ];
+  const lines = [
+    headers.join(","),
+    ...CURRENT_ROWS.map(row => headers.map(key => csvEscape(row[key] ?? "")).join(","))
+  ];
+  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "license-registry-" + Date.now() + ".csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showMsg("searchMsg", "已导出当前列表 CSV", false);
+}
+
 function renderAudit(rows) {
   const tbody = document.getElementById("auditList");
   if (!rows.length) {
@@ -1006,6 +1050,10 @@ function esc(value) {
   const node = document.createElement("div");
   node.textContent = value;
   return node.innerHTML;
+}
+
+function csvEscape(value) {
+  return '"' + String(value ?? "").replaceAll('"', '""') + '"';
 }
 
 function showMsg(id, msg, err) {

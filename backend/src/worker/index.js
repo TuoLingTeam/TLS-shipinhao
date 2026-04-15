@@ -238,8 +238,9 @@ async function validateKey(key, secretBytes) {
 // 查询 / 统计
 // ---------------------------------------------------------------------------
 
-async function fetchListRows(env, { query = "", limit = 200 } = {}) {
+async function fetchListRows(env, { query = "", status = "all", limit = 200 } = {}) {
   const trimmed = String(query || "").trim();
+  const normalizedStatus = String(status || "all").trim();
   const normalizedLimit = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500);
   const baseSql = `
     SELECT
@@ -251,17 +252,28 @@ async function fetchListRows(env, { query = "", limit = 200 } = {}) {
     FROM generated_keys g
     LEFT JOIN activations a ON g.license_key = a.license_key
   `;
-  if (!trimmed) {
+  const conditions = [];
+  const bindings = [];
+  if (trimmed) {
+    const likeQuery = `%${trimmed}%`;
+    conditions.push("(g.license_key LIKE ? OR g.note LIKE ? OR IFNULL(a.device_id, '') LIKE ?)");
+    bindings.push(likeQuery, likeQuery, likeQuery);
+  }
+  if (normalizedStatus === "unused" || normalizedStatus === "activated" || normalizedStatus === "revoked") {
+    conditions.push("g.status = ?");
+    bindings.push(normalizedStatus);
+  } else if (normalizedStatus === "expired") {
+    conditions.push("g.status != 'revoked' AND a.expires_at IS NOT NULL AND a.expires_at < ?");
+    bindings.push(nowISO());
+  }
+  const whereSql = conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "";
+  if (!trimmed && normalizedStatus === "all") {
     const result = await env.DB.prepare(`${baseSql} ORDER BY g.id DESC LIMIT ?`).bind(normalizedLimit).all();
     return result.results || [];
   }
-  const likeQuery = `%${trimmed}%`;
   const result = await env.DB.prepare(
-    `${baseSql}
-      WHERE g.license_key LIKE ? OR g.note LIKE ? OR IFNULL(a.device_id, '') LIKE ?
-      ORDER BY g.id DESC
-      LIMIT ?`
-  ).bind(likeQuery, likeQuery, likeQuery, normalizedLimit).all();
+    `${baseSql}${whereSql} ORDER BY g.id DESC LIMIT ?`
+  ).bind(...bindings, normalizedLimit).all();
   return result.results || [];
 }
 
@@ -494,9 +506,10 @@ async function handleAdminSearch(request, env) {
     return errorResponse("请求体 JSON 格式错误", 400);
   }
   const query = String(body.query || "").trim();
-  const keys = await fetchListRows(env, { query, limit: body.limit || 200 });
+  const status = String(body.status || "all").trim();
+  const keys = await fetchListRows(env, { query, status, limit: body.limit || 200 });
   const stats = await buildStatsPayload(env);
-  return jsonResponse({ success: true, keys, stats, query });
+  return jsonResponse({ success: true, keys, stats, query, status });
 }
 
 async function handleAdminAuditList(request, env) {

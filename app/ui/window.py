@@ -4,7 +4,7 @@
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -62,6 +62,7 @@ from settings import (
     INPUT_EDIT_RADIUS,
     INPUT_VISIBLE_LINES,
     LICENSE_STATUS_CACHE_TTL_SECONDS,
+    LICENSE_EXPIRY_REMINDER_DAYS,
     LOG_EDIT_PADDING,
     LOG_EDIT_RADIUS,
     LOG_PANEL_MIN_HEIGHT,
@@ -160,6 +161,7 @@ class MainWindow(QWidget):
         self._latest_task_rows = []
         self._latest_task_export_name = "tls-task-history.csv"
         self._latest_task_guidance = ""
+        self._latest_result_insight = "执行查单或批量处理后，这里会展示更直观的结果解读。"
         self._last_review_results = []
         self._update_status = {
             "checked": False,
@@ -1119,6 +1121,19 @@ class MainWindow(QWidget):
         self.task_history_label.setFont(build_font(FONT_SIZES["secondary"]))
         task_layout.addWidget(self.task_history_label)
 
+        self.result_insight_label = QLabel("结果解读")
+        self.result_insight_label.setObjectName("SectionTitle")
+        self.result_insight_label.setFont(build_font(FONT_SIZES["secondary"], bold=True))
+        task_layout.addWidget(self.result_insight_label)
+
+        self.result_insight_view = QPlainTextEdit()
+        self.result_insight_view.setObjectName("LogEdit")
+        self.result_insight_view.setReadOnly(True)
+        self.result_insight_view.setFont(build_fixed_font(10))
+        self.result_insight_view.setMinimumHeight(scale_px(120, min_value=96))
+        self.result_insight_view.setMaximumHeight(scale_px(170, min_value=128))
+        task_layout.addWidget(self.result_insight_view)
+
         task_button_row = QWidget()
         task_button_row_layout = QHBoxLayout(task_button_row)
         task_button_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1187,6 +1202,33 @@ class MainWindow(QWidget):
         except Exception:  # noqa: BLE001
             return "-"
 
+    @staticmethod
+    def _parse_iso_datetime(value):
+        """解析 ISO 时间字符串。"""
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except Exception:  # noqa: BLE001
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    def _build_license_expiry_hint(self):
+        """返回授权到期提示。"""
+        if self._license_reason != "ok":
+            return ""
+        expires_at = self._parse_iso_datetime((self._license_info or {}).get("expires_at", ""))
+        if expires_at is None:
+            return ""
+        remaining_days = int((expires_at - datetime.now(timezone.utc)).total_seconds() // 86400)
+        if remaining_days < 0:
+            return "授权已过期，请尽快续费。"
+        if remaining_days <= LICENSE_EXPIRY_REMINDER_DAYS:
+            return f"授权还有 {remaining_days} 天到期，建议提前续费，避免影响任务执行。"
+        return ""
+
     def _refresh_review_hint(self):
         """根据查询天数刷新场景化提示。"""
         if not hasattr(self, "review_note_label"):
@@ -1251,11 +1293,12 @@ class MainWindow(QWidget):
         """构建启动检查清单。"""
         checks = []
         reason = self._license_reason
+        expiry_hint = self._build_license_expiry_hint()
         checks.append(
             (
                 "授权状态",
                 "已通过" if reason == "ok" else get_license_reason_text(reason),
-                "已可执行批量处理" if reason == "ok" else "点击下方“输入卡密”完成激活",
+                expiry_hint or ("已可执行批量处理" if reason == "ok" else "点击下方“输入卡密”完成激活"),
             )
         )
 
@@ -1310,6 +1353,7 @@ class MainWindow(QWidget):
             self.task_summary_label.setText("暂未记录任务")
             self.task_history_label.setText("首次执行查单、缓存同步或批量处理后，会在这里展示最近任务摘要。")
             self.export_task_button.setDisabled(True)
+            self.result_insight_view.setPlainText(self._latest_result_insight)
             return
 
         latest = entries[0]
@@ -1329,6 +1373,7 @@ class MainWindow(QWidget):
             lines.append(f"建议：{self._latest_task_guidance}")
         self.task_history_label.setText("\n".join(lines))
         self.export_task_button.setDisabled(not self._latest_task_rows)
+        self.result_insight_view.setPlainText(self._latest_result_insight)
 
     def refresh_product_status_panels(self):
         """刷新启动检查、缓存状态与历史摘要。"""
@@ -2607,6 +2652,9 @@ class MainWindow(QWidget):
                 device_id = str(info.get("device_id", "")).strip()
                 if device_id:
                     meta_parts.append(f"设备尾号：{device_id[-6:]}")
+                expiry_hint = self._build_license_expiry_hint()
+                if expiry_hint:
+                    meta_parts.append(expiry_hint)
                 self.license_meta_label.setText(
                     "  |  ".join(meta_parts) or "授权信息已写入本地，可直接开始执行任务。"
                 )
@@ -2654,6 +2702,9 @@ class MainWindow(QWidget):
             self._append_license_status_log(reason)
             expires = str((info or {}).get("expires_at", ""))[:10]
             self._append_logs(f"授权有效期至：{expires}" if expires else "")
+            expiry_hint = self._build_license_expiry_hint()
+            if expiry_hint:
+                self._append_logs(expiry_hint)
             return True
 
         self._append_logs("当前未激活，执行前需先输入卡密。")
@@ -2844,6 +2895,13 @@ class MainWindow(QWidget):
             for row in self._batch_rows
         ]
         guidance = "如有失败条目，请根据导出文件中的 error_message 定位问题后重试。"
+        self._latest_result_insight = (
+            f"批量执行结果\n"
+            f"- 总数：{total_count}\n"
+            f"- 成功：{success_count}\n"
+            f"- 失败：{failure_count}\n"
+            f"- 建议：{'可继续下一批处理' if failure_count == 0 else '优先导出失败清单并逐条重试'}"
+        )
         self._set_latest_task_rows(
             export_rows,
             export_name=f"batch-task-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
@@ -3085,6 +3143,15 @@ class MainWindow(QWidget):
                     }
                 )
             guidance = "品退订单已回填到订单号输入框，可直接继续批量处理。"
+            preview_lines = [
+                "品退订单结果解读",
+                f"- 共 {len(export_rows)} 个订单",
+            ]
+            for index, row in enumerate(export_rows[:5], start=1):
+                preview_lines.append(
+                    f"{index}. {row['order_id']}｜{row['product_name']}｜{row['refund_reason'] or '未标注原因'}"
+                )
+            self._latest_result_insight = "\n".join(preview_lines)
             self._set_latest_task_rows(
                 export_rows,
                 export_name=f"quality-refund-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
@@ -3129,6 +3196,21 @@ class MainWindow(QWidget):
             f"低置信度 {low_confidence} 条建议人工核对；"
             f"未匹配 {unmatched} 条建议完整补查或人工确认。"
         )
+        preview_lines = [
+            "差评匹配结果解读",
+            f"- 高置信度：{high_confidence}",
+            f"- 低置信度：{low_confidence}",
+            f"- 未匹配：{unmatched}",
+        ]
+        focus_rows = [row for row in export_rows if row["confidence_bucket"] != "高置信度"][:5]
+        if focus_rows:
+            preview_lines.append("")
+            preview_lines.append("重点核对：")
+            for index, row in enumerate(focus_rows, start=1):
+                preview_lines.append(
+                    f"{index}. {row['confidence_bucket']}｜订单 {row['order_id'] or '-'}｜得分 {row['match_score']}｜{row['match_reasons'] or '建议完整补查'}"
+                )
+        self._latest_result_insight = "\n".join(preview_lines)
         self._append_logs(f"结果解读：{guidance}")
         self._set_latest_task_rows(
             export_rows,
@@ -3167,6 +3249,12 @@ class MainWindow(QWidget):
             export_name=f"cache-task-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
             guidance="如缓存仍提示缺口，可再次执行增量刷新或使用完整补查。",
         )
+        self._latest_result_insight = (
+            f"{action_label}结果\n"
+            f"- 写入/更新订单：{matched_count}\n"
+            f"- 状态：{'有提醒' if warning_text else '正常完成'}\n"
+            f"- 建议：{'先查看提醒后再查单' if warning_text else '可直接开始查单'}"
+        )
         self._show_task_summary_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
@@ -3177,6 +3265,11 @@ class MainWindow(QWidget):
     def _handle_quality_refund_finished(self, *, status, warning_text, matched_count, total_count):
         """处理品质退款任务完成后的提示。"""
         if total_count <= 0:
+            self._latest_result_insight = (
+                "品退订单结果解读\n"
+                f"- 查询范围：最近 {self.review_days_spin.value()} 天\n"
+                "- 结果：未找到符合条件的订单"
+            )
             self._record_task_history(
                 self._build_task_history_entry(
                     task_label="获取品退订单",
@@ -3192,6 +3285,12 @@ class MainWindow(QWidget):
         summary = (
             f"品退订单获取完成：共 {total_count} 个订单，"
             f"回填 {matched_count} 个订单号。"
+        )
+        self._latest_result_insight = (
+            f"品退订单结果解读\n"
+            f"- 共 {total_count} 个订单\n"
+            f"- 已回填 {matched_count} 个订单号\n"
+            f"- 建议：检查品退原因后再批量处理"
         )
         self._record_task_history(
             self._build_task_history_entry(
@@ -3215,6 +3314,11 @@ class MainWindow(QWidget):
     def _handle_review_match_finished(self, *, status, warning_text, matched_count, total_count):
         """处理中差评/完整补查任务完成后的提示。"""
         if total_count <= 0:
+            self._latest_result_insight = (
+                "差评匹配结果解读\n"
+                f"- 查询范围：最近 {self.review_days_spin.value()} 天\n"
+                "- 结果：未发现差评数据"
+            )
             self._record_task_history(
                 self._build_task_history_entry(
                     task_label="完整补查" if self.review_task_type == TASK_REVIEW_FULL_SCAN else "中差评查找",

@@ -188,6 +188,7 @@ LICENSE_API_BASE_URLS = [
 ]
 LICENSE_API_TIMEOUT = 10
 LICENSE_STATUS_CACHE_TTL_SECONDS = 60
+LICENSE_EXPIRY_REMINDER_DAYS = 7
 
 
 # =============================================================================

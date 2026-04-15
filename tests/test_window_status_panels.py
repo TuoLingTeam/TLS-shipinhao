@@ -47,6 +47,7 @@ class WindowStatusPanelTests(unittest.TestCase):
             }
         ]
         self.window._latest_task_rows = [{"task_label": "中差评查找"}]
+        self.window._latest_result_insight = "差评匹配结果解读\n- 高置信度：3\n- 低置信度：1"
 
         with mock.patch("ui.window.resolve_config_dir", return_value="/tmp/config"), mock.patch(
             "ui.window.get_config_dir_cache",
@@ -62,6 +63,7 @@ class WindowStatusPanelTests(unittest.TestCase):
         self.assertIn("发现新版本 4.4.0", self.window.startup_checklist_label.text())
         self.assertIn("缓存状态良好", self.window.cache_status_label.text())
         self.assertIn("中差评查找", self.window.task_history_label.text())
+        self.assertIn("高置信度：3", self.window.result_insight_view.toPlainText())
         self.assertTrue(self.window.export_task_button.isEnabled())
 
 
