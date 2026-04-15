@@ -99,6 +99,9 @@ LICENSE_REASON_TEXTS = {
     "device_mismatch": "当前设备与激活授权设备不一致！",
     "invalid": "本地授权异常，请重新输入卡密激活。",
     "not_found": "未激活，请购买卡密激活使用。",
+    "reactivation_required": "授权协议已升级，请联网重新校验卡密以完成迁移。",
+    "online_refresh_required": "当前设备需要联网刷新授权票据后才能继续执行核心任务。",
+    "revoked": "当前卡密已被吊销，请联系作者处理。",
 }
 
 

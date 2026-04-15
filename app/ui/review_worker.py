@@ -2,13 +2,21 @@
 """TLS-shipinhao 中差评查找后台执行器。"""
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QObject, Signal
 
 from settings import ConfigNotFoundError, get_cookie, get_magic, serialize_cookie_data
-from settings import ORDER_CACHE_COVERAGE_DAYS
+from settings import (
+    LICENSE_TASK_CACHE_MANAGE,
+    LICENSE_TASK_QUALITY_REFUND,
+    LICENSE_TASK_REVIEW_FIND,
+    LICENSE_TASK_REVIEW_FULL_SCAN,
+    ORDER_CACHE_COVERAGE_DAYS,
+)
 from core.day_window import recent_day_range_timestamps
+from core.license import issue_or_refresh_session_token
 from services.order_sync import OrderSyncService
 from services.review_matcher import AUTO_FILL_SCORE_THRESHOLD, BadReviewOrderFinder
 
@@ -49,6 +57,8 @@ class ReviewMatcherWorker(QObject):
         self._finder_lock = threading.Lock()
         self._active_finders = []
         self._active_order_sync_service = None
+        self._session_page_counter = 0
+        self._last_session_refresh = 0.0
 
     def stop(self):
         """请求终止任务（安全退出）。"""
@@ -88,10 +98,41 @@ class ReviewMatcherWorker(QObject):
             == 0
         ]
 
+    @staticmethod
+    def _session_task_type_for(task_type):
+        mapping = {
+            TASK_REVIEW_MATCH: LICENSE_TASK_REVIEW_FIND,
+            TASK_REVIEW_FULL_SCAN: LICENSE_TASK_REVIEW_FULL_SCAN,
+            TASK_QUALITY_REFUND: LICENSE_TASK_QUALITY_REFUND,
+            TASK_CACHE_REFRESH: LICENSE_TASK_CACHE_MANAGE,
+            TASK_CACHE_REBUILD: LICENSE_TASK_CACHE_MANAGE,
+        }
+        return mapping.get(task_type, LICENSE_TASK_REVIEW_FIND)
+
+    def _refresh_task_session(self, progress, *, force=False, message=""):
+        should_refresh = force
+        if not should_refresh and message and "正在获取第" in message:
+            self._session_page_counter += 1
+            should_refresh = self._session_page_counter >= 3
+        if not should_refresh:
+            should_refresh = (time.monotonic() - self._last_session_refresh) >= 90
+        if not should_refresh:
+            return
+
+        _, reason = issue_or_refresh_session_token(self._session_task_type_for(self.task_type), force=force)
+        if reason != "ok":
+            raise RuntimeError("授权会话已失效，请联网后重试。")
+        self._last_session_refresh = time.monotonic()
+        self._session_page_counter = 0
+        if force:
+            progress("[授权] 已确认短期任务令牌，有效后开始执行任务。")
+
     def _progress_emitter(self):
         def _progress(msg):
-            if not self._stopped:
-                self.progress.emit(msg)
+            if self._stopped:
+                return
+            self._refresh_task_session(self.progress.emit, message=msg)
+            self.progress.emit(msg)
 
         return _progress
 
@@ -429,6 +470,11 @@ class ReviewMatcherWorker(QObject):
 
         cookie_str, magic = credentials
         progress = self._progress_emitter()
+        try:
+            self._refresh_task_session(progress, force=True)
+        except Exception as exc:  # noqa: BLE001
+            self._emit_terminal(TERMINAL_STATUS_ERROR, str(exc))
+            return
 
         if self.task_type == TASK_QUALITY_REFUND:
             self._run_quality_refund_task(cookie_str, magic, progress)

@@ -61,7 +61,13 @@ from settings import (
     INPUT_EDIT_PADDING,
     INPUT_EDIT_RADIUS,
     INPUT_VISIBLE_LINES,
+    LICENSE_REQUIRE_ONLINE_FOR_TASKS,
     LICENSE_STATUS_CACHE_TTL_SECONDS,
+    LICENSE_TASK_BATCH_DELIVERY,
+    LICENSE_TASK_CACHE_MANAGE,
+    LICENSE_TASK_QUALITY_REFUND,
+    LICENSE_TASK_REVIEW_FIND,
+    LICENSE_TASK_REVIEW_FULL_SCAN,
     LOG_EDIT_PADDING,
     LOG_EDIT_RADIUS,
     LOG_PANEL_MIN_HEIGHT,
@@ -87,7 +93,7 @@ from settings import (
     scale_px,
     set_ui_scale,
 )
-from core.license import check_stored_license, check_stored_license_local
+from core.license import check_stored_license, check_stored_license_local, issue_or_refresh_session_token
 from ui.window_dialogs import MessagePresenter
 from ui.window_view import (
     build_badge_style,
@@ -725,7 +731,8 @@ class MainWindow(QWidget):
         """返回授权到期提示文案。"""
         if self._license_reason != "ok":
             return ""
-        expires_at = str((self._license_info or {}).get("expires_at", "")).strip()
+        info = self._license_info or {}
+        expires_at = str(info.get("license_expires_at") or info.get("expires_at") or "").strip()
         if not expires_at:
             return ""
         try:
@@ -1279,6 +1286,9 @@ class MainWindow(QWidget):
             "device_mismatch": "设备不符",
             "invalid": "状态异常",
             "not_found": "未激活",
+            "reactivation_required": "需迁移",
+            "online_refresh_required": "需联网",
+            "revoked": "已吊销",
         }
         status = status_map.get(reason, "未激活")
         self.setWindowTitle(WINDOW_TITLE)
@@ -1287,7 +1297,7 @@ class MainWindow(QWidget):
             self.license_status_badge.setStyleSheet(
                 self._build_license_status_badge_style(reason == "ok")
             )
-        expires_at = str(info.get("expires_at", ""))[:10]
+        expires_at = str(info.get("license_expires_at") or info.get("expires_at") or "")[:10]
         if hasattr(self, "license_summary_label"):
             if reason == "ok":
                 self.license_summary_label.setText("软件已激活，可正常执行批量处理。")
@@ -1298,6 +1308,12 @@ class MainWindow(QWidget):
                 meta_parts = []
                 if expires_at:
                     meta_parts.append(f"有效期至：{expires_at}")
+                offline_exp = str(info.get("offline_grant_expires_at", ""))[:16]
+                if offline_exp:
+                    meta_parts.append(f"离线票据至：{offline_exp}")
+                session_exp = str(info.get("session_token_expires_at", ""))[:16]
+                if session_exp:
+                    meta_parts.append(f"任务令牌至：{session_exp}")
                 device_id = str(info.get("device_id", "")).strip()
                 if device_id:
                     meta_parts.append(f"设备尾号：{device_id[-6:]}")
@@ -1312,6 +1328,12 @@ class MainWindow(QWidget):
                 self.license_meta_label.setText(
                     f"当前设备与原授权绑定设备不一致，请联系微信 {AUTHOR_WECHAT} 处理重绑。"
                 )
+            elif reason == "online_refresh_required":
+                self.license_meta_label.setText("当前授权需要联网刷新短期票据后才能继续执行核心任务。")
+            elif reason == "reactivation_required":
+                self.license_meta_label.setText("授权协议已升级，请联网重新校验卡密以完成迁移。")
+            elif reason == "revoked":
+                self.license_meta_label.setText(f"当前卡密已被吊销，请联系微信 {AUTHOR_WECHAT} 处理。")
             else:
                 self.license_meta_label.setText(
                     f"联系微信 {AUTHOR_WECHAT} 获取卡密后，即可完成激活并开始使用。"
@@ -1342,12 +1364,16 @@ class MainWindow(QWidget):
         return False
 
     def prompt_license_on_startup(self):
-        """启动后提示激活（仅在未激活时弹出）。"""
+        """启动后提示激活（仅在未激活或协议升级时弹出）。"""
         info, reason = self._get_startup_license_state()
         if reason == "ok":
             self._append_license_status_log(reason)
-            expires = str((info or {}).get("expires_at", ""))[:10]
+            expires = str((info or {}).get("license_expires_at") or (info or {}).get("expires_at") or "")[:10]
             self._append_logs(f"授权有效期至：{expires}" if expires else "")
+            return True
+        if reason == "online_refresh_required":
+            self._append_license_status_log(reason)
+            self._append_logs("当前授权需要联网刷新短期票据后，才能执行查单与批量处理。")
             return True
 
         self._append_logs("当前未激活，执行前需先输入卡密。")
@@ -1559,21 +1585,63 @@ class MainWindow(QWidget):
             self._resolve_review_task_button_updates(running=running, active_task=active_task)
         )
 
-    def _ensure_task_license(self, task_label):
-        """使用短时缓存 + 本地快检校验任务授权状态。"""
-        cached = self._get_cached_license_state()
-        if cached is not None and cached.get("reason") == "ok":
-            return True
+    @staticmethod
+    def _session_task_type_for(task_label):
+        mapping = {
+            "批量处理": LICENSE_TASK_BATCH_DELIVERY,
+            "中差评查找": LICENSE_TASK_REVIEW_FIND,
+            "品质退款订单获取": LICENSE_TASK_QUALITY_REFUND,
+            "完整补查订单": LICENSE_TASK_REVIEW_FULL_SCAN,
+            "订单缓存同步": LICENSE_TASK_CACHE_MANAGE,
+        }
+        return mapping.get(task_label, LICENSE_TASK_BATCH_DELIVERY)
 
-        _, reason = self._refresh_license_state_with_mode(local_only=True)
+    def _ensure_task_license(self, task_label):
+        """统一处理任务启动前的授权与会话令牌校验。"""
+        session_task_type = self._session_task_type_for(task_label)
+        cached = self._get_cached_license_state()
+        if cached is None or cached.get("reason") != "ok":
+            _, reason = self._refresh_license_state_with_mode(local_only=True)
+            if reason == "online_refresh_required" and LICENSE_REQUIRE_ONLINE_FOR_TASKS:
+                _, reason = self._refresh_license_state_with_mode(local_only=False)
+            if reason != "ok":
+                if reason in {"not_found", "invalid", "reactivation_required", "expired", "device_mismatch", "revoked"}:
+                    if self._prompt_license_activation(reason):
+                        cached = self._get_cached_license_state(max_age_seconds=None)
+                        if cached is None or cached.get("reason") != "ok":
+                            self._show_activation_required(task_label)
+                            return False
+                    else:
+                        self._show_activation_required(task_label)
+                        return False
+                else:
+                    self.show_message(
+                        QMessageBox.Warning,
+                        "需要联网刷新授权",
+                        f"执行{task_label}前，需要联网刷新授权票据与任务令牌。",
+                    )
+                    return False
+
+        info, reason = issue_or_refresh_session_token(session_task_type, force=True)
         if reason == "ok":
+            self._store_license_state(info, "ok", source="session")
             self._schedule_license_refresh(force=True)
             return True
+        if reason in {"not_found", "invalid", "reactivation_required", "expired", "device_mismatch", "revoked"}:
+            self._store_license_state(info or {}, reason, source="session")
+            if self._prompt_license_activation(reason):
+                info, reason = issue_or_refresh_session_token(session_task_type, force=True)
+                if reason == "ok":
+                    self._store_license_state(info, "ok", source="session")
+                    return True
+            self._show_activation_required(task_label)
+            return False
 
-        if self._prompt_license_activation(reason):
-            return True
-
-        self._show_activation_required(task_label)
+        self.show_message(
+            QMessageBox.Warning,
+            "需要联网刷新授权",
+            f"执行{task_label}前，需要联网获取新的任务令牌。",
+        )
         return False
 
     def _can_start_task(self, active_worker, task_label):

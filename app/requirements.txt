@@ -4,3 +4,4 @@ PySide6_Addons
 shiboken6
 pyinstaller
 Pillow
+cryptography
