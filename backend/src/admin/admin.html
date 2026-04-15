@@ -720,10 +720,7 @@ th:nth-child(9),td:nth-child(9){width:6%}
           <span class="eyebrow">Support Console</span>
           <h2>搜索 / 设备迁移 / 审计</h2>
         </div>
-        <div style="display:flex;gap:10px;">
-          <button class="btn btn-ghost btn-sm" onclick="loadAudit()">刷新审计</button>
-          <button class="btn btn-secondary btn-sm" onclick="exportAuditRows()">导出审计 CSV</button>
-        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAudit()">刷新审计</button>
       </div>
       <div class="field-grid field-grid-generate">
         <label class="field">
@@ -806,7 +803,6 @@ th:nth-child(9),td:nth-child(9){width:6%}
 let SECRET = "";
 const API = location.origin;
 let CURRENT_ROWS = [];
-let CURRENT_AUDIT_ROWS = [];
 
 function api(path, body) {
   return fetch(API + path, {
@@ -1023,13 +1019,12 @@ function exportCurrentRows() {
 }
 
 function renderAudit(rows) {
-  CURRENT_AUDIT_ROWS = rows || [];
   const tbody = document.getElementById("auditList");
-  if (!CURRENT_AUDIT_ROWS.length) {
+  if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-state">最近没有审计记录。</td></tr>';
     return;
   }
-  tbody.innerHTML = CURRENT_AUDIT_ROWS.map(row => {
+  tbody.innerHTML = rows.map(row => {
     const detail = typeof row.detail === "object" && row.detail
       ? Object.keys(row.detail).slice(0, 3).map(key => key + ':' + String(row.detail[key]).slice(0, 24)).join(' / ')
       : '-';
@@ -1041,31 +1036,6 @@ function renderAudit(rows) {
       + '<td>' + esc(detail) + '</td>'
       + '</tr>';
   }).join("");
-}
-
-function exportAuditRows() {
-  if (!CURRENT_AUDIT_ROWS.length) {
-    showMsg("searchMsg", "当前没有可导出的审计记录", true);
-    return;
-  }
-  const headers = ["created_at", "action", "license_key", "reason", "detail_json"];
-  const lines = [
-    headers.join(","),
-    ...CURRENT_AUDIT_ROWS.map(row => headers.map(key => {
-      const value = key === "detail_json" ? JSON.stringify(row.detail || {}) : (row[key] ?? "");
-      return csvEscape(value);
-    }).join(","))
-  ];
-  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "license-audit-" + Date.now() + ".csv";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  showMsg("searchMsg", "已导出审计 CSV", false);
 }
 
 function stat(n, label) {
