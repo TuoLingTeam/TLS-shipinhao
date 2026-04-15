@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+serde.workspace = true
+api-contracts = { path = "../api-contracts" }
+domain-core = { path = "../domain-core" }
