@@ -670,9 +670,9 @@ class MainWindow(QWidget):
         self.action_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.config_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.left_column_layout = QVBoxLayout()
         self.left_column_layout.setContentsMargins(0, 0, 0, 0)
@@ -680,7 +680,6 @@ class MainWindow(QWidget):
         self.left_column_layout.addWidget(self.config_card)
         self.left_column_layout.addWidget(self.action_card)
         self.left_column_layout.addWidget(self.license_card)
-        self.left_column_layout.addStretch(1)
 
         self.right_column_layout = QVBoxLayout()
         self.right_column_layout.setContentsMargins(0, 0, 0, 0)
@@ -692,7 +691,14 @@ class MainWindow(QWidget):
         self.input_row_layout.addWidget(self.order_card, 1)
         self.input_row_layout.addWidget(self.tracking_card, 1)
 
-        self.right_column_layout.addLayout(self.input_row_layout, 0)
+        self.input_wrap = QWidget()
+        self.input_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.input_wrap_layout = QVBoxLayout(self.input_wrap)
+        self.input_wrap_layout.setContentsMargins(0, 0, 0, 0)
+        self.input_wrap_layout.setSpacing(0)
+        self.input_wrap_layout.addLayout(self.input_row_layout)
+
+        self.right_column_layout.addWidget(self.input_wrap, 1)
         self.right_column_layout.addWidget(self.log_card, 1)
 
         self.main_content_layout.addLayout(self.left_column_layout, 4)
@@ -783,9 +789,9 @@ class MainWindow(QWidget):
         """创建批量输入框。"""
         editor = BatchInputEdit(placeholder)
         editor.setMinimumHeight(
-            self._calculate_editor_height(editor, max(6, scale_px(INPUT_VISIBLE_LINES, min_value=6)))
+            self._calculate_editor_height(editor, max(4, scale_px(INPUT_VISIBLE_LINES - 4, min_value=4)))
         )
-        editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return editor
 
     def _create_review_button(self, text):
@@ -794,7 +800,7 @@ class MainWindow(QWidget):
         button.setObjectName("ReviewButton")
         button.setCursor(Qt.PointingHandCursor)
         button.setFont(build_font(FONT_SIZES["button"], bold=True))
-        button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=30))
+        button.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(
             f"""QPushButton#ReviewButton {{
@@ -1005,21 +1011,26 @@ class MainWindow(QWidget):
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.setCursor(Qt.PointingHandCursor)
         self.start_button.setFont(build_font(FONT_SIZES["button"], bold=True))
-        self.start_button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=44))
+        self.start_button.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
         self.start_button.setMinimumWidth(scale_px(140, min_value=120))
         self.start_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.start_button.clicked.connect(self.on_start_clicked)
-        self.action_content_layout.addWidget(self.start_button)
-
         self.pause_button = QPushButton("暂停批量处理")
         self.pause_button.setObjectName("PauseButton")
         self.pause_button.setCursor(Qt.PointingHandCursor)
         self.pause_button.setFont(build_font(FONT_SIZES["button"], bold=True))
-        self.pause_button.setFixedHeight(scale_px(BUTTON_HEIGHT, min_value=44))
+        self.pause_button.setFixedHeight(scale_px(BADGE_HEIGHT, min_value=28))
         self.pause_button.setMinimumWidth(scale_px(140, min_value=120))
         self.pause_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.pause_button.clicked.connect(self.on_pause_clicked)
-        self.action_content_layout.addWidget(self.pause_button)
+
+        action_row = QWidget()
+        action_row_layout = QHBoxLayout(action_row)
+        action_row_layout.setContentsMargins(0, 0, 0, 0)
+        action_row_layout.setSpacing(self._standard_layout_spacing())
+        action_row_layout.addWidget(self.start_button, 1)
+        action_row_layout.addWidget(self.pause_button, 1)
+        self.action_content_layout.addWidget(action_row)
         self.action_buttons = [self.start_button, self.pause_button]
         return content
 
@@ -1087,6 +1098,50 @@ class MainWindow(QWidget):
         if viewport_height <= 720:
             return "compact"
         return "comfortable"
+
+    def _apply_right_column_strict_split(self):
+        """将右侧输入区与日志区按严格 5:5 分配高度。"""
+        if not hasattr(self, "input_wrap") or not hasattr(self, "main_content"):
+            return
+
+        self.main_content_layout.activate()
+        self.right_column_layout.activate()
+        self.input_row_layout.activate()
+
+        available_height = self.main_content.height()
+        if available_height <= 0:
+            return
+
+        gap = max(0, self.right_column_layout.spacing())
+        split_height = max(0, available_height - gap)
+        top_height = split_height // 2
+        bottom_height = split_height - top_height
+        if top_height <= 0 or bottom_height <= 0:
+            return
+
+        self.input_wrap.setFixedHeight(top_height)
+        self.log_card.setFixedHeight(bottom_height)
+        self.order_card.setFixedHeight(top_height)
+        self.tracking_card.setFixedHeight(top_height)
+
+        def _content_height(card, target_height, fallback_min):
+            layout = card.layout()
+            if layout is None:
+                return fallback_min
+            margins = layout.contentsMargins()
+            used_height = margins.top() + margins.bottom() + max(0, layout.spacing())
+            if layout.count() > 1:
+                header_item = layout.itemAt(0)
+                if header_item is not None and header_item.widget() is not None:
+                    header = header_item.widget()
+                    used_height += max(header.minimumHeight(), header.sizeHint().height())
+            return max(fallback_min, target_height - used_height)
+
+        editor_min = scale_px(96, min_value=84)
+        log_min = scale_px(140, min_value=120)
+        self.order_edit.setFixedHeight(_content_height(self.order_card, top_height, editor_min))
+        self.tracking_edit.setFixedHeight(_content_height(self.tracking_card, top_height, editor_min))
+        self.log_view.setFixedHeight(_content_height(self.log_card, bottom_height, log_min))
 
     def _sync_responsive_component_heights(self, viewport_height):
         """窗口高度变化时同步关键控件高度，优先压缩非关键留白与编辑区。"""
@@ -1169,6 +1224,7 @@ class MainWindow(QWidget):
                 widget.updateGeometry()
 
         for layout in [
+            self.input_wrap_layout,
             self.input_row_layout,
             self.right_column_layout,
             self.left_column_layout,
@@ -1268,20 +1324,25 @@ class MainWindow(QWidget):
         margin = max(scale_px(10, min_value=8), int(round(base_margin * ratio)))
         self.page_layout.setContentsMargins(margin, margin, margin, margin)
         self._sync_responsive_component_heights(viewport_height)
+        self._apply_right_column_strict_split()
 
     def resizeEvent(self, event):
         """窗口尺寸变化时同步内部尺寸。"""
-        self._sync_responsive_metrics()
         super().resizeEvent(event)
+        self._sync_responsive_metrics()
+        self._apply_right_column_strict_split()
 
     def showEvent(self, event):
         """首次展示时按内容自然高度收口，避免底部出现大块空白。"""
         super().showEvent(event)
         self._sync_responsive_metrics()
         if self._initial_height_fit_applied:
+            self._apply_right_column_strict_split()
             return
         self._fit_window_height_to_content()
+        self._apply_right_column_strict_split()
         self.setFixedSize(self.width(), self.height())
+        self._apply_right_column_strict_split()
         self._initial_height_fit_applied = True
 
     def _fit_window_height_to_content(self):
