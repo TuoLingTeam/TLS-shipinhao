@@ -28,6 +28,11 @@ class OrderSyncService:
         if on_progress:
             on_progress(message)
 
+    def _now(self):
+        return end_of_day_timestamp()
+
+    def _retention_start(self):
+        return recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS)[0]
 
     def _save_state(self, *, mode, last_error="", coverage_start=None, coverage_end=None, incremental_start=None, incremental_end=None):
         now_ts = end_of_day_timestamp()
