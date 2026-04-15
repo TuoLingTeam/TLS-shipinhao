@@ -21,6 +21,7 @@ class RustDesktopServicesTests(unittest.TestCase):
             "pub fn refresh_cache",
             "pub fn update_delivery",
             "pub fn parse_cookie_profile",
+            "pub mod order_utils",
         ):
             self.assertIn(symbol, text)
 
@@ -34,3 +35,19 @@ class RustDesktopServicesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RustDesktopOrderUtilsTests(unittest.TestCase):
+    def test_order_utils_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "order_utils.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/order_utils.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub fn first_non_empty",
+            "pub fn normalize_sale_param",
+            "pub fn parse_confirm_receipt_timestamp",
+            "pub fn parse_timestamp",
+            "pub fn normalize_product_text",
+            "pub fn split_sku_tokens",
+        ):
+            self.assertIn(symbol, text)

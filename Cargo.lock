@@ -1189,7 +1189,9 @@ dependencies = [
  "anyhow",
  "api-contracts",
  "domain-core",
+ "regex",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

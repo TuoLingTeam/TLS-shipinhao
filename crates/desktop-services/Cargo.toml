@@ -7,5 +7,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+regex = "1"
 api-contracts = { path = "../api-contracts" }
 domain-core = { path = "../domain-core" }
