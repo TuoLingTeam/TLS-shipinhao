@@ -1,1 +1,1 @@
-//! Slint desktop application entry glue.
+//! Slint desktop application shell.

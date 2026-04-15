@@ -1,0 +1,29 @@
+export component AppWindow inherits Window {
+    in-out property <string> license_status: "未激活";
+    callback start_review_find();
+    callback start_batch_delivery();
+
+    title: "TLS-shipinhao";
+    width: 960px;
+    height: 720px;
+
+    VerticalLayout {
+        spacing: 12px;
+        Text {
+            text: "TLS Keeper";
+        }
+        Text {
+            text: license_status;
+        }
+        HorizontalLayout {
+            Button {
+                text: "开始中差评查找";
+                clicked => { start_review_find(); }
+            }
+            Button {
+                text: "开始批量发货";
+                clicked => { start_batch_delivery(); }
+            }
+        }
+    }
+}
