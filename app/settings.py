@@ -33,7 +33,7 @@ WINDOW_TITLE = f"驼铃·视频小店差评处理 {APP_VERSION}"
 UPDATE_VERSION_URL = "https://gitee.com/tuolingshe/tuoling-shipinhao/raw/master/version.json"
 UPDATE_CHECK_DELAY_MS = 1200
 AUTHOR_WECHAT = "TLS-801"
-DEFAULT_WINDOW_WIDTH = 880
+DEFAULT_WINDOW_WIDTH = 860
 DEFAULT_WINDOW_HEIGHT = 830
 MIN_WINDOW_WIDTH = 800
 MIN_WINDOW_HEIGHT = 700
@@ -110,8 +110,6 @@ ORDER_CACHE_INCREMENTAL_DAYS = 3
 ORDER_CACHE_INCREMENTAL_OVERLAP_DAYS = 1
 ORDER_CACHE_DB_NAME = "order_cache.sqlite3"
 ORDER_CACHE_DIR_NAME = "cache"
-TASK_HISTORY_FILE_NAME = "task_history.json"
-TASK_HISTORY_MAX_ENTRIES = 50
 
 # =============================================================================
 # 字体方案
@@ -188,7 +186,6 @@ LICENSE_API_BASE_URLS = [
 ]
 LICENSE_API_TIMEOUT = 10
 LICENSE_STATUS_CACHE_TTL_SECONDS = 60
-LICENSE_EXPIRY_REMINDER_DAYS = 7
 
 
 # =============================================================================

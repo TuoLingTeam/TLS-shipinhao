@@ -148,15 +148,6 @@ class OrderCacheRepository:
             return ""
         return str(raw_value).strip()
 
-    @staticmethod
-    def _parse_confirm_receipt_timestamp(raw_value):
-        if raw_value in (None, ""):
-            return 0
-        if isinstance(raw_value, (int, float)):
-            return int(raw_value) if raw_value > 0 else 0
-        text = str(raw_value).strip()
-        return int(text) if text.isdigit() else 0
-
     def _normalize_order(self, order, *, raw_source):
         common_info = order.get("commonInfo", {}) or {}
         order_id = str(common_info.get("orderId", "") or "").strip()
@@ -165,9 +156,10 @@ class OrderCacheRepository:
 
         buyer_nickname = str(order.get("buyerInfo", {}).get("nickName", "") or "").strip()
         accept_info = order.get("acceptInfo", {}) or {}
-        confirm_receipt_timestamp = self._parse_confirm_receipt_timestamp(
-            accept_info.get("confirmReceiptTime", "")
-        )
+        confirm_receipt_time = accept_info.get("confirmReceiptTime", "")
+        confirm_receipt_timestamp = 0
+        if confirm_receipt_time and str(confirm_receipt_time).isdigit():
+            confirm_receipt_timestamp = int(confirm_receipt_time)
 
         auto_confirm_info = order.get("orderStatus", {}).get("autoConfirmInfo", {}) or {}
         updated_at = int(time.time())
@@ -289,46 +281,6 @@ class OrderCacheRepository:
                 (scope,),
             ).fetchone()
         return dict(row) if row else None
-
-    def get_summary(self, scope: str = ORDER_CACHE_SCOPE) -> dict:
-        """返回缓存概览，供 UI 状态展示使用。"""
-        self.initialize()
-        with self._lock, self._connect() as connection:
-            stats_row = connection.execute(
-                """
-                SELECT
-                    COUNT(*) AS order_count,
-                    MIN(create_time) AS oldest_create_time,
-                    MAX(create_time) AS newest_create_time,
-                    MAX(updated_at) AS last_updated_at
-                FROM orders
-                """
-            ).fetchone()
-        state = self.get_state(scope=scope) or {}
-        coverage_start = int(state.get("coverage_start", 0) or 0)
-        coverage_end = int(state.get("coverage_end", 0) or 0)
-        missing_segments = []
-        if coverage_start > 0 and coverage_end > 0 and coverage_start <= coverage_end:
-            missing_segments = self.get_missing_segments(
-                coverage_start,
-                coverage_end,
-                scope=scope,
-            )
-        return {
-            "order_count": int((stats_row["order_count"] if stats_row else 0) or 0),
-            "oldest_create_time": int((stats_row["oldest_create_time"] if stats_row else 0) or 0),
-            "newest_create_time": int((stats_row["newest_create_time"] if stats_row else 0) or 0),
-            "last_updated_at": int((stats_row["last_updated_at"] if stats_row else 0) or 0),
-            "coverage_start": coverage_start,
-            "coverage_end": coverage_end,
-            "last_incremental_start": int(state.get("last_incremental_start", 0) or 0),
-            "last_incremental_end": int(state.get("last_incremental_end", 0) or 0),
-            "last_success_at": int(state.get("last_success_at", 0) or 0),
-            "last_mode": str(state.get("last_mode", "") or ""),
-            "last_error": str(state.get("last_error", "") or ""),
-            "missing_segment_count": len(missing_segments),
-            "has_dirty_sale_param": self.has_dirty_sale_param(),
-        }
 
     def save_state(
         self,

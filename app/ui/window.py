@@ -4,7 +4,6 @@
 import os
 import sys
 import time
-from datetime import datetime, timezone
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -62,7 +61,6 @@ from settings import (
     INPUT_EDIT_RADIUS,
     INPUT_VISIBLE_LINES,
     LICENSE_STATUS_CACHE_TTL_SECONDS,
-    LICENSE_EXPIRY_REMINDER_DAYS,
     LOG_EDIT_PADDING,
     LOG_EDIT_RADIUS,
     LOG_PANEL_MIN_HEIGHT,
@@ -75,7 +73,6 @@ from settings import (
     HIGH_DPI_COMPACT_THRESHOLD,
     ORDER_CACHE_COVERAGE_DAYS,
     ORDER_CACHE_INCREMENTAL_DAYS,
-    ORDER_CACHE_SCOPE,
     PAGE_GAP,
     PAGE_MARGIN,
     ROW_GAP,
@@ -85,14 +82,11 @@ from settings import (
     WIDE_LAYOUT_MIN_HEIGHT,
     WIDE_LAYOUT_MIN_WIDTH,
     WINDOW_TITLE,
-    get_order_cache_dir,
     get_platform_default_window_size,
     scale_px,
     set_ui_scale,
 )
 from core.license import check_stored_license, check_stored_license_local
-from services.order_cache import OrderCacheRepository
-from services.task_history import TaskHistoryStore
 from ui.widgets import (
     BatchInputEdit,
     LicenseDialog,
@@ -156,20 +150,6 @@ class MainWindow(QWidget):
         self.update_check_worker = None
         self._update_prompt_version = None
         self._batch_rows = []
-        self._task_history_store = TaskHistoryStore()
-        self._task_history_entries = self._task_history_store.load()
-        self._latest_task_rows = []
-        self._latest_task_export_name = "tls-task-history.csv"
-        self._latest_task_guidance = ""
-        self._latest_result_insight = "执行查单或批量处理后，这里会展示更直观的结果解读。"
-        self._last_review_results = []
-        self._update_status = {
-            "checked": False,
-            "has_update": False,
-            "version": APP_VERSION,
-            "message": "尚未检查更新",
-        }
-        self._cache_repository = OrderCacheRepository()
         self._license_reason = license_reason
         self._license_info = license_info or {}
         self._license_state_cache = {
@@ -203,7 +183,6 @@ class MainWindow(QWidget):
         self.refresh_input_metrics()
         self._sync_responsive_metrics()
         self.refresh_action_buttons()
-        self.refresh_product_status_panels()
 
     @staticmethod
     def _build_stylesheet():
@@ -683,9 +662,9 @@ class MainWindow(QWidget):
         self.action_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.config_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.license_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.order_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tracking_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.left_column_layout = QVBoxLayout()
         self.left_column_layout.setContentsMargins(0, 0, 0, 0)
@@ -693,7 +672,6 @@ class MainWindow(QWidget):
         self.left_column_layout.addWidget(self.config_card)
         self.left_column_layout.addWidget(self.action_card)
         self.left_column_layout.addWidget(self.license_card)
-        self.left_column_layout.addStretch(1)
 
         self.right_column_layout = QVBoxLayout()
         self.right_column_layout.setContentsMargins(0, 0, 0, 0)
@@ -706,13 +684,13 @@ class MainWindow(QWidget):
         self.input_row_layout.addWidget(self.tracking_card, 1)
 
         self.input_wrap = QWidget()
-        self.input_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.input_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.input_wrap_layout = QVBoxLayout(self.input_wrap)
         self.input_wrap_layout.setContentsMargins(0, 0, 0, 0)
         self.input_wrap_layout.setSpacing(0)
         self.input_wrap_layout.addLayout(self.input_row_layout)
 
-        self.right_column_layout.addWidget(self.input_wrap, 0)
+        self.right_column_layout.addWidget(self.input_wrap, 1)
         self.right_column_layout.addWidget(self.log_card, 1)
 
         self.main_content_layout.addLayout(self.left_column_layout, 1)
@@ -875,7 +853,7 @@ class MainWindow(QWidget):
 
         config_content = self._build_config_content()
         config_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.setup_content_layout.addWidget(self._build_setup_section_card("1.1 系统配置", config_content))
+        self.setup_content_layout.addWidget(self._build_setup_section_card("1.1. 系统配置", config_content))
 
         review_content = self._build_review_content()
         review_content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -946,7 +924,7 @@ class MainWindow(QWidget):
         days_row_layout.setContentsMargins(0, 0, 0, 0)
         days_row_layout.setSpacing(self._standard_layout_spacing())
 
-        review_days_label = QLabel("1.2 选择订单查询天数")
+        review_days_label = QLabel("1.2. 选择订单查询天数")
         review_days_label.setFont(build_font(FONT_SIZES["body"], bold=True))
         review_days_label.setStyleSheet(f"color: {APP_COLORS['blue_deep']};")
         days_row_layout.addWidget(review_days_label, 0, Qt.AlignVCenter)
@@ -972,7 +950,6 @@ class MainWindow(QWidget):
                 width: {scale_px(22, min_value=16)}px;
             }}"""
         )
-        self.review_days_spin.valueChanged.connect(self._refresh_review_hint)
         days_row_layout.addWidget(self.review_days_spin, 0, Qt.AlignVCenter)
         self.review_content_layout.addWidget(days_row)
 
@@ -1002,14 +979,6 @@ class MainWindow(QWidget):
         second_button_row_layout.addWidget(self.review_full_scan_button, 1)
         second_button_row_layout.addWidget(self.order_cache_button, 1)
         self.review_content_layout.addWidget(second_button_row)
-
-        self.review_note_label = QLabel()
-        self.review_note_label.setObjectName("ConfigNote")
-        self.review_note_label.setWordWrap(True)
-        self.review_note_label.setFont(build_font(FONT_SIZES["secondary"]))
-        self.review_note_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.review_content_layout.addWidget(self.review_note_label)
-        self._refresh_review_hint()
 
         self.review_content_layout.addStretch(1)
         return content
@@ -1054,414 +1023,42 @@ class MainWindow(QWidget):
         self.license_content_layout.setContentsMargins(0, 0, 0, 0)
         self.license_content_layout.setSpacing(self._standard_layout_spacing())
 
-        info_panel = self._create_status_panel("授权状态")
-        info_layout = info_panel.layout()
+        body_wrap = QWidget()
+        body_wrap.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        body_layout = QVBoxLayout(body_wrap)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(self._standard_layout_spacing())
+
+        info_panel = QFrame()
+        info_panel.setObjectName("LicenseInfoPanel")
+        panel_layout = QVBoxLayout(info_panel)
+        panel_layout.setContentsMargins(
+            scale_px(14, min_value=8),
+            scale_px(14, min_value=8),
+            scale_px(14, min_value=8),
+            scale_px(14, min_value=8),
+        )
+        panel_layout.setSpacing(self._standard_layout_spacing())
 
         self.license_summary_label = QLabel()
         self.license_summary_label.setObjectName("LicenseSummary")
         self.license_summary_label.setFont(build_font(FONT_SIZES["badge"], bold=True))
         self.license_summary_label.setWordWrap(True)
         self.license_summary_label.setAlignment(Qt.AlignCenter)
-        info_layout.addWidget(self.license_summary_label)
+        panel_layout.addWidget(self.license_summary_label)
 
         self.license_meta_label = QLabel()
         self.license_meta_label.setObjectName("LicenseMeta")
         self.license_meta_label.setFont(build_font(FONT_SIZES["secondary"]))
         self.license_meta_label.setWordWrap(True)
         self.license_meta_label.setAlignment(Qt.AlignCenter)
-        info_layout.addWidget(self.license_meta_label)
+        panel_layout.addWidget(self.license_meta_label)
 
-        self.startup_check_panel = self._create_status_panel("启动检查清单")
-        startup_layout = self.startup_check_panel.layout()
-        self.startup_checklist_label = QLabel()
-        self.startup_checklist_label.setObjectName("LicenseMeta")
-        self.startup_checklist_label.setWordWrap(True)
-        self.startup_checklist_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.startup_checklist_label.setFont(build_font(FONT_SIZES["secondary"]))
-        startup_layout.addWidget(self.startup_checklist_label)
-
-        action_row = QWidget()
-        action_row_layout = QHBoxLayout(action_row)
-        action_row_layout.setContentsMargins(0, 0, 0, 0)
-        action_row_layout.setSpacing(self._standard_layout_spacing())
-
-        self.activate_license_button = QPushButton("输入卡密")
-        self.activate_license_button.setObjectName("SecondaryButton")
-        self.activate_license_button.clicked.connect(lambda: self._prompt_license_activation())
-        action_row_layout.addWidget(self.activate_license_button, 1)
-
-        self.quick_cache_refresh_button = QPushButton(f"刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天缓存")
-        self.quick_cache_refresh_button.setObjectName("SecondaryButton")
-        self.quick_cache_refresh_button.clicked.connect(self._start_quick_cache_refresh)
-        action_row_layout.addWidget(self.quick_cache_refresh_button, 1)
-
-        startup_layout.addWidget(action_row)
-
-        self.cache_status_panel = self._create_status_panel("缓存状态")
-        cache_layout = self.cache_status_panel.layout()
-        self.cache_status_label = QLabel()
-        self.cache_status_label.setObjectName("LicenseMeta")
-        self.cache_status_label.setWordWrap(True)
-        self.cache_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.cache_status_label.setFont(build_font(FONT_SIZES["secondary"]))
-        cache_layout.addWidget(self.cache_status_label)
-
-        self.recent_task_panel = self._create_status_panel("最近任务与导出")
-        task_layout = self.recent_task_panel.layout()
-        self.task_summary_label = QLabel()
-        self.task_summary_label.setObjectName("LicenseSummary")
-        self.task_summary_label.setWordWrap(True)
-        self.task_summary_label.setFont(build_font(FONT_SIZES["badge"], bold=True))
-        task_layout.addWidget(self.task_summary_label)
-
-        self.task_history_label = QLabel()
-        self.task_history_label.setObjectName("LicenseMeta")
-        self.task_history_label.setWordWrap(True)
-        self.task_history_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.task_history_label.setFont(build_font(FONT_SIZES["secondary"]))
-        task_layout.addWidget(self.task_history_label)
-
-        self.result_insight_label = QLabel("结果解读")
-        self.result_insight_label.setObjectName("SectionTitle")
-        self.result_insight_label.setFont(build_font(FONT_SIZES["secondary"], bold=True))
-        task_layout.addWidget(self.result_insight_label)
-
-        self.result_insight_view = QPlainTextEdit()
-        self.result_insight_view.setObjectName("LogEdit")
-        self.result_insight_view.setReadOnly(True)
-        self.result_insight_view.setFont(build_fixed_font(10))
-        self.result_insight_view.setMinimumHeight(scale_px(120, min_value=96))
-        self.result_insight_view.setMaximumHeight(scale_px(170, min_value=128))
-        task_layout.addWidget(self.result_insight_view)
-
-        task_button_row = QWidget()
-        task_button_row_layout = QHBoxLayout(task_button_row)
-        task_button_row_layout.setContentsMargins(0, 0, 0, 0)
-        task_button_row_layout.setSpacing(self._standard_layout_spacing())
-
-        self.export_task_button = QPushButton("导出最近任务 CSV")
-        self.export_task_button.setObjectName("SecondaryButton")
-        self.export_task_button.clicked.connect(self.export_latest_task_csv)
-        task_button_row_layout.addWidget(self.export_task_button, 1)
-
-        self.refresh_status_button = QPushButton("刷新状态")
-        self.refresh_status_button.setObjectName("SecondaryButton")
-        self.refresh_status_button.clicked.connect(self.refresh_product_status_panels)
-        task_button_row_layout.addWidget(self.refresh_status_button, 1)
-
-        task_layout.addWidget(task_button_row)
-
-        details_wrap = QWidget()
-        details_layout = QVBoxLayout(details_wrap)
-        details_layout.setContentsMargins(0, 0, 0, 0)
-        details_layout.setSpacing(self._standard_layout_spacing())
-        details_layout.addWidget(self.startup_check_panel)
-        details_layout.addWidget(self.cache_status_panel)
-        details_layout.addWidget(self.recent_task_panel)
-        details_layout.addStretch(1)
-
-        details_scroll = QScrollArea()
-        details_scroll.setWidgetResizable(True)
-        details_scroll.setFrameShape(QFrame.NoFrame)
-        details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        details_scroll.setMinimumHeight(scale_px(220, min_value=168))
-        details_scroll.setMaximumHeight(scale_px(260, min_value=200))
-        details_scroll.setWidget(details_wrap)
-
-        self.license_content_layout.addWidget(info_panel)
-        self.license_content_layout.addWidget(details_scroll)
+        body_layout.addWidget(info_panel)
+        self.license_content_layout.addStretch(1)
+        self.license_content_layout.addWidget(body_wrap)
         self.license_content_layout.addStretch(1)
         return content
-
-    def _create_status_panel(self, title):
-        """创建统一状态面板。"""
-        panel = QFrame()
-        panel.setObjectName("LicenseInfoPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(
-            scale_px(14, min_value=8),
-            scale_px(14, min_value=8),
-            scale_px(14, min_value=8),
-            scale_px(14, min_value=8),
-        )
-        layout.setSpacing(self._standard_layout_spacing())
-
-        title_label = QLabel(title)
-        title_label.setObjectName("SectionTitle")
-        title_label.setFont(build_font(FONT_SIZES["secondary"], bold=True))
-        layout.addWidget(title_label)
-        return panel
-
-    @staticmethod
-    def _format_datetime_text(timestamp):
-        """将时间戳格式化为可读文案。"""
-        if not timestamp:
-            return "-"
-        try:
-            return datetime.fromtimestamp(int(timestamp)).strftime("%Y-%m-%d %H:%M")
-        except Exception:  # noqa: BLE001
-            return "-"
-
-    @staticmethod
-    def _parse_iso_datetime(value):
-        """解析 ISO 时间字符串。"""
-        if not value:
-            return None
-        try:
-            parsed = datetime.fromisoformat(str(value))
-        except Exception:  # noqa: BLE001
-            return None
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed
-
-    def _build_license_expiry_hint(self):
-        """返回授权到期提示。"""
-        if self._license_reason != "ok":
-            return ""
-        expires_at = self._parse_iso_datetime((self._license_info or {}).get("expires_at", ""))
-        if expires_at is None:
-            return ""
-        remaining_days = int((expires_at - datetime.now(timezone.utc)).total_seconds() // 86400)
-        if remaining_days < 0:
-            return "授权已过期，请尽快续费。"
-        if remaining_days <= LICENSE_EXPIRY_REMINDER_DAYS:
-            return f"授权还有 {remaining_days} 天到期，建议提前续费，避免影响任务执行。"
-        return ""
-
-    def _refresh_review_hint(self):
-        """根据查询天数刷新场景化提示。"""
-        if not hasattr(self, "review_note_label"):
-            return
-        days = self.review_days_spin.value() if hasattr(self, "review_days_spin") else DEFAULT_REVIEW_DAYS
-        if days > ORDER_CACHE_COVERAGE_DAYS:
-            self.review_note_label.setText(
-                f"当前查询范围为最近 {days} 天：系统会优先使用最近 {ORDER_CACHE_COVERAGE_DAYS} 天缓存；"
-                "如需更完整结果，建议点击“完整补查订单”。"
-            )
-            return
-        self.review_note_label.setText(
-            f"默认优先使用最近 {ORDER_CACHE_COVERAGE_DAYS} 天订单缓存，通常更快；"
-            "如果匹配不足，系统会提示你改用“完整补查订单”。"
-        )
-
-    def _resolve_cache_status_html(self):
-        """汇总缓存状态文案。"""
-        try:
-            summary = self._cache_repository.get_summary(scope=ORDER_CACHE_SCOPE)
-        except Exception as exc:  # noqa: BLE001
-            return (
-                "缓存状态暂不可用",
-                f"读取缓存失败：{exc}",
-            )
-
-        order_count = summary.get("order_count", 0)
-        missing_count = summary.get("missing_segment_count", 0)
-        coverage_start = self._format_datetime_text(summary.get("coverage_start", 0))
-        coverage_end = self._format_datetime_text(summary.get("coverage_end", 0))
-        last_incremental = self._format_datetime_text(summary.get("last_incremental_end", 0))
-        last_success = self._format_datetime_text(summary.get("last_success_at", 0))
-        last_error = summary.get("last_error", "")
-
-        if order_count <= 0:
-            headline = "本地尚无订单缓存"
-        elif last_error:
-            headline = "缓存存在上次同步异常"
-        elif missing_count > 0:
-            headline = f"缓存存在 {missing_count} 个待补齐时间段"
-        else:
-            headline = "缓存状态良好，可直接优先使用"
-
-        lines = [
-            f"当前缓存目录：{get_order_cache_dir()}",
-            f"订单数：{order_count}",
-            f"覆盖范围：{coverage_start} ～ {coverage_end}",
-            f"最近增量刷新：{last_incremental}",
-            f"最近成功同步：{last_success}",
-        ]
-        if summary.get("has_dirty_sale_param"):
-            lines.append("检测到旧格式数据，系统会在下次同步时自动重建。")
-        if last_error:
-            lines.append(f"最近错误：{last_error}")
-        if missing_count > 0:
-            lines.append(f"建议操作：点击“刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天缓存”补齐缺口。")
-        elif order_count <= 0:
-            lines.append(f"建议操作：先刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天缓存，或直接完整补查。")
-        return headline, "<br>".join(lines)
-
-    def _resolve_startup_checklist_html(self):
-        """构建启动检查清单。"""
-        checks = []
-        reason = self._license_reason
-        expiry_hint = self._build_license_expiry_hint()
-        checks.append(
-            (
-                "授权状态",
-                "已通过" if reason == "ok" else get_license_reason_text(reason),
-                expiry_hint or ("已可执行批量处理" if reason == "ok" else "点击下方“输入卡密”完成激活"),
-            )
-        )
-
-        saved_dir = get_config_dir_cache() or get_saved_user_config_dir()
-        try:
-            resolved_dir = resolve_config_dir()
-        except ConfigNotFoundError:
-            resolved_dir = None
-        cookie_ready = bool(resolved_dir)
-        checks.append(
-            (
-                "Cookie",
-                "已获取" if cookie_ready else "未获取",
-                "当前目录中的 cookie.txt 可直接用于自动化处理" if cookie_ready else "点击“自动获取 cookie 并保存”",
-            )
-        )
-        checks.append(
-            (
-                "配置目录",
-                "已连接" if resolved_dir else ("待修复" if saved_dir else "未配置"),
-                resolved_dir or saved_dir or "首次使用时请选择保存 cookie 的目录",
-            )
-        )
-
-        cache_headline, cache_detail = self._resolve_cache_status_html()
-        checks.append(("订单缓存", cache_headline, cache_detail.replace("<br>", "；")))
-
-        update_status = self._update_status
-        if not update_status.get("checked"):
-            update_text = "尚未检查"
-            update_hint = "点击顶部“检查更新”查看最新版本"
-        elif update_status.get("has_update"):
-            update_text = f"发现新版本 {update_status.get('version')}"
-            update_hint = "建议先升级后再执行批量任务"
-        else:
-            update_text = "已是最新版本"
-            update_hint = update_status.get("message") or "当前版本已可继续使用"
-        checks.append(("版本状态", update_text, update_hint))
-
-        lines = [
-            f"<b>{title}</b>：{status}<br><span style='color:{APP_COLORS['muted']};'>{hint}</span>"
-            for title, status, hint in checks
-        ]
-        return "<br><br>".join(lines)
-
-    def _refresh_task_history_panel(self):
-        """刷新最近任务面板。"""
-        if not hasattr(self, "task_summary_label"):
-            return
-        entries = self._task_history_entries or []
-        if not entries:
-            self.task_summary_label.setText("暂未记录任务")
-            self.task_history_label.setText("首次执行查单、缓存同步或批量处理后，会在这里展示最近任务摘要。")
-            self.export_task_button.setDisabled(True)
-            self.result_insight_view.setPlainText(self._latest_result_insight)
-            return
-
-        latest = entries[0]
-        self.task_summary_label.setText(latest.get("summary", "最近任务已完成"))
-        lines = []
-        for index, entry in enumerate(entries[:5], start=1):
-            parts = [
-                entry.get("triggered_at", ""),
-                entry.get("task_label", ""),
-                entry.get("status_text", ""),
-            ]
-            extra = entry.get("detail", "")
-            if extra:
-                parts.append(extra)
-            lines.append(f"{index}. " + "｜".join(part for part in parts if part))
-        if self._latest_task_guidance:
-            lines.append(f"建议：{self._latest_task_guidance}")
-        self.task_history_label.setText("\n".join(lines))
-        self.export_task_button.setDisabled(not self._latest_task_rows)
-        self.result_insight_view.setPlainText(self._latest_result_insight)
-
-    def refresh_product_status_panels(self):
-        """刷新启动检查、缓存状态与历史摘要。"""
-        if hasattr(self, "startup_checklist_label"):
-            self.startup_checklist_label.setText(self._resolve_startup_checklist_html())
-        if hasattr(self, "cache_status_label"):
-            headline, detail = self._resolve_cache_status_html()
-            self.cache_status_label.setText(f"<b>{headline}</b><br>{detail}")
-        self._refresh_task_history_panel()
-
-    def _build_task_history_entry(
-        self,
-        *,
-        task_label,
-        status_text,
-        summary,
-        detail="",
-        days=None,
-        warning_text="",
-        total_count=0,
-        matched_count=0,
-        success_count=0,
-        failure_count=0,
-    ):
-        """统一构建任务历史记录。"""
-        entry = {
-            "task_label": task_label,
-            "status_text": status_text,
-            "summary": summary,
-            "detail": detail,
-            "triggered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "warning_text": warning_text,
-            "total_count": total_count,
-            "matched_count": matched_count,
-            "success_count": success_count,
-            "failure_count": failure_count,
-        }
-        if days is not None:
-            entry["days"] = days
-        return entry
-
-    def _record_task_history(self, entry):
-        """持久化并刷新最近任务摘要。"""
-        self._task_history_entries = self._task_history_store.append(entry)
-        self.refresh_product_status_panels()
-
-    def _set_latest_task_rows(self, rows, *, export_name, guidance=""):
-        """记录最近任务可导出的明细。"""
-        self._latest_task_rows = list(rows or [])
-        self._latest_task_export_name = export_name
-        self._latest_task_guidance = guidance or ""
-        self.refresh_product_status_panels()
-
-    def _start_quick_cache_refresh(self):
-        """直接执行最近 3 天缓存增量刷新。"""
-        if not self._can_start_task(self.review_worker, "订单缓存同步"):
-            return
-        self._start_review_worker(
-            task_type=TASK_CACHE_REFRESH,
-            days=self.review_days_spin.value(),
-            start_message=f"开始增量刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天订单缓存...",
-            clear_order_input=False,
-        )
-
-    def export_latest_task_csv(self):
-        """导出最近任务明细。"""
-        if not self._latest_task_rows:
-            self.show_message(QMessageBox.Information, "暂无可导出数据", "请先执行一次查单、缓存或批量处理任务。")
-            return
-        destination, _ = QFileDialog.getSaveFileName(
-            self,
-            "导出最近任务 CSV",
-            self._latest_task_export_name,
-            "CSV 文件 (*.csv)",
-        )
-        if not destination:
-            return
-        try:
-            exported = self._task_history_store.export_csv(destination, self._latest_task_rows)
-        except Exception as exc:  # noqa: BLE001
-            self.show_message(QMessageBox.Critical, "导出失败", f"写入 CSV 失败：{exc}")
-            return
-        self._log_and_show_message(
-            QMessageBox.Information,
-            "导出完成",
-            f"最近任务明细已导出到：\n{exported}",
-            log_messages=(f"最近任务 CSV 已导出：{exported}",),
-        )
 
     # -----------------------------------------------------------------------
     # 窗口尺寸 / 响应式
@@ -2257,7 +1854,6 @@ class MainWindow(QWidget):
         if hasattr(self, "config_badge"):
             self.config_badge.setText(badge_text)
             self.config_badge.setStyleSheet(badge_style)
-        self.refresh_product_status_panels()
 
     def _resolve_saved_config_start_dir(self):
         """返回配置目录相关操作的默认起始目录。"""
@@ -2452,7 +2048,6 @@ class MainWindow(QWidget):
             "source": source,
         }
         self._sync_window_title_with_license(reason, info)
-        self.refresh_product_status_panels()
 
     def _refresh_license_state_with_mode(self, *, local_only):
         """按模式刷新授权状态。"""
@@ -2558,13 +2153,6 @@ class MainWindow(QWidget):
 
     def _on_update_check_finished(self, info, manual):
         """更新检查完成。"""
-        self._update_status = {
-            "checked": True,
-            "has_update": bool(getattr(info, "has_update", False)),
-            "version": getattr(info, "version", APP_VERSION) or APP_VERSION,
-            "message": "发现新版本，请及时升级" if getattr(info, "has_update", False) else "当前已是最新版本",
-        }
-        self.refresh_product_status_panels()
         if getattr(info, 'tutorial_url', None):
             self._set_tutorial_badge_link(info.tutorial_url)
 
@@ -2582,13 +2170,6 @@ class MainWindow(QWidget):
 
     def _on_update_check_failed(self, error_message, manual):
         """更新检查失败。"""
-        self._update_status = {
-            "checked": True,
-            "has_update": False,
-            "version": APP_VERSION,
-            "message": f"检查失败：{error_message or '请稍后重试'}",
-        }
-        self.refresh_product_status_panels()
         if manual:
             self._show_manual_update_failed_message(error_message)
         elif error_message:
@@ -2652,9 +2233,6 @@ class MainWindow(QWidget):
                 device_id = str(info.get("device_id", "")).strip()
                 if device_id:
                     meta_parts.append(f"设备尾号：{device_id[-6:]}")
-                expiry_hint = self._build_license_expiry_hint()
-                if expiry_hint:
-                    meta_parts.append(expiry_hint)
                 self.license_meta_label.setText(
                     "  |  ".join(meta_parts) or "授权信息已写入本地，可直接开始执行任务。"
                 )
@@ -2702,9 +2280,6 @@ class MainWindow(QWidget):
             self._append_license_status_log(reason)
             expires = str((info or {}).get("expires_at", ""))[:10]
             self._append_logs(f"授权有效期至：{expires}" if expires else "")
-            expiry_hint = self._build_license_expiry_hint()
-            if expiry_hint:
-                self._append_logs(expiry_hint)
             return True
 
         self._append_logs("当前未激活，执行前需先输入卡密。")
@@ -2759,10 +2334,7 @@ class MainWindow(QWidget):
             {
                 "order_id": order_id,
                 "tracking_number": tracking_number,
-                "status": "pending",
                 "succeeded": False,
-                "old_waybill": "",
-                "error_message": "",
             }
             for order_id, tracking_number in zip(order_ids, tracking_numbers)
         ]
@@ -2824,7 +2396,6 @@ class MainWindow(QWidget):
         self._batch_rows = []
         self.is_paused = False
         self.refresh_action_buttons()
-        self.refresh_product_status_panels()
 
     def closeEvent(self, event):
         """窗口关闭时安全终止后台线程。"""
@@ -2848,16 +2419,12 @@ class MainWindow(QWidget):
     def _on_worker_step_succeeded(self, index, total_count, order_id, tracking_number, old_waybill):
         """记录单条成功。"""
         self._mark_batch_row_succeeded(index)
-        self._batch_rows[index - 1]["status"] = "success"
-        self._batch_rows[index - 1]["old_waybill"] = old_waybill
         self._append_logs(
             f"[{index}/{total_count}] 订单 {order_id} 成功：{old_waybill} -> {tracking_number}"
         )
 
     def _on_worker_step_failed(self, index, total_count, order_id, tracking_number, error_message):
         """记录单条失败。"""
-        self._batch_rows[index - 1]["status"] = "failed"
-        self._batch_rows[index - 1]["error_message"] = error_message
         self._append_logs(
             f"[{index}/{total_count}] 订单 {order_id} -> {tracking_number} 失败：{error_message}"
         )
@@ -2871,57 +2438,10 @@ class MainWindow(QWidget):
         self.set_submit_running(False)
 
         if aborted:
-            self._record_task_history(
-                self._build_task_history_entry(
-                    task_label="批量处理",
-                    status_text="已中止",
-                    summary=f"批量处理已中止：已执行 {success_count + failure_count}/{total_count} 条。",
-                    detail="当前批次被用户暂停或窗口关闭终止。",
-                    total_count=total_count,
-                    success_count=success_count,
-                    failure_count=failure_count,
-                )
-            )
             return
-
-        export_rows = [
-            {
-                "order_id": row["order_id"],
-                "tracking_number": row["tracking_number"],
-                "status": row["status"],
-                "old_waybill": row.get("old_waybill", ""),
-                "error_message": row.get("error_message", ""),
-            }
-            for row in self._batch_rows
-        ]
-        guidance = "如有失败条目，请根据导出文件中的 error_message 定位问题后重试。"
-        self._latest_result_insight = (
-            f"批量执行结果\n"
-            f"- 总数：{total_count}\n"
-            f"- 成功：{success_count}\n"
-            f"- 失败：{failure_count}\n"
-            f"- 建议：{'可继续下一批处理' if failure_count == 0 else '优先导出失败清单并逐条重试'}"
-        )
-        self._set_latest_task_rows(
-            export_rows,
-            export_name=f"batch-task-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
-            guidance=guidance,
-        )
 
         summary = (
             f"批量执行完成：共 {total_count} 条，成功 {success_count} 条，失败 {failure_count} 条。"
-        )
-        detail = "全部成功，可继续下一批处理。" if failure_count == 0 else "存在失败项，建议导出后逐条复核失败原因。"
-        self._record_task_history(
-            self._build_task_history_entry(
-                task_label="批量处理",
-                status_text="完成" if failure_count == 0 else "部分失败",
-                summary=summary,
-                detail=detail,
-                total_count=total_count,
-                success_count=success_count,
-                failure_count=failure_count,
-            )
         )
         self._log_and_show_message(
             QMessageBox.Warning if failure_count > 0 else QMessageBox.Information,
@@ -2962,13 +2482,6 @@ class MainWindow(QWidget):
                     if running and active_task == TASK_CACHE_REBUILD
                     else "订单缓存管理"
                 ),
-            ),
-            (
-                self.quick_cache_refresh_button,
-                running,
-                "正在刷新缓存..."
-                if running and active_task == TASK_CACHE_REFRESH
-                else f"刷新最近 {ORDER_CACHE_INCREMENTAL_DAYS} 天缓存",
             ),
         ]
 
@@ -3053,7 +2566,6 @@ class MainWindow(QWidget):
             clear_callback=self._clear_review_worker_refs,
             signal_bindings=(
                 (worker.progress, self._on_review_progress),
-                (worker.results_ready, self._on_review_results_ready),
                 (worker.order_ids_ready, self._on_review_order_ids),
                 (worker.missing_config, self.show_missing_config_error),
                 (worker.finished, self._on_review_finished),
@@ -3123,101 +2635,6 @@ class MainWindow(QWidget):
         """追加中差评查找进度日志。"""
         self._append_logs(message)
 
-    def _on_review_results_ready(self, results):
-        """记录最近一次查单/缓存任务的明细结果。"""
-        self._last_review_results = list(results or [])
-
-        if self.review_task_type == TASK_QUALITY_REFUND:
-            export_rows = []
-            for item in self._last_review_results:
-                order_info = item.get("commonInfo", {}) or {}
-                product_list = item.get("orderProductInfo", []) or []
-                product = product_list[0] if product_list else {}
-                refund_info = item.get("qualityRefundInfo", {}) or {}
-                export_rows.append(
-                    {
-                        "order_id": order_info.get("orderId", ""),
-                        "product_name": product.get("title", ""),
-                        "sale_param": product.get("saleParam", ""),
-                        "refund_reason": refund_info.get("reason", ""),
-                    }
-                )
-            guidance = "品退订单已回填到订单号输入框，可直接继续批量处理。"
-            preview_lines = [
-                "品退订单结果解读",
-                f"- 共 {len(export_rows)} 个订单",
-            ]
-            for index, row in enumerate(export_rows[:5], start=1):
-                preview_lines.append(
-                    f"{index}. {row['order_id']}｜{row['product_name']}｜{row['refund_reason'] or '未标注原因'}"
-                )
-            self._latest_result_insight = "\n".join(preview_lines)
-            self._set_latest_task_rows(
-                export_rows,
-                export_name=f"quality-refund-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
-                guidance=guidance,
-            )
-            return
-
-        high_confidence = 0
-        low_confidence = 0
-        unmatched = 0
-        export_rows = []
-        for item in self._last_review_results:
-            matched = bool(item.get("matched"))
-            score = int(item.get("matchScore", 0) or 0)
-            if matched and score >= 100:
-                confidence = "高置信度"
-                high_confidence += 1
-            elif matched:
-                confidence = "低置信度"
-                low_confidence += 1
-            else:
-                confidence = "未匹配"
-                unmatched += 1
-            export_rows.append(
-                {
-                    "evaluation_id": item.get("evaluationId", ""),
-                    "order_id": item.get("orderId", ""),
-                    "confidence_bucket": confidence,
-                    "match_score": score,
-                    "match_strategy": item.get("matchStrategy", ""),
-                    "product_name": item.get("productName", ""),
-                    "sale_param": item.get("saleParam", ""),
-                    "buyer_nickname": item.get("buyerNickname", ""),
-                    "order_buyer_nickname": item.get("orderBuyerNickname", ""),
-                    "match_reasons": " | ".join(item.get("matchReasons", []) or []),
-                    "evaluation_content": item.get("evaluationContent", ""),
-                    "matched": "是" if matched else "否",
-                }
-            )
-        guidance = (
-            f"高置信度 {high_confidence} 条可直接处理；"
-            f"低置信度 {low_confidence} 条建议人工核对；"
-            f"未匹配 {unmatched} 条建议完整补查或人工确认。"
-        )
-        preview_lines = [
-            "差评匹配结果解读",
-            f"- 高置信度：{high_confidence}",
-            f"- 低置信度：{low_confidence}",
-            f"- 未匹配：{unmatched}",
-        ]
-        focus_rows = [row for row in export_rows if row["confidence_bucket"] != "高置信度"][:5]
-        if focus_rows:
-            preview_lines.append("")
-            preview_lines.append("重点核对：")
-            for index, row in enumerate(focus_rows, start=1):
-                preview_lines.append(
-                    f"{index}. {row['confidence_bucket']}｜订单 {row['order_id'] or '-'}｜得分 {row['match_score']}｜{row['match_reasons'] or '建议完整补查'}"
-                )
-        self._latest_result_insight = "\n".join(preview_lines)
-        self._append_logs(f"结果解读：{guidance}")
-        self._set_latest_task_rows(
-            export_rows,
-            export_name=f"review-match-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
-            guidance=guidance,
-        )
-
     def _on_review_order_ids(self, order_ids):
         """将匹配到的订单号回填到订单输入框。"""
         self._set_order_input_values(order_ids)
@@ -3226,35 +2643,6 @@ class MainWindow(QWidget):
         """处理订单缓存任务完成后的提示。"""
         action_label = "订单缓存重建" if self.review_task_type == TASK_CACHE_REBUILD else "订单缓存刷新"
         summary = f"{action_label}完成：写入/更新 {matched_count} 个订单。"
-        self._record_task_history(
-            self._build_task_history_entry(
-                task_label=action_label,
-                status_text="完成" if status == TERMINAL_STATUS_SUCCESS else "完成（有提醒）",
-                summary=summary,
-                detail=warning_text or "缓存状态已刷新，可继续查单。",
-                warning_text=warning_text,
-                days=self.review_days_spin.value(),
-                matched_count=matched_count,
-                total_count=matched_count,
-            )
-        )
-        self._set_latest_task_rows(
-            [
-                {
-                    "task": action_label,
-                    "written_count": matched_count,
-                    "warning_text": warning_text,
-                }
-            ],
-            export_name=f"cache-task-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
-            guidance="如缓存仍提示缺口，可再次执行增量刷新或使用完整补查。",
-        )
-        self._latest_result_insight = (
-            f"{action_label}结果\n"
-            f"- 写入/更新订单：{matched_count}\n"
-            f"- 状态：{'有提醒' if warning_text else '正常完成'}\n"
-            f"- 建议：{'先查看提醒后再查单' if warning_text else '可直接开始查单'}"
-        )
         self._show_task_summary_message(
             summary=summary,
             warning_text=warning_text if status == TERMINAL_STATUS_WARNING else "",
@@ -3265,44 +2653,12 @@ class MainWindow(QWidget):
     def _handle_quality_refund_finished(self, *, status, warning_text, matched_count, total_count):
         """处理品质退款任务完成后的提示。"""
         if total_count <= 0:
-            self._latest_result_insight = (
-                "品退订单结果解读\n"
-                f"- 查询范围：最近 {self.review_days_spin.value()} 天\n"
-                "- 结果：未找到符合条件的订单"
-            )
-            self._record_task_history(
-                self._build_task_history_entry(
-                    task_label="获取品退订单",
-                    status_text="无结果",
-                    summary="品退订单获取完成：未找到符合条件的订单。",
-                    detail=f"查询范围：最近 {self.review_days_spin.value()} 天。",
-                    days=self.review_days_spin.value(),
-                )
-            )
             self.show_message(QMessageBox.Warning, "查找完成", "未找到品质退款订单。")
             return
 
         summary = (
             f"品退订单获取完成：共 {total_count} 个订单，"
             f"回填 {matched_count} 个订单号。"
-        )
-        self._latest_result_insight = (
-            f"品退订单结果解读\n"
-            f"- 共 {total_count} 个订单\n"
-            f"- 已回填 {matched_count} 个订单号\n"
-            f"- 建议：检查品退原因后再批量处理"
-        )
-        self._record_task_history(
-            self._build_task_history_entry(
-                task_label="获取品退订单",
-                status_text="完成" if status == TERMINAL_STATUS_SUCCESS else "完成（有提醒）",
-                summary=summary,
-                detail=warning_text or "订单号已回填，可直接批量处理。",
-                days=self.review_days_spin.value(),
-                warning_text=warning_text,
-                matched_count=matched_count,
-                total_count=total_count,
-            )
         )
         self._show_task_summary_message(
             summary=summary,
@@ -3314,38 +2670,12 @@ class MainWindow(QWidget):
     def _handle_review_match_finished(self, *, status, warning_text, matched_count, total_count):
         """处理中差评/完整补查任务完成后的提示。"""
         if total_count <= 0:
-            self._latest_result_insight = (
-                "差评匹配结果解读\n"
-                f"- 查询范围：最近 {self.review_days_spin.value()} 天\n"
-                "- 结果：未发现差评数据"
-            )
-            self._record_task_history(
-                self._build_task_history_entry(
-                    task_label="完整补查" if self.review_task_type == TASK_REVIEW_FULL_SCAN else "中差评查找",
-                    status_text="无结果",
-                    summary="本次查单未发现差评数据。",
-                    detail=f"查询范围：最近 {self.review_days_spin.value()} 天。",
-                    days=self.review_days_spin.value(),
-                )
-            )
             return
 
         task_label = "完整补查" if self.review_task_type == TASK_REVIEW_FULL_SCAN else "中差评查找"
         summary = (
             f"{task_label}完成：共 {total_count} 条差评，"
             f"匹配到 {matched_count} 个订单。"
-        )
-        self._record_task_history(
-            self._build_task_history_entry(
-                task_label=task_label,
-                status_text="完成" if status == TERMINAL_STATUS_SUCCESS else "完成（有提醒）",
-                summary=summary,
-                detail=warning_text or self._latest_task_guidance or "已生成匹配结果，可继续处理。",
-                days=self.review_days_spin.value(),
-                warning_text=warning_text,
-                matched_count=matched_count,
-                total_count=total_count,
-            )
         )
         self._show_task_summary_message(
             summary=summary,
@@ -3397,4 +2727,3 @@ class MainWindow(QWidget):
         self.review_worker = None
         self.review_worker_thread = None
         self.review_task_type = None
-        self.refresh_product_status_panels()

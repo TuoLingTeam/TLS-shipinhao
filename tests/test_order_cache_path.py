@@ -61,34 +61,6 @@ class OrderCachePathTests(unittest.TestCase):
             self.assertFalse(old_db.exists())
             self.assertEqual(Path(repo.db_path), user_data_dir / 'order_cache.sqlite3')
 
-    def test_get_summary_should_include_order_count_and_state(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo = OrderCacheRepository(db_path=str(Path(temp_dir) / "cache.sqlite3"))
-            repo.initialize()
-            repo.upsert_orders(
-                [
-                    {
-                        "commonInfo": {"orderId": "A100", "createTime": 1710000000},
-                        "buyerInfo": {"nickName": "alice"},
-                        "orderProductInfo": [{"title": "课程 A", "saleParam": "红色"}],
-                    }
-                ]
-            )
-            repo.save_state(
-                coverage_start=1709000000,
-                coverage_end=1710000000,
-                last_incremental_start=1709900000,
-                last_incremental_end=1710000000,
-                last_success_at=1710000100,
-                last_mode="incremental",
-            )
-
-            summary = repo.get_summary()
-
-        self.assertEqual(summary["order_count"], 1)
-        self.assertEqual(summary["last_mode"], "incremental")
-        self.assertEqual(summary["coverage_end"], 1710000000)
-
 
 if __name__ == '__main__':
     unittest.main()
