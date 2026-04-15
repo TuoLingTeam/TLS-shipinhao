@@ -2,7 +2,7 @@ use api_contracts::{IntegrityManifest, IntegrityManifestFile};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use chrono::Utc;
-use ed25519_dalek::pkcs8::{DecodePrivateKey, EncodePrivateKey};
+use ed25519_dalek::pkcs8::DecodePrivateKey;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -146,6 +146,7 @@ fn sha256_hex(path: &Path) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::pkcs8::EncodePrivateKey;
     use tempfile::tempdir;
 
     #[test]

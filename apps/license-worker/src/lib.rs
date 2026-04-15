@@ -1,7 +1,4 @@
-use license_service::{
-    ActivationInput, DeviceRegistration, GeneratedKeyRecord, LicenseRecord, LicenseRepository,
-    LicenseService, LicenseServiceResponse, VerifyInput,
-};
+use license_service::{ActivationInput, LicenseRepository, LicenseService, LicenseServiceResponse, VerifyInput};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +70,9 @@ pub fn handle_json_request<R: LicenseRepository>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use license_service::{AuditEvent, GeneratedKeyStatus};
+    use license_service::{
+        AuditEvent, DeviceRegistration, GeneratedKeyRecord, GeneratedKeyStatus, LicenseRecord,
+    };
     use std::collections::HashMap;
     use std::sync::Mutex;
 

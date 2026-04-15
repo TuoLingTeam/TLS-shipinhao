@@ -1,3 +1,5 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+
 export component AppWindow inherits Window {
     in-out property <string> license_status: "未激活";
     callback start_review_find();
@@ -7,7 +9,7 @@ export component AppWindow inherits Window {
     width: 960px;
     height: 720px;
 
-    VerticalLayout {
+    VerticalBox {
         spacing: 12px;
         Text {
             text: "TLS Keeper";
@@ -15,7 +17,7 @@ export component AppWindow inherits Window {
         Text {
             text: license_status;
         }
-        HorizontalLayout {
+        HorizontalBox {
             Button {
                 text: "开始中差评查找";
                 clicked => { start_review_find(); }
