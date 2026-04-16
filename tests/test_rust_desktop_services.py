@@ -203,3 +203,22 @@ class RustDesktopOrderSyncServiceTests(unittest.TestCase):
             "pub fn deduplicate_orders_by_id",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopDeliveryUpdateTests(unittest.TestCase):
+    def test_delivery_update_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "delivery_update.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/delivery_update.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub const DELIVERY_MISMATCH_MESSAGE",
+            "pub struct DeliveryProductInfo",
+            "pub struct DeliverySnapshot",
+            "pub struct DeliveryOverride",
+            "pub fn build_delivery_candidates",
+            "pub fn build_update_delivery_payload",
+            "pub fn is_delivery_mismatch_error",
+            "pub fn determine_delivery_override_on_mismatch",
+            "pub fn delivery_update_succeeded",
+        ):
+            self.assertIn(symbol, text)
