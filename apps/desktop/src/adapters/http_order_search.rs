@@ -181,17 +181,31 @@ fn parse_create_time(raw: &Value) -> i64 {
         .unwrap_or(0)
 }
 
+fn parse_i64_like(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().map(|u| u as i64))
+        .or_else(|| value.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+}
+
 fn pick_amount_cent(v: &Value) -> i64 {
-    if let Some(n) = v.pointer("/priceInfo/orderPrice").and_then(|x| x.as_i64()) {
+    if let Some(n) = v.pointer("/priceInfo/orderPrice").and_then(parse_i64_like) {
         return n;
     }
-    if let Some(n) = v.pointer("/payInfo/payAmount").and_then(|x| x.as_i64()) {
+    if let Some(n) = v.pointer("/payInfo/payAmount").and_then(parse_i64_like) {
         return n;
     }
-    if let Some(n) = v.pointer("/paymentInfo/shouldPayAmount").and_then(|x| x.as_i64()) {
+    if let Some(n) = v.pointer("/paymentInfo/shouldPayAmount").and_then(parse_i64_like) {
         return n;
     }
     if let Some(y) = v.pointer("/orderAmountInfo/orderAmount").and_then(|x| x.as_f64()) {
+        return (y * 100.0).round() as i64;
+    }
+    if let Some(y) = v
+        .pointer("/orderAmountInfo/orderAmount")
+        .and_then(|x| x.as_str())
+        .and_then(|s| s.trim().parse::<f64>().ok())
+    {
         return (y * 100.0).round() as i64;
     }
     0
@@ -217,6 +231,7 @@ fn order_json_to_entry(raw: &Value, now_rfc: &str) -> Option<OrderCacheEntry> {
 
     let receiver = raw
         .pointer("/acceptInfo/receiverName")
+        .or_else(|| raw.pointer("/acceptInfo/addressInfo/userName"))
         .or_else(|| raw.pointer("/deliveryInfo/receiverName"))
         .or_else(|| raw.pointer("/addressInfo/userName"))
         .and_then(|v| v.as_str())
@@ -257,4 +272,39 @@ pub fn parse_iso_window(start_at: &str, end_at: &str) -> anyhow::Result<(i64, i6
         .map_err(|_| anyhow::anyhow!("无效的结束时间：{end_at}"))?;
 
     Ok((start, end))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn order_json_to_entry_maps_nested_receiver_and_string_amount() {
+        let raw = json!({
+            "commonInfo": {
+                "orderId": "3735739244192085760",
+                "createTime": 1776324243
+            },
+            "buyerInfo": {
+                "nickName": "琼花🌸若现"
+            },
+            "acceptInfo": {
+                "addressInfo": {
+                    "userName": "李**"
+                }
+            },
+            "priceInfo": {
+                "orderPrice": "5990"
+            }
+        });
+
+        let entry = order_json_to_entry(&raw, "2026-04-16T07:30:00Z").expect("order entry");
+        assert_eq!(entry.order_id, "3735739244192085760");
+        assert_eq!(entry.buyer_name, "琼花🌸若现");
+        assert_eq!(entry.receiver_name, "李**");
+        assert_eq!(entry.amount_cent, 5990);
+        assert_eq!(entry.created_at, "2026-04-16T07:24:03+00:00");
+    }
 }

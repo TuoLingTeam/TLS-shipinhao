@@ -22,11 +22,6 @@ async function handleSearch() {
   await findReviews(days.value, daysAgoISO(days.value), todayISO());
 }
 
-function confidenceColor(score: number): string {
-  if (score >= 80) return "text-green-600";
-  if (score >= 50) return "text-yellow-600";
-  return "text-red-600";
-}
 </script>
 
 <template>
@@ -67,9 +62,6 @@ function confidenceColor(score: number): string {
             <th class="text-left px-4 py-2.5 font-medium">评价内容</th>
             <th class="text-left px-4 py-2.5 font-medium">订单详情</th>
             <th class="text-left px-4 py-2.5 font-medium">评价ID</th>
-            <th class="text-left px-4 py-2.5 font-medium">订单号</th>
-            <th class="text-left px-4 py-2.5 font-medium">匹配来源</th>
-            <th class="text-center px-4 py-2.5 font-medium">置信度</th>
             <th class="text-center px-4 py-2.5 font-medium">匹配</th>
           </tr>
         </thead>
@@ -95,11 +87,6 @@ function confidenceColor(score: number): string {
               </div>
             </td>
             <td class="px-4 py-2.5 font-mono text-xs">{{ r.evaluation_id }}</td>
-            <td class="px-4 py-2.5 font-mono text-xs">{{ r.order_id }}</td>
-            <td class="px-4 py-2.5">{{ r.source }}</td>
-            <td class="px-4 py-2.5 text-center font-semibold" :class="confidenceColor(r.confidence_score)">
-              {{ r.confidence_score }}%
-            </td>
             <td class="px-4 py-2.5 text-center">
               <span
                 class="inline-block px-2 py-0.5 text-xs rounded-full"
