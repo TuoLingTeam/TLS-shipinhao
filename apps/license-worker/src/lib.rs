@@ -1,6 +1,9 @@
 use license_service::{ActivationInput, LicenseRepository, LicenseService, LicenseServiceResponse, VerifyInput};
 use serde_json::Value;
 
+#[cfg(target_arch = "wasm32")]
+mod admin_d1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerRoute {
     Activate,
@@ -70,7 +73,7 @@ pub fn handle_json_request<R: LicenseRepository>(
 #[cfg(target_arch = "wasm32")]
 mod cloudflare_entry {
     use super::*;
-    use worker::{event, Env, Request, Response, Result, RouteContext};
+    use worker::{event, Env, Method, Request, Response, Result};
 
     fn compatibility_payload(path: &str) -> String {
         serde_json::json!({
@@ -81,8 +84,23 @@ mod cloudflare_entry {
         .to_string()
     }
 
-    async fn route_fetch(req: Request, _ctx: RouteContext<()>, _env: Env) -> Result<Response> {
+    async fn route_fetch(req: Request, env: Env) -> Result<Response> {
         let path = req.path();
+        let method = req.method();
+
+        if method == Method::Get && path == "/admin" {
+            return crate::admin_d1::serve_admin_html().await;
+        }
+
+        if path.starts_with("/api/admin/") {
+            return crate::admin_d1::handle_admin_request(req, &env).await;
+        }
+
+        if method != Method::Post {
+            return Response::error("Method Not Allowed", 405);
+        }
+
+        let _ = req.text().await;
         match parse_route(&path) {
             WorkerRoute::Activate | WorkerRoute::Verify => Response::from_json(&serde_json::json!({
                 "success": false,
@@ -94,8 +112,10 @@ mod cloudflare_entry {
     }
 
     #[event(fetch)]
-    pub async fn fetch(req: Request, env: Env, ctx: worker::Context) -> Result<Response> {
-        route_fetch(req, RouteContext::new(()), env).await.or_else(|_| Response::ok(compatibility_payload("/error")))
+    pub async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+        route_fetch(req, env)
+            .await
+            .or_else(|_| Response::ok(compatibility_payload("/error")))
     }
 }
 
