@@ -13,6 +13,7 @@ fn main() {
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::review::find_reviews,
+            commands::review::find_quality_refund_orders,
             commands::order::load_order_cache,
             commands::order::sync_orders,
             commands::delivery::update_delivery,

@@ -2,11 +2,14 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { OrderMatchResult, ReviewQuery } from "../types/review";
 
+export type ReviewFetchMode = "bad_review" | "quality_refund";
+
 export const useReviewStore = defineStore("review", () => {
   const results = ref<OrderMatchResult[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const lastQuery = ref<ReviewQuery | null>(null);
+  const lastMode = ref<ReviewFetchMode>("bad_review");
 
   function setResults(data: OrderMatchResult[]) {
     results.value = data;
@@ -24,5 +27,20 @@ export const useReviewStore = defineStore("review", () => {
     lastQuery.value = query;
   }
 
-  return { results, loading, error, lastQuery, setResults, setLoading, setError, setLastQuery };
+  function setLastMode(mode: ReviewFetchMode) {
+    lastMode.value = mode;
+  }
+
+  return {
+    results,
+    loading,
+    error,
+    lastQuery,
+    lastMode,
+    setResults,
+    setLoading,
+    setError,
+    setLastQuery,
+    setLastMode,
+  };
 });
