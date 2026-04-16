@@ -21,6 +21,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
+sha2 = { workspace = true }
 rusqlite = { workspace = true }
 dirs = "6"
 rfd = "0.15"

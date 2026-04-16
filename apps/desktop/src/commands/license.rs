@@ -1,13 +1,15 @@
-use crate::adapters::http_license_client::HttpLicenseClient;
+use crate::adapters::http_license_client::{normalize_license_state, HttpLicenseClient};
 use crate::app_settings::LICENSE_API_BASE_URLS;
 use crate::error::AppError;
 use crate::state::{self, AppState, StoredLicenseProfile};
+use sha2::{Digest, Sha256};
+use std::ffi::CStr;
 use tauri::State;
 
 const LICENSE_PROTOCOL_VERSION: u32 = 3;
 
 fn license_state_allows_feature(state: &str) -> bool {
-    matches!(state, "active" | "renewal_due")
+    matches!(state, "active" | "renewal_due" | "ok")
 }
 
 pub async fn ensure_feature_authorized(
@@ -35,15 +37,34 @@ fn make_client() -> HttpLicenseClient {
     )
 }
 
+fn legacy_compatible_device_id_from_raw(raw: &str) -> String {
+    let digest = Sha256::digest(raw.as_bytes());
+    digest
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
+}
+
+fn security_core_device_id() -> Option<String> {
+    let ptr = security_core::security_core_collect_device_id();
+    if ptr.is_null() {
+        return None;
+    }
+    let value = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().trim().to_string();
+    security_core::security_core_free_string(ptr);
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
 fn device_id() -> String {
-    // security_core 已经有跨平台设备 ID 采集，直接作为 Rust 调用
-    // 回退：使用简化的平台信息
-    format!(
-        "{}-{}-{}",
-        std::env::var("HOSTNAME").unwrap_or_default(),
-        std::env::consts::ARCH,
-        std::env::consts::OS,
-    )
+    if let Some(id) = security_core_device_id() {
+        return id;
+    }
+    legacy_compatible_device_id_from_raw(&device_fingerprint())
 }
 
 fn device_fingerprint() -> String {
@@ -87,6 +108,8 @@ pub async fn activate_license(
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
+    let normalized_state = normalize_license_state(&resp.normalized_state());
+
     persist_license_profile(
         &state,
         StoredLicenseProfile {
@@ -94,7 +117,7 @@ pub async fn activate_license(
                 .license_key
                 .clone()
                 .unwrap_or_else(|| license_key.trim().to_uppercase()),
-            license_state: "active".to_string(),
+            license_state: normalized_state.clone(),
             license_expires_at: resp.license_expires_at.clone(),
             last_verified_at: Some(current_timestamp()),
         },
@@ -104,7 +127,7 @@ pub async fn activate_license(
     Ok(serde_json::json!({
         "success": resp.success,
         "message": resp.message,
-        "license_state": "active",
+        "license_state": normalized_state,
         "license_key": resp.license_key,
         "device_id": resp.device_id,
         "license_expires_at": resp.license_expires_at,
@@ -127,6 +150,8 @@ pub async fn verify_license(
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
+    let normalized_state = normalize_license_state(&resp.normalized_state());
+
     persist_license_profile(
         &state,
         StoredLicenseProfile {
@@ -134,7 +159,7 @@ pub async fn verify_license(
                 .license_key
                 .clone()
                 .unwrap_or_else(|| license_key.trim().to_uppercase()),
-            license_state: resp.license_state.clone(),
+            license_state: normalized_state.clone(),
             license_expires_at: resp.license_expires_at.clone(),
             last_verified_at: Some(current_timestamp()),
         },
@@ -144,7 +169,7 @@ pub async fn verify_license(
     Ok(serde_json::json!({
         "success": resp.success,
         "message": resp.message,
-        "license_state": resp.license_state,
+        "license_state": normalized_state,
         "license_key": resp.license_key,
         "license_expires_at": resp.license_expires_at,
         "license_lease": resp.license_lease.is_some(),
@@ -199,5 +224,13 @@ mod tests {
                 "state {state} should be blocked"
             );
         }
+    }
+
+    #[test]
+    fn legacy_compatible_device_id_matches_python_rule() {
+        assert_eq!(
+            legacy_compatible_device_id_from_raw("SERIAL-123"),
+            "0c04dee8a171fce9"
+        );
     }
 }

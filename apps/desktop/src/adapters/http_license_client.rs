@@ -49,6 +49,37 @@ pub struct LicenseApiResponse {
     pub task_policy: Option<Vec<String>>,
 }
 
+
+pub fn normalize_license_state(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" => "invalid".to_string(),
+        "ok" => "active".to_string(),
+        other => other.to_string(),
+    }
+}
+
+impl LicenseApiResponse {
+    pub fn normalized_state(&self) -> String {
+        if !self.license_state.trim().is_empty() {
+            return normalize_license_state(&self.license_state);
+        }
+        if let Some(status) = self.license_status.as_deref() {
+            return normalize_license_state(status);
+        }
+        "invalid".to_string()
+    }
+}
+
+fn response_allows_activation(resp: &LicenseApiResponse) -> bool {
+    if !resp.success {
+        return false;
+    }
+    if resp.license_lease.is_some() {
+        return true;
+    }
+    matches!(resp.normalized_state().as_str(), "active" | "renewal_due")
+}
+
 pub struct HttpLicenseClient {
     base_urls: Vec<String>,
     client: reqwest::Client,
@@ -72,15 +103,31 @@ impl HttpLicenseClient {
         for base_url in &self.base_urls {
             let url = format!("{}{}", base_url, path);
             match self.client.post(&url).json(payload).send().await {
-                Ok(resp) => match resp.json::<LicenseApiResponse>().await {
-                    Ok(data) => return Ok(data),
-                    Err(e) => {
-                        last_err = Some(anyhow::anyhow!(
-                            "服务器返回了非 JSON 响应：{}",
-                            e
-                        ));
+                Ok(resp) => {
+                    let status = resp.status();
+                    match resp.text().await {
+                        Ok(body) => match serde_json::from_str::<LicenseApiResponse>(&body) {
+                            Ok(data) => return Ok(data),
+                            Err(e) => {
+                                let snippet = body.chars().take(160).collect::<String>().replace("\n", " ");
+                                last_err = Some(anyhow::anyhow!(
+                                    "服务器返回了非 JSON 响应（HTTP {} {}）：{}；片段：{}",
+                                    status.as_u16(),
+                                    status.canonical_reason().unwrap_or(""),
+                                    e,
+                                    snippet
+                                ));
+                            }
+                        },
+                        Err(e) => {
+                            last_err = Some(anyhow::anyhow!(
+                                "读取服务器响应失败（HTTP {}）：{}",
+                                status.as_u16(),
+                                e
+                            ));
+                        }
                     }
-                },
+                }
                 Err(e) => {
                     tracing::warn!("API 请求失败 {}: {}", url, e);
                     last_err = Some(e.into());
@@ -106,7 +153,7 @@ impl HttpLicenseClient {
             build_channel: "desktop".to_string(),
         };
         let resp = self.request_json("/api/activate", &req).await?;
-        if !resp.success || resp.license_lease.is_none() {
+        if !response_allows_activation(&resp) {
             anyhow::bail!("激活失败：{}", resp.message);
         }
         Ok(resp)
@@ -126,5 +173,40 @@ impl HttpLicenseClient {
             client_version: client_version.to_string(),
         };
         self.request_json("/api/verify", &req).await
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_license_state_maps_ok_to_active() {
+        assert_eq!(normalize_license_state("ok"), "active");
+        assert_eq!(normalize_license_state("active"), "active");
+        assert_eq!(normalize_license_state("renewal_due"), "renewal_due");
+        assert_eq!(normalize_license_state(""), "invalid");
+    }
+
+    #[test]
+    fn activation_accepts_success_without_lease_when_state_is_ok() {
+        let resp = LicenseApiResponse {
+            success: true,
+            message: "重新激活成功".into(),
+            license_state: "ok".into(),
+            license_lease: None,
+            license_expires_at: Some("2120-01-01T00:00:00Z".into()),
+            activated_at: None,
+            device_id: None,
+            license_key: Some("TLS-TEST".into()),
+            lease_expires_at: None,
+            renew_after: None,
+            issued_at: None,
+            license_status: None,
+            task_policy: None,
+        };
+        assert!(response_allows_activation(&resp));
+        assert_eq!(resp.normalized_state(), "active");
     }
 }
