@@ -53,6 +53,7 @@ const resultSummary = computed(() => {
   }
   return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条已命中订单缓存，${unmatchedCount.value} 条需先同步订单缓存后再试。`;
 });
+const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : "评价ID"));
 
 function switchMode(mode: "bad_review" | "quality_refund") {
   store.setLastMode(mode);
@@ -110,6 +111,10 @@ function unmatchedReason(orderId: string) {
     return "接口未返回订单号，无法自动带入发货。";
   }
   return "自动同步后仍未命中缓存，请到订单管理手动检查订单同步范围。";
+}
+
+function displayId(record: { evaluation_id: string; order_id: string }) {
+  return isQualityRefundMode.value ? record.order_id || record.evaluation_id : record.evaluation_id;
 }
 </script>
 
@@ -223,10 +228,15 @@ function unmatchedReason(orderId: string) {
       <table class="w-full min-w-[980px] text-sm">
         <thead class="table-head text-slate-600">
           <tr>
-            <th class="table-head-sticky px-5 py-4 text-left font-semibold">买家昵称</th>
+            <th
+              v-if="!isQualityRefundMode"
+              class="table-head-sticky px-5 py-4 text-left font-semibold"
+            >
+              买家昵称
+            </th>
             <th class="table-head-sticky px-5 py-4 text-left font-semibold">评价内容</th>
             <th class="table-head-sticky px-5 py-4 text-left font-semibold">订单详情</th>
-            <th class="table-head-sticky px-5 py-4 text-left font-semibold">评价ID</th>
+            <th class="table-head-sticky px-5 py-4 text-left font-semibold">{{ idColumnLabel }}</th>
             <th class="table-head-sticky px-5 py-4 text-center font-semibold">匹配</th>
           </tr>
         </thead>
@@ -238,7 +248,7 @@ function unmatchedReason(orderId: string) {
             :class="r.matched && r.order_id ? 'cursor-pointer' : ''"
             @click="r.matched && r.order_id ? handleUseMatchedOrder(r.order_id) : undefined"
           >
-            <td class="px-5 py-4">
+            <td v-if="!isQualityRefundMode" class="px-5 py-4">
               <div class="font-semibold text-slate-800">{{ r.buyer_nickname || "-" }}</div>
             </td>
             <td class="max-w-md px-5 py-4">
@@ -256,7 +266,7 @@ function unmatchedReason(orderId: string) {
                 <div v-if="r.product_name" class="text-slate-500">{{ r.product_name }}</div>
               </div>
             </td>
-            <td class="px-5 py-4 font-mono text-xs text-slate-700">{{ r.evaluation_id }}</td>
+            <td class="px-5 py-4 font-mono text-xs text-slate-700">{{ displayId(r) }}</td>
             <td class="px-5 py-4 text-center">
               <div class="flex flex-col items-center gap-2">
                 <span
