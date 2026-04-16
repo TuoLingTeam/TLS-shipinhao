@@ -1,7 +1,6 @@
 use desktop_services::DeliveryGateway;
 use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
 use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const ORDER_DETAIL_URL: &str =

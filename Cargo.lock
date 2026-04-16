@@ -1512,7 +1512,9 @@ version = "5.0.0"
 dependencies = [
  "anyhow",
  "api-contracts",
+ "chrono",
  "desktop-services",
+ "dirs",
  "domain-core",
  "reqwest 0.12.28",
  "rusqlite",

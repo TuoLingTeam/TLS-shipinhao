@@ -18,6 +18,8 @@ fn main() {
             commands::license::activate_license,
             commands::license::verify_license,
             commands::system::get_app_info,
+            commands::system::set_cookie,
+            commands::system::get_cookie_status,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

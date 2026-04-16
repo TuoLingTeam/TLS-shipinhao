@@ -1,14 +1,52 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 
 const cookieHeader = ref("");
 const saved = ref(false);
+const saveError = ref<string | null>(null);
+const loadError = ref<string | null>(null);
+const hasBizMagic = ref(false);
+const cookieConfigured = ref(false);
 
-function handleSave() {
-  // TODO: 调用 Tauri command 保存 Cookie 到 AppState
-  saved.value = true;
-  setTimeout(() => (saved.value = false), 2000);
+async function loadCookieStatus() {
+  loadError.value = null;
+  try {
+    const status = await invoke<{
+      configured: boolean;
+      has_biz_magic: boolean;
+    }>("get_cookie_status");
+    hasBizMagic.value = status.has_biz_magic;
+    cookieConfigured.value = status.configured;
+  } catch (e) {
+    loadError.value = typeof e === "string" ? e : String(e);
+  }
 }
+
+async function handleSave() {
+  saveError.value = null;
+  const raw = cookieHeader.value.trim();
+  if (!raw) {
+    saveError.value = "请先粘贴 Cookie 字符串";
+    return;
+  }
+  try {
+    const res = await invoke<{ success: boolean; biz_magic: string | null }>(
+      "set_cookie",
+      { cookie_header: raw },
+    );
+    hasBizMagic.value = Boolean(res.biz_magic);
+    cookieConfigured.value = true;
+    saved.value = true;
+    setTimeout(() => (saved.value = false), 2000);
+  } catch (e) {
+    saveError.value = typeof e === "string" ? e : String(e);
+  }
+}
+
+onMounted(() => {
+  void loadCookieStatus();
+});
 </script>
 
 <template>
@@ -18,6 +56,9 @@ function handleSave() {
     <div class="max-w-2xl space-y-6">
       <div class="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
         <h3 class="font-medium text-slate-700 mb-3">Cookie 配置</h3>
+        <p v-if="cookieConfigured" class="text-xs text-green-700 mb-2">
+          当前会话已保存 Cookie；下方粘贴新值可覆盖。
+        </p>
         <div class="space-y-3">
           <div>
             <label class="block text-sm text-slate-600 mb-1">
@@ -40,6 +81,11 @@ function handleSave() {
             保存
           </button>
           <span v-if="saved" class="ml-2 text-sm text-green-600">已保存</span>
+          <p v-if="hasBizMagic" class="text-xs text-slate-500">
+            已解析到 biz_magic，发货等接口将使用该值。
+          </p>
+          <p v-if="loadError" class="text-xs text-amber-600">{{ loadError }}</p>
+          <p v-if="saveError" class="text-xs text-red-600">{{ saveError }}</p>
         </div>
       </div>
 

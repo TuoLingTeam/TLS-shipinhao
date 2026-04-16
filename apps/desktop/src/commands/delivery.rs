@@ -1,7 +1,9 @@
 use tauri::State;
 
+use crate::adapters::http_delivery_gateway::HttpDeliveryGateway;
 use crate::error::AppError;
 use crate::state::AppState;
+use desktop_services::delivery_batch_runner::{BatchDeliveryItem, BatchDeliveryRuntimeGuard};
 use domain_core::DeliveryUpdateResult;
 
 #[tauri::command]
@@ -11,50 +13,41 @@ pub async fn update_delivery(
     tracking_number: String,
     carrier_code: String,
 ) -> Result<DeliveryUpdateResult, AppError> {
+    let cookie_profile = state.cookie_profile.lock().await;
+    if cookie_profile.cookie_header.is_empty() {
+        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
+    }
+    let cookie = cookie_profile.cookie_header.clone();
+    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
+    drop(cookie_profile);
+
+    let gateway = HttpDeliveryGateway::new(cookie, magic);
     let request = domain_core::DeliveryUpdateRequest {
         order_id,
         tracking_number,
         carrier_code,
     };
-    let services = state.services.clone();
-    tokio::task::spawn_blocking(move || services.update_delivery(&request))
-        .await
-        .map_err(|e| AppError::Message(e.to_string()))?
-        .map_err(AppError::Internal)
+    tokio::task::spawn_blocking(move || {
+        use desktop_services::DeliveryGateway;
+        gateway.update_delivery(&request)
+    })
+    .await
+    .map_err(|e| AppError::Message(e.to_string()))?
+    .map_err(AppError::Internal)
 }
 
 #[tauri::command]
 pub async fn batch_delivery(
+    state: State<'_, AppState>,
     items: Vec<BatchDeliveryInput>,
 ) -> Result<BatchDeliveryOutput, AppError> {
-    use desktop_services::delivery_batch_runner::{
-        BatchDeliveryGateway, BatchDeliveryItem, BatchDeliveryRuntimeGuard,
-    };
-
-    struct NoopGateway;
-    impl BatchDeliveryGateway for NoopGateway {
-        fn update_single_order(
-            &mut self,
-            _order_id: &str,
-            _tracking_number: &str,
-        ) -> anyhow::Result<Option<String>> {
-            Ok(None)
-        }
+    let cookie_profile = state.cookie_profile.lock().await;
+    if cookie_profile.cookie_header.is_empty() {
+        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
     }
-
-    struct NoopGuard;
-    impl BatchDeliveryRuntimeGuard for NoopGuard {
-        fn authorize(&mut self, _task_type: &str) -> anyhow::Result<()> {
-            Ok(())
-        }
-        fn validate_continuity(
-            &mut self,
-            _task_type: &str,
-            _index: usize,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
+    let cookie = cookie_profile.cookie_header.clone();
+    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
+    drop(cookie_profile);
 
     let batch_items: Vec<BatchDeliveryItem> = items
         .iter()
@@ -65,11 +58,9 @@ pub async fn batch_delivery(
         .collect();
 
     let report = tokio::task::spawn_blocking(move || {
-        desktop_services::run_batch_delivery_flow(
-            &batch_items,
-            &mut NoopGateway,
-            &mut NoopGuard,
-        )
+        let mut gateway = HttpDeliveryGateway::new(cookie, magic);
+        let mut guard = NoopGuard;
+        desktop_services::run_batch_delivery_flow(&batch_items, &mut gateway, &mut guard)
     })
     .await
     .map_err(|e| AppError::Message(e.to_string()))?
@@ -81,6 +72,16 @@ pub async fn batch_delivery(
         failure_count: report.failure_count,
         fatal_error: report.fatal_error,
     })
+}
+
+struct NoopGuard;
+impl BatchDeliveryRuntimeGuard for NoopGuard {
+    fn authorize(&mut self, _task_type: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn validate_continuity(&mut self, _task_type: &str, _index: usize) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(serde::Deserialize)]
