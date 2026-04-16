@@ -157,3 +157,33 @@ class RustDesktopOrderCacheStorageTests(unittest.TestCase):
             "pub fn now_epoch_seconds",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopOrderSyncPlannerTests(unittest.TestCase):
+    def test_order_sync_planner_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "order_sync_planner.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/order_sync_planner.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub const ORDER_CACHE_COVERAGE_DAYS",
+            "pub const ORDER_CACHE_INCREMENTAL_DAYS",
+            "pub const ORDER_CACHE_INCREMENTAL_OVERLAP_DAYS",
+            "pub struct SyncPlannerState",
+            "pub fn retention_start",
+            "pub fn sync_now",
+            "pub fn incremental_refresh_start",
+        ):
+            self.assertIn(symbol, text)
+
+
+class RustDesktopDayWindowTests(unittest.TestCase):
+    def test_day_window_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "day_window.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/day_window.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub fn start_of_day_timestamp",
+            "pub fn end_of_day_timestamp",
+            "pub fn recent_day_range_timestamps",
+        ):
+            self.assertIn(symbol, text)
