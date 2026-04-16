@@ -1,5 +1,6 @@
 pub mod day_window;
 pub mod delivery_update;
+pub mod delivery_batch_runner;
 pub mod order_sync_planner;
 pub mod order_sync_service;
 pub mod order_cache_storage;

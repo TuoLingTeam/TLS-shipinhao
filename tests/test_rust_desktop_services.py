@@ -222,3 +222,21 @@ class RustDesktopDeliveryUpdateTests(unittest.TestCase):
             "pub fn delivery_update_succeeded",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopDeliveryBatchRunnerTests(unittest.TestCase):
+    def test_delivery_batch_runner_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "delivery_batch_runner.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/delivery_batch_runner.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub const BATCH_DELIVERY_TASK_TYPE",
+            "pub struct BatchDeliveryItem",
+            "pub enum BatchDeliveryStepStatus",
+            "pub struct BatchDeliveryStepResult",
+            "pub struct BatchDeliveryReport",
+            "pub trait BatchDeliveryGateway",
+            "pub trait BatchDeliveryRuntimeGuard",
+            "pub fn run_batch_delivery",
+        ):
+            self.assertIn(symbol, text)
