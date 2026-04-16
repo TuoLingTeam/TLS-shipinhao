@@ -77,3 +77,7 @@ image/
 !backend/test/*.mjs
 # Rust
 target/
+
+# Tauri / Vue frontend
+ui/dist/
+ui/node_modules/

@@ -1,4 +1,4 @@
-name: Rust Desktop Release
+name: Tauri Desktop Release
 
 on:
   workflow_dispatch:
@@ -10,6 +10,7 @@ on:
       - '.cargo/**'
       - 'crates/**'
       - 'apps/**'
+      - 'ui/**'
       - 'xtask/**'
       - '.github/workflows/build.yml'
 
@@ -51,10 +52,49 @@ jobs:
             echo "release_tag=v$version"
           } >> "$GITHUB_OUTPUT"
 
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --filter tls-shipinhao-ui build
+
+      - name: Run Rust tests
+        run: cargo test --workspace
+
   prepare-release:
     name: Prepare GitHub Release
     runs-on: ubuntu-latest
-    needs: extract-version
+    needs: [extract-version, test]
     permissions:
       contents: write
 
@@ -70,7 +110,7 @@ jobs:
           gh release create "$tag" \
             --repo "${{ github.repository }}" \
             --title "$tag" \
-            --notes "Rust desktop release for $tag."
+            --notes "Tauri desktop release for $tag."
 
   build-windows:
     name: Build Windows
@@ -86,44 +126,44 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Run workspace tests
-        shell: pwsh
-        run: cargo test --workspace
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
 
-      - name: Build desktop app
-        shell: pwsh
-        run: cargo run -p xtask -- desktop-build --release
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
 
-      - name: Generate integrity manifest
+      - name: Build Tauri app
         shell: pwsh
-        env:
-          INTEGRITY_MANIFEST_PRIVATE_KEY_B64: ${{ secrets.INTEGRITY_MANIFEST_PRIVATE_KEY_B64 }}
-          INTEGRITY_MANIFEST_KEY_ID: manifest-v1
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          cargo run -p xtask -- manifest target/release dist/integrity-manifest-windows.json desktop-app.exe
+        run: cargo tauri build
+        working-directory: apps/desktop
 
-      - name: Package Windows release asset
-        shell: pwsh
-        run: |
-          $version = "${{ needs.extract-version.outputs.app_version }}"
-          $zipPath = "dist/TLS-shipinhao-v$version-windows.zip"
-          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-          Compress-Archive -Path target/release/desktop-app.exe, dist/integrity-manifest-windows.json -DestinationPath $zipPath
-
-      - name: Upload Windows release asset
+      - name: Upload Windows asset
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $version = "${{ needs.extract-version.outputs.app_version }}"
-          gh release upload $tag "dist/TLS-shipinhao-v$version-windows.zip#TLS-shipinhao-v$version-windows.zip" `
-            --repo "${{ github.repository }}" `
-            --clobber
+          $nsis = Get-ChildItem -Path "target/release/bundle/nsis/*.exe" -Recurse | Select-Object -First 1
+          if ($nsis) {
+            gh release upload $tag "$($nsis.FullName)#TLS-shipinhao-v$version-setup.exe" `
+              --repo "${{ github.repository }}" --clobber
+          }
 
   build-macos:
     name: Build macOS
@@ -139,39 +179,33 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Run workspace tests
-        shell: bash
-        run: cargo test --workspace
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
 
-      - name: Build desktop app
-        shell: bash
-        run: cargo run -p xtask -- desktop-build --release
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
 
-      - name: Generate integrity manifest
+      - name: Build Tauri app
         shell: bash
-        env:
-          INTEGRITY_MANIFEST_PRIVATE_KEY_B64: ${{ secrets.INTEGRITY_MANIFEST_PRIVATE_KEY_B64 }}
-          INTEGRITY_MANIFEST_KEY_ID: manifest-v1
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cargo run -p xtask -- manifest target/release dist/integrity-manifest-macos.json desktop-app
+        run: cargo tauri build
+        working-directory: apps/desktop
 
-      - name: Package macOS release asset
-        shell: bash
-        run: |
-          set -euo pipefail
-          version='${{ needs.extract-version.outputs.app_version }}'
-          zip_path="dist/TLS-shipinhao-v${version}-mac.zip"
-          rm -f "$zip_path"
-          ditto -c -k --keepParent target/release/desktop-app "$zip_path"
-          ditto -c -k --keepParent dist/integrity-manifest-macos.json dist/integrity-manifest-macos.zip
-          zip -j "$zip_path" dist/integrity-manifest-macos.json
-
-      - name: Upload macOS release asset
+      - name: Upload macOS asset
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,6 +213,8 @@ jobs:
           set -euo pipefail
           tag='${{ needs.extract-version.outputs.release_tag }}'
           version='${{ needs.extract-version.outputs.app_version }}'
-          gh release upload "$tag" "dist/TLS-shipinhao-v${version}-mac.zip#TLS-shipinhao-v${version}-mac.zip" \
-            --repo "${{ github.repository }}" \
-            --clobber
+          dmg=$(find target/release/bundle/dmg -name '*.dmg' 2>/dev/null | head -1)
+          if [ -n "$dmg" ]; then
+            gh release upload "$tag" "${dmg}#TLS-shipinhao-v${version}-mac.dmg" \
+              --repo "${{ github.repository }}" --clobber
+          fi
