@@ -142,3 +142,18 @@ class RustDesktopReviewBatchMatchTests(unittest.TestCase):
             "pub fn build_match_result",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopOrderCacheStorageTests(unittest.TestCase):
+    def test_order_cache_storage_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "order_cache_storage.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/order_cache_storage.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub struct CacheOrderRecord",
+            "pub struct CacheOrderProduct",
+            "pub struct SyncStateRecord",
+            "pub struct OrderCacheRepository",
+            "pub fn now_epoch_seconds",
+        ):
+            self.assertIn(symbol, text)
