@@ -11,7 +11,6 @@ TLS-shipinhao/
 │   ├── main.py                   # 入口，调用 bootstrap.main()
 │   ├── bootstrap.py              # 程序启动入口（QApplication 初始化）
 │   ├── settings.py               # 全局配置与常量（URL、窗口尺寸、抓取参数、匹配权重等）
-│   ├── requirements.txt          # Python 依赖
 │   ├── assets/                   # 静态资源
 │   │   └── favicon.png
 │   ├── core/                     # 核心基础层
@@ -66,7 +65,7 @@ settings ← core ← services/review_matcher
 ## 环境要求
 
 - Rust stable
-- Node.js 18+（仅兼容期 Cloudflare 目录/部署辅助）
+- Node.js 18+（仅 wrangler/npx 本地部署辅助）
 
 ## 快速开始
 
