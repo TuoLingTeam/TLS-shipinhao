@@ -1,7 +1,6 @@
 use crate::order_cache_storage::{CacheOrderRecord, OrderCacheRepository, SyncStateRecord};
 use crate::order_sync_planner::{
     incremental_refresh_start, retention_start, sync_now, SyncPlannerState,
-    ORDER_CACHE_COVERAGE_DAYS,
 };
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -75,7 +74,10 @@ where
         retention_start(now_end_of_day)
     }
 
-    pub fn rebuild_cache(&mut self, now: Option<chrono::DateTime<chrono::Utc>>) -> anyhow::Result<(usize, Vec<String>)> {
+    pub fn rebuild_cache(
+        &mut self,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<(usize, Vec<String>)> {
         if self.stopped {
             return Ok((0, Vec::new()));
         }
@@ -83,12 +85,18 @@ where
         let start_timestamp = retention_start(end_timestamp);
         self.repository.initialize()?;
         self.repository.clear_all()?;
-        let (written_count, warnings) = self.sync_range(start_timestamp, end_timestamp, "rebuild")?;
-        let _ = self.repository.delete_older_than(ORDER_CACHE_SCOPE, start_timestamp)?;
+        let (written_count, warnings) =
+            self.sync_range(start_timestamp, end_timestamp, "rebuild")?;
+        let _ = self
+            .repository
+            .delete_older_than(ORDER_CACHE_SCOPE, start_timestamp)?;
         Ok((written_count, warnings))
     }
 
-    pub fn refresh_cache(&mut self, now: Option<chrono::DateTime<chrono::Utc>>) -> anyhow::Result<(usize, Vec<String>)> {
+    pub fn refresh_cache(
+        &mut self,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<(usize, Vec<String>)> {
         if self.stopped {
             return Ok((0, Vec::new()));
         }
@@ -111,8 +119,10 @@ where
             MIN_GAP_WIDTH_SECONDS,
         )?;
         if gaps.is_empty() {
-            let cutoff = end_timestamp - ORDER_CACHE_COVERAGE_DAYS * ONE_DAY_SECONDS;
-            let _ = self.repository.delete_older_than(ORDER_CACHE_SCOPE, cutoff)?;
+            let cutoff = retention_start(end_timestamp);
+            let _ = self
+                .repository
+                .delete_older_than(ORDER_CACHE_SCOPE, cutoff)?;
             return Ok((0, Vec::new()));
         }
 
@@ -126,8 +136,10 @@ where
             total_written += written_count;
             all_warnings.extend(warnings);
         }
-        let cutoff = end_timestamp - ORDER_CACHE_COVERAGE_DAYS * ONE_DAY_SECONDS;
-        let _ = self.repository.delete_older_than(ORDER_CACHE_SCOPE, cutoff)?;
+        let cutoff = retention_start(end_timestamp);
+        let _ = self
+            .repository
+            .delete_older_than(ORDER_CACHE_SCOPE, cutoff)?;
         Ok((total_written, all_warnings))
     }
 
@@ -158,7 +170,8 @@ where
             if self.stopped {
                 break;
             }
-            let (written_count, gap_warnings) = self.sync_range(segment_start, segment_end, "gap_fill")?;
+            let (written_count, gap_warnings) =
+                self.sync_range(segment_start, segment_end, "gap_fill")?;
             total_written += written_count;
             warnings.extend(gap_warnings);
         }
@@ -175,7 +188,9 @@ where
     ) -> anyhow::Result<(Vec<CacheOrderRecord>, Vec<String>)> {
         let (_, warnings, recent_start, recent_end) = self.ensure_recent_cache(now)?;
         let fetch_start = earliest_time.max(recent_start);
-        let orders = self.repository.fetch_orders_in_range(fetch_start, recent_end)?;
+        let orders = self
+            .repository
+            .fetch_orders_in_range(fetch_start, recent_end)?;
         Ok((orders, warnings))
     }
 
@@ -185,7 +200,9 @@ where
         now: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<(Vec<CacheOrderRecord>, Vec<String>)> {
         let (_, mut warnings, recent_start, recent_end) = self.ensure_recent_cache(now)?;
-        let mut recent_orders = self.repository.fetch_orders_in_range(earliest_time.max(recent_start), recent_end)?;
+        let mut recent_orders = self
+            .repository
+            .fetch_orders_in_range(earliest_time.max(recent_start), recent_end)?;
         if earliest_time >= recent_start {
             return Ok((recent_orders, warnings));
         }
@@ -210,13 +227,19 @@ where
         end_timestamp: i64,
         mode: &str,
     ) -> anyhow::Result<(usize, Vec<String>)> {
-        if self.stopped || start_timestamp <= 0 || end_timestamp <= 0 || start_timestamp > end_timestamp {
+        if self.stopped
+            || start_timestamp <= 0
+            || end_timestamp <= 0
+            || start_timestamp > end_timestamp
+        {
             return Ok((0, Vec::new()));
         }
         let fetched = self
             .finder
             .get_orders_for_cache(start_timestamp, start_timestamp, end_timestamp)
-            .with_context(|| format!("fetch cache orders for {start_timestamp}..{end_timestamp}"))?;
+            .with_context(|| {
+                format!("fetch cache orders for {start_timestamp}..{end_timestamp}")
+            })?;
         let mut persisted_orders = Vec::new();
         for window in &fetched.windows {
             if self.stopped || window.orders.is_empty() {
@@ -234,8 +257,16 @@ where
             scope: ORDER_CACHE_SCOPE.to_string(),
             coverage_start: retention,
             coverage_end: now_ts,
-            last_incremental_start: if matches!(mode, "incremental" | "rebuild") { start_timestamp } else { 0 },
-            last_incremental_end: if matches!(mode, "incremental" | "rebuild") { end_timestamp } else { 0 },
+            last_incremental_start: if matches!(mode, "incremental" | "rebuild") {
+                start_timestamp
+            } else {
+                0
+            },
+            last_incremental_end: if matches!(mode, "incremental" | "rebuild") {
+                end_timestamp
+            } else {
+                0
+            },
             last_success_at: now_ts,
             last_mode: mode.to_string(),
             last_error: String::new(),
@@ -281,7 +312,10 @@ mod tests {
 
     impl FakeFinder {
         fn with_responses(responses: Vec<CacheFetchResult>) -> Self {
-            Self { responses, ..Self::default() }
+            Self {
+                responses,
+                ..Self::default()
+            }
         }
     }
 
@@ -296,7 +330,8 @@ mod tests {
             create_time_start: i64,
             create_time_end: i64,
         ) -> anyhow::Result<CacheFetchResult> {
-            self.calls.push((earliest_time, create_time_start, create_time_end));
+            self.calls
+                .push((earliest_time, create_time_start, create_time_end));
             Ok(if self.responses.is_empty() {
                 CacheFetchResult::default()
             } else {
@@ -310,6 +345,8 @@ mod tests {
             order_id: order_id.into(),
             buyer_nickname: "buyer".into(),
             normalized_nickname: "buyer".into(),
+            receiver_name: "李**".into(),
+            amount_cent: 3990,
             create_time,
             confirm_receipt_time: create_time + 100,
             is_waybill_received: true,
@@ -329,8 +366,18 @@ mod tests {
         }
     }
 
-    fn sample_window(window_id: &str, start_ts: i64, end_ts: i64, orders: Vec<CacheOrderRecord>) -> SyncWindowOrders {
-        SyncWindowOrders { window_id: window_id.into(), start_ts, end_ts, orders }
+    fn sample_window(
+        window_id: &str,
+        start_ts: i64,
+        end_ts: i64,
+        orders: Vec<CacheOrderRecord>,
+    ) -> SyncWindowOrders {
+        SyncWindowOrders {
+            window_id: window_id.into(),
+            start_ts,
+            end_ts,
+            orders,
+        }
     }
 
     #[test]
@@ -338,16 +385,27 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
         let finder = FakeFinder::with_responses(vec![CacheFetchResult {
-            windows: vec![sample_window("w1", 432_000, 3_110_399, vec![sample_order("o-1", 500_000)])],
+            windows: vec![sample_window(
+                "w1",
+                432_000,
+                3_110_399,
+                vec![sample_order("o-1", 500_000)],
+            )],
             warnings: vec!["warn-1".into()],
         }]);
         let repo = OrderCacheRepository::open(&path).unwrap();
         let mut service = OrderSyncService::new(finder, repo);
-        let now = DateTime::parse_from_rfc3339("1970-02-05T16:30:45Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("1970-02-05T16:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let (written, warnings) = service.rebuild_cache(Some(now)).unwrap();
         assert_eq!(written, 1);
         assert_eq!(warnings, vec!["warn-1"]);
-        let state = service.repository.get_state(ORDER_CACHE_SCOPE).unwrap().unwrap();
+        let state = service
+            .repository
+            .get_state(ORDER_CACHE_SCOPE)
+            .unwrap()
+            .unwrap();
         assert_eq!(state.last_mode, "rebuild");
         assert!(service.repository.fetch_order("o-1").unwrap().is_some());
     }
@@ -357,7 +415,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
         let finder = FakeFinder::with_responses(vec![CacheFetchResult {
-            windows: vec![sample_window("gap", 3_196_920, 3_542_399, vec![sample_order("o-2", 3_250_000)])],
+            windows: vec![sample_window(
+                "gap",
+                3_196_920,
+                3_542_399,
+                vec![sample_order("o-2", 3_250_000)],
+            )],
             warnings: vec![],
         }]);
         let repo = OrderCacheRepository::open(&path).unwrap();
@@ -371,10 +434,14 @@ mod tests {
             last_success_at: 3_283_200,
             last_mode: "incremental".into(),
             last_error: String::new(),
-        }).unwrap();
-        repo.mark_segment_complete(ORDER_CACHE_SCOPE, 3_196_800, 3_196_919).unwrap();
+        })
+        .unwrap();
+        repo.mark_segment_complete(ORDER_CACHE_SCOPE, 3_196_800, 3_196_919)
+            .unwrap();
         let mut service = OrderSyncService::new(finder, repo);
-        let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let (written, warnings) = service.refresh_cache(Some(now)).unwrap();
         assert_eq!(written, 1);
         assert!(warnings.is_empty());
@@ -387,12 +454,19 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
         let finder = FakeFinder::with_responses(vec![CacheFetchResult {
-            windows: vec![sample_window("recent", 864_000, 3_542_399, vec![sample_order("o-1", 900_000), sample_order("o-2", 1_200_000)])],
+            windows: vec![sample_window(
+                "recent",
+                864_000,
+                3_542_399,
+                vec![sample_order("o-1", 900_000), sample_order("o-2", 1_200_000)],
+            )],
             warnings: vec!["bootstrapped".into()],
         }]);
         let repo = OrderCacheRepository::open(&path).unwrap();
         let mut service = OrderSyncService::new(finder, repo);
-        let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let (orders, warnings) = service.ensure_orders(880_000, Some(now)).unwrap();
         assert_eq!(orders.len(), 2);
         assert_eq!(warnings, vec!["bootstrapped"]);
@@ -404,17 +478,29 @@ mod tests {
         let path = dir.path().join("order_cache.sqlite3");
         let finder = FakeFinder::with_responses(vec![
             CacheFetchResult {
-                windows: vec![sample_window("recent", 864_000, 3_542_399, vec![sample_order("o-1", 900_000), sample_order("o-2", 1_200_000)])],
+                windows: vec![sample_window(
+                    "recent",
+                    864_000,
+                    3_542_399,
+                    vec![sample_order("o-1", 900_000), sample_order("o-2", 1_200_000)],
+                )],
                 warnings: vec![],
             },
             CacheFetchResult {
-                windows: vec![sample_window("old", 120_000, 863_999, vec![sample_order("o-0", 120_000), sample_order("o-1", 900_000)])],
+                windows: vec![sample_window(
+                    "old",
+                    120_000,
+                    863_999,
+                    vec![sample_order("o-0", 120_000), sample_order("o-1", 900_000)],
+                )],
                 warnings: vec!["temporary".into()],
             },
         ]);
         let repo = OrderCacheRepository::open(&path).unwrap();
         let mut service = OrderSyncService::new(finder, repo);
-        let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let (orders, warnings) = service.fetch_full_scan_orders(120_000, Some(now)).unwrap();
         assert_eq!(orders.len(), 3);
         assert_eq!(warnings, vec!["temporary"]);
