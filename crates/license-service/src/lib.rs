@@ -568,4 +568,162 @@ mod tests {
         let lease = response.license_lease.expect("lease");
         assert_eq!(lease.task_policy, DEFAULT_TASK_POLICY.iter().map(|item| (*item).to_string()).collect::<Vec<_>>());
     }
+
+    #[test]
+    fn activate_rejects_revoked_key() {
+        let repo = MemoryRepo::with_generated_key("TLS-REV", 30);
+        repo.generated_keys.lock().unwrap().get_mut("TLS-REV").unwrap().status = GeneratedKeyStatus::Revoked;
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        let response = service.activate_at(ActivationInput {
+            license_key: "TLS-REV".into(),
+            device_id: "d".into(),
+            device_fingerprint: "fp".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(response.license_state, LicenseState::Revoked);
+    }
+
+    #[test]
+    fn activate_rejects_zero_plan_days() {
+        let repo = MemoryRepo::with_generated_key("TLS-ZERO", 0);
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        let response = service.activate_at(ActivationInput {
+            license_key: "TLS-ZERO".into(),
+            device_id: "d".into(),
+            device_fingerprint: "fp".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(response.license_state, LicenseState::Invalid);
+    }
+
+    #[test]
+    fn activate_nonexistent_key_returns_revoked() {
+        let repo = MemoryRepo::default();
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        let response = service.activate_at(ActivationInput {
+            license_key: "DOES-NOT-EXIST".into(),
+            device_id: "d".into(),
+            device_fingerprint: "fp".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(response.license_state, LicenseState::Revoked);
+    }
+
+    #[test]
+    fn reactivate_same_device_succeeds() {
+        let repo = MemoryRepo::with_generated_key("TLS-RE", 30);
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        service.activate_at(ActivationInput {
+            license_key: "TLS-RE".into(),
+            device_id: "dev-1".into(),
+            device_fingerprint: "fp-old".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        let response = service.activate_at(ActivationInput {
+            license_key: "TLS-RE".into(),
+            device_id: "dev-1".into(),
+            device_fingerprint: "fp-new".into(),
+            client_version: "5.0.0".into(),
+        }, now + Duration::hours(1)).unwrap();
+
+        assert!(response.success);
+        assert_eq!(response.message, "重新激活成功");
+        assert!(response.license_lease.is_some());
+    }
+
+    #[test]
+    fn verify_nonexistent_key_returns_revoked() {
+        let repo = MemoryRepo::default();
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        let response = service.verify_at(VerifyInput {
+            license_key: "NOPE".into(),
+            device_id: "d".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(response.license_state, LicenseState::Revoked);
+    }
+
+    #[test]
+    fn verify_unactivated_key_returns_invalid() {
+        let repo = MemoryRepo::with_generated_key("TLS-NOACT", 30);
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        let response = service.verify_at(VerifyInput {
+            license_key: "TLS-NOACT".into(),
+            device_id: "d".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(response.license_state, LicenseState::Invalid);
+    }
+
+    #[test]
+    fn verify_device_mismatch() {
+        let repo = MemoryRepo::with_generated_key("TLS-DM", 30);
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        service.activate_at(ActivationInput {
+            license_key: "TLS-DM".into(),
+            device_id: "dev-A".into(),
+            device_fingerprint: "fp".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        let response = service.verify_at(VerifyInput {
+            license_key: "TLS-DM".into(),
+            device_id: "dev-B".into(),
+            client_version: String::new(),
+        }, now).unwrap();
+
+        assert!(!response.success);
+        assert_eq!(response.license_state, LicenseState::DeviceMismatch);
+    }
+
+    #[test]
+    fn activate_records_audit_event() {
+        let repo = MemoryRepo::with_generated_key("TLS-AUD", 30);
+        let service = LicenseService::new(repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+
+        service.activate_at(ActivationInput {
+            license_key: "tls-aud".into(),
+            device_id: "dev-1".into(),
+            device_fingerprint: "fp".into(),
+            client_version: "5.0.0".into(),
+        }, now).unwrap();
+
+        let audits = service.repository.audits.lock().unwrap();
+        assert_eq!(audits.len(), 1);
+        assert_eq!(audits[0].action, "activate");
+        assert_eq!(audits[0].license_key, "TLS-AUD");
+        assert!(audits[0].reason.contains("5.0.0"));
+    }
+
+    #[test]
+    fn key_normalization_trims_and_uppercases() {
+        assert_eq!(normalize_key("  tls-test  "), "TLS-TEST");
+        assert_eq!(normalize_key("TLS-TEST"), "TLS-TEST");
+    }
 }

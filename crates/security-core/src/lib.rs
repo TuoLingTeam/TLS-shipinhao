@@ -327,3 +327,253 @@ pub extern "C" fn security_core_verify_integrity_manifest(
     let path = PathBuf::from(manifest_path);
     response_json(verify_integrity_manifest_impl(&path, &public_key_b64url))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    use ed25519_dalek::SigningKey;
+    use rand::rngs::OsRng;
+    use serde_json::json;
+    use std::io::Write;
+
+    fn make_keypair() -> (SigningKey, VerifyingKey) {
+        let sk = SigningKey::generate(&mut OsRng);
+        let vk = sk.verifying_key();
+        (sk, vk)
+    }
+
+    fn b64url(bytes: &[u8]) -> String {
+        URL_SAFE_NO_PAD.encode(bytes)
+    }
+
+    fn sign_payload(sk: &SigningKey, payload: &Value) -> String {
+        use ed25519_dalek::Signer;
+        let payload_bytes = serde_json::to_vec(payload).unwrap();
+        let encoded_payload = b64url(&payload_bytes);
+        let sig = sk.sign(encoded_payload.as_bytes());
+        let encoded_sig = b64url(&sig.to_bytes());
+        format!("{encoded_payload}.{encoded_sig}")
+    }
+
+    fn lease_payload(device_id: &str, exp: i64) -> Value {
+        json!({
+            "kind": "license_lease",
+            "device_id": device_id,
+            "exp": exp
+        })
+    }
+
+    // --- derive_device_id ---
+
+    #[test]
+    fn derive_device_id_is_deterministic_and_16_hex_chars() {
+        let id = derive_device_id("test-serial-12345");
+        assert_eq!(id.len(), 16);
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(id, derive_device_id("test-serial-12345"));
+    }
+
+    #[test]
+    fn derive_device_id_differs_for_different_input() {
+        assert_ne!(derive_device_id("serial-A"), derive_device_id("serial-B"));
+    }
+
+    // --- verify_lease_impl ---
+
+    #[test]
+    fn verify_lease_valid_token() {
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+        let payload = lease_payload("dev-1", i64::MAX);
+        let token = sign_payload(&sk, &payload);
+
+        let result = verify_lease_impl(&token, &pk_b64, Some("dev-1"), 1000, false);
+        assert_eq!(result["ok"], true);
+        assert_eq!(result["reason"], "ok");
+        assert_eq!(result["payload"]["device_id"], "dev-1");
+    }
+
+    #[test]
+    fn verify_lease_rejects_expired_token() {
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+        let payload = lease_payload("dev-1", 500);
+        let token = sign_payload(&sk, &payload);
+
+        let result = verify_lease_impl(&token, &pk_b64, Some("dev-1"), 1000, false);
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["reason"], "expired");
+    }
+
+    #[test]
+    fn verify_lease_allows_expired_when_flag_set() {
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+        let payload = lease_payload("dev-1", 500);
+        let token = sign_payload(&sk, &payload);
+
+        let result = verify_lease_impl(&token, &pk_b64, Some("dev-1"), 1000, true);
+        assert_eq!(result["ok"], true);
+    }
+
+    #[test]
+    fn verify_lease_rejects_device_mismatch() {
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+        let payload = lease_payload("dev-1", i64::MAX);
+        let token = sign_payload(&sk, &payload);
+
+        let result = verify_lease_impl(&token, &pk_b64, Some("dev-OTHER"), 1000, false);
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["reason"], "device_mismatch");
+    }
+
+    #[test]
+    fn verify_lease_rejects_tampered_signature() {
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+        let payload = lease_payload("dev-1", i64::MAX);
+        let token = sign_payload(&sk, &payload);
+        let tampered = format!("{}X", &token[..token.len() - 1]);
+
+        let result = verify_lease_impl(&tampered, &pk_b64, None, 1000, false);
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["reason"], "invalid");
+    }
+
+    #[test]
+    fn verify_lease_rejects_wrong_kind() {
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+        let payload = json!({"kind": "other", "device_id": "d", "exp": i64::MAX});
+        let token = sign_payload(&sk, &payload);
+
+        let result = verify_lease_impl(&token, &pk_b64, None, 1000, false);
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["reason"], "invalid");
+    }
+
+    #[test]
+    fn verify_lease_rejects_empty_token() {
+        let result = verify_lease_impl("", "abc", None, 0, false);
+        assert_eq!(result["ok"], false);
+    }
+
+    #[test]
+    fn verify_lease_rejects_token_without_dot() {
+        let result = verify_lease_impl("nodot", "abc", None, 0, false);
+        assert_eq!(result["ok"], false);
+    }
+
+    // --- canonical_manifest_bytes ---
+
+    #[test]
+    fn canonical_manifest_bytes_preserves_sorted_fields() {
+        let manifest = json!({
+            "version": 1,
+            "generated_at": "2026-04-16T00:00:00Z",
+            "files": [
+                {"path": "a.txt", "sha256": "aaa"},
+                {"path": "b.txt", "sha256": "bbb"}
+            ],
+            "signature": "ignored"
+        });
+        let bytes = canonical_manifest_bytes(&manifest).unwrap();
+        let parsed: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["version"], 1);
+        assert_eq!(parsed["files"][0]["path"], "a.txt");
+        assert_eq!(parsed["files"][1]["path"], "b.txt");
+    }
+
+    #[test]
+    fn canonical_manifest_bytes_rejects_missing_files() {
+        let manifest = json!({"version": 1, "generated_at": "x"});
+        assert!(canonical_manifest_bytes(&manifest).is_err());
+    }
+
+    // --- verify_integrity_manifest_impl ---
+
+    #[test]
+    fn verify_integrity_manifest_with_valid_signed_manifest() {
+        use ed25519_dalek::Signer;
+
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("app.bin");
+        let mut f = std::fs::File::create(&file_path).unwrap();
+        f.write_all(b"hello world").unwrap();
+        drop(f);
+
+        let file_hash = sha256_hex(&file_path).unwrap();
+
+        let manifest_no_sig = json!({
+            "version": 1,
+            "generated_at": "2026-04-16T00:00:00Z",
+            "files": [{"path": "app.bin", "sha256": file_hash}]
+        });
+        let canonical = canonical_manifest_bytes(&manifest_no_sig).unwrap();
+        let sig = sk.sign(&canonical);
+        let sig_b64 = b64url(&sig.to_bytes());
+
+        let manifest_with_sig = json!({
+            "version": 1,
+            "generated_at": "2026-04-16T00:00:00Z",
+            "files": [{"path": "app.bin", "sha256": file_hash}],
+            "signature": sig_b64
+        });
+
+        let manifest_path = dir.path().join("manifest.json");
+        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest_with_sig).unwrap()).unwrap();
+
+        let result = verify_integrity_manifest_impl(&manifest_path, &pk_b64);
+        assert_eq!(result["status"], "ok");
+    }
+
+    #[test]
+    fn verify_integrity_manifest_detects_tampered_file() {
+        use ed25519_dalek::Signer;
+
+        let (sk, vk) = make_keypair();
+        let pk_b64 = b64url(vk.as_bytes());
+
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("app.bin");
+        std::fs::write(&file_path, b"hello world").unwrap();
+        let file_hash = sha256_hex(&file_path).unwrap();
+
+        let manifest_no_sig = json!({
+            "version": 1,
+            "generated_at": "2026-04-16T00:00:00Z",
+            "files": [{"path": "app.bin", "sha256": file_hash}]
+        });
+        let canonical = canonical_manifest_bytes(&manifest_no_sig).unwrap();
+        let sig = sk.sign(&canonical);
+        let sig_b64 = b64url(&sig.to_bytes());
+
+        let manifest_with_sig = json!({
+            "version": 1,
+            "generated_at": "2026-04-16T00:00:00Z",
+            "files": [{"path": "app.bin", "sha256": file_hash}],
+            "signature": sig_b64
+        });
+        let manifest_path = dir.path().join("manifest.json");
+        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest_with_sig).unwrap()).unwrap();
+
+        // 篡改文件内容
+        std::fs::write(&file_path, b"tampered content").unwrap();
+
+        let result = verify_integrity_manifest_impl(&manifest_path, &pk_b64);
+        assert_eq!(result["status"], "compromised");
+        assert!(result["message"].as_str().unwrap().contains("integrity mismatch"));
+    }
+
+    #[test]
+    fn verify_integrity_manifest_rejects_missing_manifest() {
+        let result = verify_integrity_manifest_impl(Path::new("/nonexistent/manifest.json"), "abc");
+        assert_eq!(result["status"], "compromised");
+    }
+}
