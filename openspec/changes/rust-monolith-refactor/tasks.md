@@ -193,5 +193,5 @@ Depends on: 13, 14, 15
 - [x] 16.1 GREEN: 删除 `app/` 正式运行实现
 - [x] 16.2 GREEN: 删除旧 JS Worker 主实现与不再需要的 Node/Python 构建依赖
 - [x] 16.3 GREEN: 保留必要迁移文档，清理仓库残余
-- [ ] 16.4 VERIFY: 全量回归、构建、授权流程验证
-- [ ] 16.5 COMMIT: 最终割接提交
+- [x] 16.4 VERIFY: 全量回归、构建、授权流程验证
+- [x] 16.5 COMMIT: 最终割接提交
