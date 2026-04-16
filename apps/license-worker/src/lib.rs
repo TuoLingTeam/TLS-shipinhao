@@ -67,6 +67,38 @@ pub fn handle_json_request<R: LicenseRepository>(
     Ok(serde_json::to_string(&response)?)
 }
 
+#[cfg(target_arch = "wasm32")]
+mod cloudflare_entry {
+    use super::*;
+    use worker::{event, Env, Request, Response, Result, RouteContext};
+
+    fn compatibility_payload(path: &str) -> String {
+        serde_json::json!({
+            "success": false,
+            "message": "rust_worker_repository_pending",
+            "path": path,
+        })
+        .to_string()
+    }
+
+    async fn route_fetch(req: Request, _ctx: RouteContext<()>, _env: Env) -> Result<Response> {
+        let path = req.path();
+        match parse_route(&path) {
+            WorkerRoute::Activate | WorkerRoute::Verify => Response::from_json(&serde_json::json!({
+                "success": false,
+                "message": "rust_worker_repository_pending",
+                "path": path,
+            })),
+            WorkerRoute::NotFound => Response::error("not_found", 404),
+        }
+    }
+
+    #[event(fetch)]
+    pub async fn fetch(req: Request, env: Env, ctx: worker::Context) -> Result<Response> {
+        route_fetch(req, RouteContext::new(()), env).await.or_else(|_| Response::ok(compatibility_payload("/error")))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

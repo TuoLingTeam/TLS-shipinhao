@@ -182,9 +182,9 @@ Depends on: 12
 
 Depends on: 3
 
-- [ ] 15.1 RED: 为 license-worker 部署入口补充运行测试
-- [ ] 15.2 GREEN: 让 Cloudflare 兼容层真正以 Rust 主逻辑运行
-- [ ] 15.3 REFACTOR: 删除 `backend/src/worker/index.js` 主授权实现
+- [x] 15.1 RED: 为 license-worker 部署入口补充运行测试
+- [x] 15.2 GREEN: 让 Cloudflare 兼容层真正以 Rust 主逻辑运行
+- [x] 15.3 REFACTOR: 删除 `backend/src/worker/index.js` 主授权实现
 
 ## 16. 最终割接与清理
 

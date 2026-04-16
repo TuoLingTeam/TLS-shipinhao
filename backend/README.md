@@ -1,6 +1,6 @@
 # TLS-shipinhao 卡密后端
 
-基于 Cloudflare Workers + D1 的卡密生成、激活、在线校验与短期会话签发服务。
+当前正式部署入口为 `apps/license-worker/` 下的 Rust Cloudflare Worker；`backend/` 目录仅保留兼容期 D1 schema、admin 页面与 legacy shell。
 
 当前线上路由：
 
@@ -48,10 +48,12 @@ https://sphapi.199908.top/admin
 cd backend
 npm install
 npm run db:init
+
+cd ../apps/license-worker
 npx wrangler secret put HMAC_SECRET
 npx wrangler secret put ADMIN_SECRET
 npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
-npm run deploy
+npx wrangler deploy
 ```
 
 ## 线上升级到授权协议 V2
@@ -75,8 +77,8 @@ npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
 ### 3. 重新部署 Worker
 
 ```bash
-cd backend
-npm run deploy
+cd apps/license-worker
+npx wrangler deploy
 ```
 
 ### 4. 升级后客户端迁移行为
