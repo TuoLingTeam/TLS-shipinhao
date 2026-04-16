@@ -1,7 +1,0 @@
-requests
-PySide6_Essentials
-PySide6_Addons
-shiboken6
-pyinstaller
-Pillow
-cryptography

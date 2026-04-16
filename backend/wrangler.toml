@@ -1,24 +1,20 @@
+# 生产部署入口：在 backend/ 目录执行 `npx wrangler deploy`。
+# Rust 源码在 apps/license-worker；管理页 HTML 唯一源文件为 src/admin/admin.html（由 Worker include 编译进 wasm）。
+
 name = "tls-shipinhao"
-main = "src/worker/index.js"
+main = "../apps/license-worker/build/worker/shim.mjs"
 compatibility_date = "2024-12-01"
 workers_dev = false
 
-# 自定义域名路由（绕开 workers.dev DNS 污染）
+[build]
+command = "sh -c 'cd ../apps/license-worker && (command -v worker-build >/dev/null 2>&1 || cargo install worker-build 2>/dev/null) && worker-build --release'"
+
 routes = [
   { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }
 ]
 
-# 环境变量（部署后通过 wrangler secret put 设置）
 [vars]
-# HMAC_SECRET 通过 wrangler secret put HMAC_SECRET 设置
-# ADMIN_SECRET 通过 wrangler secret put ADMIN_SECRET 设置（管理页面登录密码）
-# LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64 设置（Ed25519 私钥，Base64 编码的 PKCS8 PEM 文本）
-
-# .html 文件以纯文本方式导入（esbuild Text loader）
-[[rules]]
-type = "Text"
-globs = ["**/*.html"]
-fallthrough = true
+# HMAC_SECRET / ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置
 
 [[d1_databases]]
 binding = "DB"

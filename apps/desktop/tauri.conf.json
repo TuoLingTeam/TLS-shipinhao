@@ -1,0 +1,27 @@
+{
+  "productName": "TLS-shipinhao",
+  "version": "5.0.0",
+  "identifier": "com.tls.shipinhao",
+  "build": {
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter tls-shipinhao-ui dev",
+    "beforeBuildCommand": "pnpm --filter tls-shipinhao-ui build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TLS-shipinhao",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 680,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  }
+}

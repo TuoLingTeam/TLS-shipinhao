@@ -1,1 +1,83 @@
-cookie.txt
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+.venv-mac-build/
+venv/
+env/
+ENV/
+*.egg-info/
+build/
+.pyinstaller/
+
+# Downloaded files
+downloaded_invoices/*.pdf
+test_output/
+test_qr/
+test_single/
+test_download/
+
+# Debug files
+debug_*.py
+page_source.html
+screenshot.png
+*.log
+
+# IDE
+.vscode/
+.idea/
+.kiro/
+.codex/
+.cursor/
+.windsurf/
+*.swp
+*.swo
+*~
+
+# PyInstaller
+*.spec
+
+# Cython 混淆产物（CI 构建时自动生成）
+app-dist/
+
+# Build logs
+logs_*/
+logs/
+dist/
+docs/
+
+# OS
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+!tests/
+tests/*
+!tests/test_order_match_scoring.py
+decompiled_from_exe/
+
+# Selenium
+*.crdownload
+
+# Node.js
+node_modules/
+.wrangler/
+image/
+
+!tests/test_security_runtime.py
+!backend/test/
+!backend/test/*.mjs
+# Rust
+target/
+
+# Tauri / Vue frontend
+ui/dist/
+ui/node_modules/

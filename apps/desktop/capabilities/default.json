@@ -1,0 +1,8 @@
+{
+  "identifier": "default",
+  "description": "默认权能：允许所有核心功能",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

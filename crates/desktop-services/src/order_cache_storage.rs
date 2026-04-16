@@ -1,0 +1,584 @@
+use anyhow::Context;
+use std::collections::HashMap;
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheOrderProduct {
+    pub product_id: String,
+    pub sku_id: String,
+    pub sale_param: String,
+    pub product_name: String,
+    pub thumb_img: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheOrderRecord {
+    pub order_id: String,
+    pub buyer_nickname: String,
+    pub normalized_nickname: String,
+    pub create_time: i64,
+    pub confirm_receipt_time: i64,
+    pub is_waybill_received: bool,
+    pub waybill_received_time: i64,
+    pub is_education_order: bool,
+    pub order_status: i64,
+    pub openid: String,
+    pub raw_source: String,
+    pub updated_at: i64,
+    pub products: Vec<CacheOrderProduct>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStateRecord {
+    pub scope: String,
+    pub coverage_start: i64,
+    pub coverage_end: i64,
+    pub last_incremental_start: i64,
+    pub last_incremental_end: i64,
+    pub last_success_at: i64,
+    pub last_mode: String,
+    pub last_error: String,
+}
+
+pub struct OrderCacheRepository {
+    connection: Connection,
+}
+
+impl OrderCacheRepository {
+    pub fn open(db_path: &Path) -> anyhow::Result<Self> {
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let connection = Connection::open(db_path)?;
+        connection.pragma_update(None, "journal_mode", "WAL")?;
+        Ok(Self { connection })
+    }
+
+    pub fn initialize(&self) -> anyhow::Result<()> {
+        self.connection.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id TEXT PRIMARY KEY,
+                buyer_nickname TEXT NOT NULL DEFAULT '',
+                normalized_nickname TEXT NOT NULL DEFAULT '',
+                create_time INTEGER NOT NULL DEFAULT 0,
+                confirm_receipt_time INTEGER NOT NULL DEFAULT 0,
+                is_waybill_received INTEGER NOT NULL DEFAULT 0,
+                waybill_received_time INTEGER NOT NULL DEFAULT 0,
+                is_education_order INTEGER NOT NULL DEFAULT 0,
+                order_status INTEGER NOT NULL DEFAULT 0,
+                openid TEXT NOT NULL DEFAULT '',
+                raw_source TEXT NOT NULL DEFAULT 'order_api',
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS order_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id TEXT NOT NULL,
+                product_id TEXT NOT NULL DEFAULT '',
+                sku_id TEXT NOT NULL DEFAULT '',
+                sale_param TEXT NOT NULL DEFAULT '',
+                product_name TEXT NOT NULL DEFAULT '',
+                thumb_img TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(order_id) REFERENCES orders(order_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_state (
+                scope TEXT PRIMARY KEY,
+                coverage_start INTEGER NOT NULL DEFAULT 0,
+                coverage_end INTEGER NOT NULL DEFAULT 0,
+                last_incremental_start INTEGER NOT NULL DEFAULT 0,
+                last_incremental_end INTEGER NOT NULL DEFAULT 0,
+                last_success_at INTEGER NOT NULL DEFAULT 0,
+                last_mode TEXT NOT NULL DEFAULT '',
+                last_error TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS cache_segments (
+                scope TEXT NOT NULL,
+                start_ts INTEGER NOT NULL,
+                end_ts INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'complete',
+                updated_at INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (scope, start_ts, end_ts)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_orders_create_time ON orders(create_time DESC);
+            CREATE INDEX IF NOT EXISTS idx_products_order_id ON order_products(order_id);
+            CREATE INDEX IF NOT EXISTS idx_cache_segments_scope_start ON cache_segments(scope, start_ts, end_ts);
+            "#,
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_all(&self) -> anyhow::Result<()> {
+        self.connection.execute("DELETE FROM order_products", [])?;
+        self.connection.execute("DELETE FROM orders", [])?;
+        self.connection.execute("DELETE FROM sync_state", [])?;
+        self.connection.execute("DELETE FROM cache_segments", [])?;
+        Ok(())
+    }
+
+    pub fn upsert_orders(&mut self, orders: &[CacheOrderRecord]) -> anyhow::Result<usize> {
+        if orders.is_empty() {
+            return Ok(0);
+        }
+        let tx = self.connection.transaction()?;
+        for order in orders {
+            tx.execute("DELETE FROM order_products WHERE order_id = ?1", params![order.order_id])?;
+            tx.execute(
+                r#"
+                INSERT OR REPLACE INTO orders (
+                    order_id, buyer_nickname, normalized_nickname, create_time,
+                    confirm_receipt_time, is_waybill_received, waybill_received_time,
+                    is_education_order, order_status, openid, raw_source, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                "#,
+                params![
+                    order.order_id,
+                    order.buyer_nickname,
+                    order.normalized_nickname,
+                    order.create_time,
+                    order.confirm_receipt_time,
+                    bool_to_int(order.is_waybill_received),
+                    order.waybill_received_time,
+                    bool_to_int(order.is_education_order),
+                    order.order_status,
+                    order.openid,
+                    order.raw_source,
+                    order.updated_at,
+                ],
+            )?;
+            for product in &order.products {
+                tx.execute(
+                    r#"
+                    INSERT INTO order_products (
+                        order_id, product_id, sku_id, sale_param, product_name, thumb_img
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    "#,
+                    params![
+                        order.order_id,
+                        product.product_id,
+                        product.sku_id,
+                        product.sale_param,
+                        product.product_name,
+                        product.thumb_img,
+                    ],
+                )?;
+            }
+        }
+        tx.commit()?;
+        Ok(orders.len())
+    }
+
+    pub fn save_state(&self, state: &SyncStateRecord) -> anyhow::Result<()> {
+        self.connection.execute(
+            r#"
+            INSERT OR REPLACE INTO sync_state (
+                scope, coverage_start, coverage_end, last_incremental_start,
+                last_incremental_end, last_success_at, last_mode, last_error
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "#,
+            params![
+                state.scope,
+                state.coverage_start,
+                state.coverage_end,
+                state.last_incremental_start,
+                state.last_incremental_end,
+                state.last_success_at,
+                state.last_mode,
+                state.last_error,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_state(&self, scope: &str) -> anyhow::Result<Option<SyncStateRecord>> {
+        self.connection
+            .query_row(
+                r#"
+                SELECT scope, coverage_start, coverage_end, last_incremental_start,
+                       last_incremental_end, last_success_at, last_mode, last_error
+                FROM sync_state WHERE scope = ?1
+                "#,
+                params![scope],
+                |row| {
+                    Ok(SyncStateRecord {
+                        scope: row.get(0)?,
+                        coverage_start: row.get(1)?,
+                        coverage_end: row.get(2)?,
+                        last_incremental_start: row.get(3)?,
+                        last_incremental_end: row.get(4)?,
+                        last_success_at: row.get(5)?,
+                        last_mode: row.get(6)?,
+                        last_error: row.get(7)?,
+                    })
+                },
+            )
+            .optional()
+            .context("query sync_state")
+    }
+
+    pub fn fetch_order(&self, order_id: &str) -> anyhow::Result<Option<CacheOrderRecord>> {
+        let order = self
+            .connection
+            .query_row(
+                r#"
+                SELECT order_id, buyer_nickname, normalized_nickname, create_time,
+                       confirm_receipt_time, is_waybill_received, waybill_received_time,
+                       is_education_order, order_status, openid, raw_source, updated_at
+                FROM orders WHERE order_id = ?1
+                "#,
+                params![order_id],
+                |row| {
+                    Ok(CacheOrderRecord {
+                        order_id: row.get(0)?,
+                        buyer_nickname: row.get(1)?,
+                        normalized_nickname: row.get(2)?,
+                        create_time: row.get(3)?,
+                        confirm_receipt_time: row.get(4)?,
+                        is_waybill_received: int_to_bool(row.get::<_, i64>(5)?),
+                        waybill_received_time: row.get(6)?,
+                        is_education_order: int_to_bool(row.get::<_, i64>(7)?),
+                        order_status: row.get(8)?,
+                        openid: row.get(9)?,
+                        raw_source: row.get(10)?,
+                        updated_at: row.get(11)?,
+                        products: Vec::new(),
+                    })
+                },
+            )
+            .optional()?;
+
+        let Some(mut order) = order else { return Ok(None) };
+        let mut stmt = self.connection.prepare(
+            r#"SELECT product_id, sku_id, sale_param, product_name, thumb_img
+               FROM order_products WHERE order_id = ?1 ORDER BY id ASC"#,
+        )?;
+        let rows = stmt.query_map(params![order_id], |row| {
+            Ok(CacheOrderProduct {
+                product_id: row.get(0)?,
+                sku_id: row.get(1)?,
+                sale_param: row.get(2)?,
+                product_name: row.get(3)?,
+                thumb_img: row.get(4)?,
+            })
+        })?;
+        order.products = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(Some(order))
+    }
+
+    pub fn mark_segment_complete(&self, scope: &str, start_timestamp: i64, end_timestamp: i64) -> anyhow::Result<()> {
+        self.connection.execute(
+            r#"
+            INSERT OR REPLACE INTO cache_segments (scope, start_ts, end_ts, status, updated_at)
+            VALUES (?1, ?2, ?3, 'complete', ?4)
+            "#,
+            params![scope, start_timestamp, end_timestamp, now_epoch_seconds()],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_complete_segments(
+        &self,
+        scope: &str,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<Vec<(i64, i64)>> {
+        let mut stmt = self.connection.prepare(
+            r#"
+            SELECT start_ts, end_ts
+            FROM cache_segments
+            WHERE scope = ?1 AND status = 'complete' AND end_ts >= ?2 AND start_ts <= ?3
+            ORDER BY start_ts ASC, end_ts ASC
+            "#,
+        )?;
+        let rows = stmt.query_map(params![scope, start_timestamp, end_timestamp], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn get_missing_segments(
+        &self,
+        scope: &str,
+        start_timestamp: i64,
+        end_timestamp: i64,
+        merge_tolerance: i64,
+        min_gap_width: i64,
+    ) -> anyhow::Result<Vec<(i64, i64)>> {
+        if start_timestamp <= 0 || end_timestamp <= 0 || start_timestamp > end_timestamp {
+            return Ok(Vec::new());
+        }
+
+        let mut segments = self
+            .get_complete_segments(scope, start_timestamp, end_timestamp)?
+            .into_iter()
+            .map(|(seg_start, seg_end)| (seg_start.max(start_timestamp), seg_end.min(end_timestamp)))
+            .filter(|(seg_start, seg_end)| seg_start <= seg_end)
+            .collect::<Vec<_>>();
+
+        if segments.is_empty() {
+            return Ok(vec![(start_timestamp, end_timestamp)]);
+        }
+
+        segments.sort_by_key(|(start, end)| (*start, *end));
+        let mut merged: Vec<(i64, i64)> = Vec::new();
+        for (seg_start, seg_end) in segments {
+            match merged.last_mut() {
+                Some((_, last_end)) if seg_start <= *last_end + merge_tolerance => {
+                    *last_end = (*last_end).max(seg_end);
+                }
+                _ => merged.push((seg_start, seg_end)),
+            }
+        }
+
+        let mut missing = Vec::new();
+        let mut cursor = start_timestamp;
+        for (seg_start, seg_end) in merged {
+            if cursor < seg_start {
+                let gap_width = seg_start - cursor;
+                if gap_width >= min_gap_width {
+                    missing.push((cursor, seg_start - 1));
+                }
+            }
+            cursor = cursor.max(seg_end + 1);
+        }
+        if cursor <= end_timestamp {
+            let gap_width = end_timestamp - cursor + 1;
+            if gap_width >= min_gap_width {
+                missing.push((cursor, end_timestamp));
+            }
+        }
+        Ok(missing)
+    }
+
+    pub fn delete_older_than(&self, scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
+        let expired_rows = stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
+        let order_ids = expired_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        if !order_ids.is_empty() {
+            let tx = self.connection.unchecked_transaction()?;
+            for order_id in &order_ids {
+                tx.execute("DELETE FROM order_products WHERE order_id = ?1", params![order_id])?;
+                tx.execute("DELETE FROM orders WHERE order_id = ?1", params![order_id])?;
+            }
+            tx.execute(
+                "DELETE FROM cache_segments WHERE scope = ?1 AND end_ts < ?2",
+                params![scope, cutoff_timestamp],
+            )?;
+            tx.execute(
+                r#"
+                UPDATE cache_segments
+                SET start_ts = ?1, updated_at = ?2
+                WHERE scope = ?3 AND start_ts < ?1 AND end_ts >= ?1
+                "#,
+                params![cutoff_timestamp, now_epoch_seconds(), scope],
+            )?;
+            tx.commit()?;
+        }
+        Ok(order_ids.len())
+    }
+
+    pub fn fetch_orders_in_range(&self, start_timestamp: i64, end_timestamp: i64) -> anyhow::Result<Vec<CacheOrderRecord>> {
+        let mut order_stmt = self.connection.prepare(
+            r#"
+            SELECT order_id, buyer_nickname, normalized_nickname, create_time,
+                   confirm_receipt_time, is_waybill_received, waybill_received_time,
+                   is_education_order, order_status, openid, raw_source, updated_at
+            FROM orders
+            WHERE create_time >= ?1 AND create_time <= ?2
+            ORDER BY create_time DESC, order_id DESC
+            "#,
+        )?;
+        let order_rows = order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+            Ok(CacheOrderRecord {
+                order_id: row.get(0)?,
+                buyer_nickname: row.get(1)?,
+                normalized_nickname: row.get(2)?,
+                create_time: row.get(3)?,
+                confirm_receipt_time: row.get(4)?,
+                is_waybill_received: int_to_bool(row.get::<_, i64>(5)?),
+                waybill_received_time: row.get(6)?,
+                is_education_order: int_to_bool(row.get::<_, i64>(7)?),
+                order_status: row.get(8)?,
+                openid: row.get(9)?,
+                raw_source: row.get(10)?,
+                updated_at: row.get(11)?,
+                products: Vec::new(),
+            })
+        })?;
+        let mut orders = order_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let mut product_stmt = self.connection.prepare(
+            r#"
+            SELECT p.order_id, p.product_id, p.sku_id, p.sale_param, p.product_name, p.thumb_img
+            FROM order_products p
+            JOIN orders o ON o.order_id = p.order_id
+            WHERE o.create_time >= ?1 AND o.create_time <= ?2
+            ORDER BY o.create_time DESC, p.order_id ASC, p.id ASC
+            "#,
+        )?;
+        let product_rows = product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                CacheOrderProduct {
+                    product_id: row.get(1)?,
+                    sku_id: row.get(2)?,
+                    sale_param: row.get(3)?,
+                    product_name: row.get(4)?,
+                    thumb_img: row.get(5)?,
+                },
+            ))
+        })?;
+        let mut products_by_order: HashMap<String, Vec<CacheOrderProduct>> = HashMap::new();
+        for row in product_rows {
+            let (order_id, product) = row?;
+            products_by_order.entry(order_id).or_default().push(product);
+        }
+        for order in &mut orders {
+            order.products = products_by_order.remove(&order.order_id).unwrap_or_default();
+        }
+        Ok(orders)
+    }
+}
+
+fn bool_to_int(value: bool) -> i64 { if value { 1 } else { 0 } }
+fn int_to_bool(value: i64) -> bool { value != 0 }
+
+pub fn now_epoch_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn sample_order() -> CacheOrderRecord {
+        CacheOrderRecord {
+            order_id: "o-1".into(),
+            buyer_nickname: "buyer".into(),
+            normalized_nickname: "buyer".into(),
+            create_time: 100,
+            confirm_receipt_time: 120,
+            is_waybill_received: true,
+            waybill_received_time: 110,
+            is_education_order: false,
+            order_status: 20,
+            openid: "openid".into(),
+            raw_source: "order_api".into(),
+            updated_at: 999,
+            products: vec![CacheOrderProduct {
+                product_id: "p1".into(),
+                sku_id: "s1".into(),
+                sale_param: "默认规格".into(),
+                product_name: "仁和洗发水".into(),
+                thumb_img: String::new(),
+            }],
+        }
+    }
+
+    #[test]
+    fn initialize_and_persist_state() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        let state = SyncStateRecord {
+            scope: "tls_order_cache".into(),
+            coverage_start: 1,
+            coverage_end: 2,
+            last_incremental_start: 3,
+            last_incremental_end: 4,
+            last_success_at: 5,
+            last_mode: "rebuild".into(),
+            last_error: String::new(),
+        };
+        repo.save_state(&state).unwrap();
+        assert_eq!(repo.get_state("tls_order_cache").unwrap(), Some(state));
+    }
+
+    #[test]
+    fn upsert_and_fetch_order() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        repo.upsert_orders(&[sample_order()]).unwrap();
+        let loaded = repo.fetch_order("o-1").unwrap().unwrap();
+        assert_eq!(loaded.order_id, "o-1");
+        assert_eq!(loaded.products.len(), 1);
+        assert_eq!(loaded.products[0].product_id, "p1");
+        assert!(loaded.is_waybill_received);
+    }
+
+    #[test]
+    fn computes_missing_segments_and_range_fetch() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        let mut first = sample_order();
+        first.create_time = 1_000;
+        let mut second = sample_order();
+        second.order_id = "o-2".into();
+        second.create_time = 2_000;
+        repo.upsert_orders(&[first, second]).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 900, 1500).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 1700, 2100).unwrap();
+        let missing = repo
+            .get_missing_segments("tls_order_cache", 900, 2100, 120, 1)
+            .unwrap();
+        assert_eq!(missing, vec![(1501, 1699)]);
+        let orders = repo.fetch_orders_in_range(900, 2_100).unwrap();
+        assert_eq!(orders.len(), 2);
+        assert_eq!(orders[0].order_id, "o-2");
+    }
+
+    #[test]
+    fn delete_older_than_removes_old_orders_and_trims_segments() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        let mut first = sample_order();
+        first.create_time = 1_000;
+        let mut second = sample_order();
+        second.order_id = "o-2".into();
+        second.create_time = 2_000;
+        repo.upsert_orders(&[first, second]).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 900, 2100).unwrap();
+        let deleted = repo.delete_older_than("tls_order_cache", 1_500).unwrap();
+        assert_eq!(deleted, 1);
+        let remaining = repo.fetch_orders_in_range(0, 3_000).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].order_id, "o-2");
+        let segments = repo
+            .get_complete_segments("tls_order_cache", 0, 3_000)
+            .unwrap();
+        assert_eq!(segments, vec![(1_500, 2_100)]);
+    }
+
+    #[test]
+    fn clear_all_removes_records() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        repo.upsert_orders(&[sample_order()]).unwrap();
+        repo.clear_all().unwrap();
+        assert!(repo.fetch_order("o-1").unwrap().is_none());
+    }
+}
