@@ -65,7 +65,9 @@ pub struct DeliveryUpdatePayload {
     pub change_info: Vec<DeliveryChange>,
 }
 
-pub fn normalize_product_infos(delivery_product_info: &DeliveryProductInfo) -> Vec<DeliveryProductItem> {
+pub fn normalize_product_infos(
+    delivery_product_info: &DeliveryProductInfo,
+) -> Vec<DeliveryProductItem> {
     delivery_product_info
         .product_infos
         .iter()
@@ -74,7 +76,9 @@ pub fn normalize_product_infos(delivery_product_info: &DeliveryProductInfo) -> V
         .collect()
 }
 
-pub fn extract_delivery_snapshot(delivery_product_info: &DeliveryProductInfo) -> anyhow::Result<DeliverySnapshot> {
+pub fn extract_delivery_snapshot(
+    delivery_product_info: &DeliveryProductInfo,
+) -> anyhow::Result<DeliverySnapshot> {
     if delivery_product_info.delivery_id.is_empty() {
         anyhow::bail!("获取订单详情失败：订单详情缺少承运商信息（deliveryId）。")
     }
@@ -90,7 +94,10 @@ pub fn extract_delivery_snapshot(delivery_product_info: &DeliveryProductInfo) ->
     })
 }
 
-pub fn build_delivery_candidates(tracking_number: &str, delivery_snapshot: &DeliverySnapshot) -> Vec<DeliveryCandidate> {
+pub fn build_delivery_candidates(
+    tracking_number: &str,
+    delivery_snapshot: &DeliverySnapshot,
+) -> Vec<DeliveryCandidate> {
     let mut candidates = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
     let mut push = |delivery_id: &str, delivery_name: &str| {
@@ -105,7 +112,10 @@ pub fn build_delivery_candidates(tracking_number: &str, delivery_snapshot: &Deli
             });
         }
     };
-    push(&delivery_snapshot.delivery_id, &delivery_snapshot.delivery_name);
+    push(
+        &delivery_snapshot.delivery_id,
+        &delivery_snapshot.delivery_name,
+    );
     let prefix = tracking_number.trim().chars().take(2).collect::<String>();
     push(&prefix, &delivery_snapshot.delivery_name);
     candidates
@@ -130,12 +140,17 @@ pub fn build_update_delivery_payload(
     }
     DeliveryUpdatePayload {
         order_id: order_id.trim().to_string(),
-        change_info: vec![DeliveryChange { old: old_info, new: new_info }],
+        change_info: vec![DeliveryChange {
+            old: old_info,
+            new: new_info,
+        }],
     }
 }
 
 pub fn is_delivery_mismatch_error(message: &str) -> bool {
-    DELIVERY_MISMATCH_MARKERS.iter().any(|marker| message.contains(marker))
+    DELIVERY_MISMATCH_MARKERS
+        .iter()
+        .any(|marker| message.contains(marker))
 }
 
 pub fn determine_delivery_override_on_mismatch(
@@ -169,7 +184,11 @@ mod tests {
     fn make_raw_delivery_info(delivery_id: &str, waybill_id: &str) -> DeliveryProductInfo {
         DeliveryProductInfo {
             delivery_id: delivery_id.into(),
-            delivery_name: if delivery_id == "ZTO" { "中通快递".into() } else { "极兔速递".into() },
+            delivery_name: if delivery_id == "ZTO" {
+                "中通快递".into()
+            } else {
+                "极兔速递".into()
+            },
             waybill_id: waybill_id.into(),
             deliver_type: Some(1),
             waybill_status: Some(2),
@@ -186,7 +205,8 @@ mod tests {
     #[test]
     fn build_update_delivery_payload_keeps_old_and_new_objects() {
         let raw_info = make_raw_delivery_info("ZTO", "73666162791371");
-        let payload = build_update_delivery_payload("3735560095122745088", "77777777777777", &raw_info, None);
+        let payload =
+            build_update_delivery_payload("3735560095122745088", "77777777777777", &raw_info, None);
         assert_eq!(payload.order_id, "3735560095122745088");
         assert_eq!(payload.change_info[0].old.delivery_id, "ZTO");
         assert_eq!(payload.change_info[0].new.delivery_id, "ZTO");
@@ -201,7 +221,10 @@ mod tests {
             "3735560095122745088",
             "JT1234567890",
             &raw_info,
-            Some(&DeliveryOverride { delivery_id: "JT".into(), delivery_name: "极兔速递".into() }),
+            Some(&DeliveryOverride {
+                delivery_id: "JT".into(),
+                delivery_name: "极兔速递".into(),
+            }),
         );
         assert_eq!(payload.change_info[0].old.delivery_id, "ZTO");
         assert_eq!(payload.change_info[0].new.delivery_id, "JT");
@@ -222,7 +245,11 @@ mod tests {
             delivery_id: "ZTO".into(),
             delivery_name: "中通快递".into(),
             waybill_id: "old".into(),
-            product_infos: vec![DeliveryProductItem { product_id: "1".into(), sku_id: "2".into(), product_cnt: 1 }],
+            product_infos: vec![DeliveryProductItem {
+                product_id: "1".into(),
+                sku_id: "2".into(),
+                product_cnt: 1,
+            }],
         };
         let candidates = build_delivery_candidates("JT1234567890", &snapshot);
         assert_eq!(candidates[0].delivery_id, "ZTO");
@@ -234,7 +261,9 @@ mod tests {
         assert!(delivery_update_succeeded(&json!({"code": 0, "errcode": 0})));
         assert!(delivery_update_succeeded(&json!({"ret": 0, "code": 0})));
         assert!(delivery_update_succeeded(&json!({"success": true})));
-        assert!(!delivery_update_succeeded(&json!({"success": false, "errmsg": "bad"})));
+        assert!(!delivery_update_succeeded(
+            &json!({"success": false, "errmsg": "bad"})
+        ));
     }
 
     #[test]
@@ -243,7 +272,9 @@ mod tests {
         let override_info = determine_delivery_override_on_mismatch("JT0001", &raw_info).unwrap();
         assert_eq!(override_info.delivery_id, "JT");
         assert!(override_info.delivery_name.is_empty());
-        assert!(is_delivery_mismatch_error(&format!("更新物流信息失败：{DELIVERY_MISMATCH_MESSAGE}")));
+        assert!(is_delivery_mismatch_error(&format!(
+            "更新物流信息失败：{DELIVERY_MISMATCH_MESSAGE}"
+        )));
         let same_prefix_info = make_raw_delivery_info("JT", "73666162791371");
         assert!(determine_delivery_override_on_mismatch("JT0001", &same_prefix_info).is_none());
     }

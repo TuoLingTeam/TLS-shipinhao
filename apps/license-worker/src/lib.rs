@@ -1,4 +1,6 @@
-use license_service::{ActivationInput, LicenseRepository, LicenseService, LicenseServiceResponse, VerifyInput};
+use license_service::{
+    ActivationInput, LicenseRepository, LicenseService, LicenseServiceResponse, VerifyInput,
+};
 use serde_json::Value;
 
 #[cfg(target_arch = "wasm32")]
@@ -102,11 +104,13 @@ mod cloudflare_entry {
 
         let _ = req.text().await;
         match parse_route(&path) {
-            WorkerRoute::Activate | WorkerRoute::Verify => Response::from_json(&serde_json::json!({
-                "success": false,
-                "message": "rust_worker_repository_pending",
-                "path": path,
-            })),
+            WorkerRoute::Activate | WorkerRoute::Verify => {
+                Response::from_json(&serde_json::json!({
+                    "success": false,
+                    "message": "rust_worker_repository_pending",
+                    "path": path,
+                }))
+            }
             WorkerRoute::NotFound => Response::error("not_found", 404),
         }
     }
@@ -154,12 +158,23 @@ mod tests {
     }
 
     impl LicenseRepository for Repo {
-        fn load_generated_key(&self, license_key: &str) -> anyhow::Result<Option<GeneratedKeyRecord>> {
-            Ok(self.generated_keys.lock().unwrap().get(license_key).cloned())
+        fn load_generated_key(
+            &self,
+            license_key: &str,
+        ) -> anyhow::Result<Option<GeneratedKeyRecord>> {
+            Ok(self
+                .generated_keys
+                .lock()
+                .unwrap()
+                .get(license_key)
+                .cloned())
         }
 
         fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()> {
-            self.generated_keys.lock().unwrap().insert(record.license_key.clone(), record.clone());
+            self.generated_keys
+                .lock()
+                .unwrap()
+                .insert(record.license_key.clone(), record.clone());
             Ok(())
         }
 
@@ -168,17 +183,35 @@ mod tests {
         }
 
         fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()> {
-            self.licenses.lock().unwrap().insert(record.license_key.clone(), record.clone());
+            self.licenses
+                .lock()
+                .unwrap()
+                .insert(record.license_key.clone(), record.clone());
             Ok(())
         }
 
-        fn load_device_registration(&self, license_key: &str, device_id: &str) -> anyhow::Result<Option<DeviceRegistration>> {
-            Ok(self.registrations.lock().unwrap().get(&(license_key.to_string(), device_id.to_string())).cloned())
+        fn load_device_registration(
+            &self,
+            license_key: &str,
+            device_id: &str,
+        ) -> anyhow::Result<Option<DeviceRegistration>> {
+            Ok(self
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&(license_key.to_string(), device_id.to_string()))
+                .cloned())
         }
 
-        fn save_device_registration(&self, registration: &DeviceRegistration) -> anyhow::Result<()> {
+        fn save_device_registration(
+            &self,
+            registration: &DeviceRegistration,
+        ) -> anyhow::Result<()> {
             self.registrations.lock().unwrap().insert(
-                (registration.license_key.clone(), registration.device_id.clone()),
+                (
+                    registration.license_key.clone(),
+                    registration.device_id.clone(),
+                ),
                 registration.clone(),
             );
             Ok(())

@@ -55,9 +55,9 @@ pub fn build_product_sku_index(orders: &[CandidateOrder]) -> ProductIndex {
             build_product_value_key(&order.product_name, &order.sale_param),
         ] {
             if let Some(index_key) = key {
-                index.entry(index_key)
-                    .or_default()
-                    .push(IndexedOrder { order: order.clone() });
+                index.entry(index_key).or_default().push(IndexedOrder {
+                    order: order.clone(),
+                });
             }
         }
     }
@@ -121,8 +121,14 @@ mod tests {
 
     #[test]
     fn builds_index_keys() {
-        assert_eq!(build_product_id_key("p1", "s1").as_deref(), Some("id::p1::s1"));
-        assert_eq!(build_product_value_key("仁和 洗发水", "默认规格").as_deref(), Some("value::仁和洗发水::默认规格"));
+        assert_eq!(
+            build_product_id_key("p1", "s1").as_deref(),
+            Some("id::p1::s1")
+        );
+        assert_eq!(
+            build_product_value_key("仁和 洗发水", "默认规格").as_deref(),
+            Some("value::仁和洗发水::默认规格")
+        );
         assert_eq!(build_product_id_key("", "s1"), None);
     }
 

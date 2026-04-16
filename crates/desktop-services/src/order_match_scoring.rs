@@ -137,11 +137,8 @@ pub fn compute_product_similarity(
     let sku_id_similarity = if sku_id_exact { 100 } else { 0 };
     let title_similarity = title_similarity_percent(Some(eval_title), Some(order_title));
 
-    let weighted_similarity = weighted_product_similarity(
-        product_id_similarity,
-        sku_id_similarity,
-        title_similarity,
-    );
+    let weighted_similarity =
+        weighted_product_similarity(product_id_similarity, sku_id_similarity, title_similarity);
 
     let product_exact = product_id_exact && sku_id_exact && title_exact;
     let product_similarity = if product_exact {
@@ -213,7 +210,8 @@ pub fn compute_match_score(
 
 fn strip_trailing_digit_tail(text: &str) -> String {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"[0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s]+$").expect("valid regex"));
+    let re =
+        RE.get_or_init(|| Regex::new(r"[0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s]+$").expect("valid regex"));
     re.replace(text, "").trim().to_string()
 }
 
@@ -315,7 +313,11 @@ fn nickname_similarity_by_rename_patterns(left: &str, right: &str) -> Option<i32
     None
 }
 
-fn weighted_product_similarity(product_id_similarity: i32, sku_id_similarity: i32, title_similarity: i32) -> i32 {
+fn weighted_product_similarity(
+    product_id_similarity: i32,
+    sku_id_similarity: i32,
+    title_similarity: i32,
+) -> i32 {
     let weighted = (product_id_similarity * PRODUCT_ID_WEIGHT
         + sku_id_similarity * PRODUCT_SKU_WEIGHT
         + title_similarity * PRODUCT_TITLE_WEIGHT) as f64

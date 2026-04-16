@@ -3,10 +3,12 @@ use desktop_services::delivery_batch_runner::{
     BatchDeliveryGateway, BatchDeliveryItem, BatchDeliveryRuntimeGuard,
 };
 use desktop_services::{
-    run_batch_delivery_flow, DeliveryGateway, DesktopServices, OrderCacheStore, ReviewQuery, ReviewSource,
+    run_batch_delivery_flow, DeliveryGateway, DesktopServices, OrderCacheStore, ReviewQuery,
+    ReviewSource,
 };
 use domain_core::{
-    DeliveryUpdateRequest, DeliveryUpdateResult, MatchSource, OrderCacheEntry, OrderMatchResult, TimeWindow,
+    DeliveryUpdateRequest, DeliveryUpdateResult, MatchSource, OrderCacheEntry, OrderMatchResult,
+    TimeWindow,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -117,6 +119,9 @@ impl ReviewSource for StubReviewSource {
             matched: true,
             source: MatchSource::ReceiverAndTimeWindow,
             confidence_score: 100,
+            match_reasons: vec!["stub".into()],
+            candidate_count: 1,
+            top_score: 100,
         }])
     }
 }
@@ -145,7 +150,10 @@ impl OrderCacheStore for StubOrderCacheStore {
 struct StubDeliveryGateway;
 
 impl DeliveryGateway for StubDeliveryGateway {
-    fn update_delivery(&self, request: &DeliveryUpdateRequest) -> anyhow::Result<DeliveryUpdateResult> {
+    fn update_delivery(
+        &self,
+        request: &DeliveryUpdateRequest,
+    ) -> anyhow::Result<DeliveryUpdateResult> {
         Ok(DeliveryUpdateResult {
             order_id: request.order_id.clone(),
             success: true,
@@ -156,7 +164,11 @@ impl DeliveryGateway for StubDeliveryGateway {
 }
 
 impl BatchDeliveryGateway for StubDeliveryGateway {
-    fn update_single_order(&mut self, order_id: &str, tracking_number: &str) -> anyhow::Result<Option<String>> {
+    fn update_single_order(
+        &mut self,
+        order_id: &str,
+        tracking_number: &str,
+    ) -> anyhow::Result<Option<String>> {
         let request = DeliveryUpdateRequest {
             order_id: order_id.to_string(),
             tracking_number: tracking_number.to_string(),

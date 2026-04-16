@@ -1,4 +1,6 @@
-use crate::review_candidate_scoring::{score_candidate_order, CandidateOrder, EvaluationMatchContext};
+use crate::review_candidate_scoring::{
+    score_candidate_order, CandidateOrder, EvaluationMatchContext,
+};
 use crate::review_matcher_helpers::pick_best_match;
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +24,8 @@ pub struct SingleEvaluationMatch {
     pub match_strategy: MatchStrategy,
     pub match_score: i32,
     pub match_reasons: Vec<String>,
+    pub candidate_count: usize,
+    pub top_score: i32,
 }
 
 pub fn match_strategy_by_score(score: i32) -> MatchStrategy {
@@ -50,8 +54,14 @@ pub fn match_single_evaluation(
         .collect::<Vec<_>>();
 
     if best_matches.is_empty() {
-        return SingleEvaluationMatch::default();
+        return SingleEvaluationMatch {
+            candidate_count: candidate_orders.len(),
+            ..SingleEvaluationMatch::default()
+        };
     }
+
+    let top_score = best_matches.iter().map(|item| item.score).max().unwrap_or(0);
+    let candidate_count = best_matches.len();
 
     best_matches.sort_by(|left, right| {
         right
@@ -70,7 +80,11 @@ pub fn match_single_evaluation(
         })
         .collect::<Vec<_>>();
     let Some(best_key) = pick_best_match(&mut candidates) else {
-        return SingleEvaluationMatch::default();
+        return SingleEvaluationMatch {
+            candidate_count,
+            top_score,
+            ..SingleEvaluationMatch::default()
+        };
     };
 
     let best_match = best_matches
@@ -82,11 +96,24 @@ pub fn match_single_evaluation(
         })
         .expect("best match should exist");
 
+    if best_match.score < crate::review_candidate_scoring::MATCH_MIN_SCORE {
+        return SingleEvaluationMatch {
+            matched_order: None,
+            match_strategy: MatchStrategy::None,
+            match_score: 0,
+            match_reasons: best_match.reasons,
+            candidate_count,
+            top_score,
+        };
+    }
+
     SingleEvaluationMatch {
         matched_order: Some(best_match.order),
         match_strategy: match_strategy_by_score(best_match.score),
         match_score: best_match.score,
         match_reasons: best_match.reasons,
+        candidate_count,
+        top_score,
     }
 }
 
@@ -108,7 +135,12 @@ mod tests {
         }
     }
 
-    fn order(order_id: &str, buyer: &str, confirm_time: i64, status_variant: i64) -> CandidateOrder {
+    fn order(
+        order_id: &str,
+        buyer: &str,
+        confirm_time: i64,
+        status_variant: i64,
+    ) -> CandidateOrder {
         CandidateOrder {
             order_id: order_id.into(),
             buyer_nickname: buyer.into(),
@@ -145,7 +177,10 @@ mod tests {
         let wrong = order("3735582233824220672", "Y", context().eval_time - 86400, 1);
         let right = order("3735563912835389952", "无锡农膜¹³⁸⁶¹⁸²¹¹⁷⁵", 0, 2);
         let result = match_single_evaluation(&context(), &[wrong, right]);
-        assert_eq!(result.matched_order.unwrap().order_id, "3735563912835389952");
+        assert_eq!(
+            result.matched_order.unwrap().order_id,
+            "3735563912835389952"
+        );
         assert_eq!(result.match_score, 100);
         assert_eq!(result.match_strategy, MatchStrategy::ExactMatch);
     }

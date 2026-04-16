@@ -23,8 +23,9 @@ impl SqliteOrderCache {
                      amount_cent INTEGER NOT NULL DEFAULT 0,
                      created_at TEXT NOT NULL DEFAULT '',
                      updated_at TEXT NOT NULL DEFAULT ''
-                 );"
-            ).ok();
+                 );",
+            )
+            .ok();
         }
         Self { db_path }
     }
@@ -37,7 +38,7 @@ impl OrderCacheStore for SqliteOrderCache {
             "SELECT order_id, buyer_name, receiver_name, amount_cent, created_at, updated_at
              FROM orders
              WHERE created_at >= ?1 AND created_at <= ?2
-             ORDER BY created_at DESC"
+             ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map(params![&window.start_at, &window.end_at], |row| {
             Ok(OrderCacheEntry {

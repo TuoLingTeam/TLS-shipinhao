@@ -62,10 +62,7 @@ fn check_admin(headers: &worker::Headers, env: &Env) -> Result<Option<Response>>
     let expected = match env.secret("ADMIN_SECRET") {
         Ok(s) => s.to_string(),
         Err(_) => {
-            return Ok(Some(json_err(
-                503,
-                "ADMIN_SECRET 未配置，拒绝管理员接口",
-            )?));
+            return Ok(Some(json_err(503, "ADMIN_SECRET 未配置，拒绝管理员接口")?));
         }
     };
     let got = headers.get("X-Admin-Secret")?.unwrap_or_default();
@@ -84,7 +81,8 @@ fn json_err(status: u16, message: impl AsRef<str>) -> Result<Response> {
 }
 
 async fn admin_list(db: &D1Database) -> Result<Response> {
-    let stats_stmt = db.prepare("SELECT status, COUNT(*) as cnt FROM generated_keys GROUP BY status");
+    let stats_stmt =
+        db.prepare("SELECT status, COUNT(*) as cnt FROM generated_keys GROUP BY status");
     let stats_res = stats_stmt.all().await?;
     let stats: Vec<StatRow> = stats_res.results().unwrap_or_default();
 
@@ -168,7 +166,8 @@ fn random_license_key() -> String {
     }
     format!(
         "TLS-{}",
-        buf.iter().fold(String::new(), |acc, b| acc + &format!("{:02X}", b))
+        buf.iter()
+            .fold(String::new(), |acc, b| acc + &format!("{:02X}", b))
     )
 }
 

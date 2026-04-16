@@ -48,7 +48,11 @@ pub struct BatchDeliveryReport {
 }
 
 pub trait BatchDeliveryGateway {
-    fn update_single_order(&mut self, order_id: &str, tracking_number: &str) -> anyhow::Result<Option<String>>;
+    fn update_single_order(
+        &mut self,
+        order_id: &str,
+        tracking_number: &str,
+    ) -> anyhow::Result<Option<String>>;
 }
 
 pub trait BatchDeliveryRuntimeGuard {
@@ -127,8 +131,13 @@ mod tests {
     }
 
     impl BatchDeliveryGateway for FakeGateway {
-        fn update_single_order(&mut self, order_id: &str, tracking_number: &str) -> anyhow::Result<Option<String>> {
-            self.calls.push((order_id.to_string(), tracking_number.to_string()));
+        fn update_single_order(
+            &mut self,
+            order_id: &str,
+            tracking_number: &str,
+        ) -> anyhow::Result<Option<String>> {
+            self.calls
+                .push((order_id.to_string(), tracking_number.to_string()));
             if self.results.is_empty() {
                 Ok(None)
             } else {
@@ -137,12 +146,11 @@ mod tests {
         }
     }
 
-        struct FakeRuntimeGuard {
+    struct FakeRuntimeGuard {
         authorize_result: anyhow::Result<()>,
         continuity_results: Vec<anyhow::Result<()>>,
         continuity_calls: Vec<usize>,
     }
-
 
     impl Default for FakeRuntimeGuard {
         fn default() -> Self {
@@ -205,7 +213,10 @@ mod tests {
     fn batch_collects_step_success_and_failures() {
         let items = vec![item("o-1", "t-1"), item("o-2", "t-2")];
         let mut gateway = FakeGateway {
-            results: vec![Ok(Some("old-1".into())), Err(anyhow::anyhow!("更新物流信息失败"))],
+            results: vec![
+                Ok(Some("old-1".into())),
+                Err(anyhow::anyhow!("更新物流信息失败")),
+            ],
             ..Default::default()
         };
         let mut guard = FakeRuntimeGuard::default();
@@ -216,7 +227,11 @@ mod tests {
         assert_eq!(report.steps[0].status, BatchDeliveryStepStatus::Success);
         assert_eq!(report.steps[0].old_waybill.as_deref(), Some("old-1"));
         assert_eq!(report.steps[1].status, BatchDeliveryStepStatus::Failed);
-        assert!(report.steps[1].error_message.as_deref().unwrap().contains("更新物流信息失败"));
+        assert!(report.steps[1]
+            .error_message
+            .as_deref()
+            .unwrap()
+            .contains("更新物流信息失败"));
     }
 
     #[test]
@@ -230,7 +245,10 @@ mod tests {
         };
         let mut guard = FakeRuntimeGuard {
             authorize_result: Ok(()),
-            continuity_results: vec![Ok(()), Err(anyhow::anyhow!("授权租约已失效，请联网后重试。"))],
+            continuity_results: vec![
+                Ok(()),
+                Err(anyhow::anyhow!("授权租约已失效，请联网后重试。")),
+            ],
             ..Default::default()
         };
         let report = run_batch_delivery(&items, &mut gateway, &mut guard);

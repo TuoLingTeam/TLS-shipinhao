@@ -41,9 +41,7 @@ pub async fn set_cookie(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_cookie_status(
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, AppError> {
+pub async fn get_cookie_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
     let profile = state.cookie_profile.lock().await;
     let cookie_path = state.cookie_path.lock().await.clone();
     Ok(serde_json::json!({
@@ -116,8 +114,8 @@ pub async fn open_cookie_login(
         }));
     }
 
-    let login_url = Url::parse(STORE_LOGIN_URL)
-        .map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
+    let login_url =
+        Url::parse(STORE_LOGIN_URL).map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
     let data_dir = state::login_webview_data_dir(&state.app_home_dir);
 
     WebviewWindowBuilder::new(
@@ -220,8 +218,10 @@ fn looks_like_logged_in_store_session(cookies: &[tauri::webview::Cookie<'static>
             .unwrap_or(true);
         domain_ok
             && value.len() >= 8
-            && ["sid", "sess", "token", "ticket", "biz", "auth", "key", "uin", "pass"]
-                .iter()
-                .any(|keyword| name.contains(keyword))
+            && [
+                "sid", "sess", "token", "ticket", "biz", "auth", "key", "uin", "pass",
+            ]
+            .iter()
+            .any(|keyword| name.contains(keyword))
     })
 }

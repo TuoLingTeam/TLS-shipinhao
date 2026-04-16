@@ -1,20 +1,25 @@
 pub mod day_window;
-pub mod delivery_update;
 pub mod delivery_batch_runner;
+pub mod delivery_update;
+pub mod order_cache_storage;
+pub mod order_match_scoring;
 pub mod order_sync_planner;
 pub mod order_sync_service;
-pub mod order_cache_storage;
-pub mod review_index;
-pub mod review_batch_match;
-pub mod review_match_flow;
-pub mod review_candidate_scoring;
-pub mod review_matcher_helpers;
-pub mod order_match_scoring;
 pub mod order_utils;
+pub mod review_batch_match;
+pub mod review_candidate_scoring;
+pub mod review_index;
+pub mod review_match_flow;
+pub mod review_matcher_helpers;
 
+use crate::delivery_batch_runner::{
+    run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem,
+    BatchDeliveryReport, BatchDeliveryRuntimeGuard,
+};
 use api_contracts::RuntimeGrant;
-use crate::delivery_batch_runner::{run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem, BatchDeliveryReport, BatchDeliveryRuntimeGuard};
-use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow};
+use domain_core::{
+    DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -42,7 +47,10 @@ pub trait OrderCacheStore {
 }
 
 pub trait DeliveryGateway {
-    fn update_delivery(&self, request: &DeliveryUpdateRequest) -> anyhow::Result<DeliveryUpdateResult>;
+    fn update_delivery(
+        &self,
+        request: &DeliveryUpdateRequest,
+    ) -> anyhow::Result<DeliveryUpdateResult>;
 }
 
 pub struct DesktopServices<R, C, D> {
@@ -69,12 +77,19 @@ where
         self.review_source.fetch_reviews(query)
     }
 
-    pub fn refresh_cache(&self, window: &TimeWindow, orders: &[OrderCacheEntry]) -> anyhow::Result<Vec<OrderCacheEntry>> {
+    pub fn refresh_cache(
+        &self,
+        window: &TimeWindow,
+        orders: &[OrderCacheEntry],
+    ) -> anyhow::Result<Vec<OrderCacheEntry>> {
         self.cache_store.save_orders(orders)?;
         self.cache_store.load_recent_orders(window)
     }
 
-    pub fn update_delivery(&self, request: &DeliveryUpdateRequest) -> anyhow::Result<DeliveryUpdateResult> {
+    pub fn update_delivery(
+        &self,
+        request: &DeliveryUpdateRequest,
+    ) -> anyhow::Result<DeliveryUpdateResult> {
         self.delivery_gateway.update_delivery(request)
     }
 }

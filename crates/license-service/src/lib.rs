@@ -194,7 +194,12 @@ where
             (record, "激活成功")
         };
 
-        self.upsert_device_registration(&normalized_key, &input.device_id, &input.device_fingerprint, now)?;
+        self.upsert_device_registration(
+            &normalized_key,
+            &input.device_id,
+            &input.device_fingerprint,
+            now,
+        )?;
         self.repository.append_audit_event(&AuditEvent {
             action: "activate".into(),
             license_key: normalized_key,
@@ -216,10 +221,20 @@ where
     ) -> anyhow::Result<LicenseServiceResponse> {
         let normalized_key = normalize_key(&input.license_key);
         let Some(key_record) = self.repository.load_generated_key(&normalized_key)? else {
-            return Ok(failure_response("该卡密已被吊销", LicenseState::Revoked, true, None));
+            return Ok(failure_response(
+                "该卡密已被吊销",
+                LicenseState::Revoked,
+                true,
+                None,
+            ));
         };
         if key_record.status == GeneratedKeyStatus::Revoked {
-            return Ok(failure_response("该卡密已被吊销", LicenseState::Revoked, true, None));
+            return Ok(failure_response(
+                "该卡密已被吊销",
+                LicenseState::Revoked,
+                true,
+                None,
+            ));
         }
 
         let Some(mut record) = self.repository.load_license(&normalized_key)? else {
@@ -241,7 +256,12 @@ where
         }
 
         if record.status == LicenseState::Revoked {
-            return Ok(failure_response("该卡密已被吊销", LicenseState::Revoked, true, Some(record)));
+            return Ok(failure_response(
+                "该卡密已被吊销",
+                LicenseState::Revoked,
+                true,
+                Some(record),
+            ));
         }
 
         let now_iso = iso8601(now);
@@ -258,7 +278,12 @@ where
                 reason: "expired".into(),
                 created_at: now_iso,
             })?;
-            return Ok(failure_response("授权已过期", LicenseState::Expired, true, Some(record)));
+            return Ok(failure_response(
+                "授权已过期",
+                LicenseState::Expired,
+                true,
+                Some(record),
+            ));
         }
 
         record.status = LicenseState::Active;
@@ -322,14 +347,21 @@ pub fn issue_license_lease(
         license_expires_at: license_expires_at.to_string(),
         lease_expires_at: lease_expires_at.to_string(),
         renew_after: renew_after.to_string(),
-        task_policy: DEFAULT_TASK_POLICY.iter().map(|item| (*item).to_string()).collect(),
+        task_policy: DEFAULT_TASK_POLICY
+            .iter()
+            .map(|item| (*item).to_string())
+            .collect(),
         keyset_version: 1,
         binding_version: LICENSE_PROTOCOL_VERSION,
         issued_at: issued_at.to_string(),
     }
 }
 
-fn success_response(record: LicenseRecord, message: &str, now: DateTime<Utc>) -> LicenseServiceResponse {
+fn success_response(
+    record: LicenseRecord,
+    message: &str,
+    now: DateTime<Utc>,
+) -> LicenseServiceResponse {
     LicenseServiceResponse {
         success: true,
         message: message.to_string(),
@@ -353,7 +385,9 @@ fn failure_response(
         license_state: state,
         expired,
         activated_at: record.as_ref().map(|value| value.activated_at.clone()),
-        license_expires_at: record.as_ref().map(|value| value.license_expires_at.clone()),
+        license_expires_at: record
+            .as_ref()
+            .map(|value| value.license_expires_at.clone()),
         license_lease: None,
     }
 }
@@ -420,12 +454,23 @@ mod tests {
     }
 
     impl LicenseRepository for MemoryRepo {
-        fn load_generated_key(&self, license_key: &str) -> anyhow::Result<Option<GeneratedKeyRecord>> {
-            Ok(self.generated_keys.lock().unwrap().get(license_key).cloned())
+        fn load_generated_key(
+            &self,
+            license_key: &str,
+        ) -> anyhow::Result<Option<GeneratedKeyRecord>> {
+            Ok(self
+                .generated_keys
+                .lock()
+                .unwrap()
+                .get(license_key)
+                .cloned())
         }
 
         fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()> {
-            self.generated_keys.lock().unwrap().insert(record.license_key.clone(), record.clone());
+            self.generated_keys
+                .lock()
+                .unwrap()
+                .insert(record.license_key.clone(), record.clone());
             Ok(())
         }
 
@@ -434,17 +479,35 @@ mod tests {
         }
 
         fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()> {
-            self.licenses.lock().unwrap().insert(record.license_key.clone(), record.clone());
+            self.licenses
+                .lock()
+                .unwrap()
+                .insert(record.license_key.clone(), record.clone());
             Ok(())
         }
 
-        fn load_device_registration(&self, license_key: &str, device_id: &str) -> anyhow::Result<Option<DeviceRegistration>> {
-            Ok(self.registrations.lock().unwrap().get(&(license_key.to_string(), device_id.to_string())).cloned())
+        fn load_device_registration(
+            &self,
+            license_key: &str,
+            device_id: &str,
+        ) -> anyhow::Result<Option<DeviceRegistration>> {
+            Ok(self
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&(license_key.to_string(), device_id.to_string()))
+                .cloned())
         }
 
-        fn save_device_registration(&self, registration: &DeviceRegistration) -> anyhow::Result<()> {
+        fn save_device_registration(
+            &self,
+            registration: &DeviceRegistration,
+        ) -> anyhow::Result<()> {
             self.registrations.lock().unwrap().insert(
-                (registration.license_key.clone(), registration.device_id.clone()),
+                (
+                    registration.license_key.clone(),
+                    registration.device_id.clone(),
+                ),
                 registration.clone(),
             );
             Ok(())
@@ -460,13 +523,20 @@ mod tests {
     fn activate_creates_license_and_lease() {
         let repo = MemoryRepo::with_generated_key("TLS-TEST", 30);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
-        let response = service.activate_at(ActivationInput {
-            license_key: "tls-test".into(),
-            device_id: "device-1".into(),
-            device_fingerprint: "fingerprint-1".into(),
-            client_version: "4.3.0".into(),
-        }, now).unwrap();
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let response = service
+            .activate_at(
+                ActivationInput {
+                    license_key: "tls-test".into(),
+                    device_id: "device-1".into(),
+                    device_fingerprint: "fingerprint-1".into(),
+                    client_version: "4.3.0".into(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(response.success);
         assert_eq!(response.message, "激活成功");
@@ -475,27 +545,42 @@ mod tests {
         assert_eq!(lease.device_id, "device-1");
         assert_eq!(lease.renew_after, "2026-04-17T00:00:00Z");
         assert_eq!(lease.lease_expires_at, "2026-04-19T00:00:00Z");
-        assert_eq!(response.license_expires_at.as_deref(), Some("2026-05-16T00:00:00Z"));
+        assert_eq!(
+            response.license_expires_at.as_deref(),
+            Some("2026-05-16T00:00:00Z")
+        );
     }
 
     #[test]
     fn activate_rejects_second_device() {
         let repo = MemoryRepo::with_generated_key("TLS-TEST", 30);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
-        service.activate_at(ActivationInput {
-            license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
-            device_fingerprint: "fp-1".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-TEST".into(),
+                    device_id: "device-1".into(),
+                    device_fingerprint: "fp-1".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
-        let response = service.activate_at(ActivationInput {
-            license_key: "TLS-TEST".into(),
-            device_id: "device-2".into(),
-            device_fingerprint: "fp-2".into(),
-            client_version: String::new(),
-        }, now + Duration::minutes(5)).unwrap();
+        let response = service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-TEST".into(),
+                    device_id: "device-2".into(),
+                    device_fingerprint: "fp-2".into(),
+                    client_version: String::new(),
+                },
+                now + Duration::minutes(5),
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::DeviceMismatch);
@@ -520,15 +605,27 @@ mod tests {
                 last_verify_at: "2026-01-01T00:00:00Z".into(),
             },
         );
-        repo.generated_keys.lock().unwrap().get_mut("TLS-TEST").unwrap().status = GeneratedKeyStatus::Activated;
+        repo.generated_keys
+            .lock()
+            .unwrap()
+            .get_mut("TLS-TEST")
+            .unwrap()
+            .status = GeneratedKeyStatus::Activated;
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.verify_at(VerifyInput {
-            license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .verify_at(
+                VerifyInput {
+                    license_key: "TLS-TEST".into(),
+                    device_id: "device-1".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::Expired);
@@ -553,35 +650,65 @@ mod tests {
                 last_verify_at: "2026-04-01T00:00:00Z".into(),
             },
         );
-        repo.generated_keys.lock().unwrap().get_mut("TLS-TEST").unwrap().status = GeneratedKeyStatus::Activated;
+        repo.generated_keys
+            .lock()
+            .unwrap()
+            .get_mut("TLS-TEST")
+            .unwrap()
+            .status = GeneratedKeyStatus::Activated;
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.verify_at(VerifyInput {
-            license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
-            client_version: "4.3.0".into(),
-        }, now).unwrap();
+        let response = service
+            .verify_at(
+                VerifyInput {
+                    license_key: "TLS-TEST".into(),
+                    device_id: "device-1".into(),
+                    client_version: "4.3.0".into(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(response.success);
         assert_eq!(response.license_state, LicenseState::Active);
         let lease = response.license_lease.expect("lease");
-        assert_eq!(lease.task_policy, DEFAULT_TASK_POLICY.iter().map(|item| (*item).to_string()).collect::<Vec<_>>());
+        assert_eq!(
+            lease.task_policy,
+            DEFAULT_TASK_POLICY
+                .iter()
+                .map(|item| (*item).to_string())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
     fn activate_rejects_revoked_key() {
         let repo = MemoryRepo::with_generated_key("TLS-REV", 30);
-        repo.generated_keys.lock().unwrap().get_mut("TLS-REV").unwrap().status = GeneratedKeyStatus::Revoked;
+        repo.generated_keys
+            .lock()
+            .unwrap()
+            .get_mut("TLS-REV")
+            .unwrap()
+            .status = GeneratedKeyStatus::Revoked;
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.activate_at(ActivationInput {
-            license_key: "TLS-REV".into(),
-            device_id: "d".into(),
-            device_fingerprint: "fp".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-REV".into(),
+                    device_id: "d".into(),
+                    device_fingerprint: "fp".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::Revoked);
@@ -591,14 +718,21 @@ mod tests {
     fn activate_rejects_zero_plan_days() {
         let repo = MemoryRepo::with_generated_key("TLS-ZERO", 0);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.activate_at(ActivationInput {
-            license_key: "TLS-ZERO".into(),
-            device_id: "d".into(),
-            device_fingerprint: "fp".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-ZERO".into(),
+                    device_id: "d".into(),
+                    device_fingerprint: "fp".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::Invalid);
@@ -608,14 +742,21 @@ mod tests {
     fn activate_nonexistent_key_returns_revoked() {
         let repo = MemoryRepo::default();
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.activate_at(ActivationInput {
-            license_key: "DOES-NOT-EXIST".into(),
-            device_id: "d".into(),
-            device_fingerprint: "fp".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .activate_at(
+                ActivationInput {
+                    license_key: "DOES-NOT-EXIST".into(),
+                    device_id: "d".into(),
+                    device_fingerprint: "fp".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::Revoked);
@@ -625,21 +766,33 @@ mod tests {
     fn reactivate_same_device_succeeds() {
         let repo = MemoryRepo::with_generated_key("TLS-RE", 30);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        service.activate_at(ActivationInput {
-            license_key: "TLS-RE".into(),
-            device_id: "dev-1".into(),
-            device_fingerprint: "fp-old".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-RE".into(),
+                    device_id: "dev-1".into(),
+                    device_fingerprint: "fp-old".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
-        let response = service.activate_at(ActivationInput {
-            license_key: "TLS-RE".into(),
-            device_id: "dev-1".into(),
-            device_fingerprint: "fp-new".into(),
-            client_version: "5.0.0".into(),
-        }, now + Duration::hours(1)).unwrap();
+        let response = service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-RE".into(),
+                    device_id: "dev-1".into(),
+                    device_fingerprint: "fp-new".into(),
+                    client_version: "5.0.0".into(),
+                },
+                now + Duration::hours(1),
+            )
+            .unwrap();
 
         assert!(response.success);
         assert_eq!(response.message, "重新激活成功");
@@ -650,13 +803,20 @@ mod tests {
     fn verify_nonexistent_key_returns_revoked() {
         let repo = MemoryRepo::default();
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.verify_at(VerifyInput {
-            license_key: "NOPE".into(),
-            device_id: "d".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .verify_at(
+                VerifyInput {
+                    license_key: "NOPE".into(),
+                    device_id: "d".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::Revoked);
@@ -666,13 +826,20 @@ mod tests {
     fn verify_unactivated_key_returns_invalid() {
         let repo = MemoryRepo::with_generated_key("TLS-NOACT", 30);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        let response = service.verify_at(VerifyInput {
-            license_key: "TLS-NOACT".into(),
-            device_id: "d".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .verify_at(
+                VerifyInput {
+                    license_key: "TLS-NOACT".into(),
+                    device_id: "d".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::Invalid);
@@ -682,20 +849,32 @@ mod tests {
     fn verify_device_mismatch() {
         let repo = MemoryRepo::with_generated_key("TLS-DM", 30);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        service.activate_at(ActivationInput {
-            license_key: "TLS-DM".into(),
-            device_id: "dev-A".into(),
-            device_fingerprint: "fp".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        service
+            .activate_at(
+                ActivationInput {
+                    license_key: "TLS-DM".into(),
+                    device_id: "dev-A".into(),
+                    device_fingerprint: "fp".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
-        let response = service.verify_at(VerifyInput {
-            license_key: "TLS-DM".into(),
-            device_id: "dev-B".into(),
-            client_version: String::new(),
-        }, now).unwrap();
+        let response = service
+            .verify_at(
+                VerifyInput {
+                    license_key: "TLS-DM".into(),
+                    device_id: "dev-B".into(),
+                    client_version: String::new(),
+                },
+                now,
+            )
+            .unwrap();
 
         assert!(!response.success);
         assert_eq!(response.license_state, LicenseState::DeviceMismatch);
@@ -705,14 +884,21 @@ mod tests {
     fn activate_records_audit_event() {
         let repo = MemoryRepo::with_generated_key("TLS-AUD", 30);
         let service = LicenseService::new(repo);
-        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        service.activate_at(ActivationInput {
-            license_key: "tls-aud".into(),
-            device_id: "dev-1".into(),
-            device_fingerprint: "fp".into(),
-            client_version: "5.0.0".into(),
-        }, now).unwrap();
+        service
+            .activate_at(
+                ActivationInput {
+                    license_key: "tls-aud".into(),
+                    device_id: "dev-1".into(),
+                    device_fingerprint: "fp".into(),
+                    client_version: "5.0.0".into(),
+                },
+                now,
+            )
+            .unwrap();
 
         let audits = service.repository.audits.lock().unwrap();
         assert_eq!(audits.len(), 1);

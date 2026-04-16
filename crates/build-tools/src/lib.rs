@@ -37,7 +37,10 @@ struct CanonicalManifestFile<'a> {
     pub sha256: &'a str,
 }
 
-pub fn generate_integrity_manifest(base_dir: &Path, files: &[PathBuf]) -> anyhow::Result<IntegrityManifest> {
+pub fn generate_integrity_manifest(
+    base_dir: &Path,
+    files: &[PathBuf],
+) -> anyhow::Result<IntegrityManifest> {
     let mut manifest_files = Vec::with_capacity(files.len());
     for file in files {
         let absolute = if file.is_absolute() {
@@ -157,11 +160,15 @@ mod tests {
         fs::create_dir_all(file_path.parent().unwrap()).unwrap();
         fs::write(&file_path, b"hello tls").unwrap();
 
-        let manifest = generate_integrity_manifest(base, &[PathBuf::from("nested/example.txt")]).unwrap();
+        let manifest =
+            generate_integrity_manifest(base, &[PathBuf::from("nested/example.txt")]).unwrap();
         assert_eq!(manifest.version, 1);
         assert_eq!(manifest.files.len(), 1);
         assert_eq!(manifest.files[0].path, "nested/example.txt");
-        assert_eq!(manifest.files[0].sha256, format!("{:x}", Sha256::digest(b"hello tls")));
+        assert_eq!(
+            manifest.files[0].sha256,
+            format!("{:x}", Sha256::digest(b"hello tls"))
+        );
     }
 
     #[test]
@@ -174,7 +181,8 @@ mod tests {
         let manifest = generate_integrity_manifest(base, &[PathBuf::from("payload.bin")]).unwrap();
         let signing_key = SigningKey::from_bytes(&[7u8; 32]);
         let der = signing_key.to_pkcs8_der().unwrap();
-        let signature = sign_manifest(&manifest, &STANDARD.encode(der.as_bytes()), "manifest-v1").unwrap();
+        let signature =
+            sign_manifest(&manifest, &STANDARD.encode(der.as_bytes()), "manifest-v1").unwrap();
         let signed = attach_signature(&manifest, &signature);
         let verify_key = URL_SAFE_NO_PAD.encode(signing_key.verifying_key().to_bytes());
 

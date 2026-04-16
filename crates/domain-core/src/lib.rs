@@ -69,6 +69,12 @@ pub struct OrderMatchResult {
     pub matched: bool,
     pub source: MatchSource,
     pub confidence_score: u32,
+    #[serde(default)]
+    pub match_reasons: Vec<String>,
+    #[serde(default)]
+    pub candidate_count: usize,
+    #[serde(default)]
+    pub top_score: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

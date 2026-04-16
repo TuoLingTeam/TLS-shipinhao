@@ -25,7 +25,9 @@ struct CanonicalManifest<'a> {
 }
 
 fn into_c_string(value: String) -> *mut c_char {
-    CString::new(value).unwrap_or_else(|_| CString::new("{}").unwrap()).into_raw()
+    CString::new(value)
+        .unwrap_or_else(|_| CString::new("{}").unwrap())
+        .into_raw()
 }
 
 fn opt_str_from_ptr(ptr: *const c_char) -> Option<String> {
@@ -79,7 +81,10 @@ fn current_device_fingerprint() -> Option<String> {
             ("wmic", vec!["csproduct", "get", "UUID"]),
             (
                 "powershell",
-                vec!["-Command", "(Get-CimInstance Win32_ComputerSystemProduct).UUID"],
+                vec![
+                    "-Command",
+                    "(Get-CimInstance Win32_ComputerSystemProduct).UUID",
+                ],
             ),
         ];
         for (program, args) in commands {
@@ -151,7 +156,9 @@ fn verify_lease_impl(
     };
     let signature = match Signature::from_slice(&signature_bytes) {
         Ok(value) => value,
-        Err(err) => return json!({"ok": false, "reason": "invalid", "error": err.to_string(), "payload": null}),
+        Err(err) => {
+            return json!({"ok": false, "reason": "invalid", "error": err.to_string(), "payload": null})
+        }
     };
 
     if let Err(err) = public_key.verify(encoded_payload.as_bytes(), &signature) {
@@ -164,7 +171,9 @@ fn verify_lease_impl(
     };
     let payload: Value = match serde_json::from_slice(&payload_bytes) {
         Ok(value) => value,
-        Err(err) => return json!({"ok": false, "reason": "invalid", "error": err.to_string(), "payload": null}),
+        Err(err) => {
+            return json!({"ok": false, "reason": "invalid", "error": err.to_string(), "payload": null})
+        }
     };
 
     if payload.get("kind").and_then(Value::as_str) != Some("license_lease") {
@@ -178,7 +187,10 @@ fn verify_lease_impl(
     }
 
     if !allow_expired {
-        let exp = payload.get("exp").and_then(Value::as_i64).unwrap_or_default();
+        let exp = payload
+            .get("exp")
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
         if exp <= 0 || current_epoch_seconds >= exp {
             return json!({"ok": false, "reason": "expired", "payload": payload});
         }
@@ -206,7 +218,10 @@ fn canonical_manifest_bytes(payload: &Value) -> Result<Vec<u8>, String> {
     }
     serde_json::to_vec(&CanonicalManifest {
         files: normalized_files,
-        generated_at: payload.get("generated_at").and_then(Value::as_str).unwrap_or(""),
+        generated_at: payload
+            .get("generated_at")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
         version: payload.get("version").and_then(Value::as_u64).unwrap_or(1),
     })
     .map_err(|err| err.to_string())
@@ -220,11 +235,15 @@ fn sha256_hex(path: &Path) -> Result<String, String> {
 fn verify_integrity_manifest_impl(manifest_path: &Path, public_key_b64url: &str) -> Value {
     let raw = match fs::read_to_string(manifest_path) {
         Ok(value) => value,
-        Err(err) => return json!({"status": "compromised", "message": format!("manifest read error: {err}")}),
+        Err(err) => {
+            return json!({"status": "compromised", "message": format!("manifest read error: {err}")})
+        }
     };
     let payload: Value = match serde_json::from_str(&raw) {
         Ok(value) => value,
-        Err(err) => return json!({"status": "compromised", "message": format!("manifest parse error: {err}")}),
+        Err(err) => {
+            return json!({"status": "compromised", "message": format!("manifest parse error: {err}")})
+        }
     };
     let signature = match payload.get("signature").and_then(Value::as_str) {
         Some(value) if !value.is_empty() => value,
@@ -251,7 +270,12 @@ fn verify_integrity_manifest_impl(manifest_path: &Path, public_key_b64url: &str)
     }
 
     let base_dir = manifest_path.parent().unwrap_or_else(|| Path::new("."));
-    for file in payload.get("files").and_then(Value::as_array).into_iter().flatten() {
+    for file in payload
+        .get("files")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         let rel = match file.get("path").and_then(Value::as_str) {
             Some(value) if !value.is_empty() => value,
             _ => return json!({"status": "compromised", "message": "manifest entry invalid"}),
@@ -527,7 +551,11 @@ mod tests {
         });
 
         let manifest_path = dir.path().join("manifest.json");
-        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest_with_sig).unwrap()).unwrap();
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest_with_sig).unwrap(),
+        )
+        .unwrap();
 
         let result = verify_integrity_manifest_impl(&manifest_path, &pk_b64);
         assert_eq!(result["status"], "ok");
@@ -561,14 +589,21 @@ mod tests {
             "signature": sig_b64
         });
         let manifest_path = dir.path().join("manifest.json");
-        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest_with_sig).unwrap()).unwrap();
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest_with_sig).unwrap(),
+        )
+        .unwrap();
 
         // 篡改文件内容
         std::fs::write(&file_path, b"tampered content").unwrap();
 
         let result = verify_integrity_manifest_impl(&manifest_path, &pk_b64);
         assert_eq!(result["status"], "compromised");
-        assert!(result["message"].as_str().unwrap().contains("integrity mismatch"));
+        assert!(result["message"]
+            .as_str()
+            .unwrap()
+            .contains("integrity mismatch"));
     }
 
     #[test]

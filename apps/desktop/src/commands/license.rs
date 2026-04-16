@@ -33,7 +33,10 @@ pub async fn ensure_feature_authorized(
 
 fn make_client() -> HttpLicenseClient {
     HttpLicenseClient::new(
-        LICENSE_API_BASE_URLS.iter().map(|s| s.to_string()).collect(),
+        LICENSE_API_BASE_URLS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     )
 }
 
@@ -51,7 +54,10 @@ fn security_core_device_id() -> Option<String> {
     if ptr.is_null() {
         return None;
     }
-    let value = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().trim().to_string();
+    let value = unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .trim()
+        .to_string();
     security_core::security_core_free_string(ptr);
     if value.is_empty() {
         None
@@ -84,7 +90,12 @@ fn device_fingerprint() -> String {
             }
         }
     }
-    format!("{}-{}-{}", hostname(), std::env::consts::ARCH, std::env::consts::OS)
+    format!(
+        "{}-{}-{}",
+        hostname(),
+        std::env::consts::ARCH,
+        std::env::consts::OS
+    )
 }
 
 fn hostname() -> String {
@@ -178,9 +189,7 @@ pub async fn verify_license(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_license_status(
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, AppError> {
+pub async fn get_license_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
     let profile = state.license_profile.lock().await.clone();
     Ok(serde_json::json!({
         "configured": !profile.license_key.is_empty(),
@@ -208,7 +217,6 @@ fn current_timestamp() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,7 +226,14 @@ mod tests {
         assert!(license_state_allows_feature("active"));
         assert!(license_state_allows_feature("renewal_due"));
 
-        for state in ["invalid", "expired", "revoked", "device_mismatch", "compromised", ""] {
+        for state in [
+            "invalid",
+            "expired",
+            "revoked",
+            "device_mismatch",
+            "compromised",
+            "",
+        ] {
             assert!(
                 !license_state_allows_feature(state),
                 "state {state} should be blocked"

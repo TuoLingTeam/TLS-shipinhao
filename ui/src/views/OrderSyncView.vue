@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useOrder } from "../composables/useOrder";
 import { useOrderStore } from "../stores/order";
 import { useAppStore } from "../stores/app";
@@ -11,65 +11,57 @@ import LoadingState from "../components/common/LoadingState.vue";
 
 const store = useOrderStore();
 const appStore = useAppStore();
-const { syncOrders } = useOrder();
+const { syncRecentCache, loadRecentCache, loadCacheStatus } = useOrder();
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const totalAmount = computed(() =>
   store.cachedOrders.reduce((sum, item) => sum + (item.amount_cent ?? 0), 0),
 );
 const syncSteps = computed(() => [
   {
-    key: "request_remote",
-    title: "拉取远端订单",
+    key: "ensure_recent_cache",
+    title: "维护最近 30 天缓存",
     status:
-      store.syncPhase === "request_remote"
+      store.syncPhase === "ensure_recent_cache"
         ? "进行中"
-        : ["write_cache", "load_cache", "completed"].includes(store.syncPhase || "")
+        : ["refresh_light_cache", "completed"].includes(store.syncPhase || "")
           ? "已完成"
           : "等待中",
   },
   {
-    key: "write_cache",
-    title: "写入本地缓存",
+    key: "refresh_light_cache",
+    title: "刷新订单列表视图",
     status:
-      store.syncPhase === "write_cache"
+      store.syncPhase === "refresh_light_cache"
         ? "进行中"
-        : ["load_cache", "completed"].includes(store.syncPhase || "")
+        : ["completed"].includes(store.syncPhase || "")
           ? "已完成"
           : "等待中",
   },
   {
-    key: "load_cache",
-    title: "刷新缓存视图",
+    key: "completed",
+    title: "同步完成",
     status:
-      store.syncPhase === "load_cache"
-        ? "进行中"
-        : store.syncPhase === "completed"
+      store.syncPhase === "completed"
           ? "已完成"
           : "等待中",
   },
 ]);
-
-function todayISO(): string {
-  return `${new Date().toISOString().split("T")[0]}T23:59:59Z`;
-}
-
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return `${d.toISOString().split("T")[0]}T00:00:00Z`;
-}
 
 async function handleSync() {
   if (licenseBlocked.value) {
     store.error = "请先激活授权后再使用订单同步";
     return;
   }
-  await syncOrders(daysAgoISO(30), todayISO());
+  await syncRecentCache();
 }
 
 function handleSearch(keyword: string) {
   void keyword;
 }
+
+onMounted(async () => {
+  await Promise.all([loadRecentCache(), loadCacheStatus()]);
+});
 </script>
 
 <template>
@@ -80,12 +72,19 @@ function handleSearch(keyword: string) {
           <span class="card-eyebrow">ORDER CACHE</span>
           <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">订单同步与本地检索</h2>
           <p class="mt-2 text-sm leading-6 text-slate-500">
-            同步后的订单缓存会用于评价匹配、履约核对等流程。建议定期拉取近 30 天数据保持链路完整。
+            富缓存用于差评评分匹配，轻量缓存仅用于本页订单列表展示。建议定期维护最近 30 天缓存。
           </p>
         </div>
         <OrderSearchBar @search="handleSearch" />
       </div>
-      <OrderCacheStats :count="store.cachedOrders.length" :last-sync-at="store.lastSyncAt" />
+      <OrderCacheStats
+        :count="store.cacheStatus?.cached_order_count ?? store.cachedOrders.length"
+        :last-sync-at="store.cacheStatus?.last_sync_at ?? store.lastSyncAt"
+        :coverage-start="store.cacheStatus?.coverage_start"
+        :coverage-end="store.cacheStatus?.coverage_end"
+        :coverage-complete="store.cacheStatus?.coverage_complete"
+        :missing-segment-count="store.cacheStatus?.missing_segment_count"
+      />
     </section>
 
     <section class="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
@@ -93,7 +92,7 @@ function handleSearch(keyword: string) {
         <div>
           <div class="text-base font-semibold text-slate-900">立即同步近 30 天订单</div>
           <p class="mt-1 text-sm leading-6 text-slate-500">
-            建议在开始评价查找前先同步一次，保证 SKU、商品与买家信息尽量完整。
+            此操作会维护最近 30 天富订单缓存，并刷新当前列表副本。
           </p>
         </div>
         <button
@@ -101,7 +100,7 @@ function handleSearch(keyword: string) {
           class="action-btn action-btn-primary min-w-[140px]"
           @click="handleSync"
         >
-          {{ store.loading ? "同步中..." : "同步订单" }}
+          {{ store.loading ? "同步中..." : "同步最近 30 天缓存" }}
         </button>
       </div>
 
@@ -131,7 +130,7 @@ function handleSearch(keyword: string) {
     <LoadingState
       v-if="store.loading"
       title="正在同步订单并刷新缓存"
-      :description="store.syncMessage || '会先调用远端拉单接口，再加载本地 SQLite 缓存结果。'"
+      :description="store.syncMessage || '后端会先维护最近 30 天富缓存，再刷新当前订单列表。'"
     />
 
     <section v-if="store.loading" class="surface-panel space-y-4 p-5 lg:p-6">

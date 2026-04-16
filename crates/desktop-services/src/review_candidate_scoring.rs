@@ -96,10 +96,6 @@ pub fn score_candidate_order(
         match_result.product_penalty,
     ));
 
-    if score < MATCH_MIN_SCORE {
-        return None;
-    }
-
     Some(ScoredCandidateOrder {
         order: order.clone(),
         score,

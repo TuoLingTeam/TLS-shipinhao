@@ -20,24 +20,24 @@ const isQualityRefundMode = computed(() => store.lastMode === "quality_refund");
 const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
 const unmatchedCount = computed(() => store.results.length - matchedCount.value);
 const loadingTitle = computed(() =>
-  orderStore.syncSource === "review_auto_sync"
-    ? "正在自动同步订单缓存"
+  orderStore.syncSource === "review_query"
+    ? "正在准备订单缓存并执行评分匹配"
     : isQualityRefundMode.value
       ? "正在获取品退订单并匹配缓存订单"
-      : "正在抓取评价并匹配缓存订单",
+      : "正在获取差评并执行订单评分匹配",
 );
 const loadingDescription = computed(() =>
-  orderStore.syncSource === "review_auto_sync"
-    ? orderStore.syncMessage || "正在自动同步订单缓存，请稍候…"
+  orderStore.syncSource === "review_query"
+    ? orderStore.syncMessage || "后端会先保障最近 30 天订单缓存可用，再执行评分匹配。"
     : isQualityRefundMode.value
       ? "品退接口会直接返回订单号，成功后可直接带入发货页。"
-      : "差评接口返回后如发现缓存缺口，会自动同步订单，再继续完成匹配。",
+      : "差评会先确保缓存覆盖，再按商品、SKU、昵称与时间执行评分匹配。",
 );
 const emptyTitle = computed(() => (isQualityRefundMode.value ? "未找到品退匹配订单" : "未找到匹配结果"));
 const emptyDescription = computed(() =>
   isQualityRefundMode.value
     ? "请先确认订单缓存已同步，再尝试扩大查询天数。"
-    : "可以先同步订单缓存，或尝试扩大查询天数。",
+    : "已完成缓存保障但仍未找到足够高分订单，可尝试扩大查询天数。",
 );
 const resultSummary = computed(() => {
   if (!store.results.length) return "";
@@ -51,7 +51,10 @@ const resultSummary = computed(() => {
   if (!unmatchedCount.value) {
     return `本次共获取 ${store.results.length} 条${sourceLabel}，全部命中订单缓存，可直接带入发货页。`;
   }
-  return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条已命中订单缓存，${unmatchedCount.value} 条需先同步订单缓存后再试。`;
+  const cacheNote = store.cacheSyncPerformed
+    ? `本次已自动补齐 ${store.cacheSyncWrittenCount} 条缓存订单，`
+    : "本次已完成缓存保障，";
+  return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条已完成匹配，${unmatchedCount.value} 条未达到匹配阈值。${cacheNote}当前缓存覆盖 ${store.cacheCoverageStart || "-"} 至 ${store.cacheCoverageEnd || "-" }。`;
 });
 const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : "评价ID"));
 
@@ -100,17 +103,21 @@ function handleUseMatchedOrder(orderId: string) {
   void router.push("/delivery");
 }
 
-function unmatchedReason(orderId: string) {
+function unmatchedReason(record: {
+  order_id: string;
+  candidate_count: number;
+  top_score: number;
+}) {
   if (isQualityRefundMode.value) {
-    if (!orderId.trim()) {
+    if (!record.order_id.trim()) {
       return "品退接口未返回订单号，暂时无法自动带入发货。";
     }
     return "接口已返回订单号，但当前结果未能自动带入，请重试。";
   }
-  if (!orderId.trim()) {
-    return "接口未返回订单号，无法自动带入发货。";
+  if (record.candidate_count === 0) {
+    return "已完成评分匹配，但当前缓存覆盖范围内没有找到同商品/SKU候选订单。";
   }
-  return "自动同步后仍未命中缓存，请到订单管理手动检查订单同步范围。";
+  return `已找到 ${record.candidate_count} 个候选订单，最高得分 ${record.top_score}，未达到自动匹配阈值。`;
 }
 
 function displayId(record: { evaluation_id: string; order_id: string }) {
@@ -183,7 +190,7 @@ function displayId(record: { evaluation_id: string; order_id: string }) {
       :description="loadingDescription"
     />
     <div
-      v-if="store.loading && orderStore.syncSource === 'review_auto_sync'"
+      v-if="store.loading && orderStore.syncSource === 'review_query'"
       class="surface-panel space-y-4 px-5 py-5"
     >
       <div class="flex items-center justify-between text-sm">
@@ -198,19 +205,19 @@ function displayId(record: { evaluation_id: string; order_id: string }) {
       </div>
       <div class="grid grid-cols-1 gap-3 text-xs text-slate-500 md:grid-cols-3">
         <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
-          <div class="font-semibold text-slate-700">1. 拉取订单</div>
-          <div class="mt-1">{{ orderStore.syncPhase === 'request_remote' ? '进行中' : '已完成' }}</div>
+          <div class="font-semibold text-slate-700">1. 缓存保障</div>
+          <div class="mt-1">{{ ['ensure_recent_cache', 'match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}</div>
         </div>
         <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
-          <div class="font-semibold text-slate-700">2. 刷新缓存</div>
+          <div class="font-semibold text-slate-700">2. 评分匹配</div>
           <div class="mt-1">
-            {{ ['load_cache', 're_match', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}
+            {{ ['match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}
           </div>
         </div>
         <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
-          <div class="font-semibold text-slate-700">3. 重新匹配</div>
+          <div class="font-semibold text-slate-700">3. 完成结果</div>
           <div class="mt-1">
-            {{ ['re_match', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}
+            {{ orderStore.syncPhase === 'completed' ? '已完成' : '等待中' }}
           </div>
         </div>
       </div>
@@ -222,6 +229,9 @@ function displayId(record: { evaluation_id: string; order_id: string }) {
         :class="unmatchedCount > 0 ? 'warn' : 'success'"
       >
         {{ resultSummary }}
+      </div>
+      <div v-if="store.cacheWarnings.length && !isQualityRefundMode" class="soft-alert warn">
+        {{ store.cacheWarnings.join("；") }}
       </div>
 
       <section class="data-table-shell overflow-x-auto">
@@ -279,7 +289,7 @@ function displayId(record: { evaluation_id: string; order_id: string }) {
                   class="max-w-[180px] text-center text-[11px] leading-5"
                   :class="r.matched ? 'text-slate-500' : 'text-amber-700'"
                 >
-                  {{ r.matched ? "点击本行可自动带入发货页。" : unmatchedReason(r.order_id) }}
+                  {{ r.matched ? `评分 ${r.confidence_score} · 点击本行可自动带入发货页。` : unmatchedReason(r) }}
                 </div>
               </div>
             </td>

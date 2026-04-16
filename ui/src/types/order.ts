@@ -6,3 +6,27 @@ export interface OrderCacheEntry {
   created_at: string;
   updated_at: string;
 }
+
+export interface OrderCacheStatus {
+  cached_order_count: number;
+  last_sync_at: string | null;
+  coverage_start: string | null;
+  coverage_end: string | null;
+  coverage_complete: boolean;
+  missing_segment_count: number;
+}
+
+export interface OrderSyncResult {
+  orders_saved: number;
+  cache_sync_performed: boolean;
+  cache_coverage_start: string | null;
+  cache_coverage_end: string | null;
+  cache_warnings: string[];
+}
+
+export interface OrderSyncProgressEvent {
+  source: string;
+  phase: string;
+  progress: number;
+  message: string;
+}

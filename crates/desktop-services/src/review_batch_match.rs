@@ -43,6 +43,8 @@ pub struct MatchedEvaluationResult {
     pub product_name: String,
     pub can_reply_expire_time: i64,
     pub matched: bool,
+    pub candidate_count: usize,
+    pub top_score: i32,
 }
 
 pub fn match_orders_with_evaluations(
@@ -60,9 +62,18 @@ pub fn match_orders_with_evaluations(
                 product_name: evaluation.product_name.clone(),
                 eval_time: evaluation.eval_time,
             };
-            let candidates = collect_candidate_orders(&product_index, &context, &evaluation.sku_name);
+            let candidates =
+                collect_candidate_orders(&product_index, &context, &evaluation.sku_name);
             let single = match_single_evaluation(&context, &candidates);
-            build_match_result(evaluation, single.matched_order.as_ref(), single.match_strategy, single.match_score, single.match_reasons)
+            build_match_result(
+                evaluation,
+                single.matched_order.as_ref(),
+                single.match_strategy,
+                single.match_score,
+                single.match_reasons,
+                single.candidate_count,
+                single.top_score,
+            )
         })
         .collect()
 }
@@ -73,6 +84,8 @@ pub fn build_match_result(
     match_strategy: MatchStrategy,
     match_score: i32,
     match_reasons: Vec<String>,
+    candidate_count: usize,
+    top_score: i32,
 ) -> MatchedEvaluationResult {
     let reference_time = matched_order.map(resolve_reference_time).unwrap_or(0);
     MatchedEvaluationResult {
@@ -81,12 +94,24 @@ pub fn build_match_result(
         product_id: evaluation.product_id.clone(),
         sku_id: evaluation.sku_id.clone(),
         sku_name: evaluation.sku_name.clone(),
-        sale_param: matched_order.map(|order| order.sale_param.clone()).unwrap_or_default(),
+        sale_param: matched_order
+            .map(|order| order.sale_param.clone())
+            .unwrap_or_default(),
         buyer_nickname: evaluation.buyer_nickname.clone(),
-        order_buyer_nickname: matched_order.map(|order| order.buyer_nickname.clone()).unwrap_or_default(),
+        order_buyer_nickname: matched_order
+            .map(|order| order.buyer_nickname.clone())
+            .unwrap_or_default(),
         match_strategy: matched_order.map(|_| match_strategy),
-        match_score: if matched_order.is_some() { match_score } else { 0 },
-        match_reasons: if matched_order.is_some() { match_reasons } else { Vec::new() },
+        match_score: if matched_order.is_some() {
+            match_score
+        } else {
+            0
+        },
+        match_reasons: if matched_order.is_some() {
+            match_reasons
+        } else {
+            Vec::new()
+        },
         time_diff_hours: matched_order.and_then(|order| {
             (evaluation.eval_time > 0 && order.create_time > 0)
                 .then_some((evaluation.eval_time - order.create_time) as f64 / 3600.0)
@@ -102,6 +127,8 @@ pub fn build_match_result(
         product_name: evaluation.product_name.clone(),
         can_reply_expire_time: evaluation.can_reply_expire_time,
         matched: matched_order.is_some(),
+        candidate_count,
+        top_score,
     }
 }
 
@@ -140,7 +167,12 @@ mod tests {
         }
     }
 
-    fn order(order_id: &str, buyer: &str, confirm_receipt_time: i64, create_time: i64) -> CandidateOrder {
+    fn order(
+        order_id: &str,
+        buyer: &str,
+        confirm_receipt_time: i64,
+        create_time: i64,
+    ) -> CandidateOrder {
         CandidateOrder {
             order_id: order_id.into(),
             buyer_nickname: buyer.into(),
@@ -165,8 +197,18 @@ mod tests {
 
     #[test]
     fn batch_match_picks_best_candidate_and_builds_result() {
-        let wrong = order("3735582233824220672", "Y", 1_712_910_000 - 86400, 1_712_910_000 - 172800);
-        let right = order("3735563912835389952", "无锡农膜¹³⁸⁶¹⁸²¹¹⁷⁵", 0, 1_712_910_000 - 172800);
+        let wrong = order(
+            "3735582233824220672",
+            "Y",
+            1_712_910_000 - 86400,
+            1_712_910_000 - 172800,
+        );
+        let right = order(
+            "3735563912835389952",
+            "无锡农膜¹³⁸⁶¹⁸²¹¹⁷⁵",
+            0,
+            1_712_910_000 - 172800,
+        );
         let results = match_orders_with_evaluations(&[evaluation()], &[wrong, right]);
         assert_eq!(results.len(), 1);
         assert!(results[0].matched);
@@ -178,9 +220,24 @@ mod tests {
     #[test]
     fn build_match_result_calculates_hour_diffs() {
         let eval = evaluation();
-        let matched = order("order-1", "buyer", eval.eval_time - 3600, eval.eval_time - 7200);
-        let result = build_match_result(&eval, Some(&matched), MatchStrategy::ProbableMatch, 90, vec!["ok".into()]);
+        let matched = order(
+            "order-1",
+            "buyer",
+            eval.eval_time - 3600,
+            eval.eval_time - 7200,
+        );
+        let result = build_match_result(
+            &eval,
+            Some(&matched),
+            MatchStrategy::ProbableMatch,
+            90,
+            vec!["ok".into()],
+            2,
+            90,
+        );
         assert_eq!(result.time_diff_hours, Some(2.0));
         assert_eq!(result.confirm_diff_hours, Some(1.0));
+        assert_eq!(result.candidate_count, 2);
+        assert_eq!(result.top_score, 90);
     }
 }

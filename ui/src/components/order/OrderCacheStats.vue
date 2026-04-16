@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { formatDate } from "../../utils/format";
+import { formatDate, formatDateTime } from "../../utils/format";
 
 defineProps<{
   count: number;
   lastSyncAt: string | null;
+  coverageStart?: string | null;
+  coverageEnd?: string | null;
+  coverageComplete?: boolean;
+  missingSegmentCount?: number;
 }>();
 </script>
 
@@ -26,7 +30,19 @@ defineProps<{
       </div>
       <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
         <span class="text-slate-500">最后同步</span>
-        <span class="font-medium text-slate-700">{{ lastSyncAt ? formatDate(lastSyncAt) : "从未" }}</span>
+        <span class="font-medium text-slate-700">{{ lastSyncAt ? formatDateTime(lastSyncAt) : "从未" }}</span>
+      </div>
+      <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+        <span class="text-slate-500">覆盖区间</span>
+        <span class="font-medium text-slate-700">
+          {{ coverageStart && coverageEnd ? `${formatDate(coverageStart)} ~ ${formatDate(coverageEnd)}` : "未建立" }}
+        </span>
+      </div>
+      <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+        <span class="text-slate-500">覆盖状态</span>
+        <span class="font-medium" :class="coverageComplete ? 'text-green-700' : 'text-amber-700'">
+          {{ coverageComplete ? "完整" : `存在 ${missingSegmentCount || 0} 个缺口` }}
+        </span>
       </div>
     </div>
   </div>

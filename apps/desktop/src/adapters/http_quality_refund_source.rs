@@ -188,6 +188,9 @@ fn parse_quality_refund_record(
         matched: true,
         source: MatchSource::ExactOrderId,
         confidence_score: 100,
+        match_reasons: Vec::new(),
+        candidate_count: 0,
+        top_score: 0,
     })
 }
 

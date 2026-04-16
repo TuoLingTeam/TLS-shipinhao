@@ -35,9 +35,17 @@ mod tests {
 
     #[test]
     fn recent_day_range_uses_natural_day_boundaries() {
-        let now = DateTime::parse_from_rfc3339("2026-04-14T16:30:45Z").unwrap().with_timezone(&Utc);
+        let now = DateTime::parse_from_rfc3339("2026-04-14T16:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let (start, end) = recent_day_range_timestamps(15, Some(now));
-        assert_eq!(Utc.timestamp_opt(start, 0).unwrap().to_rfc3339(), "2026-03-30T00:00:00+00:00");
-        assert_eq!(Utc.timestamp_opt(end, 0).unwrap().to_rfc3339(), "2026-04-14T23:59:59+00:00");
+        assert_eq!(
+            Utc.timestamp_opt(start, 0).unwrap().to_rfc3339(),
+            "2026-03-30T00:00:00+00:00"
+        );
+        assert_eq!(
+            Utc.timestamp_opt(end, 0).unwrap().to_rfc3339(),
+            "2026-04-14T23:59:59+00:00"
+        );
     }
 }

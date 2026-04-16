@@ -18,9 +18,21 @@ export interface OrderMatchResult {
   matched: boolean;
   source: MatchSource;
   confidence_score: number;
+  match_reasons: string[];
+  candidate_count: number;
+  top_score: number;
 }
 
 export interface ReviewQuery {
   days: number;
   time_window: TimeWindow;
+}
+
+export interface ReviewMatchResponse {
+  results: OrderMatchResult[];
+  cache_warnings: string[];
+  cache_coverage_start: string | null;
+  cache_coverage_end: string | null;
+  cache_sync_performed: boolean;
+  cache_sync_written_count: number;
 }

@@ -48,13 +48,15 @@ fn run_manifest_command(args: &[OsString]) -> Result<()> {
     let output_path = PathBuf::from(&args[1]);
     let files = args[2..].iter().map(PathBuf::from).collect::<Vec<_>>();
     let manifest = generate_integrity_manifest(&base_dir, &files)?;
-    let signed_manifest = if let Ok(signing_key) = std::env::var("INTEGRITY_MANIFEST_PRIVATE_KEY_B64") {
-        let key_id = std::env::var("INTEGRITY_MANIFEST_KEY_ID").unwrap_or_else(|_| "manifest-dev".into());
-        let signature = sign_manifest(&manifest, &signing_key, &key_id)?;
-        attach_signature(&manifest, &signature)
-    } else {
-        manifest
-    };
+    let signed_manifest =
+        if let Ok(signing_key) = std::env::var("INTEGRITY_MANIFEST_PRIVATE_KEY_B64") {
+            let key_id = std::env::var("INTEGRITY_MANIFEST_KEY_ID")
+                .unwrap_or_else(|_| "manifest-dev".into());
+            let signature = sign_manifest(&manifest, &signing_key, &key_id)?;
+            attach_signature(&manifest, &signature)
+        } else {
+            manifest
+        };
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -67,7 +69,9 @@ fn run_desktop_build_command(args: &[OsString]) -> Result<()> {
     let mut command = Command::new("cargo");
     command.args(["build", "-p", "desktop-app"]);
     command.args(args);
-    let status = command.status().context("spawn cargo build -p desktop-app")?;
+    let status = command
+        .status()
+        .context("spawn cargo build -p desktop-app")?;
     if !status.success() {
         return Err(anyhow!("desktop-build failed with status {status}"));
     }
@@ -118,7 +122,10 @@ mod tests {
         let signing_key = SigningKey::from_bytes(&[9u8; 32]);
         let der = signing_key.to_pkcs8_der().unwrap();
         unsafe {
-            std::env::set_var("INTEGRITY_MANIFEST_PRIVATE_KEY_B64", STANDARD.encode(der.as_bytes()));
+            std::env::set_var(
+                "INTEGRITY_MANIFEST_PRIVATE_KEY_B64",
+                STANDARD.encode(der.as_bytes()),
+            );
             std::env::set_var("INTEGRITY_MANIFEST_KEY_ID", "manifest-v1");
         }
         let result = run_manifest_command(&[

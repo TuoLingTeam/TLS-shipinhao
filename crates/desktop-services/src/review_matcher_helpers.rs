@@ -23,7 +23,11 @@ pub fn build_product_reason(
         "商品信息相似度 {}%(标题 {}%，ID {}，SKU {})(扣 {} 分)",
         product_similarity,
         title_similarity,
-        if product_id_exact { "命中" } else { "未命中" },
+        if product_id_exact {
+            "命中"
+        } else {
+            "未命中"
+        },
         if sku_id_exact { "命中" } else { "未命中" },
         product_penalty,
     )
@@ -44,10 +48,16 @@ pub fn build_nickname_reason(
     };
 
     if shorter.chars().count() == 1 && !shorter.is_empty() && longer.contains(shorter) {
-        return format!("昵称仅单字重合，歧义较高！(相似度 {}%，扣 {} 分)", similarity, penalty);
+        return format!(
+            "昵称仅单字重合，歧义较高！(相似度 {}%，扣 {} 分)",
+            similarity, penalty
+        );
     }
 
-    format!("昵称相似度较高，疑似改名！(相似度 {}%，扣 {} 分)", similarity, penalty)
+    format!(
+        "昵称相似度较高，疑似改名！(相似度 {}%，扣 {} 分)",
+        similarity, penalty
+    )
 }
 
 pub fn pick_best_match(best_matches: &mut [CandidateMatch]) -> Option<CandidateMatch> {
@@ -101,9 +111,21 @@ mod tests {
     #[test]
     fn picks_best_match_by_score_then_confirm_then_time() {
         let mut matches = vec![
-            CandidateMatch { score: 90, confirm_diff: 30, time_diff: 20 },
-            CandidateMatch { score: 95, confirm_diff: 50, time_diff: 10 },
-            CandidateMatch { score: 95, confirm_diff: 40, time_diff: 100 },
+            CandidateMatch {
+                score: 90,
+                confirm_diff: 30,
+                time_diff: 20,
+            },
+            CandidateMatch {
+                score: 95,
+                confirm_diff: 50,
+                time_diff: 10,
+            },
+            CandidateMatch {
+                score: 95,
+                confirm_diff: 40,
+                time_diff: 100,
+            },
         ];
         let picked = pick_best_match(&mut matches).expect("picked");
         assert_eq!(picked.score, 95);

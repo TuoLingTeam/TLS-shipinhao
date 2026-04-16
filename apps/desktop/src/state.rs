@@ -129,7 +129,11 @@ fn load_cookie_from_file(path: &Path) -> CookieProfile {
             eprintln!(
                 "[state] 从 {} 加载 Cookie（biz_magic={}）",
                 path.display(),
-                if biz_magic.is_some() { "已提取" } else { "缺失" }
+                if biz_magic.is_some() {
+                    "已提取"
+                } else {
+                    "缺失"
+                }
             );
             CookieProfile {
                 cookie_header,
@@ -186,7 +190,6 @@ impl ExpandHome for Path {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,8 +199,11 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir()
-            .join(format!("tls_shipinhao_{name}_{}_{}", std::process::id(), nanos));
+        let dir = std::env::temp_dir().join(format!(
+            "tls_shipinhao_{name}_{}_{}",
+            std::process::id(),
+            nanos
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

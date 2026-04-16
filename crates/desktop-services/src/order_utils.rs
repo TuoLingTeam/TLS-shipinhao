@@ -1,7 +1,10 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub fn first_non_empty<'a>(data: &'a serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> serde_json::Value {
+pub fn first_non_empty<'a>(
+    data: &'a serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> serde_json::Value {
     for key in keys {
         if let Some(value) = data.get(*key) {
             match value {
@@ -26,7 +29,10 @@ pub fn normalize_sale_param(raw_value: &serde_json::Value) -> String {
         serde_json::Value::Array(items) => items
             .iter()
             .filter_map(|item| {
-                let text = item.as_str().map(str::to_string).unwrap_or_else(|| item.to_string());
+                let text = item
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| item.to_string());
                 let trimmed = text.trim().to_string();
                 (!trimmed.is_empty()).then_some(trimmed)
             })
@@ -73,7 +79,8 @@ pub fn parse_timestamp(value: &serde_json::Value) -> i64 {
 pub fn normalize_product_text(value: &str) -> String {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"[\s\-_/|,，、]+").expect("valid regex"));
-    re.replace_all(&value.trim().to_lowercase(), "").into_owned()
+    re.replace_all(&value.trim().to_lowercase(), "")
+        .into_owned()
 }
 
 pub fn split_sku_tokens(value: &str) -> Vec<String> {
@@ -108,15 +115,27 @@ mod tests {
 
     #[test]
     fn normalizes_sale_params_and_timestamps() {
-        assert_eq!(normalize_sale_param(&json!(["红色", "  XL  ", ""])), "红色|XL");
-        assert_eq!(parse_confirm_receipt_timestamp(&json!("1712910000")), 1712910000);
+        assert_eq!(
+            normalize_sale_param(&json!(["红色", "  XL  ", ""])),
+            "红色|XL"
+        );
+        assert_eq!(
+            parse_confirm_receipt_timestamp(&json!("1712910000")),
+            1712910000
+        );
         assert_eq!(parse_timestamp(&json!(1712910000123i64)), 1712910000);
         assert_eq!(parse_timestamp(&json!("abc")), 0);
     }
 
     #[test]
     fn normalizes_product_text_and_sku_tokens() {
-        assert_eq!(normalize_product_text("  洗发水 / 清爽款-大瓶 "), "洗发水清爽款大瓶");
-        assert_eq!(split_sku_tokens("红色|XL,经典款"), vec!["红色", "XL", "经典款"]);
+        assert_eq!(
+            normalize_product_text("  洗发水 / 清爽款-大瓶 "),
+            "洗发水清爽款大瓶"
+        );
+        assert_eq!(
+            split_sku_tokens("红色|XL,经典款"),
+            vec!["红色", "XL", "经典款"]
+        );
     }
 }

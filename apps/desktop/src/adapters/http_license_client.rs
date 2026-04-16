@@ -49,7 +49,6 @@ pub struct LicenseApiResponse {
     pub task_policy: Option<Vec<String>>,
 }
 
-
 pub fn normalize_license_state(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         "" => "invalid".to_string(),
@@ -109,7 +108,11 @@ impl HttpLicenseClient {
                         Ok(body) => match serde_json::from_str::<LicenseApiResponse>(&body) {
                             Ok(data) => return Ok(data),
                             Err(e) => {
-                                let snippet = body.chars().take(160).collect::<String>().replace("\n", " ");
+                                let snippet = body
+                                    .chars()
+                                    .take(160)
+                                    .collect::<String>()
+                                    .replace("\n", " ");
                                 last_err = Some(anyhow::anyhow!(
                                     "服务器返回了非 JSON 响应（HTTP {} {}）：{}；片段：{}",
                                     status.as_u16(),
@@ -175,7 +178,6 @@ impl HttpLicenseClient {
         self.request_json("/api/verify", &req).await
     }
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -1,10 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useOrderStore } from "../stores/order";
 import { useTauriInvoke } from "./useTauriInvoke";
-import type { OrderCacheEntry } from "../types/order";
+import type {
+  OrderCacheEntry,
+  OrderCacheStatus,
+  OrderSyncProgressEvent,
+  OrderSyncResult,
+} from "../types/order";
 
-interface OrderSyncResult {
-  orders_saved: number;
+function todayISO(): string {
+  return `${new Date().toISOString().split("T")[0]}T23:59:59Z`;
+}
+
+function daysAgoISO(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.toISOString().split("T")[0]}T00:00:00Z`;
 }
 
 export function useOrder() {
@@ -16,20 +28,10 @@ export function useOrder() {
       store.loading = true;
     }
     store.error = null;
-    if (store.syncSource) {
-      store.syncPhase = "load_cache";
-      store.syncProgress = Math.max(store.syncProgress, 76);
-      store.syncMessage = "正在加载本地订单缓存…";
-    }
     const result = await execute({ start_at: startAt, end_at: endAt });
     if (result) {
       store.cachedOrders = result;
       store.lastSyncAt = new Date().toISOString();
-      if (store.syncSource) {
-        store.syncPhase = "completed";
-        store.syncProgress = 100;
-        store.syncMessage = `订单缓存已刷新，共 ${result.length} 条。`;
-      }
     } else {
       store.error = error.value ?? "加载缓存失败";
     }
@@ -38,31 +40,61 @@ export function useOrder() {
     }
   }
 
-  /** 远程拉单写入本地库，再加载当前时间窗内的缓存行。 */
-  async function syncOrders(startAt: string, endAt: string) {
+  async function loadRecentCache() {
+    await loadCache(daysAgoISO(30), todayISO());
+  }
+
+  async function loadCacheStatus() {
+    const status = await invoke<OrderCacheStatus>("get_order_cache_status");
+    store.cacheStatus = status;
+    store.lastSyncAt = status.last_sync_at;
+  }
+
+  async function withSyncEvents<T>(
+    source: "manual" | "review_query",
+    runner: () => Promise<T>,
+  ): Promise<T> {
+    const unlisten = await listen<OrderSyncProgressEvent>("order-sync-progress", ({ payload }) => {
+      if (!payload || payload.source !== source) return;
+      store.syncSource = source;
+      store.syncPhase = payload.phase;
+      store.syncProgress = payload.progress;
+      store.syncMessage = payload.message;
+    });
+
+    try {
+      return await runner();
+    } finally {
+      unlisten();
+      window.setTimeout(() => {
+        if (!store.loading) {
+          store.syncSource = null;
+          store.syncPhase = null;
+          store.syncMessage = null;
+          store.syncProgress = 0;
+        }
+      }, 1200);
+    }
+  }
+
+  async function syncRecentCache() {
     store.loading = true;
     store.error = null;
-    store.syncSource = "manual";
-    store.syncPhase = "request_remote";
-    store.syncProgress = 24;
-    store.syncMessage = "正在调用远端拉单接口…";
     try {
-      const sync = await invoke<OrderSyncResult>("sync_orders", {
-        start_at: startAt,
-        end_at: endAt,
-      });
-      store.syncPhase = "write_cache";
-      store.syncProgress = 58;
-      store.syncMessage = `远端返回 ${sync.orders_saved} 条订单，正在刷新本地缓存…`;
-      await loadCache(startAt, endAt, { preserveLoading: true });
+      const sync = await withSyncEvents("manual", () =>
+        invoke<OrderSyncResult>("sync_recent_order_cache"),
+      );
+      await loadRecentCache();
+      await loadCacheStatus();
+      return sync;
     } catch (e) {
       store.error = typeof e === "string" ? e : String(e);
-      store.syncPhase = "failed";
-      store.syncMessage = `订单同步失败：${store.error}`;
+      return null;
     } finally {
       store.loading = false;
     }
   }
 
-  return { loadCache, syncOrders, loading };
+  return { loadCache, loadRecentCache, loadCacheStatus, syncRecentCache, withSyncEvents, loading };
 }
+

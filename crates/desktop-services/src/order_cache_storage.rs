@@ -1,7 +1,7 @@
 use anyhow::Context;
-use std::collections::HashMap;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -21,6 +21,8 @@ pub struct CacheOrderRecord {
     pub order_id: String,
     pub buyer_nickname: String,
     pub normalized_nickname: String,
+    pub receiver_name: String,
+    pub amount_cent: i64,
     pub create_time: i64,
     pub confirm_receipt_time: i64,
     pub is_waybill_received: bool,
@@ -65,9 +67,11 @@ impl OrderCacheRepository {
             r#"
             CREATE TABLE IF NOT EXISTS orders (
                 order_id TEXT PRIMARY KEY,
-                buyer_nickname TEXT NOT NULL DEFAULT '',
-                normalized_nickname TEXT NOT NULL DEFAULT '',
-                create_time INTEGER NOT NULL DEFAULT 0,
+                    buyer_nickname TEXT NOT NULL DEFAULT '',
+                    normalized_nickname TEXT NOT NULL DEFAULT '',
+                    receiver_name TEXT NOT NULL DEFAULT '',
+                    amount_cent INTEGER NOT NULL DEFAULT 0,
+                    create_time INTEGER NOT NULL DEFAULT 0,
                 confirm_receipt_time INTEGER NOT NULL DEFAULT 0,
                 is_waybill_received INTEGER NOT NULL DEFAULT 0,
                 waybill_received_time INTEGER NOT NULL DEFAULT 0,
@@ -114,6 +118,12 @@ impl OrderCacheRepository {
             CREATE INDEX IF NOT EXISTS idx_cache_segments_scope_start ON cache_segments(scope, start_ts, end_ts);
             "#,
         )?;
+        for statement in [
+            "ALTER TABLE orders ADD COLUMN receiver_name TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE orders ADD COLUMN amount_cent INTEGER NOT NULL DEFAULT 0",
+        ] {
+            let _ = self.connection.execute(statement, []);
+        }
         Ok(())
     }
 
@@ -131,20 +141,25 @@ impl OrderCacheRepository {
         }
         let tx = self.connection.transaction()?;
         for order in orders {
-            tx.execute("DELETE FROM order_products WHERE order_id = ?1", params![order.order_id])?;
+            tx.execute(
+                "DELETE FROM order_products WHERE order_id = ?1",
+                params![order.order_id],
+            )?;
             tx.execute(
                 r#"
                 INSERT OR REPLACE INTO orders (
                     order_id, buyer_nickname, normalized_nickname, create_time,
-                    confirm_receipt_time, is_waybill_received, waybill_received_time,
+                    receiver_name, amount_cent, confirm_receipt_time, is_waybill_received, waybill_received_time,
                     is_education_order, order_status, openid, raw_source, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                 "#,
                 params![
                     order.order_id,
                     order.buyer_nickname,
                     order.normalized_nickname,
                     order.create_time,
+                    order.receiver_name,
+                    order.amount_cent,
                     order.confirm_receipt_time,
                     bool_to_int(order.is_waybill_received),
                     order.waybill_received_time,
@@ -230,7 +245,7 @@ impl OrderCacheRepository {
             .connection
             .query_row(
                 r#"
-                SELECT order_id, buyer_nickname, normalized_nickname, create_time,
+                SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
                        confirm_receipt_time, is_waybill_received, waybill_received_time,
                        is_education_order, order_status, openid, raw_source, updated_at
                 FROM orders WHERE order_id = ?1
@@ -241,22 +256,26 @@ impl OrderCacheRepository {
                         order_id: row.get(0)?,
                         buyer_nickname: row.get(1)?,
                         normalized_nickname: row.get(2)?,
-                        create_time: row.get(3)?,
-                        confirm_receipt_time: row.get(4)?,
-                        is_waybill_received: int_to_bool(row.get::<_, i64>(5)?),
-                        waybill_received_time: row.get(6)?,
-                        is_education_order: int_to_bool(row.get::<_, i64>(7)?),
-                        order_status: row.get(8)?,
-                        openid: row.get(9)?,
-                        raw_source: row.get(10)?,
-                        updated_at: row.get(11)?,
+                        receiver_name: row.get(3)?,
+                        amount_cent: row.get(4)?,
+                        create_time: row.get(5)?,
+                        confirm_receipt_time: row.get(6)?,
+                        is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
+                        waybill_received_time: row.get(8)?,
+                        is_education_order: int_to_bool(row.get::<_, i64>(9)?),
+                        order_status: row.get(10)?,
+                        openid: row.get(11)?,
+                        raw_source: row.get(12)?,
+                        updated_at: row.get(13)?,
                         products: Vec::new(),
                     })
                 },
             )
             .optional()?;
 
-        let Some(mut order) = order else { return Ok(None) };
+        let Some(mut order) = order else {
+            return Ok(None);
+        };
         let mut stmt = self.connection.prepare(
             r#"SELECT product_id, sku_id, sale_param, product_name, thumb_img
                FROM order_products WHERE order_id = ?1 ORDER BY id ASC"#,
@@ -274,7 +293,12 @@ impl OrderCacheRepository {
         Ok(Some(order))
     }
 
-    pub fn mark_segment_complete(&self, scope: &str, start_timestamp: i64, end_timestamp: i64) -> anyhow::Result<()> {
+    pub fn mark_segment_complete(
+        &self,
+        scope: &str,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<()> {
         self.connection.execute(
             r#"
             INSERT OR REPLACE INTO cache_segments (scope, start_ts, end_ts, status, updated_at)
@@ -320,7 +344,9 @@ impl OrderCacheRepository {
         let mut segments = self
             .get_complete_segments(scope, start_timestamp, end_timestamp)?
             .into_iter()
-            .map(|(seg_start, seg_end)| (seg_start.max(start_timestamp), seg_end.min(end_timestamp)))
+            .map(|(seg_start, seg_end)| {
+                (seg_start.max(start_timestamp), seg_end.min(end_timestamp))
+            })
             .filter(|(seg_start, seg_end)| seg_start <= seg_end)
             .collect::<Vec<_>>();
 
@@ -363,12 +389,16 @@ impl OrderCacheRepository {
         let mut stmt = self
             .connection
             .prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
-        let expired_rows = stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
+        let expired_rows =
+            stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
         let order_ids = expired_rows.collect::<rusqlite::Result<Vec<_>>>()?;
         if !order_ids.is_empty() {
             let tx = self.connection.unchecked_transaction()?;
             for order_id in &order_ids {
-                tx.execute("DELETE FROM order_products WHERE order_id = ?1", params![order_id])?;
+                tx.execute(
+                    "DELETE FROM order_products WHERE order_id = ?1",
+                    params![order_id],
+                )?;
                 tx.execute("DELETE FROM orders WHERE order_id = ?1", params![order_id])?;
             }
             tx.execute(
@@ -388,10 +418,14 @@ impl OrderCacheRepository {
         Ok(order_ids.len())
     }
 
-    pub fn fetch_orders_in_range(&self, start_timestamp: i64, end_timestamp: i64) -> anyhow::Result<Vec<CacheOrderRecord>> {
+    pub fn fetch_orders_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<Vec<CacheOrderRecord>> {
         let mut order_stmt = self.connection.prepare(
             r#"
-            SELECT order_id, buyer_nickname, normalized_nickname, create_time,
+            SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
                    confirm_receipt_time, is_waybill_received, waybill_received_time,
                    is_education_order, order_status, openid, raw_source, updated_at
             FROM orders
@@ -404,15 +438,17 @@ impl OrderCacheRepository {
                 order_id: row.get(0)?,
                 buyer_nickname: row.get(1)?,
                 normalized_nickname: row.get(2)?,
-                create_time: row.get(3)?,
-                confirm_receipt_time: row.get(4)?,
-                is_waybill_received: int_to_bool(row.get::<_, i64>(5)?),
-                waybill_received_time: row.get(6)?,
-                is_education_order: int_to_bool(row.get::<_, i64>(7)?),
-                order_status: row.get(8)?,
-                openid: row.get(9)?,
-                raw_source: row.get(10)?,
-                updated_at: row.get(11)?,
+                receiver_name: row.get(3)?,
+                amount_cent: row.get(4)?,
+                create_time: row.get(5)?,
+                confirm_receipt_time: row.get(6)?,
+                is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
+                waybill_received_time: row.get(8)?,
+                is_education_order: int_to_bool(row.get::<_, i64>(9)?),
+                order_status: row.get(10)?,
+                openid: row.get(11)?,
+                raw_source: row.get(12)?,
+                updated_at: row.get(13)?,
                 products: Vec::new(),
             })
         })?;
@@ -427,32 +463,50 @@ impl OrderCacheRepository {
             ORDER BY o.create_time DESC, p.order_id ASC, p.id ASC
             "#,
         )?;
-        let product_rows = product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                CacheOrderProduct {
-                    product_id: row.get(1)?,
-                    sku_id: row.get(2)?,
-                    sale_param: row.get(3)?,
-                    product_name: row.get(4)?,
-                    thumb_img: row.get(5)?,
-                },
-            ))
-        })?;
+        let product_rows =
+            product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    CacheOrderProduct {
+                        product_id: row.get(1)?,
+                        sku_id: row.get(2)?,
+                        sale_param: row.get(3)?,
+                        product_name: row.get(4)?,
+                        thumb_img: row.get(5)?,
+                    },
+                ))
+            })?;
         let mut products_by_order: HashMap<String, Vec<CacheOrderProduct>> = HashMap::new();
         for row in product_rows {
             let (order_id, product) = row?;
             products_by_order.entry(order_id).or_default().push(product);
         }
         for order in &mut orders {
-            order.products = products_by_order.remove(&order.order_id).unwrap_or_default();
+            order.products = products_by_order
+                .remove(&order.order_id)
+                .unwrap_or_default();
         }
         Ok(orders)
     }
+
+    pub fn count_orders(&self) -> anyhow::Result<usize> {
+        let count = self
+            .connection
+            .query_row("SELECT COUNT(*) FROM orders", [], |row| row.get::<_, i64>(0))?;
+        Ok(count.max(0) as usize)
+    }
 }
 
-fn bool_to_int(value: bool) -> i64 { if value { 1 } else { 0 } }
-fn int_to_bool(value: i64) -> bool { value != 0 }
+fn bool_to_int(value: bool) -> i64 {
+    if value {
+        1
+    } else {
+        0
+    }
+}
+fn int_to_bool(value: i64) -> bool {
+    value != 0
+}
 
 pub fn now_epoch_seconds() -> i64 {
     SystemTime::now()
@@ -471,6 +525,8 @@ mod tests {
             order_id: "o-1".into(),
             buyer_nickname: "buyer".into(),
             normalized_nickname: "buyer".into(),
+            receiver_name: "李**".into(),
+            amount_cent: 3990,
             create_time: 100,
             confirm_receipt_time: 120,
             is_waybill_received: true,
@@ -536,8 +592,10 @@ mod tests {
         second.order_id = "o-2".into();
         second.create_time = 2_000;
         repo.upsert_orders(&[first, second]).unwrap();
-        repo.mark_segment_complete("tls_order_cache", 900, 1500).unwrap();
-        repo.mark_segment_complete("tls_order_cache", 1700, 2100).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 900, 1500)
+            .unwrap();
+        repo.mark_segment_complete("tls_order_cache", 1700, 2100)
+            .unwrap();
         let missing = repo
             .get_missing_segments("tls_order_cache", 900, 2100, 120, 1)
             .unwrap();
@@ -559,7 +617,8 @@ mod tests {
         second.order_id = "o-2".into();
         second.create_time = 2_000;
         repo.upsert_orders(&[first, second]).unwrap();
-        repo.mark_segment_complete("tls_order_cache", 900, 2100).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 900, 2100)
+            .unwrap();
         let deleted = repo.delete_older_than("tls_order_cache", 1_500).unwrap();
         assert_eq!(deleted, 1);
         let remaining = repo.fetch_orders_in_range(0, 3_000).unwrap();
