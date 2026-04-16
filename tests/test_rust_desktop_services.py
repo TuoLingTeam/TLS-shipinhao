@@ -97,3 +97,18 @@ class RustDesktopReviewCandidateScoringTests(unittest.TestCase):
             "pub fn score_candidate_order",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopReviewMatchFlowTests(unittest.TestCase):
+    def test_review_match_flow_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "review_match_flow.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/review_match_flow.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub const AUTO_FILL_SCORE_THRESHOLD",
+            "pub enum MatchStrategy",
+            "pub struct SingleEvaluationMatch",
+            "pub fn match_strategy_by_score",
+            "pub fn match_single_evaluation",
+        ):
+            self.assertIn(symbol, text)
