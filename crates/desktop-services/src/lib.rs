@@ -1,5 +1,6 @@
 pub mod day_window;
 pub mod order_sync_planner;
+pub mod order_sync_service;
 pub mod order_cache_storage;
 pub mod review_index;
 pub mod review_batch_match;

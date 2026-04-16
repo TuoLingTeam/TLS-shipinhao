@@ -187,3 +187,19 @@ class RustDesktopDayWindowTests(unittest.TestCase):
             "pub fn recent_day_range_timestamps",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopOrderSyncServiceTests(unittest.TestCase):
+    def test_order_sync_service_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "order_sync_service.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/order_sync_service.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub const ORDER_CACHE_SCOPE",
+            "pub struct SyncWindowOrders",
+            "pub struct CacheFetchResult",
+            "pub trait CacheOrderFinder",
+            "pub struct OrderSyncService",
+            "pub fn deduplicate_orders_by_id",
+        ):
+            self.assertIn(symbol, text)

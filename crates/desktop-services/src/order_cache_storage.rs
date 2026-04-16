@@ -1,4 +1,5 @@
 use anyhow::Context;
+use std::collections::HashMap;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -272,6 +273,182 @@ impl OrderCacheRepository {
         order.products = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(Some(order))
     }
+
+    pub fn mark_segment_complete(&self, scope: &str, start_timestamp: i64, end_timestamp: i64) -> anyhow::Result<()> {
+        self.connection.execute(
+            r#"
+            INSERT OR REPLACE INTO cache_segments (scope, start_ts, end_ts, status, updated_at)
+            VALUES (?1, ?2, ?3, 'complete', ?4)
+            "#,
+            params![scope, start_timestamp, end_timestamp, now_epoch_seconds()],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_complete_segments(
+        &self,
+        scope: &str,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<Vec<(i64, i64)>> {
+        let mut stmt = self.connection.prepare(
+            r#"
+            SELECT start_ts, end_ts
+            FROM cache_segments
+            WHERE scope = ?1 AND status = 'complete' AND end_ts >= ?2 AND start_ts <= ?3
+            ORDER BY start_ts ASC, end_ts ASC
+            "#,
+        )?;
+        let rows = stmt.query_map(params![scope, start_timestamp, end_timestamp], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn get_missing_segments(
+        &self,
+        scope: &str,
+        start_timestamp: i64,
+        end_timestamp: i64,
+        merge_tolerance: i64,
+        min_gap_width: i64,
+    ) -> anyhow::Result<Vec<(i64, i64)>> {
+        if start_timestamp <= 0 || end_timestamp <= 0 || start_timestamp > end_timestamp {
+            return Ok(Vec::new());
+        }
+
+        let mut segments = self
+            .get_complete_segments(scope, start_timestamp, end_timestamp)?
+            .into_iter()
+            .map(|(seg_start, seg_end)| (seg_start.max(start_timestamp), seg_end.min(end_timestamp)))
+            .filter(|(seg_start, seg_end)| seg_start <= seg_end)
+            .collect::<Vec<_>>();
+
+        if segments.is_empty() {
+            return Ok(vec![(start_timestamp, end_timestamp)]);
+        }
+
+        segments.sort_by_key(|(start, end)| (*start, *end));
+        let mut merged: Vec<(i64, i64)> = Vec::new();
+        for (seg_start, seg_end) in segments {
+            match merged.last_mut() {
+                Some((_, last_end)) if seg_start <= *last_end + merge_tolerance => {
+                    *last_end = (*last_end).max(seg_end);
+                }
+                _ => merged.push((seg_start, seg_end)),
+            }
+        }
+
+        let mut missing = Vec::new();
+        let mut cursor = start_timestamp;
+        for (seg_start, seg_end) in merged {
+            if cursor < seg_start {
+                let gap_width = seg_start - cursor;
+                if gap_width >= min_gap_width {
+                    missing.push((cursor, seg_start - 1));
+                }
+            }
+            cursor = cursor.max(seg_end + 1);
+        }
+        if cursor <= end_timestamp {
+            let gap_width = end_timestamp - cursor + 1;
+            if gap_width >= min_gap_width {
+                missing.push((cursor, end_timestamp));
+            }
+        }
+        Ok(missing)
+    }
+
+    pub fn delete_older_than(&self, scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
+        let expired_rows = stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
+        let order_ids = expired_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        if !order_ids.is_empty() {
+            let tx = self.connection.unchecked_transaction()?;
+            for order_id in &order_ids {
+                tx.execute("DELETE FROM order_products WHERE order_id = ?1", params![order_id])?;
+                tx.execute("DELETE FROM orders WHERE order_id = ?1", params![order_id])?;
+            }
+            tx.execute(
+                "DELETE FROM cache_segments WHERE scope = ?1 AND end_ts < ?2",
+                params![scope, cutoff_timestamp],
+            )?;
+            tx.execute(
+                r#"
+                UPDATE cache_segments
+                SET start_ts = ?1, updated_at = ?2
+                WHERE scope = ?3 AND start_ts < ?1 AND end_ts >= ?1
+                "#,
+                params![cutoff_timestamp, now_epoch_seconds(), scope],
+            )?;
+            tx.commit()?;
+        }
+        Ok(order_ids.len())
+    }
+
+    pub fn fetch_orders_in_range(&self, start_timestamp: i64, end_timestamp: i64) -> anyhow::Result<Vec<CacheOrderRecord>> {
+        let mut order_stmt = self.connection.prepare(
+            r#"
+            SELECT order_id, buyer_nickname, normalized_nickname, create_time,
+                   confirm_receipt_time, is_waybill_received, waybill_received_time,
+                   is_education_order, order_status, openid, raw_source, updated_at
+            FROM orders
+            WHERE create_time >= ?1 AND create_time <= ?2
+            ORDER BY create_time DESC, order_id DESC
+            "#,
+        )?;
+        let order_rows = order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+            Ok(CacheOrderRecord {
+                order_id: row.get(0)?,
+                buyer_nickname: row.get(1)?,
+                normalized_nickname: row.get(2)?,
+                create_time: row.get(3)?,
+                confirm_receipt_time: row.get(4)?,
+                is_waybill_received: int_to_bool(row.get::<_, i64>(5)?),
+                waybill_received_time: row.get(6)?,
+                is_education_order: int_to_bool(row.get::<_, i64>(7)?),
+                order_status: row.get(8)?,
+                openid: row.get(9)?,
+                raw_source: row.get(10)?,
+                updated_at: row.get(11)?,
+                products: Vec::new(),
+            })
+        })?;
+        let mut orders = order_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let mut product_stmt = self.connection.prepare(
+            r#"
+            SELECT p.order_id, p.product_id, p.sku_id, p.sale_param, p.product_name, p.thumb_img
+            FROM order_products p
+            JOIN orders o ON o.order_id = p.order_id
+            WHERE o.create_time >= ?1 AND o.create_time <= ?2
+            ORDER BY o.create_time DESC, p.order_id ASC, p.id ASC
+            "#,
+        )?;
+        let product_rows = product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                CacheOrderProduct {
+                    product_id: row.get(1)?,
+                    sku_id: row.get(2)?,
+                    sale_param: row.get(3)?,
+                    product_name: row.get(4)?,
+                    thumb_img: row.get(5)?,
+                },
+            ))
+        })?;
+        let mut products_by_order: HashMap<String, Vec<CacheOrderProduct>> = HashMap::new();
+        for row in product_rows {
+            let (order_id, product) = row?;
+            products_by_order.entry(order_id).or_default().push(product);
+        }
+        for order in &mut orders {
+            order.products = products_by_order.remove(&order.order_id).unwrap_or_default();
+        }
+        Ok(orders)
+    }
 }
 
 fn bool_to_int(value: bool) -> i64 { if value { 1 } else { 0 } }
@@ -345,6 +522,53 @@ mod tests {
         assert_eq!(loaded.products.len(), 1);
         assert_eq!(loaded.products[0].product_id, "p1");
         assert!(loaded.is_waybill_received);
+    }
+
+    #[test]
+    fn computes_missing_segments_and_range_fetch() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        let mut first = sample_order();
+        first.create_time = 1_000;
+        let mut second = sample_order();
+        second.order_id = "o-2".into();
+        second.create_time = 2_000;
+        repo.upsert_orders(&[first, second]).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 900, 1500).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 1700, 2100).unwrap();
+        let missing = repo
+            .get_missing_segments("tls_order_cache", 900, 2100, 120, 1)
+            .unwrap();
+        assert_eq!(missing, vec![(1501, 1699)]);
+        let orders = repo.fetch_orders_in_range(900, 2_100).unwrap();
+        assert_eq!(orders.len(), 2);
+        assert_eq!(orders[0].order_id, "o-2");
+    }
+
+    #[test]
+    fn delete_older_than_removes_old_orders_and_trims_segments() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        let mut first = sample_order();
+        first.create_time = 1_000;
+        let mut second = sample_order();
+        second.order_id = "o-2".into();
+        second.create_time = 2_000;
+        repo.upsert_orders(&[first, second]).unwrap();
+        repo.mark_segment_complete("tls_order_cache", 900, 2100).unwrap();
+        let deleted = repo.delete_older_than("tls_order_cache", 1_500).unwrap();
+        assert_eq!(deleted, 1);
+        let remaining = repo.fetch_orders_in_range(0, 3_000).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].order_id, "o-2");
+        let segments = repo
+            .get_complete_segments("tls_order_cache", 0, 3_000)
+            .unwrap();
+        assert_eq!(segments, vec![(1_500, 2_100)]);
     }
 
     #[test]
