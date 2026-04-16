@@ -1329,9 +1329,9 @@ class MainWindow(QWidget):
                     f"当前设备与原授权绑定设备不一致，请联系微信 {AUTHOR_WECHAT} 处理重绑。"
                 )
             elif reason == "online_refresh_required":
-                self.license_meta_label.setText("当前授权需要联网刷新短期票据后才能继续执行核心任务。")
+                self.license_meta_label.setText("需要联网刷新，才能继续使用。")
             elif reason == "reactivation_required":
-                self.license_meta_label.setText("授权协议已升级，请联网重新校验卡密以完成迁移。")
+                self.license_meta_label.setText("授权协议升级！请重新用卡密激活。")
             elif reason == "revoked":
                 self.license_meta_label.setText(f"当前卡密已被吊销，请联系微信 {AUTHOR_WECHAT} 处理。")
             else:
@@ -1373,7 +1373,7 @@ class MainWindow(QWidget):
             return True
         if reason == "online_refresh_required":
             self._append_license_status_log(reason)
-            self._append_logs("当前授权需要联网刷新短期票据后，才能执行查单与批量处理。")
+            self._append_logs("需要联网刷新，才能继续使用。")
             return True
 
         self._append_logs("当前未激活，执行前需先输入卡密。")
