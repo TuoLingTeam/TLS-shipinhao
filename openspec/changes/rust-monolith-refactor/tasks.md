@@ -175,8 +175,8 @@ Depends on: 12
 
 - [x] 14.1 RED: 为 `xtask` / release 流程补充失败测试与命令验收
 - [x] 14.2 GREEN: 让 Rust build-tools 接管版本注入、manifest、打包编排
-- [ ] 14.3 GREEN: 更新 GitHub Actions 到 Rust-only 主链路
-- [ ] 14.4 REFACTOR: 删除 `scripts/build.py` / `scripts/obfuscate.py` 正式链路
+- [x] 14.3 GREEN: 更新 GitHub Actions 到 Rust-only 主链路
+- [x] 14.4 REFACTOR: 删除 `scripts/build.py` / `scripts/obfuscate.py` 正式链路
 
 ## 15. Cloudflare Rust 授权部署收口
 

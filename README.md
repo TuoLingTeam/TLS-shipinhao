@@ -6,7 +6,7 @@
 
 ```text
 TLS-shipinhao/
-├── app/                          # 桌面客户端（Python + PySide6）
+├── crates/                       # Rust 核心 crates（domain / services / security / app）
 │   ├── main.py                   # 入口，调用 bootstrap.main()
 │   ├── bootstrap.py              # 程序启动入口（QApplication 初始化）
 │   ├── settings.py               # 全局配置与常量（URL、窗口尺寸、抓取参数、匹配权重等）
@@ -29,16 +29,15 @@ TLS-shipinhao/
 │       ├── review_worker.py      # 中差评/品退任务后台执行器
 │       ├── widgets.py            # 自定义控件与通用 UI 组件
 │       └── window.py             # MainWindow 主窗口
-├── backend/                      # 卡密授权后端（Cloudflare Workers + D1）
+├── apps/                         # Rust 应用壳（desktop / license-worker）
+├── backend/                      # 兼容期 Cloudflare 目录（待完全退役）
 │   ├── src/
 │   │   ├── index.js              # Worker 入口（API 路由、卡密生成/校验）
 │   │   └── admin.html            # 管理后台页面
 │   ├── schema.sql                # D1 数据库建表语句
 │   ├── wrangler.toml             # Workers 部署配置
 │   └── README.md                 # 后端详细文档
-├── scripts/                      # 构建/混淆脚本
-│   ├── obfuscate.py              # Cython 混淆编译脚本
-│   └── build.py                  # PyInstaller 打包构建脚本
+├── xtask/                        # Rust 构建、manifest 与发布命令
 └── README.md
 ```
 
@@ -61,36 +60,30 @@ ui/widgets + ui/*worker ← ui/window ← app/main.py
 - 批量更新订单物流单号
 - Cookie 浏览器自动采集登录态
 - 在线卡密授权（设备绑定 + 离线回退校验）
-- 图形化桌面界面（PySide6）
+- 图形化桌面界面（Rust + Slint）
 
 ## 环境要求
 
-- Python 3.10+
-- Node.js 18+（后端部署）
+- Rust stable
+- Node.js 18+（仅兼容期 Cloudflare 目录/部署辅助）
 
 ## 快速开始
 
-### 客户端
+### 桌面客户端
 
 ```bash
-# 安装依赖
-pip install -r app/requirements.txt
-
-#激活虚拟环境
-source .venv/bin/activate
-
-# 运行
-python app/main.py
+# 运行 Slint 桌面客户端
+cargo run -p desktop-app
 ```
 
 ### 构建发布包
 
 ```bash
-# Cython 混淆编译
-python scripts/obfuscate.py
+# 构建 release 二进制
+cargo run -p xtask -- desktop-build --release
 
-# PyInstaller 打包（使用混淆后的代码）
-python scripts/build.py --dist
+# 生成完整性清单
+cargo run -p xtask -- manifest target/release dist/integrity-manifest.json desktop-app
 ```
 
 ### 后端部署
@@ -113,4 +106,4 @@ cd /Users/zxr/Downloads/source-code/TLS-shipinhao/backend && npx wrangler deploy
 
 - 确保 `cookie.txt` 文件存在且内容有效（包含 biz_magic 值）
 - Cookie 信息需要定期更新，或通过内置浏览器重新登录采集
-- 建议在虚拟环境内运行和打包
+- 正式构建发布链路已切换到 Rust workspace + xtask

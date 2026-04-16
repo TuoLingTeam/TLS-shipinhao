@@ -1,19 +1,23 @@
-name: Build Desktop Apps
+name: Rust Desktop Release
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "app/**"
-      - "scripts/**"
-      - ".github/workflows/build.yml"
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - 'crates/**'
+      - 'apps/**'
+      - 'xtask/**'
+      - '.github/workflows/build.yml'
 
 permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: "3.12"
+  APP_NAME: TLS-shipinhao
 
 jobs:
   extract-version:
@@ -27,23 +31,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract version
+      - name: Extract workspace version
         id: version
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import os
-
-          text = Path('app/settings.py').read_text(encoding='utf-8')
-          match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
-          version = match.group(1).strip() if match else '0.0.0'
-          output = Path(os.environ['GITHUB_OUTPUT'])
-          with output.open('a', encoding='utf-8') as fh:
-              fh.write(f'app_version={version}\n')
-              fh.write(f'release_tag=v{version}\n')
-          PY
+          set -euo pipefail
+          version=$(awk '
+            $0 ~ /^\[workspace.package\]$/ { in_section=1; next }
+            in_section && $0 ~ /^\[/ { in_section=0 }
+            in_section && $1 == "version" {
+              gsub(/"/, "", $3)
+              print $3
+              exit
+            }
+          ' Cargo.toml)
+          test -n "$version"
+          {
+            echo "app_version=$version"
+            echo "release_tag=v$version"
+          } >> "$GITHUB_OUTPUT"
 
   prepare-release:
     name: Prepare GitHub Release
@@ -64,7 +70,7 @@ jobs:
           gh release create "$tag" \
             --repo "${{ github.repository }}" \
             --title "$tag" \
-            --notes "Automated desktop build for $tag."
+            --notes "Rust desktop release for $tag."
 
   build-windows:
     name: Build Windows
@@ -77,62 +83,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: app/requirements.txt
-
-      - name: Install dependencies
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r app/requirements.txt
-          python -m pip install cython setuptools
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Obfuscate code
-        shell: pwsh
-        run: python scripts/obfuscate.py
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build Windows app
+      - name: Run workspace tests
+        shell: pwsh
+        run: cargo test --workspace
+
+      - name: Build desktop app
+        shell: pwsh
+        run: cargo run -p xtask -- desktop-build --release
+
+      - name: Generate integrity manifest
         shell: pwsh
         env:
           INTEGRITY_MANIFEST_PRIVATE_KEY_B64: ${{ secrets.INTEGRITY_MANIFEST_PRIVATE_KEY_B64 }}
-          LICENSE_SIGNING_PRIVATE_KEY_B64: ${{ secrets.LICENSE_SIGNING_PRIVATE_KEY_B64 }}
-        run: python scripts/build.py windows --dist
+          INTEGRITY_MANIFEST_KEY_ID: manifest-v1
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          cargo run -p xtask -- manifest target/release dist/integrity-manifest-windows.json desktop-app.exe
+
+      - name: Package Windows release asset
+        shell: pwsh
+        run: |
+          $version = "${{ needs.extract-version.outputs.app_version }}"
+          $zipPath = "dist/TLS-shipinhao-v$version-windows.zip"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path target/release/desktop-app.exe, dist/integrity-manifest-windows.json -DestinationPath $zipPath
 
       - name: Upload Windows release asset
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = "${{ needs.extract-version.outputs.app_version }}"
           $tag = "${{ needs.extract-version.outputs.release_tag }}"
-          $assetName = "TLS-shipinhao-v$version-windows.zip"
-          $assetPath = "dist/TLS-shipinhao-win.zip"
-
-          gh release upload $tag "$assetPath#$assetName" `
+          $version = "${{ needs.extract-version.outputs.app_version }}"
+          gh release upload $tag "dist/TLS-shipinhao-v$version-windows.zip#TLS-shipinhao-v$version-windows.zip" `
             --repo "${{ github.repository }}" `
             --clobber
-
-      - name: Summarize Windows release upload
-        if: ${{ always() }}
-        shell: pwsh
-        run: |
-          $version = "${{ needs.extract-version.outputs.app_version }}"
-          $tag = "${{ needs.extract-version.outputs.release_tag }}"
-          $releaseUrl = "https://github.com/${{ github.repository }}/releases/tag/$tag"
-          @"
-          已上传/更新 GitHub Release 资产：
-          - 平台: Windows
-          - Release: $tag
-          - Asset: TLS-shipinhao-v$version-windows.zip
-          - URL: $releaseUrl
-          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
   build-macos:
     name: Build macOS
@@ -145,40 +136,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: app/requirements.txt
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r app/requirements.txt
-          python -m pip install cython setuptools
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Obfuscate code
-        shell: bash
-        run: python scripts/obfuscate.py
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build macOS app
+      - name: Run workspace tests
+        shell: bash
+        run: cargo test --workspace
+
+      - name: Build desktop app
+        shell: bash
+        run: cargo run -p xtask -- desktop-build --release
+
+      - name: Generate integrity manifest
         shell: bash
         env:
           INTEGRITY_MANIFEST_PRIVATE_KEY_B64: ${{ secrets.INTEGRITY_MANIFEST_PRIVATE_KEY_B64 }}
-          LICENSE_SIGNING_PRIVATE_KEY_B64: ${{ secrets.LICENSE_SIGNING_PRIVATE_KEY_B64 }}
-        run: python scripts/build.py mac --dist
+          INTEGRITY_MANIFEST_KEY_ID: manifest-v1
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cargo run -p xtask -- manifest target/release dist/integrity-manifest-macos.json desktop-app
 
-      - name: Package macOS app bundle
+      - name: Package macOS release asset
         shell: bash
         run: |
           set -euo pipefail
-          rm -f dist/TLS-shipinhao-mac.zip
-          ditto -c -k --sequesterRsrc --keepParent dist/TLS-shipinhao.app dist/TLS-shipinhao-mac.zip
+          version='${{ needs.extract-version.outputs.app_version }}'
+          zip_path="dist/TLS-shipinhao-v${version}-mac.zip"
+          rm -f "$zip_path"
+          ditto -c -k --keepParent target/release/desktop-app "$zip_path"
+          ditto -c -k --keepParent dist/integrity-manifest-macos.json dist/integrity-manifest-macos.zip
+          zip -j "$zip_path" dist/integrity-manifest-macos.json
 
       - name: Upload macOS release asset
         shell: bash
@@ -186,26 +177,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version='${{ needs.extract-version.outputs.app_version }}'
           tag='${{ needs.extract-version.outputs.release_tag }}'
-          asset_name="TLS-shipinhao-v${version}-mac.zip"
-          asset_path='dist/TLS-shipinhao-mac.zip'
-
-          gh release upload "$tag" "$asset_path#$asset_name" \
+          version='${{ needs.extract-version.outputs.app_version }}'
+          gh release upload "$tag" "dist/TLS-shipinhao-v${version}-mac.zip#TLS-shipinhao-v${version}-mac.zip" \
             --repo "${{ github.repository }}" \
             --clobber
-
-      - name: Summarize macOS release upload
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          tag='${{ needs.extract-version.outputs.release_tag }}'
-          version='${{ needs.extract-version.outputs.app_version }}'
-          release_url="https://github.com/${{ github.repository }}/releases/tag/$tag"
-          {
-            echo '已上传/更新 GitHub Release 资产：'
-            echo '- 平台: macOS'
-            echo "- Release: $tag"
-            echo "- Asset: TLS-shipinhao-v${version}-mac.zip"
-            echo "- URL: $release_url"
-          } >> "$GITHUB_STEP_SUMMARY"

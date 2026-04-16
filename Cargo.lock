@@ -218,7 +218,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "api-contracts"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -627,7 +627,7 @@ dependencies = [
 
 [[package]]
 name = "build-tools"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -1174,7 +1174,7 @@ dependencies = [
 
 [[package]]
 name = "desktop-app"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
  "desktop-services",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "desktop-services"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "desktop-shell"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
 ]
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "domain-core"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -2834,7 +2834,7 @@ dependencies = [
 
 [[package]]
 name = "license-service"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -2846,7 +2846,7 @@ dependencies = [
 
 [[package]]
 name = "license-worker"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -4320,7 +4320,7 @@ dependencies = [
 
 [[package]]
 name = "security_core"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -6406,7 +6406,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "4.3.0"
 dependencies = [
  "anyhow",
  "base64",

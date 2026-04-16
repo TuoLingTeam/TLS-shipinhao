@@ -34,7 +34,7 @@ fn run_release_command(args: &[OsString]) -> Result<()> {
         .unwrap_or("dev");
     let release_note = release_note_for_version(version)?;
     println!("preparing {release_note}");
-    run_desktop_build_command(&[])?;
+    run_desktop_build_command(&[OsString::from("--release")])?;
     Ok(())
 }
 
@@ -63,11 +63,11 @@ fn run_manifest_command(args: &[OsString]) -> Result<()> {
     Ok(())
 }
 
-fn run_desktop_build_command(_args: &[OsString]) -> Result<()> {
-    let status = Command::new("cargo")
-        .args(["build", "-p", "desktop-app"])
-        .status()
-        .context("spawn cargo build -p desktop-app")?;
+fn run_desktop_build_command(args: &[OsString]) -> Result<()> {
+    let mut command = Command::new("cargo");
+    command.args(["build", "-p", "desktop-app"]);
+    command.args(args);
+    let status = command.status().context("spawn cargo build -p desktop-app")?;
     if !status.success() {
         return Err(anyhow!("desktop-build failed with status {status}"));
     }
