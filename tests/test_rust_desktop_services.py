@@ -67,3 +67,17 @@ class RustDesktopOrderMatchScoringTests(unittest.TestCase):
             "pub fn compute_match_score",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopReviewMatcherHelperTests(unittest.TestCase):
+    def test_review_matcher_helper_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "review_matcher_helpers.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/review_matcher_helpers.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub struct CandidateMatch",
+            "pub fn build_product_reason",
+            "pub fn build_nickname_reason",
+            "pub fn pick_best_match",
+        ):
+            self.assertIn(symbol, text)
