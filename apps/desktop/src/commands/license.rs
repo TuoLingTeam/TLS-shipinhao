@@ -1,9 +1,7 @@
 use crate::adapters::http_license_client::HttpLicenseClient;
+use crate::app_settings::LICENSE_API_BASE_URLS;
 use crate::error::AppError;
 
-const LICENSE_API_BASE_URLS: &[&str] = &[
-    "https://tls-license.tuolingshe.workers.dev",
-];
 const LICENSE_PROTOCOL_VERSION: u32 = 3;
 
 fn make_client() -> HttpLicenseClient {

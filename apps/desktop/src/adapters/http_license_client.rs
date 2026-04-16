@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const LICENSE_API_TIMEOUT_SECS: u64 = 30;
+use crate::app_settings::LICENSE_API_TIMEOUT_SECS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateRequest {

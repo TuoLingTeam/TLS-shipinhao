@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod adapters;
+mod app_settings;
 mod commands;
 mod error;
 mod state;
@@ -13,6 +14,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::review::find_reviews,
             commands::order::load_order_cache,
+            commands::order::sync_orders,
             commands::delivery::update_delivery,
             commands::delivery::batch_delivery,
             commands::license::activate_license,

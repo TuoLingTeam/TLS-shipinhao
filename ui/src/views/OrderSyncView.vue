@@ -6,7 +6,7 @@ import OrderCacheStats from "../components/order/OrderCacheStats.vue";
 import { formatCent } from "../utils/format";
 
 const store = useOrderStore();
-const { loadCache } = useOrder();
+const { syncOrders } = useOrder();
 
 function todayISO(): string {
   return new Date().toISOString().split("T")[0] + "T23:59:59Z";
@@ -19,7 +19,7 @@ function daysAgoISO(n: number): string {
 }
 
 async function handleSync() {
-  await loadCache(daysAgoISO(30), todayISO());
+  await syncOrders(daysAgoISO(30), todayISO());
 }
 
 function handleSearch(keyword: string) {
