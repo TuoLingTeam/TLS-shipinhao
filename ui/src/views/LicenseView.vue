@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useLicense } from "../composables/useLicense";
 import { useAppStore } from "../stores/app";
+import { formatDateTime } from "../utils/format";
 
 const appStore = useAppStore();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
@@ -42,82 +43,65 @@ const stateLabel: Record<string, string> = {
   invalid: "未激活",
   compromised: "异常",
 };
+
+const currentStateText = computed(() => stateLabel[appStore.licenseState] ?? appStore.licenseState);
+const stateTone = computed(() => (appStore.isLicensed ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'));
 </script>
 
 <template>
-  <div>
-    <h2 class="text-xl font-semibold text-slate-700 mb-4">授权管理</h2>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-        <h3 class="font-medium text-slate-700 mb-3">激活卡密</h3>
-        <div class="space-y-3">
-          <div>
-            <label class="block text-sm text-slate-600 mb-1">卡密</label>
-            <input
-              v-model="licenseKey"
-              class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="输入卡密"
-            />
-          </div>
-          <div class="flex gap-3">
-            <button
-              :disabled="activateLoading"
-              class="flex-1 px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
-              @click="handleActivate"
-            >
-              {{ activateLoading ? "激活中..." : "激活" }}
-            </button>
-            <button
-              :disabled="verifyLoading"
-              class="px-4 py-2 border border-slate-300 text-slate-700 text-sm rounded hover:bg-slate-50 disabled:opacity-50 transition-colors"
-              @click="handleRefresh"
-            >
-              {{ verifyLoading ? "刷新中..." : "刷新状态" }}
-            </button>
-          </div>
-        </div>
-        <div
-          v-if="message"
-          class="mt-3 p-2.5 text-sm rounded"
-          :class="messageType === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
-        >
-          {{ message }}
+  <div class="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.95fr]">
+    <section class="surface-panel p-5 lg:p-6">
+      <div class="flex items-center justify-between gap-4">
+        <h2 class="text-xl font-semibold tracking-tight text-slate-900">激活卡密</h2>
+        <div class="rounded-2xl px-3 py-2 text-sm font-semibold" :class="stateTone">
+          {{ currentStateText }}
         </div>
       </div>
 
-      <div class="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-        <h3 class="font-medium text-slate-700 mb-3">授权状态</h3>
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-slate-500">状态</span>
-            <span
-              class="font-medium"
-              :class="appStore.isLicensed ? 'text-green-600' : 'text-slate-600'"
-            >
-              {{ stateLabel[appStore.licenseState] ?? appStore.licenseState }}
-            </span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">版本</span>
-            <span class="text-slate-700">{{ appStore.appVersion }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">已保存卡密</span>
-            <span class="text-slate-700 font-mono text-xs">
-              {{ appStore.licenseKey || "未保存" }}
-            </span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">到期时间</span>
-            <span class="text-slate-700">{{ appStore.licenseExpiresAt || "-" }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">最近校验</span>
-            <span class="text-slate-700">{{ appStore.lastVerifiedAt || "-" }}</span>
-          </div>
+      <div class="mt-5 space-y-4">
+        <div>
+          <label class="field-label">卡密</label>
+          <input v-model.trim="licenseKey" class="field-input" placeholder="输入卡密" />
+        </div>
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <button :disabled="activateLoading" class="action-btn action-btn-primary flex-1" @click="handleActivate">
+            {{ activateLoading ? "激活中..." : "激活" }}
+          </button>
+          <button :disabled="verifyLoading" class="action-btn action-btn-secondary sm:min-w-[140px]" @click="handleRefresh">
+            {{ verifyLoading ? "刷新中..." : "刷新状态" }}
+          </button>
         </div>
       </div>
-    </div>
+
+      <div v-if="message" class="mt-5 soft-alert" :class="messageType === 'success' ? 'success' : 'error'">
+        {{ message }}
+      </div>
+    </section>
+
+    <section class="surface-panel p-5 lg:p-6">
+      <h2 class="text-xl font-semibold tracking-tight text-slate-900">授权快照</h2>
+      <div class="mt-5 space-y-3 text-sm">
+        <div class="flex justify-between rounded-2xl bg-slate-50 px-4 py-3">
+          <span class="text-slate-500">状态</span>
+          <span class="font-semibold text-slate-900">{{ currentStateText }}</span>
+        </div>
+        <div class="flex justify-between rounded-2xl bg-slate-50 px-4 py-3">
+          <span class="text-slate-500">版本</span>
+          <span class="font-semibold text-slate-900">{{ appStore.appVersion }}</span>
+        </div>
+        <div class="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+          <span class="text-slate-500">卡密</span>
+          <span class="break-all text-right font-mono text-xs text-slate-700">{{ appStore.licenseKey || "未保存" }}</span>
+        </div>
+        <div class="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+          <span class="text-slate-500">到期</span>
+          <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.licenseExpiresAt) }}</span>
+        </div>
+        <div class="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+          <span class="text-slate-500">校验时间</span>
+          <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.lastVerifiedAt) }}</span>
+        </div>
+      </div>
+    </section>
   </div>
 </template>

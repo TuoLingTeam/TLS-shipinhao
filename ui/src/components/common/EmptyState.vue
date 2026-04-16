@@ -1,22 +1,34 @@
 <script setup lang="ts">
-defineProps<{
-  icon?: string;
-  title: string;
-  description?: string;
-}>();
+withDefaults(
+  defineProps<{
+    title: string;
+    description?: string;
+    compact?: boolean;
+  }>(),
+  {
+    description: '',
+    compact: false,
+  },
+);
 
 defineEmits<{ action: [] }>();
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center py-12 text-center">
-    <div v-if="icon" class="text-4xl mb-3">{{ icon }}</div>
-    <div class="text-sm font-medium text-slate-600">{{ title }}</div>
-    <div v-if="description" class="text-xs text-slate-400 mt-1">{{ description }}</div>
+  <div class="surface-panel text-center" :class="compact ? 'px-5 py-10' : 'px-6 py-16 lg:px-8 lg:py-18'">
+    <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-slate-100 text-slate-500 shadow-inner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7" aria-hidden="true">
+        <path d="M4 6.5h16" />
+        <path d="M4 12h16" />
+        <path d="M4 17.5h10" />
+      </svg>
+    </div>
+    <div class="mt-5 text-lg font-semibold text-slate-800">{{ title }}</div>
+    <div v-if="description" class="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">{{ description }}</div>
     <slot name="action">
       <button
         v-if="$slots.default"
-        class="mt-4 px-4 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+        class="action-btn action-btn-primary mx-auto mt-6"
         @click="$emit('action')"
       >
         <slot />

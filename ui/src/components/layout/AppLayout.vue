@@ -12,12 +12,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden">
+  <div class="flex h-screen overflow-hidden bg-transparent p-4 text-slate-900 lg:p-5">
     <AppSidebar />
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="ml-0 flex min-w-0 flex-1 flex-col gap-4 overflow-hidden lg:ml-4">
       <AppHeader />
-      <main class="flex-1 overflow-y-auto p-6 bg-slate-50">
-        <RouterView />
+      <main class="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div class="mx-auto flex w-full max-w-[1480px] flex-col gap-5 pb-8">
+          <RouterView />
+        </div>
       </main>
     </div>
   </div>

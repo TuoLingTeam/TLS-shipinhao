@@ -15,28 +15,27 @@ const titleMap: Record<string, string> = {
   settings: "设置",
 };
 
-const pageTitle = computed(
-  () => titleMap[route.name as string] ?? "TLS-shipinhao"
-);
-
-const licenseLabel = computed(() =>
-  appStore.isLicensed ? "已授权" : "未激活"
-);
+const pageTitle = computed(() => titleMap[route.name as string] ?? "TLS-shipinhao");
+const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
 </script>
 
 <template>
-  <header
-    class="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-6"
-  >
-    <h1 class="text-lg font-semibold text-slate-800">{{ pageTitle }}</h1>
-    <div class="flex items-center gap-4 text-sm text-slate-500">
-      <span class="inline-flex items-center gap-1.5">
-        <span
-          class="w-2 h-2 rounded-full"
-          :class="appStore.isLicensed ? 'bg-green-400' : 'bg-slate-300'"
-        ></span>
-        {{ licenseLabel }}
-      </span>
+  <header class="surface-panel px-5 py-4 lg:px-6 lg:py-4">
+    <div class="flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">TLS · VIDEO COMMERCE DESK</p>
+        <div class="mt-2 flex items-center gap-3">
+          <h1 class="truncate text-2xl font-bold tracking-tight text-slate-900">{{ pageTitle }}</h1>
+          <span class="hidden rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700 sm:inline-flex">
+            v{{ appStore.appVersion }}
+          </span>
+        </div>
+      </div>
+
+      <div class="status-chip shrink-0">
+        <span class="status-dot" :class="appStore.isLicensed ? 'success' : ''"></span>
+        <div class="text-sm font-semibold text-slate-700">{{ licenseLabel }}</div>
+      </div>
     </div>
   </header>
 </template>

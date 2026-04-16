@@ -1,9 +1,44 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { RouterLink } from "vue-router";
 import { useTauriInvoke } from "../composables/useTauriInvoke";
+import { useAppStore } from "../stores/app";
+import { useOrderStore } from "../stores/order";
+import { useReviewStore } from "../stores/review";
+import { useDeliveryStore } from "../stores/delivery";
+import AppNavIcon from "../components/layout/AppNavIcon.vue";
+
+const appStore = useAppStore();
+const orderStore = useOrderStore();
+const reviewStore = useReviewStore();
+const deliveryStore = useDeliveryStore();
 
 const appInfo = useTauriInvoke<{ name: string; version: string; runtime: string }>("get_app_info");
 const info = ref<{ name: string; version: string; runtime: string } | null>(null);
+
+const metrics = computed(() => [
+  {
+    label: "评价匹配",
+    value: reviewStore.results.length > 0 ? String(reviewStore.results.filter((item) => item.matched).length) : "--",
+    hint: reviewStore.results.length > 0 ? `${reviewStore.results.length} 条结果` : "等待查询",
+  },
+  {
+    label: "订单缓存",
+    value: orderStore.cachedOrders.length > 0 ? String(orderStore.cachedOrders.length) : "--",
+    hint: orderStore.lastSyncAt ? "已同步" : "未同步",
+  },
+  {
+    label: "发货任务",
+    value: deliveryStore.batchProgress ? String(deliveryStore.batchProgress.totalCount) : "--",
+    hint: deliveryStore.batchProgress ? `${deliveryStore.batchProgress.successCount} 成功` : "待执行",
+  },
+]);
+
+const quickLinks = [
+  { to: "/review", title: "中差评查找", icon: "review" },
+  { to: "/order", title: "订单缓存同步", icon: "order" },
+  { to: "/delivery", title: "批量发货", icon: "delivery" },
+] as const;
 
 onMounted(async () => {
   info.value = await appInfo.execute();
@@ -11,43 +46,40 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <h2 class="text-xl font-semibold text-slate-700 mb-4">概览</h2>
+  <div class="space-y-5">
+    <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <article v-for="metric in metrics" :key="metric.label" class="surface-panel metric-card p-5 lg:p-6">
+        <div class="metric-label">{{ metric.label }}</div>
+        <div class="metric-value">{{ metric.value }}</div>
+        <div class="metric-hint">{{ metric.hint }}</div>
+      </article>
+    </section>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-white rounded-lg p-5 shadow-sm border border-slate-200">
-        <div class="text-sm text-slate-500">今日评价匹配</div>
-        <div class="mt-1 text-2xl font-bold text-slate-800">--</div>
+    <section class="surface-panel p-5 lg:p-6">
+      <div class="mb-4 flex items-center justify-between">
+        <h3 class="text-xl font-semibold tracking-tight text-slate-900">高频入口</h3>
+        <div class="text-xs text-slate-400">{{ info?.runtime ?? 'tauri' }} · v{{ info?.version ?? appStore.appVersion }}</div>
       </div>
-      <div class="bg-white rounded-lg p-5 shadow-sm border border-slate-200">
-        <div class="text-sm text-slate-500">订单缓存数</div>
-        <div class="mt-1 text-2xl font-bold text-slate-800">--</div>
-      </div>
-      <div class="bg-white rounded-lg p-5 shadow-sm border border-slate-200">
-        <div class="text-sm text-slate-500">发货任务</div>
-        <div class="mt-1 text-2xl font-bold text-slate-800">--</div>
-      </div>
-    </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <RouterLink
-        to="/review"
-        class="block bg-white rounded-lg p-5 shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow transition-all"
-      >
-        <div class="text-lg font-medium text-slate-700">中差评查找</div>
-        <div class="text-sm text-slate-500 mt-1">查找并匹配中评价管理</div>
-      </RouterLink>
-      <RouterLink
-        to="/delivery"
-        class="block bg-white rounded-lg p-5 shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow transition-all"
-      >
-        <div class="text-lg font-medium text-slate-700">批量发货</div>
-        <div class="text-sm text-slate-500 mt-1">批量更新物流信息</div>
-      </RouterLink>
-    </div>
-
-    <div v-if="info" class="mt-6 text-xs text-slate-400">
-      {{ info.name }} v{{ info.version }} · {{ info.runtime }}
-    </div>
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <RouterLink
+          v-for="item in quickLinks"
+          :key="item.to"
+          :to="item.to"
+          class="quick-link surface-panel-strong flex min-h-[144px] flex-col justify-between p-5"
+        >
+          <div>
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-900/10">
+              <AppNavIcon :name="item.icon" icon-class="h-5 w-5" />
+            </div>
+            <h4 class="mt-4 text-lg font-semibold text-slate-900">{{ item.title }}</h4>
+          </div>
+          <div class="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-600">
+            进入
+            <span aria-hidden="true">→</span>
+          </div>
+        </RouterLink>
+      </div>
+    </section>
   </div>
 </template>
