@@ -6,6 +6,7 @@
 
 ```text
 TLS-shipinhao/
+├── app/                          # 兼容期 Python 启动壳（委托 Rust desktop-app）
 ├── crates/                       # Rust 核心 crates（domain / services / security / app）
 │   ├── main.py                   # 入口，调用 bootstrap.main()
 │   ├── bootstrap.py              # 程序启动入口（QApplication 初始化）
@@ -50,7 +51,7 @@ settings ← core ← services/review_matcher
                ← core/http_utils
                ← core/license
 
-ui/widgets + ui/*worker ← ui/window ← app/main.py
+旧 PySide6 UI 已冻结，`app/main.py` / `app/bootstrap.py` 仅作为兼容启动壳委托 Rust desktop-app
 ```
 
 ## 功能特性

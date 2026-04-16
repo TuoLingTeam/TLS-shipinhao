@@ -158,16 +158,16 @@ Depends on: 9, 10, 11
 - [x] 12.1 RED: 为 Slint 主界面命令流建立端到端/命令级测试
 - [x] 12.2 GREEN: 让 desktop-app 调用真实 desktop-services，而不是占位回调
 - [x] 12.3 GREEN: 接入授权状态展示、任务启动、日志输出、错误反馈
-- [ ] 12.4 REFACTOR: 停止给 PySide6 UI 增加任何正式功能
+- [x] 12.4 REFACTOR: 停止给 PySide6 UI 增加任何正式功能
 
 ## 13. 旧 Python UI / worker 退役前置
 
 Depends on: 12
 
-- [ ] 13.1 RED: 为关键 UI 流程建立迁移验收清单
-- [ ] 13.2 GREEN: 移除 `app/ui/*.py` 的正式执行路径
-- [ ] 13.3 GREEN: 移除 `app/bootstrap.py` / `app/main.py` 的正式职责
-- [ ] 13.4 REFACTOR: 将旧 Python 客户端降级为仅兼容/迁移代码，或删除
+- [x] 13.1 RED: 为关键 UI 流程建立迁移验收清单
+- [x] 13.2 GREEN: 移除 `app/ui/*.py` 的正式执行路径
+- [x] 13.3 GREEN: 移除 `app/bootstrap.py` / `app/main.py` 的正式职责
+- [x] 13.4 REFACTOR: 将旧 Python 客户端降级为仅兼容/迁移代码，或删除
 
 ## 14. Rust 构建发布主链路收口
 
