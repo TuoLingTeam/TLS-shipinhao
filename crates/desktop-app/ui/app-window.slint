@@ -2,6 +2,9 @@ import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
     in-out property <string> license_status: "未激活";
+    in-out property <string> last_action: "等待操作";
+    in-out property <string> event_log: "";
+    in-out property <string> last_error: "";
     callback start_review_find();
     callback start_batch_delivery();
 
@@ -11,12 +14,9 @@ export component AppWindow inherits Window {
 
     VerticalBox {
         spacing: 12px;
-        Text {
-            text: "TLS Keeper";
-        }
-        Text {
-            text: license_status;
-        }
+        Text { text: "TLS Keeper"; }
+        Text { text: license_status; }
+        Text { text: "最近动作：" + last_action; }
         HorizontalBox {
             Button {
                 text: "开始中差评查找";
@@ -27,5 +27,8 @@ export component AppWindow inherits Window {
                 clicked => { start_batch_delivery(); }
             }
         }
+        Text { text: "日志："; }
+        Text { text: event_log; wrap: word-wrap; }
+        Text { text: last_error == "" ? "" : "错误：" + last_error; color: red; wrap: word-wrap; }
     }
 }

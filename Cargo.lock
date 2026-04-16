@@ -1178,6 +1178,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "desktop-services",
+ "domain-core",
  "slint",
  "slint-build",
 ]
