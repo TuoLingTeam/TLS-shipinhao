@@ -6,7 +6,7 @@
 
 ```text
 TLS-shipinhao/
-├── app/                          # 兼容期 Python 启动壳（委托 Rust desktop-app）
+├── app/                          # 兼容期 Python 启动壳（已不含 PySide6 UI）
 ├── crates/                       # Rust 核心 crates（domain / services / security / app）
 │   ├── main.py                   # 入口，调用 bootstrap.main()
 │   ├── bootstrap.py              # 程序启动入口（QApplication 初始化）
@@ -23,12 +23,6 @@ TLS-shipinhao/
 │   │   ├── order_match_scoring.py# 订单匹配评分
 │   │   ├── order_sync.py         # 订单增量同步（缓存+远程协调）
 │   │   └── review_matcher.py     # 中差评订单查找（抓取、匹配、汇总）
-│   └── ui/                       # 界面层
-│       ├── batch_worker.py       # 批量任务后台执行器
-│       ├── cookie_dialog.py      # Cookie 浏览器弹窗
-│       ├── review_worker.py      # 中差评/品退任务后台执行器
-│       ├── widgets.py            # 自定义控件与通用 UI 组件
-│       └── window.py             # MainWindow 主窗口
 ├── apps/                         # Rust 应用壳（desktop / license-worker）
 ├── backend/                      # 兼容期 Cloudflare 目录（待完全退役）
 │   ├── src/
@@ -50,7 +44,6 @@ settings ← core ← services/review_matcher
                ← core/http_utils
                ← core/license
 
-旧 PySide6 UI 已冻结，`app/main.py` / `app/bootstrap.py` 仅作为兼容启动壳委托 Rust desktop-app
 ```
 
 ## 功能特性
