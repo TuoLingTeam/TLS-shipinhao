@@ -24,6 +24,8 @@ https://sphapi.199908.top/admin
 - 管理员生成卡密：`POST /api/admin/generate`
 - 管理员查看卡密列表与统计：`POST /api/admin/list`
 - 管理员吊销卡密：`POST /api/admin/revoke`
+
+**说明**：`backend/src/worker/index.js` 为兼容壳，仅提供 `/admin` 静态页；其余路径统一返回 **HTTP 410**（见仓库内 `legacy_js_worker_retired_use_apps_license_worker`）。公网若仍指向该壳，管理员接口**不可用**，与 `X-Admin-Secret` 是否正确无关。完整管理员能力需在部署中接入实现 `/api/admin/*` 的 Worker（或迁移后的 `apps/license-worker` 扩展）。
 - 管理员重置设备绑定：`POST /api/admin/device/rebind`
 - 管理员吊销短期会话：`POST /api/admin/device/revoke_sessions`
 - 管理员查看授权审计：`POST /api/admin/audit/list`

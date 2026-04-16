@@ -756,7 +756,34 @@ function api(path, body) {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Admin-Secret": SECRET },
     body: JSON.stringify(body)
-  }).then(res => res.json());
+  }).then(async (httpRes) => {
+    const data = await httpRes.json().catch(() => ({}));
+    return Object.assign(data, {
+      __httpOk: httpRes.ok,
+      __httpStatus: httpRes.status,
+    });
+  });
+}
+
+function adminEndpointUnavailable(res) {
+  if (res.__httpStatus === 410) {
+    return true;
+  }
+  return res.message === "legacy_js_worker_retired_use_apps_license_worker";
+}
+
+function loginErrorMessage(res) {
+  if (adminEndpointUnavailable(res)) {
+    return "线上网关已下线旧版接口（HTTP 410），当前部署不包含 /api/admin/*。"
+      + "这与管理密钥是否正确无关；需部署带管理员 API 的 License Worker，或使用仍提供该接口的环境。";
+  }
+  if (!res.__httpOk) {
+    return "服务异常（HTTP " + res.__httpStatus + "），请检查网关与路由。";
+  }
+  if (!res.success) {
+    return res.message || "密钥错误或无权访问";
+  }
+  return "";
 }
 
 function doLogin() {
@@ -766,8 +793,9 @@ function doLogin() {
     return;
   }
   api("/api/admin/list", {}).then(res => {
-    if (!res.success) {
-      showMsg("loginMsg", "密钥错误", true);
+    const err = loginErrorMessage(res);
+    if (err) {
+      showMsg("loginMsg", err, true);
       SECRET = "";
       return;
     }
@@ -786,8 +814,12 @@ function doGenerate() {
   const plan_days = parseInt(document.getElementById("genDays").value, 10) || 30;
   const note = document.getElementById("genNote").value;
   api("/api/admin/generate", { count, plan_days, note }).then(res => {
+    if (adminEndpointUnavailable(res) || !res.__httpOk) {
+      showMsg("genMsg", loginErrorMessage(res), true);
+      return;
+    }
     if (!res.success) {
-      showMsg("genMsg", res.message, true);
+      showMsg("genMsg", res.message || "操作失败", true);
       return;
     }
     showMsg("genMsg", "成功生成 " + res.keys.length + " 个卡密", false);
@@ -813,8 +845,12 @@ function copyKeys() {
 function doRevoke(key) {
   if (!confirm("确定要吊销卡密 " + key + " 吗？此操作不可逆！")) return;
   api("/api/admin/revoke", { key }).then(res => {
+    if (adminEndpointUnavailable(res) || !res.__httpOk) {
+      alert(loginErrorMessage(res));
+      return;
+    }
     if (!res.success) {
-      alert(res.message);
+      alert(res.message || "操作失败");
       return;
     }
     loadList();
@@ -823,6 +859,10 @@ function doRevoke(key) {
 
 function loadList() {
   api("/api/admin/list", {}).then(res => {
+    if (adminEndpointUnavailable(res) || !res.__httpOk) {
+      showMsg("loginMsg", loginErrorMessage(res), true);
+      return;
+    }
     if (res.success) renderList(res);
   });
 }
