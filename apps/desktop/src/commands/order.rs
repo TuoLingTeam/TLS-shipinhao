@@ -1,4 +1,5 @@
 use crate::adapters::http_order_search::{parse_iso_window, HttpOrderSearchClient};
+use crate::commands::license::ensure_feature_authorized;
 use crate::adapters::sqlite_order_cache::SqliteOrderCache;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -40,6 +41,7 @@ pub async fn sync_orders(
     start_at: String,
     end_at: String,
 ) -> Result<OrderSyncResult, AppError> {
+    ensure_feature_authorized(&state, "订单同步").await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));

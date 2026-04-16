@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { useOrder } from "../composables/useOrder";
 import { useOrderStore } from "../stores/order";
+import { useAppStore } from "../stores/app";
 import OrderSearchBar from "../components/order/OrderSearchBar.vue";
 import OrderCacheStats from "../components/order/OrderCacheStats.vue";
 import { formatCent } from "../utils/format";
+import { computed } from "vue";
 
 const store = useOrderStore();
+const appStore = useAppStore();
 const { syncOrders } = useOrder();
+const licenseBlocked = computed(() => !appStore.isLicensed);
 
 function todayISO(): string {
   return new Date().toISOString().split("T")[0] + "T23:59:59Z";
@@ -19,6 +23,10 @@ function daysAgoISO(n: number): string {
 }
 
 async function handleSync() {
+  if (licenseBlocked.value) {
+    store.error = "请先激活授权后再使用订单同步";
+    return;
+  }
   await syncOrders(daysAgoISO(30), todayISO());
 }
 
@@ -44,12 +52,16 @@ function handleSearch(keyword: string) {
 
     <div class="mb-4">
       <button
-        :disabled="store.loading"
+        :disabled="store.loading || licenseBlocked"
         class="px-4 py-1.5 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
         @click="handleSync"
       >
         {{ store.loading ? "同步中..." : "同步订单" }}
       </button>
+    </div>
+
+    <div v-if="licenseBlocked" class="mb-4 p-3 bg-amber-50 text-amber-700 text-sm rounded border border-amber-200">
+      当前未激活授权，订单同步不可用。
     </div>
 
     <div v-if="store.error" class="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded border border-red-200">

@@ -6,6 +6,29 @@ use tauri::State;
 
 const LICENSE_PROTOCOL_VERSION: u32 = 3;
 
+fn license_state_allows_feature(state: &str) -> bool {
+    matches!(state, "active" | "renewal_due")
+}
+
+pub async fn ensure_feature_authorized(
+    state: &AppState,
+    feature_name: &str,
+) -> Result<(), AppError> {
+    let profile = state.license_profile.lock().await.clone();
+    if license_state_allows_feature(profile.license_state.as_str()) {
+        return Ok(());
+    }
+
+    let detail = match profile.license_state.as_str() {
+        "expired" => "当前授权已过期，请续费后再试",
+        "revoked" => "当前授权已吊销，请联系管理员",
+        "device_mismatch" => "当前设备与授权不匹配，请重新激活",
+        "compromised" => "当前授权状态异常，请联系管理员",
+        _ => "请先激活授权后再使用此功能",
+    };
+    Err(AppError::Message(format!("{feature_name}：{detail}")))
+}
+
 fn make_client() -> HttpLicenseClient {
     HttpLicenseClient::new(
         LICENSE_API_BASE_URLS.iter().map(|s| s.to_string()).collect(),
@@ -158,4 +181,23 @@ async fn persist_license_profile(
 
 fn current_timestamp() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn license_state_allows_active_and_renewal_due_only() {
+        assert!(license_state_allows_feature("active"));
+        assert!(license_state_allows_feature("renewal_due"));
+
+        for state in ["invalid", "expired", "revoked", "device_mismatch", "compromised", ""] {
+            assert!(
+                !license_state_allows_feature(state),
+                "state {state} should be blocked"
+            );
+        }
+    }
 }

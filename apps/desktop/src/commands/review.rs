@@ -1,6 +1,7 @@
 use tauri::State;
 
 use crate::adapters::http_review_source::HttpReviewSource;
+use crate::commands::license::ensure_feature_authorized;
 use crate::error::AppError;
 use crate::state::AppState;
 use desktop_services::ReviewQuery;
@@ -14,6 +15,7 @@ pub async fn find_reviews(
     start_at: String,
     end_at: String,
 ) -> Result<Vec<OrderMatchResult>, AppError> {
+    ensure_feature_authorized(&state, "评价管理").await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));

@@ -1,6 +1,7 @@
 use tauri::State;
 
 use crate::adapters::http_delivery_gateway::HttpDeliveryGateway;
+use crate::commands::license::ensure_feature_authorized;
 use crate::error::AppError;
 use crate::state::AppState;
 use desktop_services::delivery_batch_runner::{BatchDeliveryItem, BatchDeliveryRuntimeGuard};
@@ -13,6 +14,7 @@ pub async fn update_delivery(
     tracking_number: String,
     carrier_code: String,
 ) -> Result<DeliveryUpdateResult, AppError> {
+    ensure_feature_authorized(&state, "发货功能").await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
@@ -41,6 +43,7 @@ pub async fn batch_delivery(
     state: State<'_, AppState>,
     items: Vec<BatchDeliveryInput>,
 ) -> Result<BatchDeliveryOutput, AppError> {
+    ensure_feature_authorized(&state, "发货功能").await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));

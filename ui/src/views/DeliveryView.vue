@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useDelivery } from "../composables/useDelivery";
 import { useDeliveryStore } from "../stores/delivery";
+import { useAppStore } from "../stores/app";
 
 const store = useDeliveryStore();
+const appStore = useAppStore();
 const { updateDelivery, batchDelivery } = useDelivery();
+const licenseBlocked = computed(() => !appStore.isLicensed);
 
 const orderId = ref("");
 const trackingNumber = ref("");
@@ -13,11 +16,19 @@ const carrierCode = ref("JT");
 const batchText = ref("");
 
 async function handleSingleDelivery() {
+  if (licenseBlocked.value) {
+    store.error = "请先激活授权后再使用发货功能";
+    return;
+  }
   if (!orderId.value || !trackingNumber.value) return;
   await updateDelivery(orderId.value, trackingNumber.value, carrierCode.value);
 }
 
 async function handleBatchDelivery() {
+  if (licenseBlocked.value) {
+    store.error = "请先激活授权后再使用发货功能";
+    return;
+  }
   const lines = batchText.value
     .split("\n")
     .map((l) => l.trim())
@@ -70,7 +81,7 @@ async function handleBatchDelivery() {
             </select>
           </div>
           <button
-            :disabled="store.loading"
+            :disabled="store.loading || licenseBlocked"
             class="w-full px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
             @click="handleSingleDelivery"
           >
@@ -94,7 +105,7 @@ async function handleBatchDelivery() {
             />
           </div>
           <button
-            :disabled="store.loading"
+            :disabled="store.loading || licenseBlocked"
             class="w-full px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 disabled:opacity-50 transition-colors"
             @click="handleBatchDelivery"
           >
@@ -115,6 +126,10 @@ async function handleBatchDelivery() {
           </div>
         </div>
       </div>
+    </div>
+
+    <div v-if="licenseBlocked" class="mt-4 p-3 bg-amber-50 text-amber-700 text-sm rounded border border-amber-200">
+      当前未激活授权，发货功能不可用。
     </div>
 
     <div v-if="store.error" class="mt-4 p-3 bg-red-50 text-red-600 text-sm rounded border border-red-200">
