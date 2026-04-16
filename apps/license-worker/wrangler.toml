@@ -1,17 +1,17 @@
+# 仅用于在 apps/license-worker 目录本地调试：`npx wrangler dev`。
+# 线上生产部署请使用 ../../backend/wrangler.toml（管理页与 D1 配置以 backend 为入口）。
+
 name = "tls-shipinhao-license-worker"
 main = "build/worker/shim.mjs"
 compatibility_date = "2024-12-01"
-workers_dev = false
+workers_dev = true
 
 [build]
-command = "cargo install -q worker-build >/dev/null 2>&1 || true && worker-build --release"
+command = "sh -c '(command -v worker-build >/dev/null 2>&1 || cargo install worker-build 2>/dev/null) && worker-build --release'"
 
-routes = [
-  { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }
-]
+# 勿在此文件配置 routes，避免与 backend/wrangler.toml 线上路由冲突。
 
 [vars]
-# HMAC_SECRET / ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置
 
 [[d1_databases]]
 binding = "DB"

@@ -1,15 +1,22 @@
+# 生产部署入口：在 backend/ 目录执行 `npx wrangler deploy`。
+# Rust 源码在 apps/license-worker；管理页 HTML 唯一源文件为 src/admin/admin.html（由 Worker include 编译进 wasm）。
+
 name = "tls-shipinhao"
-main = "src/worker/index.js"
+main = "../apps/license-worker/build/worker/shim.mjs"
 compatibility_date = "2024-12-01"
 workers_dev = false
 
-# 旧 JS Worker 仅保留兼容提示壳；正式部署入口迁移到 apps/license-worker/wrangler.toml
+[build]
+command = "sh -c 'cd ../apps/license-worker && (command -v worker-build >/dev/null 2>&1 || cargo install worker-build 2>/dev/null) && worker-build --release'"
 
 routes = [
   { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }
 ]
 
-[[rules]]
-type = "Text"
-globs = ["**/*.html"]
-fallthrough = true
+[vars]
+# HMAC_SECRET / ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tls-license-db"
+database_id = "dc9a0ef0-26b5-4738-9863-729a64c74a27"
