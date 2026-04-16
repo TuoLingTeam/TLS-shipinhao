@@ -112,3 +112,33 @@ class RustDesktopReviewMatchFlowTests(unittest.TestCase):
             "pub fn match_single_evaluation",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopReviewIndexTests(unittest.TestCase):
+    def test_review_index_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "review_index.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/review_index.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub type ProductIndex",
+            "pub fn build_product_id_key",
+            "pub fn build_product_value_key",
+            "pub fn build_candidate_index_keys",
+            "pub fn build_product_sku_index",
+            "pub fn collect_candidate_orders",
+        ):
+            self.assertIn(symbol, text)
+
+
+class RustDesktopReviewBatchMatchTests(unittest.TestCase):
+    def test_review_batch_match_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "review_batch_match.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/review_batch_match.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub struct EvaluationRecord",
+            "pub struct MatchedEvaluationResult",
+            "pub fn match_orders_with_evaluations",
+            "pub fn build_match_result",
+        ):
+            self.assertIn(symbol, text)

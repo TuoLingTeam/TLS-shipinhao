@@ -1,3 +1,5 @@
+pub mod review_index;
+pub mod review_batch_match;
 pub mod review_match_flow;
 pub mod review_candidate_scoring;
 pub mod review_matcher_helpers;
