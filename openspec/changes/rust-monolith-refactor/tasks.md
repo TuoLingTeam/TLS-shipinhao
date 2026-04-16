@@ -122,7 +122,7 @@ Depends on: 4
 - [x] 8.1 RED: 为 `_match_single_evaluation` 建立 Rust 等价测试（空候选 / 多候选择优 / 无有效候选）
 - [x] 8.2 GREEN: 实现 `review_match_flow`，接管单条评价候选筛选与最佳匹配选择
 - [x] 8.3 GREEN: 将 `match_strategy_by_score`、结果组装结构迁移到 Rust
-- [ ] 8.4 REFACTOR: 让 Python `review_matcher.py` 开始优先委托 Rust helper
+- [x] 8.4 REFACTOR: 让 Python `review_matcher.py` 开始优先委托 Rust helper
 
 ## 9. review matcher 批处理总流程 Rust 化
 
@@ -131,7 +131,7 @@ Depends on: 8
 - [x] 9.1 RED: 为整批评价匹配流程建立 Rust 回归测试
 - [x] 9.2 GREEN: 实现批量 `match_orders_with_evaluations` 核心流程
 - [x] 9.3 GREEN: 迁移候选订单收集与 product index 相关逻辑
-- [ ] 9.4 REFACTOR: 删除 Python 中已被 Rust 覆盖的匹配主路径
+- [x] 9.4 REFACTOR: 删除 Python 中已被 Rust 覆盖的匹配主路径
 
 ## 10. 订单缓存与同步 Rust 化
 
@@ -140,7 +140,7 @@ Depends on: 8
 - [x] 10.1 RED: 为 `order_cache.py` / `order_sync.py` 建立等价行为测试
 - [x] 10.2 GREEN: 迁移 SQLite 缓存读写与同步逻辑到 Rust
 - [x] 10.3 GREEN: 暴露 desktop-services 统一缓存接口
-- [ ] 10.4 REFACTOR: 下线 Python `order_cache.py` / `order_sync.py` 正式职责
+- [x] 10.4 REFACTOR: 下线 Python `order_cache.py` / `order_sync.py` 正式职责
 
 ## 11. 批量发货链路 Rust 化
 
@@ -149,7 +149,7 @@ Depends on: 10
 - [x] 11.1 RED: 为 `delivery_api.py` 建立请求/错误路径等价测试
 - [x] 11.2 GREEN: 迁移物流更新请求构造、返回解析、批量失败处理
 - [x] 11.3 GREEN: 将批量发货入口接入 Rust services
-- [ ] 11.4 REFACTOR: 下线 Python `delivery_api.py` 正式职责
+- [x] 11.4 REFACTOR: 下线 Python `delivery_api.py` 正式职责
 
 ## 12. desktop-app 真正接线
 
