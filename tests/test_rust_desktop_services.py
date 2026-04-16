@@ -81,3 +81,19 @@ class RustDesktopReviewMatcherHelperTests(unittest.TestCase):
             "pub fn pick_best_match",
         ):
             self.assertIn(symbol, text)
+
+
+class RustDesktopReviewCandidateScoringTests(unittest.TestCase):
+    def test_review_candidate_scoring_module_exists(self):
+        module_rs = ROOT / "crates" / "desktop-services" / "src" / "review_candidate_scoring.rs"
+        self.assertTrue(module_rs.exists(), "缺少 crates/desktop-services/src/review_candidate_scoring.rs")
+        text = module_rs.read_text(encoding="utf-8")
+        for symbol in (
+            "pub const MATCH_MIN_SCORE",
+            "pub struct EvaluationMatchContext",
+            "pub struct CandidateOrder",
+            "pub struct ScoredCandidateOrder",
+            "pub fn resolve_reference_time",
+            "pub fn score_candidate_order",
+        ):
+            self.assertIn(symbol, text)

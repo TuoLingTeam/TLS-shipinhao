@@ -1,3 +1,4 @@
+pub mod review_candidate_scoring;
 pub mod review_matcher_helpers;
 pub mod order_match_scoring;
 pub mod order_utils;
