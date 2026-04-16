@@ -108,6 +108,12 @@ impl ReviewSource for StubReviewSource {
         Ok(vec![OrderMatchResult {
             evaluation_id: "eval-1".into(),
             order_id: "3735563912835389952".into(),
+            buyer_nickname: "测试买家".into(),
+            evaluation_content: "默认差评内容".into(),
+            product_id: "product-1".into(),
+            sku_id: "sku-1".into(),
+            sku_name: "默认规格".into(),
+            product_name: "测试商品".into(),
             matched: true,
             source: MatchSource::ReceiverAndTimeWindow,
             confidence_score: 100,

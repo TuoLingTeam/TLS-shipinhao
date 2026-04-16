@@ -8,6 +8,10 @@ const saveError = ref<string | null>(null);
 const loadError = ref<string | null>(null);
 const hasBizMagic = ref(false);
 const cookieConfigured = ref(false);
+const cookiePath = ref("");
+const loginLoading = ref(false);
+const extractLoading = ref(false);
+const pickDirLoading = ref(false);
 
 async function loadCookieStatus() {
   loadError.value = null;
@@ -15,9 +19,11 @@ async function loadCookieStatus() {
     const status = await invoke<{
       configured: boolean;
       has_biz_magic: boolean;
+      cookie_path: string;
     }>("get_cookie_status");
     hasBizMagic.value = status.has_biz_magic;
     cookieConfigured.value = status.configured;
+    cookiePath.value = status.cookie_path;
   } catch (e) {
     loadError.value = typeof e === "string" ? e : String(e);
   }
@@ -31,16 +37,67 @@ async function handleSave() {
     return;
   }
   try {
-    const res = await invoke<{ success: boolean; biz_magic: string | null }>(
+    const res = await invoke<{ success: boolean; biz_magic: string | null; cookie_path: string }>(
       "set_cookie",
       { cookie_header: raw },
     );
     hasBizMagic.value = Boolean(res.biz_magic);
     cookieConfigured.value = true;
+    cookiePath.value = res.cookie_path;
     saved.value = true;
     setTimeout(() => (saved.value = false), 2000);
   } catch (e) {
     saveError.value = typeof e === "string" ? e : String(e);
+  }
+}
+
+async function handlePickSaveDir() {
+  pickDirLoading.value = true;
+  saveError.value = null;
+  try {
+    const result = await invoke<{ selected: boolean; cookie_path: string }>(
+      "pick_cookie_save_dir",
+    );
+    cookiePath.value = result.cookie_path;
+  } catch (e) {
+    saveError.value = typeof e === "string" ? e : String(e);
+  } finally {
+    pickDirLoading.value = false;
+  }
+}
+
+async function handleOpenLogin() {
+  loginLoading.value = true;
+  saveError.value = null;
+  try {
+    await invoke("open_cookie_login");
+  } catch (e) {
+    saveError.value = typeof e === "string" ? e : String(e);
+  } finally {
+    loginLoading.value = false;
+  }
+}
+
+async function handleExtractCookie() {
+  extractLoading.value = true;
+  saveError.value = null;
+  try {
+    const result = await invoke<{
+      success: boolean;
+      biz_magic: string | null;
+      cookie_header: string;
+      cookie_path: string;
+    }>("extract_cookie_from_login");
+    cookieHeader.value = result.cookie_header;
+    cookiePath.value = result.cookie_path;
+    hasBizMagic.value = Boolean(result.biz_magic);
+    cookieConfigured.value = true;
+    saved.value = true;
+    setTimeout(() => (saved.value = false), 2000);
+  } catch (e) {
+    saveError.value = typeof e === "string" ? e : String(e);
+  } finally {
+    extractLoading.value = false;
   }
 }
 
@@ -57,12 +114,42 @@ onMounted(() => {
       <div class="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
         <h3 class="font-medium text-slate-700 mb-3">Cookie 配置</h3>
         <p v-if="cookieConfigured" class="text-xs text-green-700 mb-2">
-          当前会话已保存 Cookie；下方粘贴新值可覆盖。
+          当前已保存 Cookie；重新提取或手动粘贴都会覆盖当前文件。
         </p>
         <div class="space-y-3">
+          <div class="rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            <div class="font-medium text-slate-700 mb-1">当前保存位置</div>
+            <div class="font-mono text-xs break-all">{{ cookiePath || "未设置" }}</div>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button
+              class="px-4 py-1.5 border border-slate-300 text-sm rounded hover:bg-slate-50 transition-colors disabled:opacity-50"
+              :disabled="pickDirLoading"
+              @click="handlePickSaveDir"
+            >
+              {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
+            </button>
+            <button
+              class="px-4 py-1.5 bg-slate-800 text-white text-sm rounded hover:bg-slate-900 transition-colors disabled:opacity-50"
+              :disabled="loginLoading"
+              @click="handleOpenLogin"
+            >
+              {{ loginLoading ? "打开中..." : "打开登录页" }}
+            </button>
+            <button
+              class="px-4 py-1.5 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+              :disabled="extractLoading"
+              @click="handleExtractCookie"
+            >
+              {{ extractLoading ? "提取中..." : "登录后自动提取" }}
+            </button>
+          </div>
+          <p class="text-xs text-slate-400">
+            推荐流程：先选择保存目录 → 打开登录页完成视频号小店登录 → 点击“登录后自动提取”。
+          </p>
           <div>
             <label class="block text-sm text-slate-600 mb-1">
-              视频号商家后台 Cookie
+              手动覆盖 Cookie（兜底）
             </label>
             <textarea
               v-model="cookieHeader"
@@ -71,7 +158,7 @@ onMounted(() => {
               placeholder="粘贴完整的 Cookie 字符串..."
             />
             <p class="mt-1 text-xs text-slate-400">
-              从浏览器开发者工具中复制完整的 Cookie 请求头
+              如自动提取失败，可从浏览器开发者工具中复制完整 Cookie 请求头手动保存
             </p>
           </div>
           <button

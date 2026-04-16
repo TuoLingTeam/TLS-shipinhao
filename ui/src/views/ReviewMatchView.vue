@@ -31,7 +31,7 @@ function confidenceColor(score: number): string {
 
 <template>
   <div>
-    <h2 class="text-xl font-semibold text-slate-700 mb-4">中差评管理</h2>
+    <h2 class="text-xl font-semibold text-slate-700 mb-4">评价管理</h2>
 
     <div class="bg-white rounded-lg p-4 shadow-sm border border-slate-200 mb-4">
       <div class="flex items-end gap-4">
@@ -63,6 +63,9 @@ function confidenceColor(score: number): string {
       <table class="w-full text-sm">
         <thead class="bg-slate-50 text-slate-600">
           <tr>
+            <th class="text-left px-4 py-2.5 font-medium">买家昵称</th>
+            <th class="text-left px-4 py-2.5 font-medium">评价内容</th>
+            <th class="text-left px-4 py-2.5 font-medium">订单详情</th>
             <th class="text-left px-4 py-2.5 font-medium">评价ID</th>
             <th class="text-left px-4 py-2.5 font-medium">订单号</th>
             <th class="text-left px-4 py-2.5 font-medium">匹配来源</th>
@@ -76,6 +79,21 @@ function confidenceColor(score: number): string {
             :key="r.evaluation_id"
             class="border-t border-slate-100 hover:bg-slate-50 transition-colors"
           >
+            <td class="px-4 py-2.5">
+              <div class="font-medium text-slate-700">{{ r.buyer_nickname || "-" }}</div>
+            </td>
+            <td class="px-4 py-2.5 max-w-sm">
+              <div class="text-slate-700 whitespace-pre-wrap break-all">
+                {{ r.evaluation_content || "（无评价内容）" }}
+              </div>
+            </td>
+            <td class="px-4 py-2.5">
+              <div class="space-y-1 text-xs text-slate-600">
+                <div>SKU：{{ r.sku_name || r.sku_id || "-" }}</div>
+                <div>商品ID：<span class="font-mono">{{ r.product_id || "-" }}</span></div>
+                <div v-if="r.product_name" class="text-slate-500">{{ r.product_name }}</div>
+              </div>
+            </td>
             <td class="px-4 py-2.5 font-mono text-xs">{{ r.evaluation_id }}</td>
             <td class="px-4 py-2.5 font-mono text-xs">{{ r.order_id }}</td>
             <td class="px-4 py-2.5">{{ r.source }}</td>

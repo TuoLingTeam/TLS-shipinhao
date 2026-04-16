@@ -6,7 +6,7 @@ use crate::state::AppState;
 use desktop_services::delivery_batch_runner::{BatchDeliveryItem, BatchDeliveryRuntimeGuard};
 use domain_core::DeliveryUpdateResult;
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn update_delivery(
     state: State<'_, AppState>,
     order_id: String,
@@ -36,7 +36,7 @@ pub async fn update_delivery(
     .map_err(AppError::Internal)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn batch_delivery(
     state: State<'_, AppState>,
     items: Vec<BatchDeliveryInput>,

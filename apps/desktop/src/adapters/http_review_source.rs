@@ -79,6 +79,82 @@ impl HttpReviewSource {
     }
 }
 
+fn parse_review_record(eval: &Value) -> Option<OrderMatchResult> {
+    let op_info = eval.get("operationInfo")?;
+    let attitude = op_info.get("attitudeName").and_then(Value::as_str).unwrap_or("");
+    if attitude != "不够好" {
+        return None;
+    }
+
+    let evaluation_info = eval.get("evaluationInfo").cloned().unwrap_or_default();
+    let product_info = eval.get("productInfo").cloned().unwrap_or_default();
+
+    let evaluation_id = eval
+        .get("productEvaluationId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if evaluation_id.is_empty() {
+        return None;
+    }
+
+    let order_id = eval
+        .get("orderId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let buyer_nickname = evaluation_info
+        .get("buyer")
+        .and_then(|v| v.get("identity"))
+        .and_then(|v| v.get("nickname"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let evaluation_content = evaluation_info
+        .get("firstEvaluationInfo")
+        .and_then(|v| v.get("buyerEvaluationInfo"))
+        .and_then(|v| v.get("content"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let product_id = first_non_empty_string(&product_info, &["productId", "product_id", "spuId", "spu_id"]);
+    let sku_id = first_non_empty_string(&product_info, &["skuId", "sku_id"]);
+    let sku_name = first_non_empty_string(&product_info, &["skuName", "saleParam", "sale_param", "specName", "spec"]);
+    let product_name =
+        first_non_empty_string(&product_info, &["spuName", "title", "productName", "name"]);
+
+    Some(OrderMatchResult {
+        evaluation_id,
+        order_id,
+        buyer_nickname,
+        evaluation_content,
+        product_id,
+        sku_id,
+        sku_name,
+        product_name,
+        matched: true,
+        source: MatchSource::ExactOrderId,
+        confidence_score: 100,
+    })
+}
+
+fn first_non_empty_string(value: &Value, keys: &[&str]) -> String {
+    keys.iter()
+        .find_map(|key| {
+            value
+                .get(*key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_default()
+}
+
 impl ReviewSource for HttpReviewSource {
     fn fetch_reviews(&self, query: &ReviewQuery) -> anyhow::Result<Vec<OrderMatchResult>> {
         let start_ts = Self::parse_timestamp(&query.time_window.start_at);
@@ -119,30 +195,9 @@ impl ReviewSource for HttpReviewSource {
             }
 
             for eval in &evaluations {
-                let op_info = eval.get("operationInfo").cloned().unwrap_or_default();
-                let attitude = op_info.get("attitudeName").and_then(Value::as_str).unwrap_or("");
-                if attitude != "不够好" {
-                    continue;
+                if let Some(record) = parse_review_record(eval) {
+                    all_results.push(record);
                 }
-
-                let eval_id = eval
-                    .get("productEvaluationId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                let order_id = eval
-                    .get("orderId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-
-                all_results.push(OrderMatchResult {
-                    evaluation_id: eval_id,
-                    order_id,
-                    matched: true,
-                    source: MatchSource::ExactOrderId,
-                    confidence_score: 100,
-                });
             }
 
             if evaluations.is_empty() {
@@ -157,5 +212,46 @@ impl ReviewSource for HttpReviewSource {
         }
 
         Ok(all_results)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_review_details_from_api_payload() {
+        let item = serde_json::json!({
+            "productEvaluationId": "eval-1",
+            "orderId": "order-1",
+            "productInfo": {
+                "productId": "p-100",
+                "skuId": "sku-9",
+                "skuName": "红色 / XL",
+                "spuName": "春装外套"
+            },
+            "evaluationInfo": {
+                "buyer": { "identity": { "nickname": "买家小王" } },
+                "firstEvaluationInfo": {
+                    "buyerEvaluationInfo": {
+                        "content": "尺码偏小，物流慢"
+                    }
+                }
+            },
+            "operationInfo": {
+                "attitudeName": "不够好"
+            }
+        });
+
+        let parsed = parse_review_record(&item).expect("should parse");
+        assert_eq!(parsed.evaluation_id, "eval-1");
+        assert_eq!(parsed.order_id, "order-1");
+        assert_eq!(parsed.buyer_nickname, "买家小王");
+        assert_eq!(parsed.evaluation_content, "尺码偏小，物流慢");
+        assert_eq!(parsed.product_id, "p-100");
+        assert_eq!(parsed.sku_id, "sku-9");
+        assert_eq!(parsed.sku_name, "红色 / XL");
+        assert_eq!(parsed.product_name, "春装外套");
     }
 }

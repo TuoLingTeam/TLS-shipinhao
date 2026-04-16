@@ -9,7 +9,7 @@ interface OrderSyncResult {
 
 export function useOrder() {
   const store = useOrderStore();
-  const { execute, loading } = useTauriInvoke<OrderCacheEntry[]>("load_order_cache");
+  const { execute, error, loading } = useTauriInvoke<OrderCacheEntry[]>("load_order_cache");
 
   async function loadCache(startAt: string, endAt: string) {
     store.loading = true;
@@ -19,7 +19,7 @@ export function useOrder() {
       store.cachedOrders = result;
       store.lastSyncAt = new Date().toISOString();
     } else {
-      store.error = "加载缓存失败";
+      store.error = error.value ?? "加载缓存失败";
     }
     store.loading = false;
   }

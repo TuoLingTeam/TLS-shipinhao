@@ -22,6 +22,9 @@ export function useDelivery() {
       tracking_number: trackingNumber,
       carrier_code: carrierCode,
     });
+    if (!result) {
+      store.error = single.error.value ?? "发货更新失败";
+    }
     store.loading = false;
     return result;
   }
@@ -38,6 +41,8 @@ export function useDelivery() {
         failureCount: result.failure_count,
         fatalError: result.fatal_error,
       };
+    } else {
+      store.error = batch.error.value ?? "批量发货失败";
     }
     store.loading = false;
     return result;

@@ -54,6 +54,18 @@ pub struct OrderCacheEntry {
 pub struct OrderMatchResult {
     pub evaluation_id: String,
     pub order_id: String,
+    #[serde(default)]
+    pub buyer_nickname: String,
+    #[serde(default)]
+    pub evaluation_content: String,
+    #[serde(default)]
+    pub product_id: String,
+    #[serde(default)]
+    pub sku_id: String,
+    #[serde(default)]
+    pub sku_name: String,
+    #[serde(default)]
+    pub product_name: String,
     pub matched: bool,
     pub source: MatchSource,
     pub confidence_score: u32,

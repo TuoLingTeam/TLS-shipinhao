@@ -4,18 +4,31 @@ import { useLicense } from "../composables/useLicense";
 import { useAppStore } from "../stores/app";
 
 const appStore = useAppStore();
-const { activateLicense, activateLoading } = useLicense();
+const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
 
 const licenseKey = ref("");
-const deviceId = ref("auto-detect");
 const message = ref<string | null>(null);
 const messageType = ref<"success" | "error">("success");
 
 async function handleActivate() {
   if (!licenseKey.value) return;
-  const result = await activateLicense(licenseKey.value, deviceId.value);
+  const result = await activateLicense(licenseKey.value);
   if (result) {
-    message.value = result.message;
+    message.value = result.message ?? null;
+    messageType.value = result.success ? "success" : "error";
+  }
+}
+
+async function handleRefresh() {
+  const key = appStore.licenseKey || licenseKey.value;
+  if (!key) {
+    message.value = "暂无已保存卡密，无法刷新状态";
+    messageType.value = "error";
+    return;
+  }
+  const result = await verifyLicense(key);
+  if (result) {
+    message.value = result.message ?? "状态已刷新";
     messageType.value = result.success ? "success" : "error";
   }
 }
@@ -47,13 +60,22 @@ const stateLabel: Record<string, string> = {
               placeholder="输入卡密"
             />
           </div>
-          <button
-            :disabled="activateLoading"
-            class="w-full px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
-            @click="handleActivate"
-          >
-            {{ activateLoading ? "激活中..." : "激活" }}
-          </button>
+          <div class="flex gap-3">
+            <button
+              :disabled="activateLoading"
+              class="flex-1 px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
+              @click="handleActivate"
+            >
+              {{ activateLoading ? "激活中..." : "激活" }}
+            </button>
+            <button
+              :disabled="verifyLoading"
+              class="px-4 py-2 border border-slate-300 text-slate-700 text-sm rounded hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              @click="handleRefresh"
+            >
+              {{ verifyLoading ? "刷新中..." : "刷新状态" }}
+            </button>
+          </div>
         </div>
         <div
           v-if="message"
@@ -79,6 +101,20 @@ const stateLabel: Record<string, string> = {
           <div class="flex justify-between">
             <span class="text-slate-500">版本</span>
             <span class="text-slate-700">{{ appStore.appVersion }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">已保存卡密</span>
+            <span class="text-slate-700 font-mono text-xs">
+              {{ appStore.licenseKey || "未保存" }}
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">到期时间</span>
+            <span class="text-slate-700">{{ appStore.licenseExpiresAt || "-" }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">最近校验</span>
+            <span class="text-slate-700">{{ appStore.lastVerifiedAt || "-" }}</span>
           </div>
         </div>
       </div>

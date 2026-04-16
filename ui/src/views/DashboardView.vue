@@ -35,7 +35,7 @@ onMounted(async () => {
         class="block bg-white rounded-lg p-5 shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow transition-all"
       >
         <div class="text-lg font-medium text-slate-700">中差评查找</div>
-        <div class="text-sm text-slate-500 mt-1">查找并匹配中差评订单</div>
+        <div class="text-sm text-slate-500 mt-1">查找并匹配中评价管理</div>
       </RouterLink>
       <RouterLink
         to="/delivery"

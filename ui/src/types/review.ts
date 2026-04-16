@@ -9,6 +9,12 @@ export type MatchSource =
 export interface OrderMatchResult {
   evaluation_id: string;
   order_id: string;
+  buyer_nickname: string;
+  evaluation_content: string;
+  product_id: string;
+  sku_id: string;
+  sku_name: string;
+  product_name: string;
   matched: boolean;
   source: MatchSource;
   confidence_score: number;

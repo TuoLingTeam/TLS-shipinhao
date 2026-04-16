@@ -7,7 +7,7 @@ use desktop_services::ReviewQuery;
 use desktop_services::ReviewSource;
 use domain_core::{OrderMatchResult, TimeWindow};
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn find_reviews(
     state: State<'_, AppState>,
     days: u32,

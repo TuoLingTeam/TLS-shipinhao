@@ -19,9 +19,13 @@ fn main() {
             commands::delivery::batch_delivery,
             commands::license::activate_license,
             commands::license::verify_license,
+            commands::license::get_license_status,
             commands::system::get_app_info,
             commands::system::set_cookie,
             commands::system::get_cookie_status,
+            commands::system::pick_cookie_save_dir,
+            commands::system::open_cookie_login,
+            commands::system::extract_cookie_from_login,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

@@ -5,7 +5,7 @@ const route = useRoute();
 
 const navItems = [
   { path: "/", label: "仪表盘", icon: "📊" },
-  { path: "/review", label: "中差评管理", icon: "⭐" },
+  { path: "/review", label: "评价管理", icon: "⭐" },
   { path: "/order", label: "订单管理", icon: "📦" },
   { path: "/delivery", label: "发货管理", icon: "🚚" },
   { path: "/license", label: "授权管理", icon: "🔑" },

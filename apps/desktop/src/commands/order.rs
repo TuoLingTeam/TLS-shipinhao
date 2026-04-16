@@ -17,7 +17,7 @@ pub struct OrderSyncResult {
     pub orders_saved: usize,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn load_order_cache(
     start_at: String,
     end_at: String,
@@ -34,7 +34,7 @@ pub async fn load_order_cache(
 }
 
 /// 从微信 `orderSearch` 拉单并写入本地 SQLite（与 Python `get_orders_for_cache` 同数据源）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn sync_orders(
     state: State<'_, AppState>,
     start_at: String,

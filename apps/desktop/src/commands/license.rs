@@ -1,6 +1,8 @@
 use crate::adapters::http_license_client::HttpLicenseClient;
 use crate::app_settings::LICENSE_API_BASE_URLS;
 use crate::error::AppError;
+use crate::state::{self, AppState, StoredLicenseProfile};
+use tauri::State;
 
 const LICENSE_PROTOCOL_VERSION: u32 = 3;
 
@@ -47,8 +49,9 @@ fn hostname() -> String {
         .unwrap_or_else(|_| "unknown".to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn activate_license(
+    state: State<'_, AppState>,
     license_key: String,
 ) -> Result<serde_json::Value, AppError> {
     let client = make_client();
@@ -61,18 +64,35 @@ pub async fn activate_license(
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
+    persist_license_profile(
+        &state,
+        StoredLicenseProfile {
+            license_key: resp
+                .license_key
+                .clone()
+                .unwrap_or_else(|| license_key.trim().to_uppercase()),
+            license_state: "active".to_string(),
+            license_expires_at: resp.license_expires_at.clone(),
+            last_verified_at: Some(current_timestamp()),
+        },
+    )
+    .await?;
+
     Ok(serde_json::json!({
         "success": resp.success,
         "message": resp.message,
+        "license_state": "active",
         "license_key": resp.license_key,
         "device_id": resp.device_id,
         "license_expires_at": resp.license_expires_at,
         "license_lease": resp.license_lease.is_some(),
+        "last_verified_at": current_timestamp(),
     }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn verify_license(
+    state: State<'_, AppState>,
     license_key: String,
 ) -> Result<serde_json::Value, AppError> {
     let client = make_client();
@@ -84,6 +104,20 @@ pub async fn verify_license(
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
+    persist_license_profile(
+        &state,
+        StoredLicenseProfile {
+            license_key: resp
+                .license_key
+                .clone()
+                .unwrap_or_else(|| license_key.trim().to_uppercase()),
+            license_state: resp.license_state.clone(),
+            license_expires_at: resp.license_expires_at.clone(),
+            last_verified_at: Some(current_timestamp()),
+        },
+    )
+    .await?;
+
     Ok(serde_json::json!({
         "success": resp.success,
         "message": resp.message,
@@ -91,5 +125,37 @@ pub async fn verify_license(
         "license_key": resp.license_key,
         "license_expires_at": resp.license_expires_at,
         "license_lease": resp.license_lease.is_some(),
+        "last_verified_at": current_timestamp(),
     }))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_license_status(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, AppError> {
+    let profile = state.license_profile.lock().await.clone();
+    Ok(serde_json::json!({
+        "configured": !profile.license_key.is_empty(),
+        "license_key": profile.license_key,
+        "license_state": if profile.license_state.is_empty() { "invalid".to_string() } else { profile.license_state },
+        "license_expires_at": profile.license_expires_at,
+        "last_verified_at": profile.last_verified_at,
+    }))
+}
+
+async fn persist_license_profile(
+    state: &AppState,
+    profile: StoredLicenseProfile,
+) -> Result<(), AppError> {
+    {
+        let mut current = state.license_profile.lock().await;
+        *current = profile.clone();
+    }
+    state::save_license_profile(&state.app_home_dir, &profile)
+        .map_err(|e| AppError::Message(format!("保存授权状态失败：{e}")))?;
+    Ok(())
+}
+
+fn current_timestamp() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }

@@ -4,7 +4,7 @@ import type { OrderMatchResult } from "../types/review";
 
 export function useReview() {
   const store = useReviewStore();
-  const { execute, loading } = useTauriInvoke<OrderMatchResult[]>("find_reviews");
+  const { execute, error, loading } = useTauriInvoke<OrderMatchResult[]>("find_reviews");
 
   async function findReviews(days: number, startAt: string, endAt: string) {
     store.setLoading(true);
@@ -14,7 +14,7 @@ export function useReview() {
     if (result) {
       store.setResults(result);
     } else {
-      store.setError("查找失败");
+      store.setError(error.value ?? "查找失败");
     }
     store.setLoading(false);
   }
