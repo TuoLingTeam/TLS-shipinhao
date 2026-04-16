@@ -9,6 +9,7 @@ build = "build.rs"
 anyhow.workspace = true
 slint = "1.8"
 desktop-services = { path = "../desktop-services" }
+api-contracts = { path = "../api-contracts" }
 domain-core = { path = "../domain-core" }
 
 [build-dependencies]

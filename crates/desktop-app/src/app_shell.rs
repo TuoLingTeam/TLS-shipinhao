@@ -1,5 +1,9 @@
+use api_contracts::RuntimeGrant;
+use desktop_services::delivery_batch_runner::{
+    BatchDeliveryGateway, BatchDeliveryItem, BatchDeliveryRuntimeGuard,
+};
 use desktop_services::{
-    DeliveryGateway, DesktopServices, OrderCacheStore, ReviewQuery, ReviewSource,
+    run_batch_delivery_flow, DeliveryGateway, DesktopServices, OrderCacheStore, ReviewQuery, ReviewSource,
 };
 use domain_core::{
     DeliveryUpdateRequest, DeliveryUpdateResult, MatchSource, OrderCacheEntry, OrderMatchResult, TimeWindow,
@@ -14,6 +18,7 @@ pub struct ShellCommandResult {
 
 pub struct AppShell {
     services: DesktopServices<StubReviewSource, StubOrderCacheStore, StubDeliveryGateway>,
+    runtime_guard: StubRuntimeGuard,
 }
 
 impl AppShell {
@@ -24,6 +29,7 @@ impl AppShell {
                 StubOrderCacheStore::default(),
                 StubDeliveryGateway::default(),
             ),
+            runtime_guard: StubRuntimeGuard,
         }
     }
 
@@ -61,21 +67,29 @@ impl AppShell {
     }
 
     pub fn start_batch_delivery(&self) -> ShellCommandResult {
-        let request = DeliveryUpdateRequest {
-            order_id: "3735560095122745088".into(),
-            tracking_number: "JT00000001".into(),
-            carrier_code: "JT".into(),
-        };
-        match self.services.update_delivery(&request) {
-            Ok(result) => ShellCommandResult {
+        let items = vec![
+            BatchDeliveryItem {
+                order_id: "3735560095122745088".into(),
+                tracking_number: "JT00000001".into(),
+            },
+            BatchDeliveryItem {
+                order_id: "3735560095122745089".into(),
+                tracking_number: "JT00000002".into(),
+            },
+        ];
+        let mut gateway = StubDeliveryGateway::default();
+        let mut runtime_guard = self.runtime_guard;
+        match run_batch_delivery_flow(&items, &mut gateway, &mut runtime_guard) {
+            Ok(report) => ShellCommandResult {
                 title: "批量发货".into(),
                 log: format!(
-                    "已调用 Rust desktop-services.update_delivery\n订单号：{}\n更新结果：{}\n原单号：{}",
-                    result.order_id,
-                    if result.success { "success" } else { "failed" },
-                    result.previous_waybill.unwrap_or_else(|| "无原物流单号".into())
+                    "已调用 Rust delivery_batch_runner\n批量总数：{}\n成功：{}\n失败：{}\n首单状态：{:?}",
+                    report.total_count,
+                    report.success_count,
+                    report.failure_count,
+                    report.steps.first().map(|step| step.status.clone())
                 ),
-                error: result.error_message,
+                error: report.fatal_error,
             },
             Err(error) => ShellCommandResult {
                 title: "批量发货".into(),
@@ -135,6 +149,39 @@ impl DeliveryGateway for StubDeliveryGateway {
     }
 }
 
+impl BatchDeliveryGateway for StubDeliveryGateway {
+    fn update_single_order(&mut self, order_id: &str, tracking_number: &str) -> anyhow::Result<Option<String>> {
+        let request = DeliveryUpdateRequest {
+            order_id: order_id.to_string(),
+            tracking_number: tracking_number.to_string(),
+            carrier_code: "JT".into(),
+        };
+        let result = self.update_delivery(&request)?;
+        Ok(result.previous_waybill)
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+struct StubRuntimeGuard;
+
+impl BatchDeliveryRuntimeGuard for StubRuntimeGuard {
+    fn authorize(&mut self, task_type: &str) -> anyhow::Result<()> {
+        let _grant = RuntimeGrant {
+            task_type: task_type.to_string(),
+            granted: true,
+            grant_id: "grant-1".into(),
+            valid_until: "2026-04-16T23:59:59Z".into(),
+            risk_level: Some(api_contracts::RiskLevel::Low),
+            degraded_reason: None,
+        };
+        Ok(())
+    }
+
+    fn validate_continuity(&mut self, _task_type: &str, _index: usize) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,7 +200,7 @@ mod tests {
         let shell = AppShell::new();
         let result = shell.start_batch_delivery();
         assert!(result.error.is_none());
-        assert!(result.log.contains("desktop-services.update_delivery"));
-        assert!(result.log.contains("73666162791371"));
+        assert!(result.log.contains("delivery_batch_runner"));
+        assert!(result.log.contains("成功：2"));
     }
 }

@@ -13,6 +13,7 @@ pub mod order_match_scoring;
 pub mod order_utils;
 
 use api_contracts::RuntimeGrant;
+use crate::delivery_batch_runner::{run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem, BatchDeliveryReport, BatchDeliveryRuntimeGuard};
 use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow};
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +77,18 @@ where
     pub fn update_delivery(&self, request: &DeliveryUpdateRequest) -> anyhow::Result<DeliveryUpdateResult> {
         self.delivery_gateway.update_delivery(request)
     }
+}
+
+pub fn run_batch_delivery_flow<G, RG>(
+    items: &[BatchDeliveryItem],
+    gateway: &mut G,
+    runtime_guard: &mut RG,
+) -> anyhow::Result<BatchDeliveryReport>
+where
+    G: DeliveryBatchGateway,
+    RG: BatchDeliveryRuntimeGuard,
+{
+    Ok(run_batch_delivery(items, gateway, runtime_guard))
 }
 
 pub fn parse_cookie_profile(cookie_header: &str) -> CookieProfile {

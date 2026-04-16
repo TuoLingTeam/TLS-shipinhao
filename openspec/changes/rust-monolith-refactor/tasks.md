@@ -148,7 +148,7 @@ Depends on: 10
 
 - [x] 11.1 RED: 为 `delivery_api.py` 建立请求/错误路径等价测试
 - [x] 11.2 GREEN: 迁移物流更新请求构造、返回解析、批量失败处理
-- [ ] 11.3 GREEN: 将批量发货入口接入 Rust services
+- [x] 11.3 GREEN: 将批量发货入口接入 Rust services
 - [ ] 11.4 REFACTOR: 下线 Python `delivery_api.py` 正式职责
 
 ## 12. desktop-app 真正接线

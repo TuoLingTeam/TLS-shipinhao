@@ -21,6 +21,7 @@ class RustDesktopServicesTests(unittest.TestCase):
             "pub fn refresh_cache",
             "pub fn update_delivery",
             "pub fn parse_cookie_profile",
+            "pub fn run_batch_delivery_flow",
             "pub mod order_utils",
         ):
             self.assertIn(symbol, text)
