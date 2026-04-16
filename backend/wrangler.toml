@@ -1,4 +1,4 @@
-name = "tls-shipinhao-legacy-shell"
+name = "tls-shipinhao"
 main = "src/worker/index.js"
 compatibility_date = "2024-12-01"
 workers_dev = false
