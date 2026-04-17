@@ -1,4 +1,5 @@
 pub mod lease;
+pub mod task_grant;
 
 use api_contracts::{
     LicenseLease, LicenseState, LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE,
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub use lease::{LeaseError, LeaseVerifier};
+pub use task_grant::{authorize_task_local, GrantError, TaskGrantCache};
 
 pub const LEASE_RENEWAL_HOURS: i64 = 24;
 pub const LEASE_HARD_EXPIRY_HOURS: i64 = 72;
