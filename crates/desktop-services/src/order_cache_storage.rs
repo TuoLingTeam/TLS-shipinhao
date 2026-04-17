@@ -423,7 +423,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
         }
 
         let raw_segments = self.get_complete_segments(scope, start_timestamp, end_timestamp)?;
-        Ok(compute_missing_segments(
+        Ok(crate::order_gap_planner::compute_missing_segments(
             start_timestamp,
             end_timestamp,
             merge_tolerance,
@@ -589,55 +589,6 @@ pub fn now_epoch_seconds() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
-}
-
-/// 计算 [start, end] 内未覆盖的缺口段。分离成纯函数便于单元测试和外部调用。
-pub(crate) fn compute_missing_segments(
-    start_timestamp: i64,
-    end_timestamp: i64,
-    merge_tolerance: i64,
-    min_gap_width: i64,
-    raw_segments: Vec<(i64, i64)>,
-) -> Vec<(i64, i64)> {
-    let mut segments = raw_segments
-        .into_iter()
-        .map(|(seg_start, seg_end)| (seg_start.max(start_timestamp), seg_end.min(end_timestamp)))
-        .filter(|(seg_start, seg_end)| seg_start <= seg_end)
-        .collect::<Vec<_>>();
-
-    if segments.is_empty() {
-        return vec![(start_timestamp, end_timestamp)];
-    }
-
-    segments.sort_by_key(|(start, end)| (*start, *end));
-    let mut merged: Vec<(i64, i64)> = Vec::new();
-    for (seg_start, seg_end) in segments {
-        match merged.last_mut() {
-            Some((_, last_end)) if seg_start <= *last_end + merge_tolerance => {
-                *last_end = (*last_end).max(seg_end);
-            }
-            _ => merged.push((seg_start, seg_end)),
-        }
-    }
-
-    let mut missing = Vec::new();
-    let mut cursor = start_timestamp;
-    for (seg_start, seg_end) in merged {
-        if cursor < seg_start {
-            let gap_width = seg_start - cursor;
-            if gap_width >= min_gap_width {
-                missing.push((cursor, seg_start - 1));
-            }
-        }
-        cursor = cursor.max(seg_end + 1);
-    }
-    if cursor <= end_timestamp {
-        let gap_width = end_timestamp - cursor + 1;
-        if gap_width >= min_gap_width {
-            missing.push((cursor, end_timestamp));
-        }
-    }
-    missing
 }
 
 #[cfg(test)]
@@ -944,26 +895,4 @@ mod tests {
         assert!(repo.has_dirty_sale_param().unwrap());
     }
 
-    #[test]
-    fn compute_missing_segments_handles_boundary_cases() {
-        // 无已完成段 → 返回整段
-        assert_eq!(
-            compute_missing_segments(100, 200, 10, 1, vec![]),
-            vec![(100, 200)]
-        );
-        // 完整覆盖 → 返回空
-        assert_eq!(
-            compute_missing_segments(100, 200, 10, 1, vec![(100, 200)]),
-            Vec::<(i64, i64)>::new()
-        );
-        // 非法输入（在调用方过滤）
-        // 中间小于 min_gap_width 的缺口 → 过滤
-        assert_eq!(
-            compute_missing_segments(100, 300, 10, 50, vec![(100, 150), (180, 300)]),
-            Vec::<(i64, i64)>::new()
-        );
-        // 中间 ≥ min_gap_width 的缺口 → 保留
-        let gaps = compute_missing_segments(100, 300, 10, 20, vec![(100, 150), (180, 300)]);
-        assert_eq!(gaps, vec![(151, 179)]);
-    }
 }

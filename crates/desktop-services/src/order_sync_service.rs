@@ -578,7 +578,7 @@ mod tests {
                 return Ok(Vec::new());
             }
             let raw = self.get_complete_segments(scope, start_timestamp, end_timestamp)?;
-            Ok(crate::order_cache_storage::compute_missing_segments(
+            Ok(crate::order_gap_planner::compute_missing_segments(
                 start_timestamp,
                 end_timestamp,
                 merge_tolerance,
