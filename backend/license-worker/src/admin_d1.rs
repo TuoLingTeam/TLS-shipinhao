@@ -57,7 +57,7 @@ pub(crate) fn check_admin(headers: &worker::Headers, env: &Env) -> Result<Option
     let expected = match env.secret("ADMIN_SECRET") {
         Ok(s) => s.to_string(),
         Err(_) => {
-            return Ok(Some(json_err(503, "ADMIN_SECRET 未配置，拒绝管理员接口")?));
+            return Ok(Some(json_err(503, "secret_missing")?));
         }
     };
     let got = headers.get("X-Admin-Secret")?.unwrap_or_default();
@@ -138,19 +138,13 @@ async fn admin_revoke(db: &D1Database, body: &str) -> Result<Response> {
     let payload = match crate::handle_admin_revoke_json(&repo, body, chrono::Utc::now()).await {
         Ok(payload) => payload,
         Err(err) => {
-            let message = err.to_string();
-            if message == "empty_key" {
-                return json_err(400, message);
-            }
-            if message.starts_with("missing field") || message.starts_with("expected") {
-                return json_err(400, format!("invalid_json: {message}"));
-            }
-            return json_err(500, format!("revoke_failed: {message}"));
+            let (status, message) = crate::revoke_error_contract(&err.to_string());
+            return json_err(status, message);
         }
     };
-    let value: serde_json::Value =
+    let value: crate::SignedLicenseApiResponse =
         serde_json::from_str(&payload).map_err(|e| worker::Error::RustError(e.to_string()))?;
-    Response::from_json(&value)
+    Response::from_json(&value).map(|resp| resp.with_status(crate::revoke_response_status(&value)))
 }
 
 fn js_iso_timestamp() -> String {

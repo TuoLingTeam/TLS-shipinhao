@@ -306,6 +306,33 @@ fn signed_failure_response_for_record(
     }
 }
 
+fn looks_like_invalid_json_error(message: &str) -> bool {
+    message.starts_with("missing field")
+        || message.starts_with("expected")
+        || message.contains("EOF while parsing")
+        || message.contains("trailing characters")
+        || message.contains("expected value")
+}
+
+pub fn revoke_error_contract(message: &str) -> (u16, &'static str) {
+    match message {
+        "empty_key" => (400, "empty_key"),
+        "not_found" => (404, "not_found"),
+        "unauthorized" => (401, "unauthorized"),
+        "secret_missing" => (503, "secret_missing"),
+        _ if looks_like_invalid_json_error(message) => (400, "invalid_json"),
+        _ => (500, "revoke_failed"),
+    }
+}
+
+pub fn revoke_response_status(payload: &SignedLicenseApiResponse) -> u16 {
+    if payload.success {
+        200
+    } else {
+        revoke_error_contract(&payload.message).0
+    }
+}
+
 async fn runtime_upsert_device_registration<R: AsyncRuntimeRepository + ?Sized>(
     repo: &R,
     license_key: &str,
@@ -619,6 +646,13 @@ pub async fn runtime_revoke<R: AsyncRuntimeRepository + ?Sized>(
     now: DateTime<Utc>,
 ) -> anyhow::Result<SignedLicenseApiResponse> {
     let normalized_key = normalize_key(&input.license_key);
+    if normalized_key.is_empty() {
+        return Ok(signed_failure_response_for_record(
+            "empty_key",
+            LicenseState::Invalid,
+            None,
+        ));
+    }
     let now_iso_str = now_iso(now);
     let reason = if input.reason.trim().is_empty() {
         "admin_revoke".to_string()
@@ -800,6 +834,12 @@ mod cloudflare_entry {
             "message": format!("{name} 未配置"),
         }))
         .map(|resp| resp.with_status(503))
+    }
+
+    fn response_from_revoke_payload(payload: &str) -> Result<Response> {
+        let value: SignedLicenseApiResponse =
+            serde_json::from_str(payload).map_err(worker_error)?;
+        Response::from_json(&value).map(|resp| resp.with_status(revoke_response_status(&value)))
     }
 
     fn load_signer(env: &Env) -> anyhow::Result<LeaseTokenSigner> {
@@ -1138,11 +1178,31 @@ mod cloudflare_entry {
                 };
                 let db = env.d1("DB")?;
                 let repo = D1RuntimeRepo::new(&db);
-                let payload =
-                    handle_async_runtime_json(&repo, &path, &body, signer.as_ref(), Utc::now())
-                        .await
-                        .map_err(worker_error)?;
-                response_from_json_string(payload)
+                let payload = match handle_async_runtime_json(
+                    &repo,
+                    &path,
+                    &body,
+                    signer.as_ref(),
+                    Utc::now(),
+                )
+                .await
+                {
+                    Ok(payload) => payload,
+                    Err(err) if route == WorkerRoute::LeaseRevoke => {
+                        let (status, message) = revoke_error_contract(&err.to_string());
+                        return Response::from_json(&serde_json::json!({
+                            "success": false,
+                            "message": message,
+                        }))
+                        .map(|resp| resp.with_status(status));
+                    }
+                    Err(err) => return Err(worker_error(err)),
+                };
+                if route == WorkerRoute::LeaseRevoke {
+                    response_from_revoke_payload(&payload)
+                } else {
+                    response_from_json_string(payload)
+                }
             }
             WorkerRoute::NotFound => Response::error("not_found", 404),
         }
@@ -1346,6 +1406,18 @@ mod tests {
         assert!(!route_requires_signer(WorkerRoute::LeaseRevoke));
         assert!(!route_requires_signer(WorkerRoute::TaskAuthorize));
         assert!(!route_requires_signer(WorkerRoute::NotFound));
+    }
+
+    #[test]
+    fn revoke_contract_maps_status_and_message_consistently() {
+        assert_eq!(revoke_error_contract("empty_key"), (400, "empty_key"));
+        assert_eq!(revoke_error_contract("not_found"), (404, "not_found"));
+        assert_eq!(revoke_error_contract("unauthorized"), (401, "unauthorized"));
+        assert_eq!(revoke_error_contract("secret_missing"), (503, "secret_missing"));
+        assert_eq!(
+            revoke_error_contract("missing field `key`"),
+            (400, "invalid_json")
+        );
     }
 
     #[tokio::test]
@@ -1683,6 +1755,29 @@ mod tests {
         let verified_payload: SignedLicenseApiResponse = serde_json::from_str(&verified).unwrap();
         assert!(!verified_payload.success);
         assert_eq!(verified_payload.license_state, LicenseState::Revoked);
+    }
+
+    #[tokio::test]
+    async fn runtime_revoke_with_empty_key_uses_stable_error_contract() {
+        let repo = Repo::seeded();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let revoked = handle_async_runtime_json(
+            &repo,
+            "/api/lease/revoke",
+            r#"{"license_key":"   ","device_id":"device-1","reason":"admin"}"#,
+            None,
+            now,
+        )
+        .await
+        .unwrap();
+        let payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
+        assert!(!payload.success);
+        assert_eq!(payload.message, "empty_key");
+        assert_eq!(payload.license_state, LicenseState::Invalid);
+        assert_eq!(revoke_response_status(&payload), 400);
     }
 
     #[test]
