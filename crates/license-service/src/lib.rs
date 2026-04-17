@@ -1,4 +1,7 @@
-use api_contracts::{LicenseLease, LicenseState};
+use api_contracts::{
+    LicenseLease, LicenseState, LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE,
+    LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
+};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -7,12 +10,22 @@ pub const LEASE_RENEWAL_HOURS: i64 = 24;
 pub const LEASE_HARD_EXPIRY_HOURS: i64 = 72;
 pub const LICENSE_PROTOCOL_VERSION: u32 = 3;
 pub const ISSUER: &str = "tls-license-backend";
+
+/// 任务级授权 Grant 的有效期（分钟）。与 Python 4.3.0 `LICENSE_RUNTIME_GRANT_MINUTES` 对齐。
+pub const LICENSE_RUNTIME_GRANT_MINUTES: i64 = 30;
+
+/// Worker 签发 Lease 使用的 Ed25519 公钥（base64url）。客户端用来验签。
+///
+/// 轮换这把密钥时必须同步更新此处与 Worker secret；旧客户端会因验签失败落入
+/// `LicenseState::Invalid`，从而触发「请重新激活」流程。
+pub const LICENSE_PUBLIC_KEY_B64: &str = "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8";
+
 pub const DEFAULT_TASK_POLICY: &[&str] = &[
-    "review_find",
-    "review_full_scan",
-    "quality_refund",
-    "batch_delivery",
-    "cache_manage",
+    LICENSE_TASK_REVIEW_FIND,
+    LICENSE_TASK_REVIEW_FULL_SCAN,
+    LICENSE_TASK_QUALITY_REFUND,
+    LICENSE_TASK_BATCH_DELIVERY,
+    LICENSE_TASK_CACHE_MANAGE,
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -398,7 +411,7 @@ fn issue_license_lease_for_record(record: &LicenseRecord, now: DateTime<Utc>) ->
     issue_license_lease(
         &record.license_key,
         &record.device_id,
-        record.status.clone(),
+        record.status,
         &record.license_expires_at,
         &lease_expires_at,
         &renew_after,
