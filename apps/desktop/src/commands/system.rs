@@ -2,6 +2,7 @@ use desktop_services::parse_cookie_profile;
 use desktop_services::update_service::{fetch_latest_version_info, UpdateInfo};
 use domain_core::brand::{get_window_title, APP_NAME, APP_NAME_EN, AUTHOR_WECHAT};
 use reqwest::Url;
+use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::error::AppError;
@@ -22,7 +23,7 @@ fn clamp_ui_scale(scale: f64) -> f64 {
 
 #[tauri::command]
 pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
-    fetch_latest_version_info(None)
+    fetch_latest_version_info(None, Some(&get_device_id()))
         .await
         .map_err(|e| AppError::Message(format!("检查更新失败：{e}")))
 }

@@ -8,6 +8,7 @@ mod migration;
 mod state;
 
 use desktop_services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
+use security_core::get_device_id;
 use state::AppState;
 use tauri::Emitter;
 
@@ -18,7 +19,8 @@ fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(UPDATE_CHECK_DELAY_MS)).await;
-                match fetch_latest_version_info(None).await {
+                let device_id = get_device_id();
+                match fetch_latest_version_info(None, Some(&device_id)).await {
                     Ok(info) if info.has_update => {
                         let _ = app_handle.emit("update-available", info);
                     }
