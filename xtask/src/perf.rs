@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
 use desktop_services::review_candidate_scoring::CandidateOrder;
 use serde::{Deserialize, Serialize};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -33,75 +34,95 @@ pub struct PerfReport {
     pub notes: Vec<String>,
 }
 
-pub fn run_perf_command(args: &[std::ffi::OsString]) -> Result<()> {
+#[derive(Debug, Clone, Default, PartialEq)]
+struct PerfOverrides {
+    startup_secs: Option<f64>,
+    sync_secs: Option<f64>,
+    match_secs: Option<f64>,
+    single_delivery_secs: Option<f64>,
+    batch_delivery_secs: Option<f64>,
+    memory_mb: Option<f64>,
+    package_mb: Option<f64>,
+}
+
+pub fn run_perf_command(args: &[OsString]) -> Result<()> {
     let output = args
         .first()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_REPORT_PATH));
-    let report = collect_perf_report();
+    let overrides = parse_overrides(&args[1..])?;
+    let report = collect_perf_report(&overrides);
     write_report(&output, &report)?;
     println!("perf report written: {}", output.display());
     Ok(())
 }
 
-fn collect_perf_report() -> PerfReport {
-    let match_elapsed = benchmark_match_100();
-    let release_binary_size_mb = find_release_binary_size_mb();
+fn collect_perf_report(overrides: &PerfOverrides) -> PerfReport {
+    let measured_match_secs = overrides.match_secs.unwrap_or_else(benchmark_match_100);
+    let release_binary_size_mb = overrides.package_mb.or_else(find_release_binary_size_mb);
 
     let metrics = vec![
-        PerfMetric {
-            name: "冷启动时间".into(),
-            target: format!("< {STARTUP_TARGET_SECS:.0} 秒"),
-            actual: "待人工执行（推荐 hyperfine / 真机桌面启动）".into(),
-            status: "manual".into(),
-            evidence: "需在 M6-04 打包产物上复测".into(),
-        },
-        PerfMetric {
-            name: "订单同步 1000 条".into(),
-            target: format!("< {SYNC_TARGET_SECS:.0} 秒"),
-            actual: "待人工执行（真实 Cookie / 外部接口）".into(),
-            status: "manual".into(),
-            evidence: "外部依赖强，留待发布前环境跑实测".into(),
-        },
+        build_metric(
+            "冷启动时间",
+            STARTUP_TARGET_SECS,
+            overrides.startup_secs,
+            "秒",
+            "推荐使用 hyperfine 或真机桌面启动测量",
+        ),
+        build_metric(
+            "订单同步 1000 条",
+            SYNC_TARGET_SECS,
+            overrides.sync_secs,
+            "秒",
+            "需使用真实 Cookie 与外部接口实测",
+        ),
         PerfMetric {
             name: "评价匹配 100 条".into(),
             target: format!("< {MATCH_TARGET_SECS:.0} 秒"),
-            actual: format!("{match_elapsed:.4} 秒（样板数据基准）"),
-            status: if match_elapsed < MATCH_TARGET_SECS { "pass" } else { "fail" }.into(),
-            evidence: "xtask perf 内部 synthetic benchmark".into(),
+            actual: format!("{measured_match_secs:.4} 秒"),
+            status: if measured_match_secs < MATCH_TARGET_SECS { "pass" } else { "fail" }.into(),
+            evidence: if overrides.match_secs.is_some() {
+                "人工录入实测值".into()
+            } else {
+                "xtask perf 内部 synthetic benchmark".into()
+            },
         },
-        PerfMetric {
-            name: "单条发货".into(),
-            target: format!("< {SINGLE_DELIVERY_TARGET_SECS:.0} 秒"),
-            actual: "待人工执行（真实接口）".into(),
-            status: "manual".into(),
-            evidence: "需要外部接口与可用订单号".into(),
-        },
-        PerfMetric {
-            name: "批量发货 100 条".into(),
-            target: format!("< {BATCH_DELIVERY_TARGET_SECS:.0} 秒"),
-            actual: "待人工执行（真实接口）".into(),
-            status: "manual".into(),
-            evidence: "需要外部接口与可用订单号".into(),
-        },
-        PerfMetric {
-            name: "运行内存".into(),
-            target: format!("< {MEMORY_TARGET_MB:.0} MB"),
-            actual: "待人工执行（推荐 Instruments / Activity Monitor）".into(),
-            status: "manual".into(),
-            evidence: "需在桌面产物运行态采样".into(),
-        },
+        build_metric(
+            "单条发货",
+            SINGLE_DELIVERY_TARGET_SECS,
+            overrides.single_delivery_secs,
+            "秒",
+            "需要真实接口与可用订单号",
+        ),
+        build_metric(
+            "批量发货 100 条",
+            BATCH_DELIVERY_TARGET_SECS,
+            overrides.batch_delivery_secs,
+            "秒",
+            "需要真实接口与可用订单号",
+        ),
+        build_metric(
+            "运行内存",
+            MEMORY_TARGET_MB,
+            overrides.memory_mb,
+            "MB",
+            "推荐使用 Instruments / Activity Monitor 采样",
+        ),
         PerfMetric {
             name: "安装包体积".into(),
             target: format!("< {PACKAGE_TARGET_MB:.0} MB"),
             actual: release_binary_size_mb
-                .map(|size| format!("{size:.2} MB（当前 release 二进制）"))
+                .map(|size| format!("{size:.2} MB"))
                 .unwrap_or_else(|| "待生成 release 产物后复测".into()),
             status: release_binary_size_mb
                 .map(|size| if size < PACKAGE_TARGET_MB { "pass" } else { "fail" })
                 .unwrap_or("manual")
                 .into(),
-            evidence: "target/release/desktop-app 或 desktop 二进制大小".into(),
+            evidence: if overrides.package_mb.is_some() {
+                "人工录入安装包体积".into()
+            } else {
+                "target/release/desktop-app 或 desktop 二进制大小".into()
+            },
         },
     ];
 
@@ -114,6 +135,45 @@ fn collect_perf_report() -> PerfReport {
             "正式发版前需在 macOS / Windows 打包产物上补齐冷启动、内存、同步与发货实测。".into(),
         ],
     }
+}
+
+fn build_metric(name: &str, target: f64, actual: Option<f64>, unit: &str, evidence: &str) -> PerfMetric {
+    PerfMetric {
+        name: name.into(),
+        target: format!("< {:.0} {}", target, unit),
+        actual: actual
+            .map(|value| format!("{value:.4} {unit}"))
+            .unwrap_or_else(|| "待人工执行".into()),
+        status: actual
+            .map(|value| if value < target { "pass" } else { "fail" })
+            .unwrap_or("manual")
+            .into(),
+        evidence: evidence.into(),
+    }
+}
+
+fn parse_overrides(args: &[OsString]) -> Result<PerfOverrides> {
+    let mut overrides = PerfOverrides::default();
+    for arg in args {
+        let Some(raw) = arg.to_str() else {
+            continue;
+        };
+        let Some((key, value)) = raw.split_once('=') else {
+            continue;
+        };
+        let parsed = value.parse::<f64>().with_context(|| format!("无法解析性能参数：{raw}"))?;
+        match key {
+            "--startup" => overrides.startup_secs = Some(parsed),
+            "--sync" => overrides.sync_secs = Some(parsed),
+            "--match" => overrides.match_secs = Some(parsed),
+            "--single-delivery" => overrides.single_delivery_secs = Some(parsed),
+            "--batch-delivery" => overrides.batch_delivery_secs = Some(parsed),
+            "--memory" => overrides.memory_mb = Some(parsed),
+            "--package" => overrides.package_mb = Some(parsed),
+            _ => {}
+        }
+    }
+    Ok(overrides)
 }
 
 fn benchmark_match_100() -> f64 {
@@ -208,7 +268,7 @@ mod tests {
     fn perf_report_can_be_written() {
         let dir = tempdir().unwrap();
         let output = dir.path().join("perf.md");
-        let report = collect_perf_report();
+        let report = collect_perf_report(&PerfOverrides::default());
         write_report(&output, &report).unwrap();
         let content = fs::read_to_string(output).unwrap();
         assert!(content.contains("性能报告"));
