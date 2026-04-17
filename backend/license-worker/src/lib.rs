@@ -1087,7 +1087,7 @@ mod cloudflare_entry {
         Response::from_json(&value)
     }
 
-    async fn route_fetch(req: Request, env: Env) -> Result<Response> {
+    async fn route_fetch(mut req: Request, env: Env) -> Result<Response> {
         let path = req.path();
         let method = req.method();
 
