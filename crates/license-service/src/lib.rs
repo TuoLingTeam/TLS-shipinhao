@@ -1,3 +1,5 @@
+pub mod lease;
+
 use api_contracts::{
     LicenseLease, LicenseState, LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE,
     LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
@@ -5,6 +7,8 @@ use api_contracts::{
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+pub use lease::{LeaseError, LeaseVerifier};
 
 pub const LEASE_RENEWAL_HOURS: i64 = 24;
 pub const LEASE_HARD_EXPIRY_HOURS: i64 = 72;
