@@ -226,6 +226,12 @@ pub trait AsyncRuntimeRepository {
         reason: &str,
         revoked_at: &str,
     ) -> anyhow::Result<bool>;
+    async fn revoke_license_by_key(
+        &self,
+        license_key: &str,
+        reason: &str,
+        revoked_at: &str,
+    ) -> anyhow::Result<bool>;
 }
 
 fn normalize_key(value: &str) -> String {
@@ -710,21 +716,49 @@ pub async fn handle_admin_revoke_json<R: AsyncRuntimeRepository + ?Sized>(
     if normalized_key.is_empty() {
         anyhow::bail!("empty_key");
     }
-    let device_id = repo
+    let record = repo
         .load_license(&normalized_key)
         .await?
-        .map(|value| value.device_id)
+        .map(Some)
+        .unwrap_or(None);
+    let device_id = record
+        .as_ref()
+        .map(|value| value.device_id.clone())
         .unwrap_or_default();
-    let payload = runtime_revoke(
-        repo,
-        LeaseRevokeRequest {
-            license_key: normalized_key,
+    let now_iso_str = now_iso(now);
+    let existed = repo
+        .revoke_license_by_key(&normalized_key, "admin_revoke", &now_iso_str)
+        .await?;
+    let payload = if !existed {
+        signed_failure_response_for_record("not_found", LicenseState::NotFound, None)
+    } else {
+        repo.append_audit_event(&AuditEvent {
+            action: "lease_revoke".into(),
+            license_key: normalized_key.clone(),
             device_id,
             reason: "admin_revoke".into(),
-        },
-        now,
-    )
-    .await?;
+            created_at: now_iso_str,
+        })
+        .await?;
+        let refreshed = repo.load_license(&normalized_key).await?;
+        SignedLicenseApiResponse {
+            success: true,
+            message: "license_revoked".into(),
+            license_state: LicenseState::Revoked,
+            license_lease: None,
+            license_expires_at: refreshed
+                .as_ref()
+                .map(|value| value.license_expires_at.clone()),
+            activated_at: refreshed.as_ref().map(|value| value.activated_at.clone()),
+            device_id: refreshed.as_ref().map(|value| value.device_id.clone()),
+            license_key: Some(normalized_key),
+            lease_expires_at: None,
+            renew_after: None,
+            issued_at: None,
+            license_status: Some(LicenseState::Revoked),
+            task_policy: None,
+        }
+    };
     Ok(serde_json::to_string(&payload)?)
 }
 
@@ -1123,6 +1157,66 @@ mod cloudflare_entry {
                 .await?;
             Ok(true)
         }
+
+        async fn revoke_license_by_key(
+            &self,
+            license_key: &str,
+            reason: &str,
+            revoked_at: &str,
+        ) -> anyhow::Result<bool> {
+            let Some(_key_record) = self.load_generated_key(license_key).await? else {
+                return Ok(false);
+            };
+
+            let advanced_update = self
+                .db
+                .prepare(
+                    "UPDATE generated_keys SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE license_key = ?",
+                )
+                .bind(&[
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(reason),
+                    JsValue::from_str(license_key),
+                ])?
+                .run()
+                .await;
+            if advanced_update.is_err() {
+                self.db
+                    .prepare("UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?")
+                    .bind(&[JsValue::from_str(license_key)])?
+                    .run()
+                    .await?;
+            }
+
+            self.db
+                .prepare(
+                    "UPDATE activations SET status = 'revoked', updated_at = ?, last_verify_at = ? WHERE license_key = ?",
+                )
+                .bind(&[
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(license_key),
+                ])?
+                .run()
+                .await?;
+
+            self.db
+                .prepare(
+                    "UPDATE device_sessions SET revoked_at = ? WHERE license_key = ? AND (revoked_at IS NULL OR revoked_at = '')",
+                )
+                .bind(&[JsValue::from_str(revoked_at), JsValue::from_str(license_key)])?
+                .run()
+                .await?;
+
+            self.db
+                .prepare(
+                    "UPDATE device_registrations SET registration_status = 'revoked', last_seen_at = ? WHERE license_key = ?",
+                )
+                .bind(&[JsValue::from_str(revoked_at), JsValue::from_str(license_key)])?
+                .run()
+                .await?;
+            Ok(true)
+        }
     }
 
     fn worker_error(err: impl ToString) -> worker::Error {
@@ -1370,6 +1464,36 @@ mod tests {
             {
                 registration.registration_status = "revoked".into();
                 registration.last_seen_at = revoked_at.to_string();
+            }
+            Ok(true)
+        }
+
+        async fn revoke_license_by_key(
+            &self,
+            license_key: &str,
+            _reason: &str,
+            revoked_at: &str,
+        ) -> anyhow::Result<bool> {
+            let mut generated = self.generated_keys.lock().unwrap();
+            let Some(key_record) = generated.get_mut(license_key) else {
+                return Ok(false);
+            };
+            key_record.status = GeneratedKeyStatus::Revoked;
+            drop(generated);
+
+            let mut licenses = self.licenses.lock().unwrap();
+            if let Some(record) = licenses.get_mut(license_key) {
+                record.status = LicenseState::Revoked;
+                record.updated_at = revoked_at.to_string();
+                record.last_verify_at = revoked_at.to_string();
+            }
+            drop(licenses);
+
+            for ((key, _), registration) in self.registrations.lock().unwrap().iter_mut() {
+                if key == license_key {
+                    registration.registration_status = "revoked".into();
+                    registration.last_seen_at = revoked_at.to_string();
+                }
             }
             Ok(true)
         }
@@ -1755,6 +1879,54 @@ mod tests {
         let verified_payload: SignedLicenseApiResponse = serde_json::from_str(&verified).unwrap();
         assert!(!verified_payload.success);
         assert_eq!(verified_payload.license_state, LicenseState::Revoked);
+    }
+
+    #[tokio::test]
+    async fn admin_revoke_revokes_all_registrations_under_same_license_key() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let _ = handle_async_runtime_json(
+            &repo,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+
+        repo.save_device_registration(&DeviceRegistration {
+            license_key: "TLS-TEST".into(),
+            device_id: "device-legacy".into(),
+            device_fingerprint_hash: "legacy-hash".into(),
+            registered_at: "2026-04-01T00:00:00Z".into(),
+            last_seen_at: "2026-04-16T00:00:00Z".into(),
+            registration_status: "active".into(),
+        })
+        .await
+        .unwrap();
+
+        let _ = handle_admin_revoke_json(&repo, r#"{"key":"TLS-TEST"}"#, now)
+            .await
+            .unwrap();
+
+        let registrations = repo.registrations.lock().unwrap();
+        assert_eq!(
+            registrations
+                .get(&("TLS-TEST".into(), "device-1".into()))
+                .map(|value| value.registration_status.as_str()),
+            Some("revoked")
+        );
+        assert_eq!(
+            registrations
+                .get(&("TLS-TEST".into(), "device-legacy".into()))
+                .map(|value| value.registration_status.as_str()),
+            Some("revoked")
+        );
     }
 
     #[tokio::test]
