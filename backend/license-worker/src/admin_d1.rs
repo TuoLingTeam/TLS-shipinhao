@@ -14,11 +14,6 @@ struct GenerateBody {
     note: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct RevokeBody {
-    key: String,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 struct StatRow {
     status: String,
@@ -139,20 +134,23 @@ async fn admin_generate(db: &D1Database, body: &str) -> Result<Response> {
 }
 
 async fn admin_revoke(db: &D1Database, body: &str) -> Result<Response> {
-    let req: RevokeBody = match serde_json::from_str(body) {
-        Ok(v) => v,
-        Err(e) => return json_err(400, format!("invalid_json: {e}")),
+    let repo = crate::cloudflare_entry::D1RuntimeRepo::new(db);
+    let payload = match crate::handle_admin_revoke_json(&repo, body, chrono::Utc::now()).await {
+        Ok(payload) => payload,
+        Err(err) => {
+            let message = err.to_string();
+            if message == "empty_key" {
+                return json_err(400, message);
+            }
+            if message.starts_with("missing field") || message.starts_with("expected") {
+                return json_err(400, format!("invalid_json: {message}"));
+            }
+            return json_err(500, format!("revoke_failed: {message}"));
+        }
     };
-    let key = req.key.trim().to_uppercase();
-    if key.is_empty() {
-        return json_err(400, "empty_key");
-    }
-
-    let sql = "UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?";
-    let stmt = db.prepare(sql).bind(&[JsValue::from_str(&key)])?;
-    stmt.run().await?;
-
-    Response::from_json(&serde_json::json!({ "success": true }))
+    let value: serde_json::Value =
+        serde_json::from_str(&payload).map_err(|e| worker::Error::RustError(e.to_string()))?;
+    Response::from_json(&value)
 }
 
 fn js_iso_timestamp() -> String {

@@ -60,4 +60,4 @@ npx wrangler dev
 
 - Cloudflare 线上路径已改为 `D1RuntimeRepo + handle_async_runtime_json()` 统一路径
 - 本 crate 内的测试入口也已切换到异步主路径，不再依赖旧的同步兼容入口
-- 管理端 `/api/admin/revoke` 仍保留旧 D1 管理实现，尚未与统一异步运行时服务完全收敛
+- 管理端 `/api/admin/revoke` 已复用统一异步吊销服务

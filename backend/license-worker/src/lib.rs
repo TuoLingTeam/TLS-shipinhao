@@ -69,6 +69,11 @@ pub struct LeaseRevokeRequest {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdminRevokeRequest {
+    pub key: String,
+}
+
 /// `/api/task/authorize` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskAuthorizeRequest {
@@ -661,6 +666,34 @@ pub async fn runtime_revoke<R: AsyncRuntimeRepository + ?Sized>(
     })
 }
 
+pub async fn handle_admin_revoke_json<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    body: &str,
+    now: DateTime<Utc>,
+) -> anyhow::Result<String> {
+    let request: AdminRevokeRequest = serde_json::from_str(body)?;
+    let normalized_key = normalize_key(&request.key);
+    if normalized_key.is_empty() {
+        anyhow::bail!("empty_key");
+    }
+    let device_id = repo
+        .load_license(&normalized_key)
+        .await?
+        .map(|value| value.device_id)
+        .unwrap_or_default();
+    let payload = runtime_revoke(
+        repo,
+        LeaseRevokeRequest {
+            license_key: normalized_key,
+            device_id,
+            reason: "admin_revoke".into(),
+        },
+        now,
+    )
+    .await?;
+    Ok(serde_json::to_string(&payload)?)
+}
+
 pub fn parse_route(path: &str) -> WorkerRoute {
     match path {
         "/api/activate" => WorkerRoute::Activate,
@@ -776,12 +809,12 @@ mod cloudflare_entry {
         .to_string()
     }
 
-    struct D1RuntimeRepo<'a> {
+    pub(crate) struct D1RuntimeRepo<'a> {
         db: &'a D1Database,
     }
 
     impl<'a> D1RuntimeRepo<'a> {
-        fn new(db: &'a D1Database) -> Self {
+        pub(crate) fn new(db: &'a D1Database) -> Self {
             Self { db }
         }
     }
@@ -1593,6 +1626,46 @@ mod tests {
             grant_payload.degraded_reason.as_deref(),
             Some("该卡密已被吊销")
         );
+    }
+
+    #[tokio::test]
+    async fn admin_revoke_json_reuses_runtime_revoke_flow_without_device_id() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let _ = handle_async_runtime_json(
+            &repo,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+
+        let revoked = handle_admin_revoke_json(&repo, r#"{"key":"TLS-TEST"}"#, now)
+            .await
+            .unwrap();
+        let revoked_payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
+        assert!(revoked_payload.success);
+        assert_eq!(revoked_payload.license_state, LicenseState::Revoked);
+        assert_eq!(revoked_payload.device_id.as_deref(), Some("device-1"));
+
+        let verified = handle_async_runtime_json(
+            &repo,
+            "/api/verify",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","client_version":"5.1.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+        let verified_payload: SignedLicenseApiResponse = serde_json::from_str(&verified).unwrap();
+        assert!(!verified_payload.success);
+        assert_eq!(verified_payload.license_state, LicenseState::Revoked);
     }
 
     #[test]
