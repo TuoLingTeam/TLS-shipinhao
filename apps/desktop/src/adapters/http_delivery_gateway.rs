@@ -107,33 +107,31 @@ impl HttpDeliveryGateway {
     }
 
     fn extract_delivery_info(&self, order_id: &str) -> anyhow::Result<(Value, String)> {
-        if let Ok(payload) = self.fetch_init_ship_data(order_id) {
-            if let Some(info) = payload
-                .pointer("/orderDetail/expressInfo/deliveryProductInfo")
-                .and_then(Value::as_array)
-                .and_then(|arr| arr.first())
-            {
-                let old_waybill = info
-                    .get("waybillId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                return Ok((info.clone(), old_waybill));
+        let init_result = self
+            .fetch_init_ship_data(order_id)
+            .and_then(|payload| extract_raw_delivery_product_info_from_init_ship_data(&payload));
+        match init_result {
+            Ok(info) => {
+                let old_waybill = old_waybill_from_raw_delivery_info(&info);
+                Ok((info, old_waybill))
             }
+            Err(init_err) if is_missing_snapshot_error(&init_err) => {
+                let detail_result = self
+                    .fetch_order_detail(order_id)
+                    .and_then(|payload| extract_raw_delivery_product_info_from_order_detail(&payload));
+                match detail_result {
+                    Ok(info) => {
+                        let old_waybill = old_waybill_from_raw_delivery_info(&info);
+                        Ok((info, old_waybill))
+                    }
+                    Err(detail_err) if is_missing_snapshot_error(&detail_err) => {
+                        anyhow::bail!("订单详情中没有可更新的物流信息")
+                    }
+                    Err(detail_err) => Err(detail_err),
+                }
+            }
+            Err(init_err) => Err(init_err),
         }
-
-        let payload = self.fetch_order_detail(order_id)?;
-        let info = payload
-            .pointer("/expressInfo/deliveryProductInfo")
-            .and_then(Value::as_array)
-            .and_then(|arr| arr.first())
-            .ok_or_else(|| anyhow::anyhow!("订单详情中没有可更新的物流信息"))?;
-        let old_waybill = info
-            .get("waybillId")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        Ok((info.clone(), old_waybill))
     }
 
     fn do_update(
@@ -197,6 +195,36 @@ fn check_update_response(resp: &Value) -> anyhow::Result<()> {
     }
     let msg = extract_error_message(resp).unwrap_or_else(|| format!("物流更新失败：{}", resp));
     anyhow::bail!("更新物流信息失败：{}", msg);
+}
+
+fn extract_raw_delivery_product_info_from_init_ship_data(payload: &Value) -> anyhow::Result<Value> {
+    payload
+        .pointer("/orderDetail/expressInfo/deliveryProductInfo")
+        .and_then(Value::as_array)
+        .and_then(|arr| arr.first())
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("initShipData 中没有可更新的物流信息"))
+}
+
+fn extract_raw_delivery_product_info_from_order_detail(payload: &Value) -> anyhow::Result<Value> {
+    payload
+        .pointer("/expressInfo/deliveryProductInfo")
+        .and_then(Value::as_array)
+        .and_then(|arr| arr.first())
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("orderDetail 中没有可更新的物流信息"))
+}
+
+fn is_missing_snapshot_error(err: &anyhow::Error) -> bool {
+    let message = err.to_string();
+    message.contains("没有可更新的物流信息")
+}
+
+fn old_waybill_from_raw_delivery_info(info: &Value) -> String {
+    info.get("waybillId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
 }
 
 impl DeliveryGateway for HttpDeliveryGateway {
@@ -281,5 +309,46 @@ impl BatchDeliveryGateway for HttpDeliveryGateway {
                     .unwrap_or_else(|| "更新失败".to_string())
             )
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn init_ship_data_snapshot_is_preferred() {
+        let payload = json!({
+            "orderDetail": {"expressInfo": {"deliveryProductInfo": [{"waybillId": "WB-1", "deliveryId": "ZTO"}]}}
+        });
+        let info = extract_raw_delivery_product_info_from_init_ship_data(&payload).expect("info");
+        assert_eq!(info["waybillId"], "WB-1");
+    }
+
+    #[test]
+    fn falls_back_to_order_detail_snapshot() {
+        let payload = json!({
+            "expressInfo": {"deliveryProductInfo": [{"waybillId": "WB-2", "deliveryId": "SF"}]}
+        });
+        let info = extract_raw_delivery_product_info_from_order_detail(&payload).expect("info");
+        assert_eq!(info["waybillId"], "WB-2");
+    }
+
+    #[test]
+    fn missing_snapshot_errors_are_detected_and_merged() {
+        let init_err = extract_raw_delivery_product_info_from_init_ship_data(&json!({})).unwrap_err();
+        let detail_err = extract_raw_delivery_product_info_from_order_detail(&json!({})).unwrap_err();
+        assert!(is_missing_snapshot_error(&init_err));
+        assert!(is_missing_snapshot_error(&detail_err));
+        assert!(init_err.to_string().contains("initShipData"));
+        assert!(detail_err.to_string().contains("orderDetail"));
+    }
+
+    #[test]
+    fn old_waybill_is_extracted_from_raw_snapshot() {
+        let info = json!({"waybillId": "73666162791371"});
+        assert_eq!(old_waybill_from_raw_delivery_info(&info), "73666162791371");
     }
 }
