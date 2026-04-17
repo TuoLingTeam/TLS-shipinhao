@@ -20,6 +20,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_GRANT_SEQ: AtomicU64 = AtomicU64::new(1);
 pub const WORKER_RUNTIME_ERROR_MESSAGE: &str = "worker_runtime_error";
+pub const REVOKE_GENERATED_KEY_SQL_WITH_METADATA: &str =
+    "UPDATE generated_keys SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE license_key = ?";
+pub const REVOKE_GENERATED_KEY_SQL_FALLBACK: &str =
+    "UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?";
 
 #[cfg(target_arch = "wasm32")]
 mod admin_d1;
@@ -350,6 +354,14 @@ pub fn admin_auth_error_contract(
         Some((401, "unauthorized"))
     } else {
         None
+    }
+}
+
+pub fn revoke_generated_key_update_sql(with_metadata_columns: bool) -> &'static str {
+    if with_metadata_columns {
+        REVOKE_GENERATED_KEY_SQL_WITH_METADATA
+    } else {
+        REVOKE_GENERATED_KEY_SQL_FALLBACK
     }
 }
 
@@ -1120,9 +1132,7 @@ mod cloudflare_entry {
 
             let advanced_update = self
                 .db
-                .prepare(
-                    "UPDATE generated_keys SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE license_key = ?",
-                )
+                .prepare(revoke_generated_key_update_sql(true))
                 .bind(&[
                     JsValue::from_str(revoked_at),
                     JsValue::from_str(reason),
@@ -1132,7 +1142,7 @@ mod cloudflare_entry {
                 .await;
             if advanced_update.is_err() {
                 self.db
-                    .prepare("UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?")
+                    .prepare(revoke_generated_key_update_sql(false))
                     .bind(&[JsValue::from_str(license_key)])?
                     .run()
                     .await?;
@@ -1184,9 +1194,7 @@ mod cloudflare_entry {
 
             let advanced_update = self
                 .db
-                .prepare(
-                    "UPDATE generated_keys SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE license_key = ?",
-                )
+                .prepare(revoke_generated_key_update_sql(true))
                 .bind(&[
                     JsValue::from_str(revoked_at),
                     JsValue::from_str(reason),
@@ -1196,7 +1204,7 @@ mod cloudflare_entry {
                 .await;
             if advanced_update.is_err() {
                 self.db
-                    .prepare("UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?")
+                    .prepare(revoke_generated_key_update_sql(false))
                     .bind(&[JsValue::from_str(license_key)])?
                     .run()
                     .await?;
@@ -1340,6 +1348,7 @@ mod tests {
         generated_keys: Mutex<HashMap<String, GeneratedKeyRecord>>,
         licenses: Mutex<HashMap<String, LicenseRecord>>,
         registrations: Mutex<HashMap<(String, String), DeviceRegistration>>,
+        sessions: Mutex<HashMap<String, String>>,
         audits: Mutex<Vec<AuditEvent>>,
     }
 
@@ -1479,6 +1488,10 @@ mod tests {
                 registration.registration_status = "revoked".into();
                 registration.last_seen_at = revoked_at.to_string();
             }
+            self.sessions
+                .lock()
+                .unwrap()
+                .insert(license_key.to_string(), revoked_at.to_string());
             Ok(true)
         }
 
@@ -1509,6 +1522,10 @@ mod tests {
                     registration.last_seen_at = revoked_at.to_string();
                 }
             }
+            self.sessions
+                .lock()
+                .unwrap()
+                .insert(license_key.to_string(), revoked_at.to_string());
             Ok(true)
         }
     }
@@ -1574,6 +1591,20 @@ mod tests {
             Some((401, "unauthorized"))
         );
         assert_eq!(admin_auth_error_contract(true, true), None);
+    }
+
+    #[test]
+    fn revoke_generated_key_sql_covers_metadata_and_fallback_paths() {
+        assert_eq!(
+            revoke_generated_key_update_sql(true),
+            REVOKE_GENERATED_KEY_SQL_WITH_METADATA
+        );
+        assert_eq!(
+            revoke_generated_key_update_sql(false),
+            REVOKE_GENERATED_KEY_SQL_FALLBACK
+        );
+        assert!(revoke_generated_key_update_sql(true).contains("revoked_at = ?"));
+        assert!(!revoke_generated_key_update_sql(false).contains("revoked_at = ?"));
     }
 
     #[tokio::test]
@@ -2009,6 +2040,79 @@ mod tests {
         assert_eq!(payload.message, "not_found");
         assert_eq!(payload.license_state, LicenseState::NotFound);
         assert_eq!(revoke_response_status(&payload), 404);
+    }
+
+    #[tokio::test]
+    async fn runtime_revoke_persists_repo_side_effects_and_audit_event() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let _ = handle_async_runtime_json(
+            &repo,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+
+        repo.sessions
+            .lock()
+            .unwrap()
+            .insert("TLS-TEST".into(), String::new());
+
+        let revoked = handle_async_runtime_json(
+            &repo,
+            "/api/lease/revoke",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","reason":"admin"}"#,
+            None,
+            now,
+        )
+        .await
+        .unwrap();
+        let payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
+        assert!(payload.success);
+        let revoked_at = now_iso(now);
+
+        let generated = repo.generated_keys.lock().unwrap();
+        assert_eq!(
+            generated.get("TLS-TEST").map(|value| value.status.clone()),
+            Some(GeneratedKeyStatus::Revoked)
+        );
+        drop(generated);
+
+        let licenses = repo.licenses.lock().unwrap();
+        let record = licenses.get("TLS-TEST").unwrap();
+        assert_eq!(record.status, LicenseState::Revoked);
+        assert_eq!(record.updated_at, revoked_at);
+        assert_eq!(record.last_verify_at, revoked_at);
+        drop(licenses);
+
+        let registrations = repo.registrations.lock().unwrap();
+        let registration = registrations
+            .get(&("TLS-TEST".into(), "device-1".into()))
+            .unwrap();
+        assert_eq!(registration.registration_status, "revoked");
+        assert_eq!(registration.last_seen_at, revoked_at);
+        drop(registrations);
+
+        let sessions = repo.sessions.lock().unwrap();
+        assert_eq!(
+            sessions.get("TLS-TEST").map(|value| value.as_str()),
+            Some(revoked_at.as_str())
+        );
+        drop(sessions);
+
+        let audits = repo.audits.lock().unwrap();
+        let audit = audits.last().unwrap();
+        assert_eq!(audit.action, "lease_revoke");
+        assert_eq!(audit.license_key, "TLS-TEST");
+        assert_eq!(audit.device_id, "device-1");
+        assert_eq!(audit.reason, "admin");
     }
 
     #[tokio::test]
