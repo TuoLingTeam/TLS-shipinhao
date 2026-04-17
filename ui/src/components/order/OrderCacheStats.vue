@@ -17,16 +17,34 @@ defineProps<{
       <div>
         <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Cache Snapshot</div>
         <h3 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">缓存统计</h3>
+        <p class="mt-2 text-sm leading-6 text-slate-500">
+          该状态来自富订单缓存，用于差评评分匹配与覆盖诊断。
+        </p>
       </div>
-      <div class="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
-        Local Store
+      <div
+        class="rounded-2xl px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em]"
+        :class="
+          coverageComplete
+            ? 'bg-green-50 text-green-700'
+            : 'bg-amber-50 text-amber-700'
+        "
+      >
+        {{ coverageComplete ? 'Coverage OK' : 'Need Refresh' }}
       </div>
     </div>
 
-    <div class="mt-5 space-y-4 text-sm">
-      <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-        <span class="text-slate-500">缓存订单数</span>
-        <span class="text-xl font-semibold tracking-tight text-slate-900">{{ count }}</span>
+    <div class="mt-5 grid grid-cols-1 gap-3 text-sm">
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-2xl bg-slate-50 px-4 py-3">
+          <div class="text-xs text-slate-400">缓存订单数</div>
+          <div class="mt-1 text-xl font-semibold tracking-tight text-slate-900">{{ count }}</div>
+        </div>
+        <div class="rounded-2xl bg-slate-50 px-4 py-3">
+          <div class="text-xs text-slate-400">覆盖状态</div>
+          <div class="mt-1 text-base font-semibold" :class="coverageComplete ? 'text-green-700' : 'text-amber-700'">
+            {{ coverageComplete ? "完整" : `缺口 ${missingSegmentCount || 0}` }}
+          </div>
+        </div>
       </div>
       <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
         <span class="text-slate-500">最后同步</span>
@@ -36,12 +54,6 @@ defineProps<{
         <span class="text-slate-500">覆盖区间</span>
         <span class="font-medium text-slate-700">
           {{ coverageStart && coverageEnd ? `${formatDate(coverageStart)} ~ ${formatDate(coverageEnd)}` : "未建立" }}
-        </span>
-      </div>
-      <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-        <span class="text-slate-500">覆盖状态</span>
-        <span class="font-medium" :class="coverageComplete ? 'text-green-700' : 'text-amber-700'">
-          {{ coverageComplete ? "完整" : `存在 ${missingSegmentCount || 0} 个缺口` }}
         </span>
       </div>
     </div>

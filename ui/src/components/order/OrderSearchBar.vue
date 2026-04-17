@@ -6,9 +6,9 @@ const keyword = ref("");
 </script>
 
 <template>
-  <div class="surface-panel flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:p-5">
+  <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
     <div class="min-w-0 flex-1">
-      <label class="field-label">搜索订单</label>
+      <label class="field-label">本地订单检索</label>
       <input
         v-model.trim="keyword"
         type="text"
@@ -16,6 +16,9 @@ const keyword = ref("");
         class="field-input"
         @keyup.enter="emit('search', keyword)"
       />
+      <p class="mt-2 text-xs leading-5 text-slate-500">
+        支持按订单号、买家昵称、收件人本地筛选，不会触发远端接口请求。
+      </p>
     </div>
     <button class="action-btn action-btn-primary min-w-[108px]" @click="emit('search', keyword)">
       搜索

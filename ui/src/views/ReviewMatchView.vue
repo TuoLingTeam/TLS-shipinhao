@@ -123,6 +123,16 @@ function unmatchedReason(record: {
 function displayId(record: { evaluation_id: string; order_id: string }) {
   return isQualityRefundMode.value ? record.order_id || record.evaluation_id : record.evaluation_id;
 }
+
+function matchedHint(record: { confidence_score: number }) {
+  if (isQualityRefundMode.value) {
+    return "官方已返回订单号 · 点击本行可自动带入发货页。";
+  }
+  if (record.confidence_score === 100) {
+    return "评分 100 · 已加入自动发货候选，点击本行可立即覆盖发货单号。";
+  }
+  return `评分 ${record.confidence_score} · 点击本行可手动带入发货页。`;
+}
 </script>
 
 <template>
@@ -289,7 +299,7 @@ function displayId(record: { evaluation_id: string; order_id: string }) {
                   class="max-w-[180px] text-center text-[11px] leading-5"
                   :class="r.matched ? 'text-slate-500' : 'text-amber-700'"
                 >
-                  {{ r.matched ? `评分 ${r.confidence_score} · 点击本行可自动带入发货页。` : unmatchedReason(r) }}
+                  {{ r.matched ? matchedHint(r) : unmatchedReason(r) }}
                 </div>
               </div>
             </td>

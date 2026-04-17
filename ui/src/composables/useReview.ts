@@ -26,9 +26,18 @@ export function useReview() {
     store.cacheSyncPerformed = payload.cache_sync_performed;
     store.cacheSyncWrittenCount = payload.cache_sync_written_count;
 
-    const firstMatched = payload.results.find((item) => item.matched && item.order_id?.trim());
-    if (firstMatched) {
-      deliveryStore.prefillOrder(firstMatched.order_id, source);
+    const autofillCandidate =
+      source === "评价匹配"
+        ? payload.results.find(
+            (item) =>
+              item.matched && item.order_id?.trim() && item.confidence_score === 100,
+          )
+        : payload.results.find((item) => item.matched && item.order_id?.trim());
+
+    if (autofillCandidate) {
+      deliveryStore.prefillOrder(autofillCandidate.order_id, source);
+    } else if (source === "评价匹配") {
+      deliveryStore.clearPrefillOrder();
     }
   }
 
@@ -82,4 +91,3 @@ export function useReview() {
     loading,
   };
 }
-
