@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
+use crate::adapters::secure_storage::{init_default_store, SecretStore, StorageError};
+use api_contracts::{LicenseState, RuntimeState};
 use desktop_services::{parse_cookie_profile, CookieProfile};
+use license_service::{verify_stored_lease_local, LeaseVerifier};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -24,12 +28,26 @@ pub struct AppState {
     pub cookie_profile: Mutex<CookieProfile>,
     pub cookie_path: Mutex<PathBuf>,
     pub app_home_dir: PathBuf,
+    pub device_id: String,
+    pub lease_store: Arc<dyn SecretStore>,
+    pub lease_verifier: LeaseVerifier,
+    pub runtime_license_state: Mutex<RuntimeState>,
     pub license_profile: Mutex<StoredLicenseProfile>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         let app_home_dir = app_home_dir();
+        let device_id = security_core::get_device_id();
+        let lease_store = init_default_store(&app_home_dir, &device_id);
+        let lease_verifier =
+            LeaseVerifier::new().unwrap_or_else(|err| panic!("授权公钥加载失败：{err}"));
+        let runtime_license_state =
+            load_runtime_state_from_store(lease_store.as_ref(), &device_id, now_epoch(), &lease_verifier)
+                .unwrap_or_else(|err| {
+                    tracing::warn!("启动时恢复本地 Lease 失败，降级为 invalid：{err}");
+                    RuntimeState::reason_only(LicenseState::Invalid)
+                });
         let cookie_path = resolve_cookie_path(&app_home_dir);
         let profile = load_cookie_from_file(&cookie_path);
         let license_profile = load_license_profile(&app_home_dir).unwrap_or_default();
@@ -37,6 +55,10 @@ impl AppState {
             cookie_profile: Mutex::new(profile),
             cookie_path: Mutex::new(cookie_path),
             app_home_dir,
+            device_id,
+            lease_store,
+            lease_verifier,
+            runtime_license_state: Mutex::new(runtime_license_state),
             license_profile: Mutex::new(license_profile),
         }
     }
@@ -168,6 +190,64 @@ pub fn save_license_profile(
     std::fs::write(license_profile_path(app_home_dir), text)
 }
 
+pub fn runtime_state_to_license_state(runtime: &RuntimeState) -> String {
+    match runtime.reason {
+        LicenseState::Active if runtime.status_hint == LicenseState::RenewalDue => {
+            "renewal_due".to_string()
+        }
+        LicenseState::Active => "active".to_string(),
+        LicenseState::NotFound => "not_found".to_string(),
+        LicenseState::Invalid => "invalid".to_string(),
+        LicenseState::Expired => "expired".to_string(),
+        LicenseState::DeviceMismatch => "device_mismatch".to_string(),
+        LicenseState::ReactivationRequired => "reactivation_required".to_string(),
+        LicenseState::Revoked => "revoked".to_string(),
+        LicenseState::OnlineRefreshRequired => "online_refresh_required".to_string(),
+        LicenseState::RenewalDue => "renewal_due".to_string(),
+        LicenseState::Compromised => "compromised".to_string(),
+    }
+}
+
+pub fn load_runtime_state_from_store(
+    store: &dyn SecretStore,
+    device_id: &str,
+    now_epoch: i64,
+    verifier: &LeaseVerifier,
+) -> Result<RuntimeState, String> {
+    let token = match store.get() {
+        Ok(token) => token,
+        Err(StorageError::DeviceChanged) => {
+            return Ok(RuntimeState::reason_only(LicenseState::ReactivationRequired));
+        }
+        Err(err) => return Err(err.to_string()),
+    };
+
+    Ok(verify_stored_lease_local(
+        token.as_deref(),
+        device_id,
+        now_epoch,
+        verifier,
+    ))
+}
+
+pub fn verify_and_store_license_token(
+    store: &dyn SecretStore,
+    token: &str,
+    device_id: &str,
+    now_epoch: i64,
+    verifier: &LeaseVerifier,
+) -> Result<RuntimeState, String> {
+    verifier
+        .verify(token, Some(device_id), now_epoch, false)
+        .map_err(|err| err.to_string())?;
+    store.set(token).map_err(|err| err.to_string())?;
+    load_runtime_state_from_store(store, device_id, now_epoch, verifier)
+}
+
+fn now_epoch() -> i64 {
+    chrono::Utc::now().timestamp()
+}
+
 trait ExpandHome {
     fn expand_home(&self) -> std::io::Result<PathBuf>;
 }
@@ -193,6 +273,14 @@ impl ExpandHome for Path {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapters::secure_storage::{InMemorySecretStore, SecretStore};
+    use license_service::LeaseVerifier;
+    use std::sync::Arc;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
+    use serde_json::json;
 
     fn unique_temp_dir(name: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
@@ -237,5 +325,76 @@ mod tests {
         save_license_profile(&home, &profile).unwrap();
         let loaded = load_license_profile(&home).expect("saved profile");
         assert_eq!(loaded, profile);
+    }
+
+    fn signed_lease_token(device_id: &str, renew_after: i64, exp: i64) -> (String, String) {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let verifying_key_b64 = URL_SAFE_NO_PAD.encode(signing_key.verifying_key().as_bytes());
+        let payload = json!({
+            "kind": "license_lease",
+            "license_key": "TLS-TEST",
+            "device_id": device_id,
+            "issued_at": 1_700_000_000i64,
+            "exp": exp,
+            "renew_after": renew_after,
+            "task_policy": ["review_find"],
+            "risk_level": "low",
+        });
+        let payload_bytes = serde_json::to_vec(&payload).unwrap();
+        let payload_b64 = URL_SAFE_NO_PAD.encode(payload_bytes);
+        let signature = signing_key.sign(payload_b64.as_bytes());
+        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+        (format!("{payload_b64}.{signature_b64}"), verifying_key_b64)
+    }
+
+    #[test]
+    fn verified_lease_token_roundtrip_stores_runtime_bundle() {
+        let store: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::new());
+        let (token, public_key_b64) = signed_lease_token("dev-1", 1_800_000_000, 1_900_000_000);
+
+        let runtime = verify_and_store_license_token(
+            store.as_ref(),
+            &token,
+            "dev-1",
+            1_750_000_000,
+            &LeaseVerifier::from_public_key_b64(&public_key_b64).unwrap(),
+        )
+        .expect("token should be accepted");
+
+        assert_eq!(store.get().unwrap().as_deref(), Some(token.as_str()));
+        assert_eq!(runtime.license_key, "TLS-TEST");
+        assert_eq!(runtime.device_id, "dev-1");
+    }
+
+    #[test]
+    fn runtime_state_uses_renewal_due_for_soft_refresh_window() {
+        let store: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::new());
+        let (token, public_key_b64) = signed_lease_token("dev-2", 1_750_000_000, 1_900_000_000);
+        store.set(&token).unwrap();
+
+        let runtime = load_runtime_state_from_store(
+            store.as_ref(),
+            "dev-2",
+            1_800_000_000,
+            &LeaseVerifier::from_public_key_b64(&public_key_b64).unwrap(),
+        )
+        .expect("runtime state should load");
+
+        assert_eq!(runtime_state_to_license_state(&runtime), "renewal_due");
+    }
+
+    #[test]
+    fn storage_device_change_maps_to_reactivation_required() {
+        let old_store_root = unique_temp_dir("lease_store_old");
+        let new_store_root = old_store_root.clone();
+        let old_store = crate::adapters::secure_storage::EncryptedFileSecretStore::new(&old_store_root, "dev-old");
+        old_store.set("sensitive-lease").unwrap();
+        let new_store = crate::adapters::secure_storage::EncryptedFileSecretStore::new(&new_store_root, "dev-new");
+        let verifier = LeaseVerifier::new().unwrap();
+
+        let runtime = load_runtime_state_from_store(&new_store, "dev-new", 1_800_000_000, &verifier)
+            .expect("device drift should map to runtime state");
+
+        assert_eq!(runtime_state_to_license_state(&runtime), "reactivation_required");
     }
 }

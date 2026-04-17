@@ -12,6 +12,7 @@ tauri = { workspace = true, features = [] }
 desktop-services = { path = "../../backend/crates/desktop-services" }
 domain-core = { path = "../../backend/crates/domain-core" }
 api-contracts = { path = "../../backend/crates/api-contracts" }
+license-service = { path = "../../backend/crates/license-service" }
 security_core = { path = "../../backend/crates/security-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -30,4 +31,6 @@ aes-gcm = "0.10"
 rand = "0.8"
 
 [dev-dependencies]
+base64 = "0.22"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 tempfile = "3"
