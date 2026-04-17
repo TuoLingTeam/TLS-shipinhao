@@ -1,3 +1,5 @@
+mod bench_match;
+
 use anyhow::{anyhow, Context, Result};
 use build_tools::{attach_signature, generate_integrity_manifest, inject_version, sign_manifest};
 use std::ffi::OsString;
@@ -19,6 +21,7 @@ fn run(args: Vec<OsString>) -> Result<()> {
         "release" => run_release_command(&args[1..]),
         "manifest" => run_manifest_command(&args[1..]),
         "desktop-build" => run_desktop_build_command(&args[1..]),
+        "bench-match" => bench_match::run_bench_match_command(&args[1..]),
         other => Err(anyhow!("unknown command: {other}")),
     }
 }

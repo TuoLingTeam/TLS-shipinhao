@@ -1,0 +1,52 @@
+{
+  "snapshot_name": "sample-snapshot",
+  "notes": [
+    "仓库内样板数据，仅用于验证 bench-match 工作流",
+    "正式发版前请替换成真实用户脱敏快照"
+  ],
+  "orders": [
+    {
+      "orderId": "order-1",
+      "buyerNickname": "赵亮",
+      "productId": "p1",
+      "skuId": "s1",
+      "productName": "仁和洗发水",
+      "createTime": 1712737200,
+      "confirmReceiptTime": 0,
+      "isWaybillReceived": false,
+      "waybillReceivedTime": 0,
+      "saleParam": "默认规格"
+    }
+  ],
+  "evaluations": [
+    {
+      "evaluationId": "eval-1",
+      "buyerNickname": "赵亮6057",
+      "productId": "p1",
+      "skuId": "s1",
+      "skuName": "默认规格",
+      "productName": "仁和洗发水",
+      "evalTime": 1712910000,
+      "attitudeName": "差评",
+      "evaluationContent": "有点痒",
+      "defaultContent": "",
+      "evaluationStar": 1,
+      "canReplyExpireTime": 0
+    }
+  ],
+  "python_results": [
+    {
+      "evaluation_id": "eval-1",
+      "order_id": "order-1",
+      "matched": true,
+      "match_score": 95,
+      "match_strategy": "probable_match",
+      "top_candidates": [
+        {
+          "order_id": "order-1",
+          "score": 95
+        }
+      ]
+    }
+  ]
+}

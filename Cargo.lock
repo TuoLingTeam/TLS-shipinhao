@@ -9925,7 +9925,9 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "build-tools",
+ "desktop-services",
  "ed25519-dalek",
+ "serde",
  "serde_json",
  "tempfile",
 ]
