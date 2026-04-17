@@ -1,4 +1,7 @@
 use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
+use desktop_services::delivery_update::{
+    determine_delivery_override_from_raw_info, is_delivery_mismatch_error,
+};
 use desktop_services::DeliveryGateway;
 use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult};
 use serde_json::Value;
@@ -11,7 +14,6 @@ const DELIVERY_UPDATE_URL: &str =
     "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo";
 const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
-const MISMATCH_MARKERS: &[&str] = &["快递单号与所选物流商不匹配", "快递单号有误"];
 
 pub struct HttpDeliveryGateway {
     cookie_header: String,
@@ -199,10 +201,6 @@ fn check_update_response(resp: &Value) -> anyhow::Result<()> {
     anyhow::bail!("更新物流信息失败：{}", msg);
 }
 
-fn is_mismatch_error(err: &str) -> bool {
-    MISMATCH_MARKERS.iter().any(|m| err.contains(m))
-}
-
 impl DeliveryGateway for HttpDeliveryGateway {
     fn update_delivery(
         &self,
@@ -223,18 +221,15 @@ impl DeliveryGateway for HttpDeliveryGateway {
                     error_message: None,
                 });
             }
-            Err(e) if is_mismatch_error(&e.to_string()) => {
-                let prefix = &request.tracking_number[..2.min(request.tracking_number.len())];
-                let current_did = old_info
-                    .get("deliveryId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
-                if !prefix.is_empty() && prefix != current_did {
+            Err(e) if is_delivery_mismatch_error(&e.to_string()) => {
+                if let Some(override_info) =
+                    determine_delivery_override_from_raw_info(&request.tracking_number, &old_info)
+                {
                     self.do_update(
                         &request.order_id,
                         &request.tracking_number,
                         &old_info,
-                        Some((prefix, "")),
+                        Some((&override_info.delivery_id, &override_info.delivery_name)),
                     )?;
                     return Ok(DeliveryUpdateResult {
                         order_id: request.order_id.clone(),

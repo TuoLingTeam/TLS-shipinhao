@@ -167,6 +167,28 @@ pub fn determine_delivery_override_on_mismatch(
     })
 }
 
+pub fn determine_delivery_override_from_raw_info(
+    tracking_number: &str,
+    raw_delivery_product_info: &Value,
+) -> Option<DeliveryOverride> {
+    let delivery_id = raw_delivery_product_info
+        .get("deliveryId")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    determine_delivery_override_on_mismatch(
+        tracking_number,
+        &DeliveryProductInfo {
+            delivery_id: delivery_id.to_string(),
+            delivery_name: raw_delivery_product_info
+                .get("deliveryName")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            ..DeliveryProductInfo::default()
+        },
+    )
+}
+
 pub fn delivery_update_succeeded(result: &Value) -> bool {
     result.get("success").and_then(Value::as_bool) == Some(true)
         || (result.get("code").and_then(Value::as_i64) == Some(0)
@@ -277,5 +299,21 @@ mod tests {
         )));
         let same_prefix_info = make_raw_delivery_info("JT", "73666162791371");
         assert!(determine_delivery_override_on_mismatch("JT0001", &same_prefix_info).is_none());
+    }
+
+    #[test]
+    fn raw_delivery_info_can_drive_auto_downgrade_mapping() {
+        let raw = json!({
+            "deliveryId": "ZTO",
+            "deliveryName": "中通快递",
+            "waybillId": "73666162791371"
+        });
+        let override_info =
+            determine_delivery_override_from_raw_info("  SF000123456  ", &raw).unwrap();
+        assert_eq!(override_info.delivery_id, "SF");
+        assert_eq!(override_info.delivery_name, "");
+
+        let same_prefix = json!({"deliveryId": "SF", "deliveryName": "顺丰速运"});
+        assert!(determine_delivery_override_from_raw_info("SF000123456", &same_prefix).is_none());
     }
 }
