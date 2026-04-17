@@ -653,7 +653,7 @@ mod tests {
         let state = test_state(
             "dev-1",
             store,
-            "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8",
+            "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo",
         );
         let response = LicenseApiResponse {
             success: true,

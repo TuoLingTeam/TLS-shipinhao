@@ -26,7 +26,7 @@ pub const LICENSE_RUNTIME_GRANT_MINUTES: i64 = 30;
 ///
 /// 轮换这把密钥时必须同步更新此处与 Worker secret；旧客户端会因验签失败落入
 /// `LicenseState::Invalid`，从而触发「请重新激活」流程。
-pub const LICENSE_PUBLIC_KEY_B64: &str = "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8";
+pub const LICENSE_PUBLIC_KEY_B64: &str = "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo";
 
 pub const DEFAULT_TASK_POLICY: &[&str] = &[
     LICENSE_TASK_REVIEW_FIND,

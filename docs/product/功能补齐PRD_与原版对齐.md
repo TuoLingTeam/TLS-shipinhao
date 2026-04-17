@@ -177,7 +177,7 @@ pub const LICENSE_LEASE_RENEWAL_HOURS: i64 = 24;
 pub const LICENSE_LEASE_HARD_EXPIRY_HOURS: i64 = 72;
 pub const LICENSE_RUNTIME_GRANT_MINUTES: i64 = 30;
 pub const LICENSE_REQUIRE_ONLINE_FOR_TASKS: bool = true;
-pub const LICENSE_PUBLIC_KEY_B64: &str = "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8";
+pub const LICENSE_PUBLIC_KEY_B64: &str = "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo";
 pub const INTEGRITY_MANIFEST_FILE_NAME: &str = "integrity_manifest.json";
 
 pub const LICENSE_TASK_REVIEW_FIND: &str = "review_find";

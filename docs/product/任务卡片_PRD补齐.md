@@ -519,7 +519,7 @@ graph LR
 - `crates/license-service/Cargo.toml`（加依赖）
 
 **风险 / 澄清点**
-- 公钥 `LICENSE_PUBLIC_KEY_B64 = "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8"` 与 Worker（M2-11）签名使用的私钥是否一致？上线前必须联调一轮
+- 公钥 `LICENSE_PUBLIC_KEY_B64 = "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo"` 与 Worker（M2-11）签名使用的私钥是否一致？上线前必须联调一轮
 
 ---
 

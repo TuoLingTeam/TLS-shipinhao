@@ -6,12 +6,12 @@ main = "./license-worker/build/worker/shim.mjs"
 compatibility_date = "2024-12-01"
 workers_dev = false
 
-[build]
-command = "sh -c 'cd ./license-worker && (command -v worker-build >/dev/null 2>&1 || cargo install worker-build 2>/dev/null) && worker-build --release'"
-
 routes = [
   { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }
 ]
+
+[build]
+command = "sh ./scripts/build_license_worker.sh --release"
 
 [vars]
 # HMAC_SECRET / ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置
