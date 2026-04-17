@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLayout from "./components/layout/AppLayout.vue";
+import UpdateBanner from "./components/layout/UpdateBanner.vue";
 import { useLayout } from "./composables/useLayout";
 import { useUiScale } from "./composables/useUiScale";
 
@@ -9,6 +10,8 @@ const { mode } = useLayout();
 
 <template>
   <div class="app-shell" :data-layout="mode">
-    <AppLayout />
+    <AppLayout>
+      <UpdateBanner />
+    </AppLayout>
   </div>
 </template>

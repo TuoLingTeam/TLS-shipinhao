@@ -15,6 +15,7 @@ onMounted(() => {
   <div class="app-frame flex h-screen overflow-hidden bg-transparent p-4 text-slate-900 lg:p-5">
     <AppSidebar />
     <div class="app-content-shell ml-0 flex min-w-0 flex-1 flex-col gap-4 overflow-hidden lg:ml-4">
+      <slot />
       <AppHeader />
       <main class="min-h-0 flex-1 overflow-y-auto pr-1">
         <div class="app-page-shell mx-auto flex w-full max-w-[1480px] flex-col gap-5 pb-8">
