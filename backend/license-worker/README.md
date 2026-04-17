@@ -39,8 +39,20 @@ npx wrangler dev
   - Cloudflare 路径已接入 D1 查询
   - 返回真实 `RuntimeGrant`
 
+## 当前 Worker 授权架构
+
+- `handle_async_runtime_json()` 统一路由：
+  - `activate`
+  - `verify`
+  - `lease_refresh`
+  - `task_authorize`
+- `runtime_activate()` / `runtime_verify()` / `runtime_refresh_lease()` / `runtime_task_authorize()`
+  共享同一套运行时授权逻辑
+- `D1RuntimeRepo` 作为 Cloudflare 运行时实现，负责把 D1 表结构映射到异步仓库接口
+- 单元测试中的内存仓库也实现相同 `AsyncRuntimeRepository`，用于验证统一路径
+
 ## 当前边界
 
-- 非 wasm 单元测试路径仍通过 `license-service + 内存仓库` 验证契约
-- Cloudflare 线上路径通过 D1 直连实现 `activate / verify / lease_refresh / task_authorize`
+- 旧的 `license-service + handle_json_request()` 同步路径仍保留，用于兼容既有契约测试
+- Cloudflare 线上路径已改为 `D1RuntimeRepo + handle_async_runtime_json()` 统一路径
 - `/api/lease/revoke` 仍保留占位响应，管理员吊销继续走 `/api/admin/*`
