@@ -13,9 +13,11 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 sha2.workspace = true
+tokio.workspace = true
 license-service = { path = "../../backend/crates/license-service" }
 api-contracts = { path = "../../backend/crates/api-contracts" }
 base64 = "0.22"
+async-trait = "0.1"
 ed25519-dalek = { version = "2.1", features = ["pkcs8"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

@@ -3,21 +3,21 @@ use api_contracts::{
     LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE, LICENSE_TASK_QUALITY_REFUND,
     LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
 };
+use async_trait::async_trait;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::pkcs8::DecodePrivateKey;
 use ed25519_dalek::{Signer, SigningKey};
 use license_service::{
-    authorize_task_local, ActivationInput, LicenseRepository, LicenseService,
-    LicenseServiceResponse, VerifyInput,
+    authorize_task_local, ActivationInput, AuditEvent, DeviceRegistration, GeneratedKeyRecord,
+    GeneratedKeyStatus, LicenseRecord, LicenseRepository, LicenseService, LicenseServiceResponse,
+    VerifyInput,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::atomic::{AtomicU64, Ordering};
-
-#[cfg(target_arch = "wasm32")]
 use sha2::{Digest, Sha256};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_GRANT_SEQ: AtomicU64 = AtomicU64::new(1);
 
@@ -213,6 +213,395 @@ fn map_service_response(
         license_status: lease.as_ref().map(|value| value.license_status),
         task_policy: lease.as_ref().map(|value| value.task_policy.clone()),
     })
+}
+
+#[async_trait(?Send)]
+pub trait AsyncRuntimeRepository {
+    async fn load_generated_key(&self, license_key: &str)
+        -> anyhow::Result<Option<GeneratedKeyRecord>>;
+    async fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()>;
+    async fn load_license(&self, license_key: &str) -> anyhow::Result<Option<LicenseRecord>>;
+    async fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()>;
+    async fn load_device_registration(
+        &self,
+        license_key: &str,
+        device_id: &str,
+    ) -> anyhow::Result<Option<DeviceRegistration>>;
+    async fn save_device_registration(&self, record: &DeviceRegistration) -> anyhow::Result<()>;
+    async fn append_audit_event(&self, event: &AuditEvent) -> anyhow::Result<()>;
+    async fn update_runtime_markers(
+        &self,
+        license_key: &str,
+        now_iso: &str,
+        session_issued: bool,
+        grant_issued: bool,
+        new_status: Option<LicenseState>,
+    ) -> anyhow::Result<()>;
+}
+
+fn normalize_key(value: &str) -> String {
+    value.trim().to_uppercase()
+}
+
+fn now_iso(now: DateTime<Utc>) -> String {
+    now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+fn sha256_hex(value: &str) -> String {
+    format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+
+fn issue_license_lease_for_record(record: &LicenseRecord, now: DateTime<Utc>) -> LicenseLease {
+    let lease = license_service::issue_license_lease(
+        &record.license_key,
+        &record.device_id,
+        record.status,
+        &record.license_expires_at,
+        &(now + chrono::Duration::hours(license_service::LEASE_HARD_EXPIRY_HOURS))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        &(now + chrono::Duration::hours(license_service::LEASE_RENEWAL_HOURS))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        &now_iso(now),
+    );
+    LicenseLease {
+        binding_version: record.binding_version,
+        ..lease
+    }
+}
+
+fn signed_success_response_for_record(
+    message: &str,
+    state: LicenseState,
+    record: &LicenseRecord,
+    signer: &LeaseTokenSigner,
+    now: DateTime<Utc>,
+) -> anyhow::Result<SignedLicenseApiResponse> {
+    let lease = issue_license_lease_for_record(record, now);
+    let token = signer.sign_license_lease(&lease)?;
+    Ok(SignedLicenseApiResponse {
+        success: true,
+        message: message.to_string(),
+        license_state: state,
+        license_lease: Some(token),
+        license_expires_at: Some(record.license_expires_at.clone()),
+        activated_at: Some(record.activated_at.clone()),
+        device_id: Some(record.device_id.clone()),
+        license_key: Some(record.license_key.clone()),
+        lease_expires_at: Some(lease.lease_expires_at.clone()),
+        renew_after: Some(lease.renew_after.clone()),
+        issued_at: Some(lease.issued_at.clone()),
+        license_status: Some(state),
+        task_policy: Some(lease.task_policy.clone()),
+    })
+}
+
+fn signed_failure_response_for_record(
+    message: &str,
+    state: LicenseState,
+    record: Option<&LicenseRecord>,
+) -> SignedLicenseApiResponse {
+    SignedLicenseApiResponse {
+        success: false,
+        message: message.to_string(),
+        license_state: state,
+        license_lease: None,
+        license_expires_at: record.map(|value| value.license_expires_at.clone()),
+        activated_at: record.map(|value| value.activated_at.clone()),
+        device_id: record.map(|value| value.device_id.clone()),
+        license_key: record.map(|value| value.license_key.clone()),
+        lease_expires_at: None,
+        renew_after: None,
+        issued_at: None,
+        license_status: record.map(|_| state),
+        task_policy: None,
+    }
+}
+
+async fn runtime_upsert_device_registration<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    license_key: &str,
+    device_id: &str,
+    device_fingerprint: &str,
+    now: DateTime<Utc>,
+) -> anyhow::Result<()> {
+    let now_iso_str = now_iso(now);
+    let hash = sha256_hex(device_fingerprint);
+    let mut registration = repo
+        .load_device_registration(license_key, device_id)
+        .await?
+        .unwrap_or(DeviceRegistration {
+            license_key: license_key.to_string(),
+            device_id: device_id.to_string(),
+            device_fingerprint_hash: hash.clone(),
+            registered_at: now_iso_str.clone(),
+            last_seen_at: now_iso_str.clone(),
+            registration_status: "active".into(),
+        });
+    registration.device_fingerprint_hash = hash;
+    registration.last_seen_at = now_iso_str;
+    registration.registration_status = "active".into();
+    repo.save_device_registration(&registration).await
+}
+
+async fn runtime_load_usable_license<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    license_key: &str,
+    device_id: &str,
+    now: DateTime<Utc>,
+    expired_audit_action: &str,
+) -> anyhow::Result<Result<LicenseRecord, (String, LicenseState, Option<LicenseRecord>)>> {
+    let normalized_key = normalize_key(license_key);
+    let Some(key_record) = repo.load_generated_key(&normalized_key).await? else {
+        return Ok(Err(("该卡密已被吊销".into(), LicenseState::Revoked, None)));
+    };
+    if key_record.status == GeneratedKeyStatus::Revoked {
+        return Ok(Err(("该卡密已被吊销".into(), LicenseState::Revoked, None)));
+    }
+
+    let Some(mut record) = repo.load_license(&normalized_key).await? else {
+        return Ok(Err(("该卡密尚未激活".into(), LicenseState::Invalid, None)));
+    };
+    if record.device_id != device_id {
+        return Ok(Err((
+            "设备不匹配：该卡密已绑定其他设备".into(),
+            LicenseState::DeviceMismatch,
+            Some(record),
+        )));
+    }
+    if record.status == LicenseState::Revoked {
+        return Ok(Err(("该卡密已被吊销".into(), LicenseState::Revoked, Some(record))));
+    }
+
+    let expires_at = DateTime::parse_from_rfc3339(&record.license_expires_at)?.with_timezone(&Utc);
+    if now >= expires_at {
+        let now_iso_str = now_iso(now);
+        record.status = LicenseState::Expired;
+        record.updated_at = now_iso_str.clone();
+        record.last_verify_at = now_iso_str.clone();
+        repo.save_license(&record).await?;
+        repo.append_audit_event(&AuditEvent {
+            action: expired_audit_action.to_string(),
+            license_key: normalized_key,
+            device_id: device_id.to_string(),
+            reason: "expired".into(),
+            created_at: now_iso_str,
+        })
+        .await?;
+        return Ok(Err(("授权已过期".into(), LicenseState::Expired, Some(record))));
+    }
+
+    Ok(Ok(record))
+}
+
+pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    signer: &LeaseTokenSigner,
+    input: ActivationInput,
+    now: DateTime<Utc>,
+) -> anyhow::Result<SignedLicenseApiResponse> {
+    let normalized_key = normalize_key(&input.license_key);
+    let Some(mut key_record) = repo.load_generated_key(&normalized_key).await? else {
+        return Ok(signed_failure_response_for_record(
+            "该卡密不存在或已被吊销",
+            LicenseState::Revoked,
+            None,
+        ));
+    };
+    if key_record.status == GeneratedKeyStatus::Revoked {
+        return Ok(signed_failure_response_for_record(
+            "该卡密已被吊销，无法使用",
+            LicenseState::Revoked,
+            None,
+        ));
+    }
+    if key_record.plan_days == 0 {
+        return Ok(signed_failure_response_for_record(
+            "卡密无效：有效期异常",
+            LicenseState::Invalid,
+            None,
+        ));
+    }
+
+    let now_iso_str = now_iso(now);
+    let existing = repo.load_license(&normalized_key).await?;
+    let (record, message) = if let Some(mut record) = existing {
+        if record.device_id != input.device_id {
+            return Ok(signed_failure_response_for_record(
+                "该卡密已在其他设备激活，不允许更换设备。如需帮助请联系作者。",
+                LicenseState::DeviceMismatch,
+                Some(&record),
+            ));
+        }
+        record.device_fingerprint = input.device_fingerprint.clone();
+        record.updated_at = now_iso_str.clone();
+        record.binding_version = license_service::LICENSE_PROTOCOL_VERSION;
+        record.status = LicenseState::Active;
+        record.last_verify_at = now_iso_str.clone();
+        repo.save_license(&record).await?;
+        (record, "重新激活成功")
+    } else {
+        let record = LicenseRecord {
+            license_key: normalized_key.clone(),
+            device_id: input.device_id.clone(),
+            device_fingerprint: input.device_fingerprint.clone(),
+            plan_days: key_record.plan_days,
+            activated_at: now_iso_str.clone(),
+            license_expires_at: now_iso(now + chrono::Duration::days(key_record.plan_days as i64)),
+            updated_at: now_iso_str.clone(),
+            binding_version: license_service::LICENSE_PROTOCOL_VERSION,
+            status: LicenseState::Active,
+            last_verify_at: now_iso_str.clone(),
+        };
+        repo.save_license(&record).await?;
+        key_record.status = GeneratedKeyStatus::Activated;
+        repo.save_generated_key(&key_record).await?;
+        (record, "激活成功")
+    };
+
+    runtime_upsert_device_registration(
+        repo,
+        &normalized_key,
+        &input.device_id,
+        &input.device_fingerprint,
+        now,
+    )
+    .await?;
+    repo.append_audit_event(&AuditEvent {
+        action: "activate".into(),
+        license_key: normalized_key,
+        device_id: input.device_id,
+        reason: if input.client_version.is_empty() {
+            "client_activate".into()
+        } else {
+            format!("client_activate:{}", input.client_version)
+        },
+        created_at: now_iso_str,
+    })
+    .await?;
+
+    signed_success_response_for_record(message, LicenseState::Active, &record, signer, now)
+}
+
+pub async fn runtime_verify<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    signer: &LeaseTokenSigner,
+    input: VerifyInput,
+    now: DateTime<Utc>,
+) -> anyhow::Result<SignedLicenseApiResponse> {
+    let normalized_key = normalize_key(&input.license_key);
+    let mut record = match runtime_load_usable_license(
+        repo,
+        &normalized_key,
+        &input.device_id,
+        now,
+        "verify",
+    )
+    .await? {
+        Ok(record) => record,
+        Err((message, state, record)) => {
+            return Ok(signed_failure_response_for_record(
+                &message,
+                state,
+                record.as_ref(),
+            ))
+        }
+    };
+
+    let now_iso_str = now_iso(now);
+    record.status = LicenseState::Active;
+    record.updated_at = now_iso_str.clone();
+    record.last_verify_at = now_iso_str.clone();
+    repo.save_license(&record).await?;
+    repo.append_audit_event(&AuditEvent {
+        action: "verify".into(),
+        license_key: normalized_key,
+        device_id: input.device_id,
+        reason: if input.client_version.is_empty() {
+            "client_verify".into()
+        } else {
+            format!("client_verify:{}", input.client_version)
+        },
+        created_at: now_iso_str,
+    })
+    .await?;
+
+    signed_success_response_for_record("授权有效", LicenseState::Active, &record, signer, now)
+}
+
+pub async fn runtime_refresh_lease<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    signer: &LeaseTokenSigner,
+    input: LeaseRefreshRequest,
+    now: DateTime<Utc>,
+) -> anyhow::Result<LeaseRefreshResponse> {
+    let record = match runtime_load_usable_license(repo, &input.license_key, &input.device_id, now, "verify").await? {
+        Ok(record) => record,
+        Err((message, _, _)) => {
+            return Ok(LeaseRefreshResponse {
+                success: false,
+                message,
+                new_token: String::new(),
+            })
+        }
+    };
+    let now_iso_str = now_iso(now);
+    repo.update_runtime_markers(
+        &record.license_key,
+        &now_iso_str,
+        true,
+        false,
+        Some(LicenseState::Active),
+    )
+    .await?;
+    repo.append_audit_event(&AuditEvent {
+        action: "lease_refresh".into(),
+        license_key: record.license_key.clone(),
+        device_id: input.device_id,
+        reason: "ok".into(),
+        created_at: now_iso_str,
+    })
+    .await?;
+    Ok(LeaseRefreshResponse {
+        success: true,
+        message: "lease_refreshed".into(),
+        new_token: signer.sign_license_lease(&issue_license_lease_for_record(&record, now))?,
+    })
+}
+
+pub async fn runtime_task_authorize<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    input: TaskAuthorizeRequest,
+    now: DateTime<Utc>,
+) -> anyhow::Result<RuntimeGrant> {
+    let record = match runtime_load_usable_license(repo, &input.license_key, &input.device_id, now, "verify").await? {
+        Ok(record) => record,
+        Err((message, _, _)) => return Ok(denied_grant(&input.task_type, message)),
+    };
+    let payload = lease_to_payload(&issue_license_lease_for_record(&record, now))?;
+    let mut grant =
+        match authorize_task_local(&payload, &input.task_type, now.timestamp(), next_grant_id) {
+            Ok(grant) => grant,
+            Err(err) => return Ok(denied_grant(&input.task_type, err.to_string())),
+        };
+    grant.risk_level = task_risk_level(&input.task_type);
+    let now_iso_str = now_iso(now);
+    repo.update_runtime_markers(
+        &record.license_key,
+        &now_iso_str,
+        false,
+        true,
+        Some(LicenseState::Active),
+    )
+    .await?;
+    repo.append_audit_event(&AuditEvent {
+        action: "task_authorize".into(),
+        license_key: record.license_key,
+        device_id: input.device_id,
+        reason: input.task_type,
+        created_at: now_iso_str,
+    })
+    .await?;
+    Ok(grant)
 }
 
 fn handle_lease_refresh<R: LicenseRepository>(
@@ -1176,6 +1565,66 @@ mod tests {
         }
     }
 
+    #[async_trait(?Send)]
+    impl AsyncRuntimeRepository for Repo {
+        async fn load_generated_key(
+            &self,
+            license_key: &str,
+        ) -> anyhow::Result<Option<GeneratedKeyRecord>> {
+            LicenseRepository::load_generated_key(self, license_key)
+        }
+
+        async fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()> {
+            LicenseRepository::save_generated_key(self, record)
+        }
+
+        async fn load_license(&self, license_key: &str) -> anyhow::Result<Option<LicenseRecord>> {
+            LicenseRepository::load_license(self, license_key)
+        }
+
+        async fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()> {
+            LicenseRepository::save_license(self, record)
+        }
+
+        async fn load_device_registration(
+            &self,
+            license_key: &str,
+            device_id: &str,
+        ) -> anyhow::Result<Option<DeviceRegistration>> {
+            LicenseRepository::load_device_registration(self, license_key, device_id)
+        }
+
+        async fn save_device_registration(
+            &self,
+            record: &DeviceRegistration,
+        ) -> anyhow::Result<()> {
+            LicenseRepository::save_device_registration(self, record)
+        }
+
+        async fn append_audit_event(&self, event: &AuditEvent) -> anyhow::Result<()> {
+            LicenseRepository::append_audit_event(self, event)
+        }
+
+        async fn update_runtime_markers(
+            &self,
+            license_key: &str,
+            now_iso: &str,
+            _session_issued: bool,
+            _grant_issued: bool,
+            new_status: Option<LicenseState>,
+        ) -> anyhow::Result<()> {
+            let mut licenses = self.licenses.lock().unwrap();
+            if let Some(record) = licenses.get_mut(license_key) {
+                record.updated_at = now_iso.to_string();
+                record.last_verify_at = now_iso.to_string();
+                if let Some(status) = new_status {
+                    record.status = status;
+                }
+            }
+            Ok(())
+        }
+    }
+
     #[test]
     fn parses_routes() {
         assert_eq!(parse_route("/api/activate"), WorkerRoute::Activate);
@@ -1317,6 +1766,118 @@ mod tests {
         assert!(payload.granted);
         assert_eq!(payload.task_type, "review_find");
         assert!(!payload.grant_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn async_runtime_service_activate_verify_refresh_and_authorize_share_repo_path() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let activated = runtime_activate(
+            &repo,
+            &signer,
+            ActivationInput {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                device_fingerprint: "fp-1".into(),
+                client_version: "5.0.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(activated.success);
+        assert!(activated.license_lease.is_some());
+
+        let verified = runtime_verify(
+            &repo,
+            &signer,
+            VerifyInput {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                client_version: "5.1.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(verified.success);
+        assert_eq!(verified.license_state, LicenseState::Active);
+
+        let refreshed = runtime_refresh_lease(
+            &repo,
+            &signer,
+            LeaseRefreshRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                current_issued_at: now.timestamp(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(refreshed.success);
+        assert!(!refreshed.new_token.is_empty());
+
+        let grant = runtime_task_authorize(
+            &repo,
+            TaskAuthorizeRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                task_type: LICENSE_TASK_REVIEW_FIND.into(),
+                client_version: "5.2.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(grant.granted);
+        assert_eq!(grant.task_type, LICENSE_TASK_REVIEW_FIND);
+    }
+
+    #[tokio::test]
+    async fn async_runtime_verify_reports_expired_from_shared_repo_state() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let activated_at = chrono::DateTime::parse_from_rfc3339("2026-04-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        runtime_activate(
+            &repo,
+            &signer,
+            ActivationInput {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                device_fingerprint: "fp-1".into(),
+                client_version: String::new(),
+            },
+            activated_at,
+        )
+        .await
+        .unwrap();
+
+        let expired_at = chrono::DateTime::parse_from_rfc3339("2026-05-05T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let verified = runtime_verify(
+            &repo,
+            &signer,
+            VerifyInput {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                client_version: String::new(),
+            },
+            expired_at,
+        )
+        .await
+        .unwrap();
+
+        assert!(!verified.success);
+        assert_eq!(verified.license_state, LicenseState::Expired);
+        assert_eq!(verified.message, "授权已过期");
     }
 
     #[test]
