@@ -57,10 +57,10 @@ async function handleBatchDelivery() {
 <template>
   <div class="space-y-5">
     <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
-      <div class="surface-panel p-5 lg:p-6">
+      <div class="hero-panel p-5 lg:p-6">
         <div class="flex items-center justify-between gap-4">
           <h2 class="text-xl font-semibold tracking-tight text-slate-900">单个发货</h2>
-          <div v-if="store.draftOrderId" class="text-xs text-green-600">
+          <div v-if="store.draftOrderId" class="text-xs text-brand">
             已自动带入：{{ store.draftSource || '匹配订单' }}
           </div>
         </div>
@@ -123,7 +123,7 @@ async function handleBatchDelivery() {
         <div
           v-if="store.batchProgress"
           class="mt-5 rounded-[20px] border px-4 py-4 text-sm"
-          :class="store.batchProgress.fatalError ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'"
+          :class="store.batchProgress.fatalError ? 'border-red-200 bg-red-50 text-red-700' : 'border-brand-tint bg-brand-soft text-brand-deep'"
         >
           <div class="grid grid-cols-3 gap-3 text-center">
             <div>

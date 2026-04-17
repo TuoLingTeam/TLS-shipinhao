@@ -20,8 +20,8 @@ withDefaults(
         <div class="text-lg font-semibold text-slate-900">{{ title }}</div>
         <p class="mt-2 text-sm leading-6 text-slate-500">{{ description }}</p>
       </div>
-      <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-blue-500"></span>
+      <div class="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-2 text-sm font-medium text-brand-deep">
+        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-brand"></span>
         正在加载
       </div>
     </div>

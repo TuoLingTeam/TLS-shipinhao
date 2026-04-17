@@ -115,14 +115,14 @@ onMounted(() => {
         <h2 class="text-xl font-semibold tracking-tight text-slate-900">Cookie 配置</h2>
         <div
           class="rounded-2xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
-          :class="cookieConfigured ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'"
+          :class="cookieConfigured ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-500'"
         >
           {{ cookieConfigured ? '已配置' : '未配置' }}
         </div>
       </div>
 
       <div class="mt-5 space-y-4">
-        <div class="rounded-[20px] border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+        <div class="rounded-[20px] border border-brand-tint bg-brand-soft/80 p-4 text-sm text-brand-deep">
           <div class="font-semibold">品牌信息</div>
           <div class="mt-2">应用：{{ APP_NAME }}</div>
           <div class="mt-1">作者微信：<span class="font-mono">{{ AUTHOR_WECHAT }}</span></div>
@@ -157,7 +157,7 @@ onMounted(() => {
 
         <div class="flex items-center gap-3">
           <button class="action-btn action-btn-primary" @click="handleSave">保存</button>
-          <span v-if="saved" class="text-sm font-semibold text-green-600">已保存</span>
+          <span v-if="saved" class="text-sm font-semibold text-brand">已保存</span>
           <span v-if="hasBizMagic" class="text-sm text-slate-500">已识别 biz_magic</span>
         </div>
 

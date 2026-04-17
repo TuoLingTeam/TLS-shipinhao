@@ -248,7 +248,7 @@ function formatReplyDeadline(value: string | null) {
       </div>
       <div class="h-2 overflow-hidden rounded-full bg-slate-100">
         <div
-          class="h-full rounded-full bg-blue-600 transition-all duration-300"
+          class="h-full rounded-full bg-brand transition-all duration-300"
           :style="{ width: `${orderStore.syncProgress}%` }"
         ></div>
       </div>
@@ -339,7 +339,7 @@ function formatReplyDeadline(value: string | null) {
               <div class="flex flex-col items-center gap-2">
                 <span
                   class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
-                  :class="r.matched ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'"
+                  :class="r.matched ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-500'"
                 >
                   {{ r.matched ? "已匹配" : "未匹配" }}
                 </span>

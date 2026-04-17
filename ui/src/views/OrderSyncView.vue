@@ -84,7 +84,7 @@ onMounted(async () => {
 <template>
   <div class="space-y-5">
     <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-      <div class="surface-panel p-5 lg:p-6">
+      <div class="hero-panel p-5 lg:p-6">
         <div class="flex flex-col gap-5">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -94,8 +94,8 @@ onMounted(async () => {
                 这里同时承担两类职责：维护近 30 天富缓存，以及对当前订单副本做快速本地检索。
               </p>
             </div>
-            <div class="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-500 lg:max-w-[280px]">
-              <div class="font-semibold text-slate-800">当前状态</div>
+            <div class="rounded-2xl border border-brand-tint bg-white/75 px-4 py-3 text-sm text-brand-deep lg:max-w-[280px]">
+              <div class="font-semibold text-brand-deep">当前状态</div>
               <div class="mt-1 leading-6">{{ activeCoverageLabel }}</div>
             </div>
           </div>
@@ -196,7 +196,7 @@ onMounted(async () => {
       </div>
       <div class="h-2 overflow-hidden rounded-full bg-slate-100">
         <div
-          class="h-full rounded-full bg-blue-600 transition-all duration-300"
+          class="h-full rounded-full bg-brand transition-all duration-300"
           :style="{ width: `${store.syncProgress}%` }"
         ></div>
       </div>
@@ -207,9 +207,9 @@ onMounted(async () => {
           class="rounded-2xl border px-4 py-3"
           :class="
             step.status === '已完成'
-              ? 'border-green-200 bg-green-50/70'
+              ? 'border-brand-tint bg-brand-soft/70'
               : step.status === '进行中'
-                ? 'border-blue-200 bg-blue-50/70'
+                ? 'border-brand-tint bg-brand-soft/70'
                 : 'border-slate-200 bg-white'
           "
         >

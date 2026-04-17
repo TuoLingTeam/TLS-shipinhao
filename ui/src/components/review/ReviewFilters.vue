@@ -15,11 +15,11 @@ const days = ref(30);
           type="number"
           min="1"
           max="90"
-          class="w-24 px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-24 px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand/35"
         />
       </div>
       <button
-        class="px-4 py-1.5 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+        class="px-4 py-1.5 bg-brand text-white text-sm rounded hover:bg-brand transition-colors"
         @click="emit('search', days)"
       >
         开始查找

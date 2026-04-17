@@ -25,7 +25,7 @@ defineProps<{
         class="rounded-2xl px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em]"
         :class="
           coverageComplete
-            ? 'bg-green-50 text-green-700'
+            ? 'bg-brand-soft text-brand-deep'
             : 'bg-amber-50 text-amber-700'
         "
       >
@@ -41,7 +41,7 @@ defineProps<{
         </div>
         <div class="rounded-2xl bg-slate-50 px-4 py-3">
           <div class="text-xs text-slate-400">覆盖状态</div>
-          <div class="mt-1 text-base font-semibold" :class="coverageComplete ? 'text-green-700' : 'text-amber-700'">
+          <div class="mt-1 text-base font-semibold" :class="coverageComplete ? 'text-brand-deep' : 'text-amber-700'">
             {{ coverageComplete ? "完整" : `缺口 ${missingSegmentCount || 0}` }}
           </div>
         </div>

@@ -34,7 +34,7 @@ function handleSubmit() {
       <textarea
         v-model="batchText"
         rows="6"
-        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand/35"
         placeholder="3735560095122745088,JT00000001&#10;3735560095122745089,JT00000002"
       />
     </div>
@@ -43,7 +43,7 @@ function handleSubmit() {
     </div>
     <button
       :disabled="parsedItems.length === 0"
-      class="w-full px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 disabled:opacity-50 transition-colors"
+      class="w-full px-4 py-2 bg-brand-soft0 text-white text-sm rounded hover:bg-brand-deep disabled:opacity-50 transition-colors"
       @click="handleSubmit"
     >
       开始批量发货

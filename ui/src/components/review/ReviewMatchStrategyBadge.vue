@@ -10,13 +10,13 @@ const meta = computed(() => {
     case "exact_match":
       return {
         text: "精确匹配",
-        badgeClass: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200",
+        badgeClass: "bg-brand-soft text-brand-deep ring-1 ring-brand-tint",
         description: "评分 100：昵称、商品与 SKU 关键信号完全命中，可直接自动带入。",
       };
     case "high_confidence":
       return {
         text: "高置信",
-        badgeClass: "bg-sky-100 text-sky-700 ring-1 ring-sky-200",
+        badgeClass: "bg-brand-soft/80 text-brand ring-1 ring-brand-tint",
         description: "评分达到自动带入阈值，命中度很高，建议优先复核后使用。",
       };
     case "probable_match":
@@ -40,7 +40,7 @@ const meta = computed(() => {
   <div class="relative inline-flex">
     <button
       type="button"
-      class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-blue-200"
+      class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-brand-tint"
       :class="meta.badgeClass"
       :title="`${meta.text}：${meta.description}`"
       @click.stop="tooltipOpen = !tooltipOpen"

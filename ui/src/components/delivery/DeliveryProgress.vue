@@ -23,9 +23,9 @@ const percent = computed(() => {
         <div class="text-slate-500">总计</div>
         <div class="font-bold text-slate-800">{{ progress.totalCount }}</div>
       </div>
-      <div class="bg-green-50 p-2 rounded">
-        <div class="text-green-600">成功</div>
-        <div class="font-bold text-green-700">{{ progress.successCount }}</div>
+      <div class="bg-brand-soft p-2 rounded">
+        <div class="text-brand">成功</div>
+        <div class="font-bold text-brand-deep">{{ progress.successCount }}</div>
       </div>
       <div class="bg-red-50 p-2 rounded">
         <div class="text-red-600">失败</div>

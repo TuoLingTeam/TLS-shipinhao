@@ -30,7 +30,7 @@ const carriers = [
       <label class="block text-sm text-slate-600 mb-1">订单号</label>
       <input
         v-model="orderId"
-        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand/35"
         placeholder="输入订单号"
       />
     </div>
@@ -38,7 +38,7 @@ const carriers = [
       <label class="block text-sm text-slate-600 mb-1">快递单号</label>
       <input
         v-model="trackingNumber"
-        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand/35"
         placeholder="输入快递单号"
       />
     </div>
@@ -46,13 +46,13 @@ const carriers = [
       <label class="block text-sm text-slate-600 mb-1">快递公司</label>
       <select
         v-model="carrierCode"
-        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand/35"
       >
         <option v-for="c in carriers" :key="c.code" :value="c.code">{{ c.label }}</option>
       </select>
     </div>
     <button
-      class="w-full px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+      class="w-full px-4 py-2 bg-brand text-white text-sm rounded hover:bg-brand transition-colors"
       @click="handleSubmit"
     >
       确认发货

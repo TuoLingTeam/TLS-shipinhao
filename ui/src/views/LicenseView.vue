@@ -45,7 +45,7 @@ const stateLabel: Record<string, string> = {
 };
 
 const currentStateText = computed(() => stateLabel[appStore.licenseState] ?? appStore.licenseState);
-const stateTone = computed(() => (appStore.isLicensed ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'));
+const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-600'));
 </script>
 
 <template>

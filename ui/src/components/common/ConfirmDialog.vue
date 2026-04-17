@@ -31,7 +31,7 @@ defineEmits<{
             {{ cancelText ?? "取消" }}
           </button>
           <button
-            class="px-4 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            class="px-4 py-1.5 text-sm bg-brand text-white rounded hover:bg-brand transition-colors"
             @click="$emit('confirm')"
           >
             {{ confirmText ?? "确认" }}
