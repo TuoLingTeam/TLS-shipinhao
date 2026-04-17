@@ -1,4 +1,5 @@
 mod bench_match;
+mod perf;
 
 use anyhow::{anyhow, Context, Result};
 use build_tools::{attach_signature, generate_integrity_manifest, inject_version, sign_manifest};
@@ -22,6 +23,7 @@ fn run(args: Vec<OsString>) -> Result<()> {
         "manifest" => run_manifest_command(&args[1..]),
         "desktop-build" => run_desktop_build_command(&args[1..]),
         "bench-match" => bench_match::run_bench_match_command(&args[1..]),
+        "perf" => perf::run_perf_command(&args[1..]),
         other => Err(anyhow!("unknown command: {other}")),
     }
 }

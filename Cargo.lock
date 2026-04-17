@@ -9925,6 +9925,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "build-tools",
+ "chrono",
  "desktop-services",
  "ed25519-dalek",
  "serde",
