@@ -49,7 +49,8 @@ export function useLicense() {
   async function refreshStoredLicenseStatus() {
     const result = await loadStoredLicenseStatus();
     if (result?.license_key) {
-      return verifyLicense(result.license_key);
+      const verified = await verifyLicense(result.license_key);
+      return verified ?? result;
     }
     return result;
   }

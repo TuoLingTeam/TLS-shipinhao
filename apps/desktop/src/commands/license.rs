@@ -272,14 +272,9 @@ pub async fn verify_license(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+    let runtime = state.runtime_license_state.lock().await.clone();
     let profile = state.license_profile.lock().await.clone();
-    Ok(serde_json::json!({
-        "configured": !profile.license_key.is_empty(),
-        "license_key": profile.license_key,
-        "license_state": if profile.license_state.is_empty() { "invalid".to_string() } else { profile.license_state },
-        "license_expires_at": profile.license_expires_at,
-        "last_verified_at": profile.last_verified_at,
-    }))
+    Ok(build_license_status_payload(&profile, &runtime))
 }
 
 async fn persist_license_profile(
@@ -297,6 +292,45 @@ async fn persist_license_profile(
 
 fn current_timestamp() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+fn build_license_status_payload(
+    profile: &StoredLicenseProfile,
+    runtime: &RuntimeState,
+) -> serde_json::Value {
+    let license_key = if runtime.license_key.trim().is_empty() {
+        profile.license_key.clone()
+    } else {
+        runtime.license_key.clone()
+    };
+    let license_state = if matches!(runtime.reason, LicenseState::NotFound)
+        && runtime.license_key.trim().is_empty()
+        && profile.license_key.trim().is_empty()
+    {
+        "invalid".to_string()
+    } else {
+        state::runtime_state_to_license_state(runtime)
+    };
+    let license_expires_at = if runtime.license_expires_at.trim().is_empty() {
+        profile.license_expires_at.clone()
+    } else {
+        Some(runtime.license_expires_at.clone())
+    };
+    let last_verified_at = profile
+        .last_verified_at
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            (!runtime.last_verify_at.trim().is_empty()).then(|| runtime.last_verify_at.clone())
+        });
+
+    serde_json::json!({
+        "configured": !license_key.is_empty(),
+        "license_key": license_key,
+        "license_state": license_state,
+        "license_expires_at": license_expires_at,
+        "last_verified_at": last_verified_at,
+    })
 }
 
 #[cfg(test)]
@@ -452,5 +486,36 @@ mod tests {
             .await
             .expect_err("bare active state must be rejected");
         assert!(err.to_string().contains("未返回签名 Lease"));
+    }
+
+    #[test]
+    fn build_license_status_prefers_runtime_snapshot_over_legacy_profile() {
+        let profile = StoredLicenseProfile {
+            license_key: "OLD-KEY".into(),
+            license_state: "invalid".into(),
+            license_expires_at: Some("2020-01-01T00:00:00Z".into()),
+            last_verified_at: Some("2026-04-16T10:00:00Z".into()),
+        };
+        let runtime = RuntimeState {
+            license_key: "TLS-TEST".into(),
+            device_id: "dev-1".into(),
+            reason: LicenseState::Active,
+            status_hint: LicenseState::RenewalDue,
+            license_expires_at: "2030-01-01T00:00:00Z".into(),
+            lease_expires_at: "2030-01-01T00:00:00Z".into(),
+            renew_after: "2029-12-01T00:00:00Z".into(),
+            task_policy: vec![],
+            risk_level: "low".into(),
+            runtime_backend: "rust".into(),
+            compromised: false,
+            last_verify_at: String::new(),
+        };
+
+        let payload = build_license_status_payload(&profile, &runtime);
+        assert_eq!(payload["configured"], true);
+        assert_eq!(payload["license_key"], "TLS-TEST");
+        assert_eq!(payload["license_state"], "renewal_due");
+        assert_eq!(payload["license_expires_at"], "2030-01-01T00:00:00Z");
+        assert_eq!(payload["last_verified_at"], "2026-04-16T10:00:00Z");
     }
 }

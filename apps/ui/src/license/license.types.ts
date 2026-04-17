@@ -1,9 +1,12 @@
 export type LicenseState =
   | "active"
+  | "not_found"
   | "renewal_due"
   | "expired"
   | "revoked"
   | "device_mismatch"
+  | "reactivation_required"
+  | "online_refresh_required"
   | "invalid"
   | "compromised"
   | "offline_grace"
@@ -12,10 +15,13 @@ export type LicenseState =
 
 export const LICENSE_STATE_LABELS: Record<LicenseState, string> = {
   active: "已激活",
+  not_found: "未发现租约",
   renewal_due: "待续期",
   expired: "已过期",
   revoked: "已吊销",
   device_mismatch: "设备不匹配",
+  reactivation_required: "需重新激活",
+  online_refresh_required: "需联网刷新",
   invalid: "未激活",
   compromised: "异常",
   offline_grace: "离线宽限",
