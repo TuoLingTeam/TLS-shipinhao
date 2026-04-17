@@ -1,4 +1,5 @@
 pub mod lease;
+pub mod local_verify;
 pub mod task_grant;
 
 use api_contracts::{
@@ -10,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub use lease::{LeaseError, LeaseVerifier};
+pub use local_verify::verify_stored_lease_local;
 pub use task_grant::{authorize_task_local, GrantError, TaskGrantCache};
 
 pub const LEASE_RENEWAL_HOURS: i64 = 24;
