@@ -1,9 +1,91 @@
 use anyhow::Context;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+pub const CURRENT_SCHEMA_VERSION: i32 = 2;
+
+const CREATE_ORDERS_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS orders (
+    order_id TEXT PRIMARY KEY,
+    buyer_nickname TEXT NOT NULL DEFAULT '',
+    normalized_nickname TEXT NOT NULL DEFAULT '',
+    receiver_name TEXT NOT NULL DEFAULT '',
+    amount_cent INTEGER NOT NULL DEFAULT 0,
+    create_time INTEGER NOT NULL DEFAULT 0,
+    confirm_receipt_time INTEGER NOT NULL DEFAULT 0,
+    is_waybill_received INTEGER NOT NULL DEFAULT 0,
+    waybill_received_time INTEGER NOT NULL DEFAULT 0,
+    is_education_order INTEGER NOT NULL DEFAULT 0,
+    order_status INTEGER NOT NULL DEFAULT 0,
+    openid TEXT NOT NULL DEFAULT '',
+    raw_source TEXT NOT NULL DEFAULT 'order_api',
+    updated_at INTEGER NOT NULL DEFAULT 0
+);
+"#;
+
+const CREATE_ORDER_PRODUCTS_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS order_products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id TEXT NOT NULL,
+    product_id TEXT NOT NULL DEFAULT '',
+    sku_id TEXT NOT NULL DEFAULT '',
+    sale_param TEXT NOT NULL DEFAULT '',
+    product_name TEXT NOT NULL DEFAULT '',
+    thumb_img TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY(order_id) REFERENCES orders(order_id) ON DELETE CASCADE
+);
+"#;
+
+const CREATE_SYNC_STATE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS sync_state (
+    scope TEXT PRIMARY KEY,
+    coverage_start INTEGER NOT NULL DEFAULT 0,
+    coverage_end INTEGER NOT NULL DEFAULT 0,
+    last_incremental_start INTEGER NOT NULL DEFAULT 0,
+    last_incremental_end INTEGER NOT NULL DEFAULT 0,
+    last_success_at INTEGER NOT NULL DEFAULT 0,
+    last_mode TEXT NOT NULL DEFAULT '',
+    last_error TEXT NOT NULL DEFAULT ''
+);
+"#;
+
+const CREATE_CACHE_SEGMENTS_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS cache_segments (
+    scope TEXT NOT NULL,
+    start_ts INTEGER NOT NULL,
+    end_ts INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'complete',
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (scope, start_ts, end_ts)
+);
+"#;
+
+const CREATE_INDEXES_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_orders_create_time ON orders(create_time DESC);
+CREATE INDEX IF NOT EXISTS idx_products_order_id ON order_products(order_id);
+CREATE INDEX IF NOT EXISTS idx_cache_segments_scope_start ON cache_segments(scope, start_ts, end_ts);
+"#;
+
+/// orders 表在 v2 schema 下必须存在的列清单。v1 单表数据库可能缺少这些列，
+/// 迁移器通过反射 `PRAGMA table_info` 来增量补齐。
+const ORDERS_V2_COLUMNS: &[(&str, &str)] = &[
+    ("buyer_nickname", "TEXT NOT NULL DEFAULT ''"),
+    ("normalized_nickname", "TEXT NOT NULL DEFAULT ''"),
+    ("receiver_name", "TEXT NOT NULL DEFAULT ''"),
+    ("amount_cent", "INTEGER NOT NULL DEFAULT 0"),
+    ("create_time", "INTEGER NOT NULL DEFAULT 0"),
+    ("confirm_receipt_time", "INTEGER NOT NULL DEFAULT 0"),
+    ("is_waybill_received", "INTEGER NOT NULL DEFAULT 0"),
+    ("waybill_received_time", "INTEGER NOT NULL DEFAULT 0"),
+    ("is_education_order", "INTEGER NOT NULL DEFAULT 0"),
+    ("order_status", "INTEGER NOT NULL DEFAULT 0"),
+    ("openid", "TEXT NOT NULL DEFAULT ''"),
+    ("raw_source", "TEXT NOT NULL DEFAULT 'order_api'"),
+    ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -59,71 +141,62 @@ impl OrderCacheRepository {
         }
         let connection = Connection::open(db_path)?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
+        // 打开外键约束：order_products → orders 的 ON DELETE CASCADE 需要这一步。
+        connection.pragma_update(None, "foreign_keys", "ON")?;
         Ok(Self { connection })
     }
 
     pub fn initialize(&self) -> anyhow::Result<()> {
-        self.connection.execute_batch(
-            r#"
-            CREATE TABLE IF NOT EXISTS orders (
-                order_id TEXT PRIMARY KEY,
-                    buyer_nickname TEXT NOT NULL DEFAULT '',
-                    normalized_nickname TEXT NOT NULL DEFAULT '',
-                    receiver_name TEXT NOT NULL DEFAULT '',
-                    amount_cent INTEGER NOT NULL DEFAULT 0,
-                    create_time INTEGER NOT NULL DEFAULT 0,
-                confirm_receipt_time INTEGER NOT NULL DEFAULT 0,
-                is_waybill_received INTEGER NOT NULL DEFAULT 0,
-                waybill_received_time INTEGER NOT NULL DEFAULT 0,
-                is_education_order INTEGER NOT NULL DEFAULT 0,
-                order_status INTEGER NOT NULL DEFAULT 0,
-                openid TEXT NOT NULL DEFAULT '',
-                raw_source TEXT NOT NULL DEFAULT 'order_api',
-                updated_at INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS order_products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id TEXT NOT NULL,
-                product_id TEXT NOT NULL DEFAULT '',
-                sku_id TEXT NOT NULL DEFAULT '',
-                sale_param TEXT NOT NULL DEFAULT '',
-                product_name TEXT NOT NULL DEFAULT '',
-                thumb_img TEXT NOT NULL DEFAULT '',
-                FOREIGN KEY(order_id) REFERENCES orders(order_id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS sync_state (
-                scope TEXT PRIMARY KEY,
-                coverage_start INTEGER NOT NULL DEFAULT 0,
-                coverage_end INTEGER NOT NULL DEFAULT 0,
-                last_incremental_start INTEGER NOT NULL DEFAULT 0,
-                last_incremental_end INTEGER NOT NULL DEFAULT 0,
-                last_success_at INTEGER NOT NULL DEFAULT 0,
-                last_mode TEXT NOT NULL DEFAULT '',
-                last_error TEXT NOT NULL DEFAULT ''
-            );
-
-            CREATE TABLE IF NOT EXISTS cache_segments (
-                scope TEXT NOT NULL,
-                start_ts INTEGER NOT NULL,
-                end_ts INTEGER NOT NULL,
-                status TEXT NOT NULL DEFAULT 'complete',
-                updated_at INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (scope, start_ts, end_ts)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_orders_create_time ON orders(create_time DESC);
-            CREATE INDEX IF NOT EXISTS idx_products_order_id ON order_products(order_id);
-            CREATE INDEX IF NOT EXISTS idx_cache_segments_scope_start ON cache_segments(scope, start_ts, end_ts);
-            "#,
-        )?;
-        for statement in [
-            "ALTER TABLE orders ADD COLUMN receiver_name TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE orders ADD COLUMN amount_cent INTEGER NOT NULL DEFAULT 0",
-        ] {
-            let _ = self.connection.execute(statement, []);
+        let existing_version = self.read_user_version()?;
+        if existing_version >= CURRENT_SCHEMA_VERSION {
+            // 已处于目标版本：仅确保 DDL 幂等语句执行一次，兼容手工删除过索引的场景。
+            self.connection
+                .execute_batch(CREATE_INDEXES_SQL)
+                .context("ensure indexes on up-to-date schema")?;
+            return Ok(());
         }
+
+        self.migrate_to_current(existing_version)
+            .with_context(|| format!("migrate order cache schema from v{existing_version}"))?;
+        self.write_user_version(CURRENT_SCHEMA_VERSION)?;
+        Ok(())
+    }
+
+    fn read_user_version(&self) -> anyhow::Result<i32> {
+        let value: i32 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        Ok(value)
+    }
+
+    fn write_user_version(&self, version: i32) -> anyhow::Result<()> {
+        // PRAGMA user_version 不支持参数占位符，只能把整数直接拼进语句；该值来自常量，不可被外部输入污染。
+        self.connection
+            .execute_batch(&format!("PRAGMA user_version = {version};"))?;
+        Ok(())
+    }
+
+    /// v0（空库）/ v1（单表 orders，字段不全）→ v2（4 表 + 索引）统一迁移入口。
+    /// 所有变更在单事务内完成，失败回滚；成功后由调用方写入 user_version。
+    fn migrate_to_current(&self, _from_version: i32) -> anyhow::Result<()> {
+        let tx = self.connection.unchecked_transaction()?;
+        tx.execute_batch(CREATE_ORDERS_SQL)?;
+        tx.execute_batch(CREATE_ORDER_PRODUCTS_SQL)?;
+        tx.execute_batch(CREATE_SYNC_STATE_SQL)?;
+        tx.execute_batch(CREATE_CACHE_SEGMENTS_SQL)?;
+
+        let existing_columns = columns_of_table(&tx, "orders")?;
+        for (column_name, column_ddl) in ORDERS_V2_COLUMNS {
+            if !existing_columns.contains(*column_name) {
+                tx.execute(
+                    &format!("ALTER TABLE orders ADD COLUMN {column_name} {column_ddl}"),
+                    [],
+                )?;
+            }
+        }
+
+        tx.execute_batch(CREATE_INDEXES_SQL)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -508,6 +581,17 @@ fn int_to_bool(value: i64) -> bool {
     value != 0
 }
 
+/// 反射目标表的列集合，供 schema 迁移判断缺失字段。
+fn columns_of_table(conn: &Connection, table: &str) -> anyhow::Result<HashSet<String>> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    let mut columns = HashSet::new();
+    for name in rows {
+        columns.insert(name?);
+    }
+    Ok(columns)
+}
+
 pub fn now_epoch_seconds() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -639,5 +723,154 @@ mod tests {
         repo.upsert_orders(&[sample_order()]).unwrap();
         repo.clear_all().unwrap();
         assert!(repo.fetch_order("o-1").unwrap().is_none());
+    }
+
+    fn table_exists(conn: &Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?1",
+            params![name],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .unwrap()
+        .is_some()
+    }
+
+    fn index_exists(conn: &Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name = ?1",
+            params![name],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .unwrap()
+        .is_some()
+    }
+
+    #[test]
+    fn fresh_schema_contains_all_tables_indexes_and_wal_mode() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+
+        for table in ["orders", "order_products", "sync_state", "cache_segments"] {
+            assert!(table_exists(&repo.connection, table), "missing table {table}");
+        }
+        for index in [
+            "idx_orders_create_time",
+            "idx_products_order_id",
+            "idx_cache_segments_scope_start",
+        ] {
+            assert!(index_exists(&repo.connection, index), "missing index {index}");
+        }
+
+        let columns = columns_of_table(&repo.connection, "orders").unwrap();
+        for (column_name, _) in ORDERS_V2_COLUMNS {
+            assert!(columns.contains(*column_name), "orders missing column {column_name}");
+        }
+
+        let user_version: i32 = repo
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+
+        let journal_mode: String = repo
+            .connection
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode.to_lowercase(), "wal");
+    }
+
+    #[test]
+    fn v1_single_table_schema_migrates_to_v2() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        {
+            let legacy = Connection::open(&path).unwrap();
+            legacy
+                .execute_batch(
+                    r#"
+                    CREATE TABLE orders (
+                        order_id TEXT PRIMARY KEY,
+                        buyer_nickname TEXT NOT NULL DEFAULT '',
+                        create_time INTEGER NOT NULL DEFAULT 0
+                    );
+                    INSERT INTO orders (order_id, buyer_nickname, create_time)
+                    VALUES ('legacy-1', 'old buyer', 42);
+                    "#,
+                )
+                .unwrap();
+        }
+
+        let repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+
+        for table in ["order_products", "sync_state", "cache_segments"] {
+            assert!(table_exists(&repo.connection, table), "missing table {table}");
+        }
+        let columns = columns_of_table(&repo.connection, "orders").unwrap();
+        for (column_name, _) in ORDERS_V2_COLUMNS {
+            assert!(
+                columns.contains(*column_name),
+                "orders missing migrated column {column_name}"
+            );
+        }
+
+        let legacy_row = repo
+            .connection
+            .query_row(
+                "SELECT buyer_nickname, raw_source FROM orders WHERE order_id = 'legacy-1'",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .unwrap();
+        assert_eq!(legacy_row.0, "old buyer");
+        // raw_source 默认值 'order_api' 对 v1 历史行同样生效
+        assert_eq!(legacy_row.1, "order_api");
+
+        let user_version: i32 = repo
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn foreign_key_cascade_deletes_products_when_order_removed() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        repo.upsert_orders(&[sample_order()]).unwrap();
+
+        repo.connection
+            .execute("DELETE FROM orders WHERE order_id = 'o-1'", [])
+            .unwrap();
+        let remaining: i64 = repo
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM order_products WHERE order_id = 'o-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0, "ON DELETE CASCADE 必须级联删除 order_products");
+    }
+
+    #[test]
+    fn initialize_is_idempotent_when_already_at_current_version() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let repo = OrderCacheRepository::open(&path).unwrap();
+        repo.initialize().unwrap();
+        // 第二次 initialize 不应重置或污染数据，且仍保持 user_version。
+        repo.initialize().unwrap();
+        let user_version: i32 = repo
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
     }
 }
