@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import ProgressBar from "../common/ProgressBar.vue";
+import ProgressBar from "../shared/ProgressBar.vue";
 import type { BatchProgress } from "../../stores/delivery";
 
 const props = defineProps<{ progress: BatchProgress }>();

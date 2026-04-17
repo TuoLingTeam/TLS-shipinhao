@@ -5,9 +5,9 @@ import { useOrderStore } from "../stores/order";
 import { useAppStore } from "../stores/app";
 import OrderSearchBar from "../components/order/OrderSearchBar.vue";
 import OrderCacheStats from "../components/order/OrderCacheStats.vue";
-import { formatCent } from "../utils/format";
-import EmptyState from "../components/common/EmptyState.vue";
-import LoadingState from "../components/common/LoadingState.vue";
+import { formatCent } from "../shared/format";
+import EmptyState from "../shared/EmptyState.vue";
+import LoadingState from "../shared/LoadingState.vue";
 import { useLayout } from "../composables/useLayout";
 
 const store = useOrderStore();

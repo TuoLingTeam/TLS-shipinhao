@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDate, formatDateTime } from "../../utils/format";
+import { formatDate, formatDateTime } from "../../shared/format";
 
 defineProps<{
   count: number;

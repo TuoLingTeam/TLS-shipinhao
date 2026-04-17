@@ -6,8 +6,8 @@ import { useAppStore } from "../stores/app";
 import { useOrderStore } from "../stores/order";
 import { useReviewStore } from "../stores/review";
 import { useDeliveryStore } from "../stores/delivery";
-import AppNavIcon from "../components/layout/AppNavIcon.vue";
-import { AUTHOR_WECHAT } from "../constants/brand";
+import AppNavIcon from "../layout/AppNavIcon.vue";
+import { AUTHOR_WECHAT } from "../shared/brand";
 
 const appStore = useAppStore();
 const orderStore = useOrderStore();

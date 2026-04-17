@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useLicense } from "../composables/useLicense";
 import { useAppStore } from "../stores/app";
-import { formatDateTime } from "../utils/format";
+import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../types/license";
 
 const appStore = useAppStore();

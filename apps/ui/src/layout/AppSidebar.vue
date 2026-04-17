@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
 import AppNavIcon from "./AppNavIcon.vue";
-import { APP_NAME_EN, APP_VERSION, AUTHOR_WECHAT } from "../../constants/brand";
+import { APP_NAME_EN, APP_VERSION, AUTHOR_WECHAT } from "../shared/brand";
 
 const route = useRoute();
 

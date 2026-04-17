@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { AUTHOR_WECHAT, APP_NAME } from "../constants/brand";
+import { AUTHOR_WECHAT, APP_NAME } from "../shared/brand";
 
 const cookieHeader = ref("");
 const saved = ref(false);

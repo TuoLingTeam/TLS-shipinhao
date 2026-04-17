@@ -1,4 +1,4 @@
-import type { TimeWindow } from "./common";
+import type { TimeWindow } from "../shared/common.types";
 
 export type MatchSource =
   | "exact_order_id"

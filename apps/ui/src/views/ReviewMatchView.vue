@@ -5,8 +5,8 @@ import { useReview } from "../composables/useReview";
 import { useReviewStore } from "../stores/review";
 import { useOrderStore } from "../stores/order";
 import { useAppStore } from "../stores/app";
-import EmptyState from "../components/common/EmptyState.vue";
-import LoadingState from "../components/common/LoadingState.vue";
+import EmptyState from "../shared/EmptyState.vue";
+import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../components/review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../composables/useLayout";
 

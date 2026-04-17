@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AppLayout from "./components/layout/AppLayout.vue";
-import MigrationBanner from "./components/layout/MigrationBanner.vue";
-import UpdateBanner from "./components/layout/UpdateBanner.vue";
+import AppLayout from "./layout/AppLayout.vue";
+import MigrationBanner from "./migration/MigrationBanner.vue";
+import UpdateBanner from "./update/UpdateBanner.vue";
 import { useLayout } from "./composables/useLayout";
 import { useUiScale } from "./composables/useUiScale";
 

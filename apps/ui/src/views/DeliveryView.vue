@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useDelivery } from "../composables/useDelivery";
 import { useDeliveryStore } from "../stores/delivery";
 import { useAppStore } from "../stores/app";
-import EmptyState from "../components/common/EmptyState.vue";
+import EmptyState from "../shared/EmptyState.vue";
 
 const store = useDeliveryStore();
 const appStore = useAppStore();
