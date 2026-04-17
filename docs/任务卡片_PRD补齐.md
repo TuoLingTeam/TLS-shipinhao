@@ -1651,7 +1651,11 @@ graph LR
 - [ ] 报告可作为发版凭据
 
 **涉及文件**
+<<<<<<<< Updated upstream:docs/任务卡片_PRD补齐.md
 - `docs/regression-matrix.md`（新）
+========
+- `docs/reports/regression-matrix.md`（新）
+>>>>>>>> Stashed changes:docs/product/任务卡片_PRD补齐.md
 - `tests/e2e/*`
 
 ---
@@ -1719,11 +1723,19 @@ graph LR
 **AC**
 - [ ] 全部硬指标通过
 - [ ] 对比 5.0.0 基线记录回退/改进
+<<<<<<<< Updated upstream:docs/任务卡片_PRD补齐.md
 - [ ] 报告写入 `docs/perf-report-{date}.md`
 
 **涉及文件**
 - `xtask/src/perf.rs`
 - `docs/perf-report-2026-xx.md`
+========
+- [ ] 报告写入 `docs/reports/perf-report-{date}.md`
+
+**涉及文件**
+- `crates/tooling/xtask/src/perf.rs`
+- `docs/reports/perf-report-2026-xx.md`
+>>>>>>>> Stashed changes:docs/product/任务卡片_PRD补齐.md
 
 ---
 
@@ -1761,8 +1773,13 @@ graph LR
 
 **涉及文件**
 - `.github/workflows/release.yml`
+<<<<<<<< Updated upstream:docs/任务卡片_PRD补齐.md
 - `xtask/src/release.rs`
 - `docs/release-runbook.md`
+========
+- `crates/tooling/xtask/src/release.rs`
+- `docs/operations/release-runbook.md`
+>>>>>>>> Stashed changes:docs/product/任务卡片_PRD补齐.md
 
 ---
 

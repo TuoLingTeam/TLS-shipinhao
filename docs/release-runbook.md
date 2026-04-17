@@ -6,9 +6,15 @@
 
 ## 2. 发布前门槛
 
+<<<<<<<< Updated upstream:docs/release-runbook.md
 - `M6-01`：`docs/regression-matrix.md` 已落地，40 条用例均有归属
 - `M6-02`：`cargo run -p xtask -- bench-match ...` 已产出 `summary.md` / `diff.csv`
 - `M6-03`：`cargo run -p xtask -- perf docs/perf-report-2026-04-17.md` 已执行
+========
+- `M6-01`：`docs/reports/regression-matrix.md` 已落地，40 条用例均有归属
+- `M6-02`：`cargo run -p xtask -- bench-match ...` 已产出 `summary.md` / `diff.csv`
+- `M6-03`：`cargo run -p xtask -- perf docs/reports/perf-report-2026-04-17.md` 已执行
+>>>>>>>> Stashed changes:docs/operations/release-runbook.md
 - GitHub Actions `release.yml` 可手动触发
 - 签名 / notarization / Windows 代码签名材料已就绪
 

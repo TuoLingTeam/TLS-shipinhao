@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-const DEFAULT_REPORT_PATH: &str = "backend/docs/perf-report-2026-04-17.md";
+const DEFAULT_REPORT_PATH: &str = "docs/perf-report-2026-04-17.md";
 const MATCH_TARGET_SECS: f64 = 5.0;
 const PACKAGE_TARGET_MB: f64 = 30.0;
 const MEMORY_TARGET_MB: f64 = 200.0;

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const DEFAULT_FIXTURE_DIR: &str = "backend/tests/fixtures/real_user_snapshot";
-const DEFAULT_OUTPUT_DIR: &str = "backend/tests/artifacts/bench_match";
+const DEFAULT_FIXTURE_DIR: &str = "tests/fixtures/real_user_snapshot";
+const DEFAULT_OUTPUT_DIR: &str = "tests/artifacts/bench_match";
 const MAX_SCORE_DIFF: i32 = 2;
 const MAX_STRATEGY_GAP: i32 = 1;
 const MAX_MISMATCH_RATE: f64 = 0.02;
@@ -126,7 +126,7 @@ fn load_fixture(dir: &Path) -> Result<MatchBenchmarkFixture> {
     let path = dir.join("snapshot.json");
     let raw = fs::read_to_string(&path).with_context(|| {
         format!(
-            "读取真实数据快照失败：{}。请先准备脱敏后的 backend/tests/fixtures/real_user_snapshot/snapshot.json",
+            "读取真实数据快照失败：{}。请先准备脱敏后的 tests/fixtures/real_user_snapshot/snapshot.json",
             path.display()
         )
     })?;

@@ -4,7 +4,11 @@
 - 执行人：`{owner}`
 - 环境：`{env}`
 - 基线 PRD：`docs/功能补齐PRD_与原版对齐.md` §16.1 / §16.2
+<<<<<<<< Updated upstream:docs/regression-report-{date}.md
 - 关联矩阵：`docs/regression-matrix.md`
+========
+- 关联矩阵：`docs/reports/regression-matrix.md`
+>>>>>>>> Stashed changes:docs/reports/regression-report-template.md
 
 ## 1. 结论
 
@@ -21,7 +25,7 @@
 | Rust Core | `cargo test -p domain-core` | {pass_or_fail} | {note} |
 | Desktop Services | `cargo test -p desktop-services -- --nocapture` | {pass_or_fail} | {note} |
 | Desktop | `cargo test -p desktop -- --nocapture` | {pass_or_fail} | {note} |
-| Python/Rust 冒烟 | `pytest tests/test_rust_*.py tests/test_security_runtime.py -q` | {pass_or_fail} | {note} |
+| Python/Rust 冒烟 | `python3 -m unittest discover -s tests/integration -p "test_*.py"` | {pass_or_fail} | {note} |
 | UI Lint | `pnpm --filter tls-shipinhao-ui lint` | {pass_or_fail} | {note} |
 | UI Build | `pnpm --filter tls-shipinhao-ui build` | {pass_or_fail} | {note} |
 

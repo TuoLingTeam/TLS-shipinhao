@@ -81,7 +81,7 @@
 2. Desktop 命令与桌面适配层
    - `cargo test -p desktop -- --nocapture`
 3. Python/Rust 桥接与仓库级冒烟
-   - `pytest tests/test_rust_*.py tests/test_security_runtime.py -q`
+   - `python3 -m unittest discover -s tests/integration -p "test_*.py"`
 4. 前端类型与构建
    - `pnpm --filter tls-shipinhao-ui lint`
    - `pnpm --filter tls-shipinhao-ui build`
