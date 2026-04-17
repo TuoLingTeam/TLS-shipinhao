@@ -46,7 +46,8 @@
           "order_id": "order-hash-001",
           "score": 100
         }
-      ]
+      ],
+      "replyable": true
     }
   ]
 }

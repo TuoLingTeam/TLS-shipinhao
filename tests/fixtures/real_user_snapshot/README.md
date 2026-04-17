@@ -36,3 +36,10 @@
 
 仓库内默认放的是 **脱敏样板数据**，用于验证 `bench-match` 工作流可运行。
 正式发版前请替换成真实用户脱敏快照，并保留生成出的 `summary.md` / `diff.csv` 作为发版证据。
+
+
+## 通过门槛
+
+- `python_results` 至少 **100 条评价样本**
+- Rust / Python 不一致率需 **≤ 2%**
+- 报告需输出 `summary.md` / `diff.csv` / `diff.json`

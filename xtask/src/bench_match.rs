@@ -11,6 +11,7 @@ const DEFAULT_OUTPUT_DIR: &str = "tests/artifacts/bench_match";
 const MAX_SCORE_DIFF: i32 = 2;
 const MAX_STRATEGY_GAP: i32 = 1;
 const MAX_MISMATCH_RATE: f64 = 0.02;
+const MIN_REQUIRED_EVALUATIONS: usize = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -31,6 +32,8 @@ pub struct PythonMatchResult {
     pub matched: bool,
     pub match_score: i32,
     pub match_strategy: Option<String>,
+    #[serde(default)]
+    pub replyable: Option<bool>,
     #[serde(default)]
     pub top_candidates: Vec<PythonTopCandidate>,
 }
@@ -134,6 +137,12 @@ fn load_fixture(dir: &Path) -> Result<MatchBenchmarkFixture> {
             "snapshot.json 数据不完整：orders/evaluations/python_results 不能为空"
         ));
     }
+    if fixture.python_results.len() < MIN_REQUIRED_EVALUATIONS {
+        return Err(anyhow!(
+            "真实数据比对至少需要 {MIN_REQUIRED_EVALUATIONS} 条评价样本，当前只有 {} 条",
+            fixture.python_results.len()
+        ));
+    }
     Ok(fixture)
 }
 
@@ -188,7 +197,7 @@ fn benchmark_fixture(fixture: &MatchBenchmarkFixture) -> BenchmarkArtifacts {
             allowed_mismatch_rate: MAX_MISMATCH_RATE,
             score_diff_limit: MAX_SCORE_DIFF,
             strategy_gap_limit: MAX_STRATEGY_GAP,
-            passed: mismatch_rate <= MAX_MISMATCH_RATE,
+            passed: total >= MIN_REQUIRED_EVALUATIONS && mismatch_rate <= MAX_MISMATCH_RATE,
             mismatch_reasons: dedup_strings(mismatch_reasons),
         },
         diffs,
@@ -257,20 +266,25 @@ fn build_diff_row(
 
     let mut mismatch_reason = Vec::new();
     if python.order_id != rust_order_id {
-        mismatch_reason.push("命中订单不一致".to_string());
+        mismatch_reason.push("其他：命中订单不一致".to_string());
     }
     if python.matched != rust.matched {
-        mismatch_reason.push("matched 标记不一致".to_string());
+        mismatch_reason.push("其他：matched 标记不一致".to_string());
     }
     if score_diff > MAX_SCORE_DIFF {
-        mismatch_reason.push(format!("评分差异超阈值（{}）", score_diff));
+        mismatch_reason.push(format!("昵称算法差异：评分差异超阈值（{}）", score_diff));
     }
     if strategy_gap > MAX_STRATEGY_GAP {
-        mismatch_reason.push(format!("strategy 分档差异超阈值（{}）", strategy_gap));
+        mismatch_reason.push(format!("昵称算法差异：strategy 分档差异超阈值（{}）", strategy_gap));
+    }
+    if let Some(replyable) = python.replyable {
+        if replyable != rust.matched && python.order_id == rust_order_id {
+            mismatch_reason.push("可回复期差异：replyable 判断不一致".to_string());
+        }
     }
     if let Some(diff) = top5_avg_diff {
         if diff > MAX_SCORE_DIFF as f64 {
-            mismatch_reason.push(format!("Top5 平均分差异超阈值（{diff:.2}）"));
+            mismatch_reason.push(format!("昵称算法差异：Top5 平均分差异超阈值（{diff:.2}）"));
         }
     }
 
@@ -390,6 +404,7 @@ fn build_markdown_summary(fixture: &MatchBenchmarkFixture, artifacts: &Benchmark
     md.push_str("## 结果概览\n\n");
     md.push_str("| 指标 | 值 |\n|---|---:|\n");
     md.push_str(&format!("| 总评价数 | {} |\n", artifacts.summary.total_evaluations));
+    md.push_str(&format!("| 最低样本门槛 | {} |\n", MIN_REQUIRED_EVALUATIONS));
     md.push_str(&format!("| 不一致条数 | {} |\n", artifacts.summary.mismatched_rows));
     md.push_str(&format!("| 不一致率 | {:.2}% |\n", artifacts.summary.mismatch_rate * 100.0));
     md.push_str(&format!("| 允许上限 | {:.2}% |\n", artifacts.summary.allowed_mismatch_rate * 100.0));
@@ -436,46 +451,54 @@ mod tests {
     use tempfile::tempdir;
 
     fn sample_fixture() -> MatchBenchmarkFixture {
-        MatchBenchmarkFixture {
-            snapshot_name: "sample".into(),
-            notes: vec!["脱敏样板数据，仅用于验证 bench-match 工作流".into()],
-            orders: vec![CandidateOrder {
-                order_id: "order-1".into(),
-                buyer_nickname: "赵亮".into(),
-                product_id: "p1".into(),
-                sku_id: "s1".into(),
-                product_name: "仁和洗发水".into(),
-                create_time: 1_712_910_000 - 172800,
-                confirm_receipt_time: 0,
-                is_waybill_received: false,
-                waybill_received_time: 0,
-                sale_param: "默认规格".into(),
-            }],
-            evaluations: vec![EvaluationRecord {
-                evaluation_id: "eval-1".into(),
+        let orders = vec![CandidateOrder {
+            order_id: "order-1".into(),
+            buyer_nickname: "赵亮".into(),
+            product_id: "p1".into(),
+            sku_id: "s1".into(),
+            product_name: "仁和洗发水".into(),
+            create_time: 1_712_910_000 - 172800,
+            confirm_receipt_time: 0,
+            is_waybill_received: false,
+            waybill_received_time: 0,
+            sale_param: "默认规格".into(),
+        }];
+        let evaluations = (0..100)
+            .map(|index| EvaluationRecord {
+                evaluation_id: format!("eval-{index}"),
                 buyer_nickname: "赵亮6057".into(),
                 product_id: "p1".into(),
                 sku_id: "s1".into(),
                 sku_name: "默认规格".into(),
                 product_name: "仁和洗发水".into(),
-                eval_time: 1_712_910_000,
+                eval_time: 1_712_910_000 + index as i64,
                 attitude_name: "差评".into(),
-                evaluation_content: "有点痒".into(),
+                evaluation_content: format!("有点痒-{index}"),
                 default_content: String::new(),
                 evaluation_star: 1,
                 can_reply_expire_time: 0,
-            }],
-            python_results: vec![PythonMatchResult {
-                evaluation_id: "eval-1".into(),
+            })
+            .collect::<Vec<_>>();
+        let python_results = (0..100)
+            .map(|index| PythonMatchResult {
+                evaluation_id: format!("eval-{index}"),
                 order_id: Some("order-1".into()),
                 matched: true,
                 match_score: 95,
                 match_strategy: Some("probable_match".into()),
+                replyable: Some(true),
                 top_candidates: vec![PythonTopCandidate {
                     order_id: "order-1".into(),
                     score: 95,
                 }],
-            }],
+            })
+            .collect::<Vec<_>>();
+        MatchBenchmarkFixture {
+            snapshot_name: "sample".into(),
+            notes: vec!["脱敏样板数据，仅用于验证 bench-match 工作流".into()],
+            orders,
+            evaluations,
+            python_results,
         }
     }
 
