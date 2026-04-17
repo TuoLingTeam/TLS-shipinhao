@@ -1,5 +1,5 @@
 packages:
-  - ui
+  - apps/ui
 
 ignoredBuiltDependencies:
   - esbuild

@@ -11,7 +11,8 @@
 
 ```text
 workspace/
-├── crates/
+├── backend/
+│   ├── crates/
 │   ├── domain-core           # 订单、评价、缓存、授权共享模型
 │   ├── security-core         # 设备绑定、验签、完整性、风险检测
 │   ├── desktop-app           # 桌面客户端入口与 UI 壳层
@@ -22,7 +23,8 @@ workspace/
 ├── apps/
 │   ├── desktop               # 桌面应用启动配置/资源
 │   └── license-server        # 服务部署入口
-└── tests/
+│   ├── tests/
+│   └── xtask/
     ├── integration
     └── e2e
 ```

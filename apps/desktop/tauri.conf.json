@@ -3,7 +3,7 @@
   "version": "5.1.0",
   "identifier": "com.tls.shipinhao",
   "build": {
-    "frontendDist": "../../ui/dist",
+    "frontendDist": "../ui/dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm --filter tls-shipinhao-ui dev",
     "beforeBuildCommand": "pnpm --filter tls-shipinhao-ui build"

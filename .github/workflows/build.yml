@@ -8,10 +8,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
-      - 'crates/**'
+      - 'backend/crates/**'
       - 'apps/**'
-      - 'ui/**'
-      - 'xtask/**'
+      - 'apps/ui/**'
+      - 'backend/xtask/**'
       - '.github/workflows/build.yml'
 
 permissions:

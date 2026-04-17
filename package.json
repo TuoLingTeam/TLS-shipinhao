@@ -4,7 +4,7 @@
     "dev": "pnpm --filter tls-shipinhao-ui dev",
     "build": "pnpm --filter tls-shipinhao-ui build",
     "lint": "pnpm --filter tls-shipinhao-ui lint",
-    "tauri:dev": "cargo tauri dev",
-    "tauri:build": "cargo tauri build"
+    "tauri:dev": "cd apps/desktop && cargo tauri dev",
+    "tauri:build": "cd apps/desktop && cargo tauri build"
   }
 }

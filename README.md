@@ -8,27 +8,25 @@
 
 ```text
 TLS-shipinhao/
-├── crates/
-│   ├── domain-core/              # 领域模型（OrderMatchResult、DeliveryUpdateRequest 等）
-│   ├── api-contracts/            # 前后端共享契约（LicenseLease、RuntimeGrant 等）
-│   ├── security-core/            # 设备指纹 + Ed25519 签名验证 + 完整性校验
-│   ├── desktop-services/         # 业务逻辑（评价匹配、订单缓存、发货更新、订单同步）
-│   ├── license-service/          # 授权激活 / 验证 / lease 签发
-│   └── build-tools/              # 构建完整性清单生成
 ├── apps/
 │   ├── desktop/                  # Tauri 桌面壳（commands + adapters + state）
-│   └── license-worker/           # Cloudflare Worker 授权后端
-├── ui/                           # Vue 3 前端（Vite + Pinia + vue-router）
-│   ├── src/
-│   │   ├── views/                # 6 个页面（Dashboard / Review / Order / Delivery / License / Settings）
-│   │   ├── components/           # 通用 + 业务组件
-│   │   ├── composables/          # useTauriInvoke / useReview / useOrder 等
-│   │   ├── stores/               # Pinia 状态管理
-│   │   └── types/                # TypeScript 类型定义（镜像 Rust 契约）
-│   └── vite.config.ts
-├── backend/                      # Cloudflare Workers 授权后端（JS）
-├── xtask/                        # 构建 / manifest / 发布命令
-└── .github/workflows/build.yml   # CI：测试 + Windows/macOS 打包
+│   ├── ui/                       # Vue 3 前端（Vite + Pinia + vue-router）
+│   │   ├── src/
+│   │   ├── package.json
+│   │   └── vite.config.ts
+│   ├── license-worker/           # Rust Cloudflare Worker 授权服务
+│   ├── legacy-src/               # 兼容期 Python 源码快照
+│   ├── legacy-runtime/           # 兼容期 Python 运行时残留
+│   └── legacy-dist/              # 兼容期 Python 编译产物
+├── backend/
+│   ├── crates/                   # Rust 共享库与核心业务
+│   ├── docs/                     # 验收、性能、发布文档
+│   ├── src/                      # Worker 管理页与兼容壳
+│   ├── tests/                    # Rust / Python 回归测试与夹具
+│   ├── xtask/                    # 构建 / manifest / 发布命令
+│   └── db/                       # D1 schema / migration
+├── Cargo.toml                    # 顶层 Rust workspace
+└── .github/workflows/            # CI/CD
 ```
 
 ## 功能特性
@@ -51,7 +49,7 @@ TLS-shipinhao/
 
 ```bash
 pnpm install
-cargo tauri dev
+pnpm tauri:dev
 ```
 
 ### 运行测试
@@ -64,7 +62,7 @@ pnpm --filter tls-shipinhao-ui lint
 ### 构建发布包
 
 ```bash
-cargo tauri build
+pnpm tauri:build
 ```
 
 产物位于 `target/release/bundle/`（Windows NSIS / macOS DMG）。
@@ -75,7 +73,7 @@ cargo tauri build
 cd backend && npm install && npm run deploy
 ```
 
-详见 [backend/README.md](backend/README.md)。
+详见 [backend/README.md](backend/README.md) 与 [apps/license-worker/README.md](apps/license-worker/README.md)。
 
 ## 注意事项
 

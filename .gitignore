@@ -46,8 +46,10 @@ app-dist/
 # Build logs
 logs_*/
 logs/
-dist/
-docs/
+/dist/
+/docs/
+!backend/docs/
+!backend/docs/**
 
 # OS
 .DS_Store
@@ -79,5 +81,6 @@ image/
 target/
 
 # Tauri / Vue frontend
-ui/dist/
-ui/node_modules/
+apps/ui/dist/
+apps/ui/node_modules/
+backend/tests/artifacts/

@@ -11,8 +11,8 @@ crate-type = ["cdylib", "rlib"]
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-license-service = { path = "../../crates/license-service" }
-api-contracts = { path = "../../crates/api-contracts" }
+license-service = { path = "../../backend/crates/license-service" }
+api-contracts = { path = "../../backend/crates/api-contracts" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 worker = "0.6"

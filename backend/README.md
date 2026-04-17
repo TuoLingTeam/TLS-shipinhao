@@ -45,7 +45,7 @@ https://sphapi.199908.top/admin
 - `LICENSE_SIGNING_PRIVATE_KEY_B64`
   Ed25519 私钥（Base64 编码的 PKCS8 PEM 文本），用于签发 `device_claims`、`offline_grant`、`session_token`。
 
-客户端内置的公钥位于 [app/settings.py](../app/settings.py) 的 `LICENSE_PUBLIC_KEY`。
+客户端内置的公钥位于 [apps/legacy-src/app/settings.py](../apps/legacy-src/app/settings.py) 的 `LICENSE_PUBLIC_KEY`。
 如需轮换密钥，请同时更新客户端公钥与后端私钥。
 
 ## 首次部署
