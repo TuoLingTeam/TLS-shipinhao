@@ -2,6 +2,7 @@ use crate::review_candidate_scoring::{
     score_candidate_order, CandidateOrder, EvaluationMatchContext,
 };
 use crate::review_matcher_helpers::pick_best_match;
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const AUTO_FILL_SCORE_THRESHOLD: i32 = 100;
@@ -38,6 +39,20 @@ pub fn match_strategy_by_score(score: i32) -> MatchStrategy {
     } else {
         MatchStrategy::Fallback
     }
+}
+
+pub fn is_evaluation_replyable(can_reply_expire_time: i64, now_ts: i64) -> bool {
+    if can_reply_expire_time == 0 {
+        return true;
+    }
+    let days_until_expire = (can_reply_expire_time - now_ts) / 86_400;
+    days_until_expire >= -30
+}
+
+pub fn reply_deadline(can_reply_expire_time: i64) -> Option<DateTime<Utc>> {
+    (can_reply_expire_time > 0)
+        .then(|| Utc.timestamp_opt(can_reply_expire_time, 0).single())
+        .flatten()
 }
 
 pub fn match_single_evaluation(
@@ -212,5 +227,15 @@ mod tests {
         assert_eq!(match_strategy_by_score(100), MatchStrategy::ExactMatch);
         assert_eq!(match_strategy_by_score(80), MatchStrategy::ProbableMatch);
         assert_eq!(match_strategy_by_score(40), MatchStrategy::Fallback);
+    }
+
+    #[test]
+    fn reply_window_keeps_30_day_grace_period_and_missing_values() {
+        let now = 1_776_324_243;
+        assert!(is_evaluation_replyable(0, now));
+        assert!(is_evaluation_replyable(now - 15 * 86_400, now));
+        assert!(!is_evaluation_replyable(now - 45 * 86_400, now));
+        assert!(reply_deadline(now + 86_400).is_some());
+        assert!(reply_deadline(0).is_none());
     }
 }

@@ -186,6 +186,8 @@ fn parse_quality_refund_record(
         matched: true,
         source: MatchSource::ExactOrderId,
         strategy: MatchStrategy::ExactMatch,
+        replyable: true,
+        reply_deadline: None,
         confidence_score: 100,
         match_reasons: Vec::new(),
         candidate_count: 0,

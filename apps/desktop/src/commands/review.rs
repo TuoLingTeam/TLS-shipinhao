@@ -14,7 +14,9 @@ use desktop_services::order_sync_planner::ORDER_CACHE_COVERAGE_DAYS;
 use desktop_services::order_sync_service::OrderSyncService;
 use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
 use desktop_services::review_candidate_scoring::CandidateOrder;
-use desktop_services::review_match_flow::MatchStrategy as ServiceMatchStrategy;
+use desktop_services::review_match_flow::{
+    is_evaluation_replyable, reply_deadline, MatchStrategy as ServiceMatchStrategy,
+};
 use desktop_services::ReviewQuery;
 use domain_core::{MatchSource, MatchStrategy as ApiMatchStrategy, OrderMatchResult, TimeWindow};
 use serde::{Deserialize, Serialize};
@@ -67,6 +69,13 @@ fn map_match_strategy(strategy: Option<ServiceMatchStrategy>) -> ApiMatchStrateg
     }
 }
 
+fn map_reply_state(can_reply_expire_time: i64) -> (bool, Option<String>) {
+    (
+        is_evaluation_replyable(can_reply_expire_time, chrono::Utc::now().timestamp()),
+        reply_deadline(can_reply_expire_time).map(|dt| dt.to_rfc3339()),
+    )
+}
+
 fn cache_record_to_candidates(record: &CacheOrderRecord) -> Vec<CandidateOrder> {
     record
         .products
@@ -101,30 +110,35 @@ fn match_reviews_with_cache_records(
 
     match_orders_with_evaluations(evaluations, &candidates)
         .into_iter()
-        .map(|matched| OrderMatchResult {
-            evaluation_id: matched.evaluation_id,
-            order_id: matched.order_id.unwrap_or_default(),
-            buyer_nickname: matched.buyer_nickname,
-            evaluation_content: if matched.evaluation_content.trim().is_empty() {
-                matched.default_content
-            } else {
-                matched.evaluation_content
-            },
-            product_id: matched.product_id,
-            sku_id: matched.sku_id,
-            sku_name: if matched.sku_name.trim().is_empty() {
-                matched.sale_param
-            } else {
-                matched.sku_name
-            },
-            product_name: matched.product_name,
-            matched: matched.matched,
-            source: map_match_source(matched.match_strategy),
-            strategy: map_match_strategy(matched.match_strategy),
-            confidence_score: matched.match_score.max(0) as u32,
-            match_reasons: matched.match_reasons,
-            candidate_count: matched.candidate_count,
-            top_score: matched.top_score,
+        .map(|matched| {
+            let (replyable, reply_deadline) = map_reply_state(matched.can_reply_expire_time);
+            OrderMatchResult {
+                evaluation_id: matched.evaluation_id,
+                order_id: matched.order_id.unwrap_or_default(),
+                buyer_nickname: matched.buyer_nickname,
+                evaluation_content: if matched.evaluation_content.trim().is_empty() {
+                    matched.default_content
+                } else {
+                    matched.evaluation_content
+                },
+                product_id: matched.product_id,
+                sku_id: matched.sku_id,
+                sku_name: if matched.sku_name.trim().is_empty() {
+                    matched.sale_param
+                } else {
+                    matched.sku_name
+                },
+                product_name: matched.product_name,
+                matched: matched.matched,
+                source: map_match_source(matched.match_strategy),
+                strategy: map_match_strategy(matched.match_strategy),
+                replyable,
+                reply_deadline,
+                confidence_score: matched.match_score.max(0) as u32,
+                match_reasons: matched.match_reasons,
+                candidate_count: matched.candidate_count,
+                top_score: matched.top_score,
+            }
         })
         .collect()
 }
@@ -402,6 +416,8 @@ mod tests {
         assert_eq!(results[0].order_id, "3735563912835389952");
         assert_eq!(results[0].source, MatchSource::ExactOrderId);
         assert_eq!(results[0].strategy, domain_core::MatchStrategy::ExactMatch);
+        assert!(results[0].replyable);
+        assert!(results[0].reply_deadline.is_some());
         assert_eq!(results[0].candidate_count, 2);
         assert_eq!(results[0].top_score, 100);
     }

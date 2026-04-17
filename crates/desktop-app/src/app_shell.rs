@@ -119,6 +119,8 @@ impl ReviewSource for StubReviewSource {
             matched: true,
             source: MatchSource::ReceiverAndTimeWindow,
             strategy: MatchStrategy::ExactMatch,
+            replyable: true,
+            reply_deadline: None,
             confidence_score: 100,
             match_reasons: vec!["stub".into()],
             candidate_count: 1,

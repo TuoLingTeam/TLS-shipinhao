@@ -140,6 +140,19 @@ function matchedHint(record: { confidence_score: number; strategy: string }) {
   }
   return `评分 ${record.confidence_score} · 当前结果仅供参考。`;
 }
+
+function formatReplyDeadline(value: string | null) {
+  if (!value) return "未知";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
 </script>
 
 <template>
@@ -272,7 +285,10 @@ function matchedHint(record: { confidence_score: number; strategy: string }) {
             v-for="r in store.results"
             :key="r.evaluation_id"
             class="table-row border-t border-slate-100/80 align-top transition-colors"
-            :class="r.matched && r.order_id ? 'cursor-pointer' : ''"
+            :class="[
+              r.matched && r.order_id ? 'cursor-pointer' : '',
+              !isQualityRefundMode && !r.replyable ? 'bg-slate-50/80 text-slate-400' : '',
+            ]"
             @click="r.matched && r.order_id ? handleUseMatchedOrder(r.order_id) : undefined"
           >
             <td v-if="!isQualityRefundMode" class="px-5 py-4">
@@ -303,6 +319,13 @@ function matchedHint(record: { confidence_score: number; strategy: string }) {
                   {{ r.matched ? "已匹配" : "未匹配" }}
                 </span>
                 <ReviewMatchStrategyBadge :strategy="r.strategy" />
+                <span
+                  v-if="!isQualityRefundMode && !r.replyable"
+                  class="inline-flex rounded-full bg-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600"
+                  :title="`回复截止：${formatReplyDeadline(r.reply_deadline)}`"
+                >
+                  已超期
+                </span>
                 <div
                   class="max-w-[180px] text-center text-[11px] leading-5"
                   :class="r.matched ? 'text-slate-500' : 'text-amber-700'"

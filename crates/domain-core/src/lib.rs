@@ -64,6 +64,10 @@ pub struct OrderCacheEntry {
     pub updated_at: String,
 }
 
+fn default_replyable() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct OrderMatchResult {
@@ -85,6 +89,10 @@ pub struct OrderMatchResult {
     pub source: MatchSource,
     #[serde(default)]
     pub strategy: MatchStrategy,
+    #[serde(default = "default_replyable")]
+    pub replyable: bool,
+    #[serde(default)]
+    pub reply_deadline: Option<String>,
     pub confidence_score: u32,
     #[serde(default)]
     pub match_reasons: Vec<String>,

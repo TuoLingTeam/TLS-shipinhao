@@ -24,6 +24,8 @@ export interface OrderMatchResult {
   matched: boolean;
   source: MatchSource;
   strategy: MatchStrategy;
+  replyable: boolean;
+  reply_deadline: string | null;
   confidence_score: number;
   match_reasons: string[];
   candidate_count: number;

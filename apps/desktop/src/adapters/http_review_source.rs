@@ -1,4 +1,5 @@
 use desktop_services::review_batch_match::EvaluationRecord;
+use desktop_services::review_match_flow::{is_evaluation_replyable, reply_deadline};
 use desktop_services::ReviewQuery;
 use desktop_services::ReviewSource;
 use domain_core::{MatchSource, MatchStrategy, OrderMatchResult};
@@ -109,6 +110,12 @@ impl HttpReviewSource {
 
 fn parse_review_record(eval: &Value) -> Option<OrderMatchResult> {
     let evaluation = parse_evaluation_record(eval)?;
+    let replyable = is_evaluation_replyable(
+        evaluation.can_reply_expire_time,
+        chrono::Utc::now().timestamp(),
+    );
+    let reply_deadline = reply_deadline(evaluation.can_reply_expire_time).map(|dt| dt.to_rfc3339());
+
     Some(OrderMatchResult {
         evaluation_id: evaluation.evaluation_id,
         order_id: eval
@@ -130,19 +137,13 @@ fn parse_review_record(eval: &Value) -> Option<OrderMatchResult> {
         matched: false,
         source: MatchSource::ManualFallback,
         strategy: MatchStrategy::Fallback,
+        replyable,
+        reply_deadline,
         confidence_score: 0,
         match_reasons: Vec::new(),
         candidate_count: 0,
         top_score: 0,
     })
-}
-
-fn is_within_reply_window(can_reply_expire_time: i64, now_ts: i64) -> bool {
-    if can_reply_expire_time <= 0 {
-        return false;
-    }
-    let days_until_expire = (can_reply_expire_time - now_ts) / 86_400;
-    days_until_expire >= -30
 }
 
 fn parse_evaluation_record(eval: &Value) -> Option<EvaluationRecord> {
@@ -158,10 +159,6 @@ fn parse_evaluation_record(eval: &Value) -> Option<EvaluationRecord> {
         .get("canReplyExpireTime")
         .and_then(|v| v.as_i64().or_else(|| v.as_u64().map(|u| u as i64)))
         .unwrap_or(0);
-    if !is_within_reply_window(can_reply_expire_time, chrono::Utc::now().timestamp()) {
-        return None;
-    }
-
     let evaluation_info = eval.get("evaluationInfo").cloned().unwrap_or_default();
     let product_info = eval.get("productInfo").cloned().unwrap_or_default();
 
@@ -455,10 +452,57 @@ mod tests {
     }
 
     #[test]
-    fn filters_reviews_outside_reply_window() {
-        let stale = Utc::now().timestamp() - 31 * 86_400;
-        assert!(!is_within_reply_window(stale, Utc::now().timestamp()));
-        let recent = Utc::now().timestamp() - 20 * 86_400;
-        assert!(is_within_reply_window(recent, Utc::now().timestamp()));
+    fn keeps_reviews_even_when_reply_window_is_missing_or_expired() {
+        let now = Utc::now().timestamp();
+        let expired = serde_json::json!({
+            "productEvaluationId": "eval-expired",
+            "productInfo": {
+                "productId": "p-100",
+                "skuId": "sku-9",
+                "skuName": "红色 / XL",
+                "spuName": "春装外套"
+            },
+            "evaluationInfo": {
+                "evaluationStar": 1,
+                "buyer": { "identity": { "nickname": "买家小王" } },
+                "firstEvaluationInfo": {
+                    "buyerEvaluationInfo": {
+                        "content": "尺码偏小，物流慢",
+                        "defaultContent": "系统默认评价",
+                        "createTime": 1776324243
+                    }
+                }
+            },
+            "operationInfo": {
+                "attitudeName": "不够好",
+                "canReplyExpireTime": now - 45 * 86_400
+            }
+        });
+        let missing = serde_json::json!({
+            "productEvaluationId": "eval-missing",
+            "productInfo": {
+                "productId": "p-100",
+                "skuId": "sku-9",
+                "skuName": "红色 / XL",
+                "spuName": "春装外套"
+            },
+            "evaluationInfo": {
+                "evaluationStar": 1,
+                "buyer": { "identity": { "nickname": "买家小王" } },
+                "firstEvaluationInfo": {
+                    "buyerEvaluationInfo": {
+                        "content": "尺码偏小，物流慢",
+                        "defaultContent": "系统默认评价",
+                        "createTime": 1776324243
+                    }
+                }
+            },
+            "operationInfo": {
+                "attitudeName": "不够好"
+            }
+        });
+
+        assert!(parse_evaluation_record(&expired).is_some());
+        assert!(parse_evaluation_record(&missing).is_some());
     }
 }
