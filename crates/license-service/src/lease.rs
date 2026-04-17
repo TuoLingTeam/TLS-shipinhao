@@ -147,6 +147,89 @@ fn decode_payload(payload_b64: &str) -> Result<LeasePayload, LeaseError> {
         .map_err(|e| LeaseError::InvalidFormat(format!("payload JSON 非法：{e}")))
 }
 
+// ---- 续约（M2-04） ---------------------------------------------------------
+
+/// 续约请求载荷。
+#[derive(Debug, Clone)]
+pub struct RefreshRequest {
+    pub license_key: String,
+    pub device_id: String,
+    /// 原 Lease 的 `issued_at`，Worker 用它做乐观并发控制（避免旧续约覆盖新续约）。
+    pub current_issued_at: i64,
+}
+
+/// Worker 返回的续约响应。只关心新 Token；其他字段由调用方在验签后提取。
+#[derive(Debug, Clone)]
+pub struct RefreshResponse {
+    pub new_token: String,
+}
+
+/// `refresh_lease_if_due` 的语义化返回值。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefreshOutcome {
+    /// 当前时刻尚未到软刷新窗口（`now < renew_after`），无需续约。
+    NotDue,
+    /// 成功拿到新 Token，调用方应验签后覆盖本地存储。
+    Renewed(String),
+}
+
+/// 续约过程中的错误分类。
+#[derive(Debug, Error)]
+pub enum RefreshError {
+    /// 当前 Lease 已硬过期（`now >= exp`），无法续约，必须重新激活。
+    #[error("Lease 已硬过期，需要重新激活")]
+    HardExpired,
+    /// 与 Worker 通信失败（网络/超时/HTTP 非 2xx）。调用方应保留旧 Token。
+    #[error("Lease 续约网络错误：{0}")]
+    Network(String),
+    /// Worker 响应不符合预期（比如 new_token 为空）。
+    #[error("Lease 续约响应异常：{0}")]
+    Protocol(String),
+}
+
+/// 在软刷新窗口内自动续约；窗口外按语义返回 `NotDue` 或 `HardExpired`。
+///
+/// 流程：
+/// 1. `now < renew_after` → `NotDue`，不联网
+/// 2. `now >= exp` → `HardExpired`，需重激
+/// 3. `renew_after <= now < exp` → 调 `refresher` 请求 `/api/lease/refresh`
+///    - 返回空 token → `Protocol`
+///    - 网络失败 → `Network`，**不覆盖旧 Token**，调用方由业务上下文决定降级
+///    - 成功 → `Renewed(new_token)`
+///
+/// 注意：本函数不做「写回 Keychain」与「事件推送」，这些是 Tauri 命令层的
+/// 职责（M2-06 + M2-08）。这里保持纯 async 逻辑方便单测。
+pub async fn refresh_lease_if_due<F, Fut>(
+    payload: &LeasePayload,
+    now_epoch: i64,
+    refresher: F,
+) -> Result<RefreshOutcome, RefreshError>
+where
+    F: FnOnce(RefreshRequest) -> Fut,
+    Fut: std::future::Future<Output = Result<RefreshResponse, String>>,
+{
+    if !payload.is_renewal_due_at(now_epoch) {
+        return Ok(RefreshOutcome::NotDue);
+    }
+    if !payload.is_still_valid_at(now_epoch) {
+        return Err(RefreshError::HardExpired);
+    }
+
+    let req = RefreshRequest {
+        license_key: payload.license_key.clone(),
+        device_id: payload.device_id.clone(),
+        current_issued_at: payload.issued_at,
+    };
+
+    match refresher(req).await {
+        Ok(resp) if resp.new_token.trim().is_empty() => {
+            Err(RefreshError::Protocol("new_token 为空".into()))
+        }
+        Ok(resp) => Ok(RefreshOutcome::Renewed(resp.new_token)),
+        Err(msg) => Err(RefreshError::Network(msg)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,5 +453,117 @@ mod tests {
 
         let err = verifier.verify(&token, None, 1_000, false).unwrap_err();
         assert!(matches!(err, LeaseError::InvalidSignature));
+    }
+
+    // --- refresh_lease_if_due（M2-04） ---
+
+    fn sample_payload(renew_after: i64, exp: i64) -> LeasePayload {
+        LeasePayload {
+            kind: LEASE_KIND_LICENSE.into(),
+            license_key: "ABCD-EFGH".into(),
+            device_id: "dev-1".into(),
+            issued_at: 1_000,
+            exp,
+            renew_after,
+            task_policy: vec!["review_find".into()],
+            risk_level: "low".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_returns_not_due_when_now_is_before_renew_after() {
+        let payload = sample_payload(2_000, 3_000);
+        let called = std::cell::RefCell::new(false);
+
+        let outcome = refresh_lease_if_due(&payload, 1_500, |_req| {
+            *called.borrow_mut() = true;
+            async move { Ok(RefreshResponse { new_token: "X".into() }) }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(outcome, RefreshOutcome::NotDue);
+        assert!(!*called.borrow(), "not due 场景不应调用 refresher");
+    }
+
+    #[tokio::test]
+    async fn refresh_returns_hard_expired_when_past_exp() {
+        let payload = sample_payload(2_000, 3_000);
+        let err = refresh_lease_if_due(&payload, 3_500, |_req| async move {
+            Ok(RefreshResponse { new_token: "X".into() })
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(err, RefreshError::HardExpired));
+    }
+
+    #[tokio::test]
+    async fn refresh_renews_within_soft_window() {
+        let payload = sample_payload(2_000, 3_000);
+        let captured_req = std::cell::RefCell::new(None);
+
+        let outcome = refresh_lease_if_due(&payload, 2_500, |req| {
+            *captured_req.borrow_mut() = Some(req);
+            async move {
+                Ok(RefreshResponse {
+                    new_token: "new.token.value".into(),
+                })
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(outcome, RefreshOutcome::Renewed("new.token.value".into()));
+        let req = captured_req.borrow().clone().unwrap();
+        assert_eq!(req.license_key, "ABCD-EFGH");
+        assert_eq!(req.device_id, "dev-1");
+        assert_eq!(req.current_issued_at, 1_000);
+    }
+
+    #[tokio::test]
+    async fn refresh_maps_worker_string_error_to_network() {
+        let payload = sample_payload(2_000, 3_000);
+        let err = refresh_lease_if_due(&payload, 2_500, |_req| async move {
+            Err("connection refused".into())
+        })
+        .await
+        .unwrap_err();
+
+        match err {
+            RefreshError::Network(msg) => assert_eq!(msg, "connection refused"),
+            other => panic!("预期 Network，实际 {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_empty_new_token_as_protocol() {
+        let payload = sample_payload(2_000, 3_000);
+        let err = refresh_lease_if_due(&payload, 2_500, |_req| async move {
+            Ok(RefreshResponse {
+                new_token: "   ".into(),
+            })
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(err, RefreshError::Protocol(_)));
+    }
+
+    #[tokio::test]
+    async fn refresh_edge_case_exactly_at_renew_after_triggers_refresh() {
+        // renew_after 是闭区间：now == renew_after 即应续约。
+        let payload = sample_payload(2_000, 3_000);
+        let called = std::cell::RefCell::new(false);
+        let outcome = refresh_lease_if_due(&payload, 2_000, |_req| {
+            *called.borrow_mut() = true;
+            async move {
+                Ok(RefreshResponse {
+                    new_token: "edge".into(),
+                })
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(outcome, RefreshOutcome::Renewed("edge".into()));
+        assert!(*called.borrow());
     }
 }

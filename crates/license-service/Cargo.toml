@@ -18,3 +18,4 @@ api-contracts = { path = "../api-contracts" }
 [dev-dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand = "0.8"
+tokio = { workspace = true, features = ["macros", "rt"] }
