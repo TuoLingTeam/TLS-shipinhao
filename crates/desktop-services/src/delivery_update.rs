@@ -147,6 +147,43 @@ pub fn build_update_delivery_payload(
     }
 }
 
+pub fn build_raw_update_delivery_payload(
+    order_id: &str,
+    tracking_number: &str,
+    old_delivery_product_info: &Value,
+    delivery_override: Option<&DeliveryOverride>,
+) -> anyhow::Result<Value> {
+    let mut new_info = old_delivery_product_info.clone();
+    let obj = new_info
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("原始物流快照格式无效"))?;
+    obj.insert(
+        "waybillId".to_string(),
+        Value::String(tracking_number.trim().to_string()),
+    );
+    if let Some(override_info) = delivery_override {
+        if !override_info.delivery_id.is_empty() {
+            obj.insert(
+                "deliveryId".to_string(),
+                Value::String(override_info.delivery_id.clone()),
+            );
+        }
+        if !override_info.delivery_name.is_empty() {
+            obj.insert(
+                "deliveryName".to_string(),
+                Value::String(override_info.delivery_name.clone()),
+            );
+        }
+    }
+    Ok(serde_json::json!({
+        "orderId": order_id.trim(),
+        "changeInfo": [{
+            "old": old_delivery_product_info,
+            "new": new_info,
+        }],
+    }))
+}
+
 pub fn is_delivery_mismatch_error(message: &str) -> bool {
     DELIVERY_MISMATCH_MARKERS
         .iter()
@@ -315,5 +352,38 @@ mod tests {
 
         let same_prefix = json!({"deliveryId": "SF", "deliveryName": "顺丰速运"});
         assert!(determine_delivery_override_from_raw_info("SF000123456", &same_prefix).is_none());
+    }
+
+    #[test]
+    fn build_raw_update_payload_only_changes_waybill_or_delivery_override() {
+        let raw = json!({
+            "deliveryId": "ZTO",
+            "deliveryName": "中通快递",
+            "waybillId": "73666162791371",
+            "deliverType": 1,
+            "waybillStatus": 2,
+            "extInfo": {
+                "batchNo": "B-1",
+                "packages": [{"skuId": "7982968968", "count": 1}]
+            }
+        });
+
+        let payload = build_raw_update_delivery_payload(
+            "3735560095122745088",
+            "  SF1234567890  ",
+            &raw,
+            Some(&DeliveryOverride {
+                delivery_id: "SF".into(),
+                delivery_name: "顺丰速运".into(),
+            }),
+        )
+        .expect("payload");
+
+        assert_eq!(payload["orderId"], "3735560095122745088");
+        assert_eq!(payload["changeInfo"][0]["old"], raw);
+        assert_eq!(payload["changeInfo"][0]["new"]["waybillId"], "SF1234567890");
+        assert_eq!(payload["changeInfo"][0]["new"]["deliveryId"], "SF");
+        assert_eq!(payload["changeInfo"][0]["new"]["deliveryName"], "顺丰速运");
+        assert_eq!(payload["changeInfo"][0]["new"]["extInfo"], raw["extInfo"]);
     }
 }

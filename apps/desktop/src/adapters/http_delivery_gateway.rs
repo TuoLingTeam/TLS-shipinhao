@@ -1,6 +1,7 @@
 use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
 use desktop_services::delivery_update::{
-    determine_delivery_override_from_raw_info, is_delivery_mismatch_error,
+    build_raw_update_delivery_payload, determine_delivery_override_from_raw_info,
+    is_delivery_mismatch_error,
 };
 use desktop_services::DeliveryGateway;
 use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult};
@@ -142,21 +143,18 @@ impl HttpDeliveryGateway {
         old_info: &Value,
         delivery_override: Option<(&str, &str)>,
     ) -> anyhow::Result<()> {
-        let mut new_info = old_info.clone();
-        if let Some(obj) = new_info.as_object_mut() {
-            obj.insert(
-                "waybillId".to_string(),
-                Value::String(tracking_number.to_string()),
-            );
-            if let Some((did, dname)) = delivery_override {
-                obj.insert("deliveryId".to_string(), Value::String(did.to_string()));
-                obj.insert("deliveryName".to_string(), Value::String(dname.to_string()));
+        let delivery_override = delivery_override.map(|(delivery_id, delivery_name)| {
+            desktop_services::delivery_update::DeliveryOverride {
+                delivery_id: delivery_id.to_string(),
+                delivery_name: delivery_name.to_string(),
             }
-        }
-        let body = serde_json::json!({
-            "orderId": order_id,
-            "changeInfo": [{"old": old_info, "new": new_info}],
         });
+        let body = build_raw_update_delivery_payload(
+            order_id,
+            tracking_number,
+            old_info,
+            delivery_override.as_ref(),
+        )?;
         let resp = self.post_json_sync(DELIVERY_UPDATE_URL, &body)?;
         check_update_response(&resp)
     }
