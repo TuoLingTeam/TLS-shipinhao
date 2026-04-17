@@ -1,4 +1,4 @@
-//! 与 `apps/legacy-src/app/settings.py` 保持一致的远程配置，避免桌面端与 Python 业务分叉。
+//! 与 `backup/legacy-src/app/settings.py` 保持一致的远程配置，避免桌面端与 Python 业务分叉。
 
 /// 卡密验证后端（与 `LICENSE_API_BASE_URLS` 顺序一致，依次回退）。
 pub const LICENSE_API_BASE_URLS: &[&str] = &[

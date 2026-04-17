@@ -32,7 +32,7 @@ class RustBuildToolsTests(unittest.TestCase):
             '"release"',
             '"manifest"',
             '"desktop-build"',
-            'run_desktop_build_command(&[OsString::from("--release")])',
+            'run_desktop_build_command(&args[1..])',
         ):
             self.assertIn(symbol, text)
 
@@ -49,7 +49,7 @@ class RustBuildToolsTests(unittest.TestCase):
             self.assertIn(expected, text)
         for forbidden in (
             "actions/setup-python",
-            "apps/legacy-src/app/requirements.txt",
+            "backup/legacy-src/app/requirements.txt",
             "scripts/build.py",
             "scripts/obfuscate.py",
             "PyInstaller",

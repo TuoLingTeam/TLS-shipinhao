@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_ROOT = ROOT / 'apps' / 'legacy-src' / 'app'
+APP_ROOT = ROOT / 'backup' / 'legacy-src' / 'app'
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
@@ -19,7 +19,7 @@ class BootstrapUpdateTests(unittest.TestCase):
             exists_mock.side_effect = lambda path_obj: Path(path_obj) == binary
             subprocess_mock.run.return_value.returncode = 0
             with self.assertRaises(SystemExit) as ctx:
-                with mock.patch.object(bootstrap.sys, 'argv', ['apps/legacy-src/app/main.py']):
+                with mock.patch.object(bootstrap.sys, 'argv', ['backup/legacy-src/app/main.py']):
                     bootstrap.main()
 
         self.assertEqual(ctx.exception.code, 0)
@@ -31,7 +31,7 @@ class BootstrapUpdateTests(unittest.TestCase):
              mock.patch.object(bootstrap, 'subprocess') as subprocess_mock:
             subprocess_mock.run.return_value.returncode = 0
             with self.assertRaises(SystemExit):
-                with mock.patch.object(bootstrap.sys, 'argv', ['apps/legacy-src/app/main.py', '--demo']):
+                with mock.patch.object(bootstrap.sys, 'argv', ['backup/legacy-src/app/main.py', '--demo']):
                     bootstrap.main()
 
         subprocess_mock.run.assert_called_once_with(

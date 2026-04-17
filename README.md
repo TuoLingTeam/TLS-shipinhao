@@ -14,10 +14,7 @@ TLS-shipinhao/
 │   │   ├── src/
 │   │   ├── package.json
 │   │   └── vite.config.ts
-│   ├── license-worker/           # Rust Cloudflare Worker 授权服务
-│   ├── legacy-src/               # 兼容期 Python 源码快照
-│   ├── legacy-runtime/           # 兼容期 Python 运行时残留
-│   └── legacy-dist/              # 兼容期 Python 编译产物
+│   └── license-worker/           # Rust Cloudflare Worker 授权服务
 ├── backend/
 │   ├── crates/                   # Rust 共享库与核心业务
 │   ├── docs/                     # 验收、性能、发布文档
@@ -25,6 +22,7 @@ TLS-shipinhao/
 │   ├── tests/                    # Rust / Python 回归测试与夹具
 │   ├── xtask/                    # 构建 / manifest / 发布命令
 │   └── db/                       # D1 schema / migration
+├── backup/                       # 旧版 Python 源码 / 运行时 / 编译产物备份
 ├── Cargo.toml                    # 顶层 Rust workspace
 ├── openspec/                     # 变更提案与迁移设计
 └── .github/workflows/            # CI/CD
