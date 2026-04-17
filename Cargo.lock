@@ -4097,6 +4097,7 @@ version = "5.1.0"
 dependencies = [
  "anyhow",
  "api-contracts",
+ "async-trait",
  "base64 0.22.1",
  "chrono",
  "ed25519-dalek",
@@ -4107,6 +4108,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
  "wasm-bindgen",
  "worker",
 ]

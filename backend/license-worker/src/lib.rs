@@ -148,7 +148,9 @@ impl LeaseTokenSigner {
 }
 
 fn parse_iso_epoch(value: &str) -> anyhow::Result<i64> {
-    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc).timestamp())
+    Ok(DateTime::parse_from_rfc3339(value)?
+        .with_timezone(&Utc)
+        .timestamp())
 }
 
 fn lease_to_payload(lease: &LicenseLease) -> anyhow::Result<LeasePayload> {
@@ -217,8 +219,10 @@ fn map_service_response(
 
 #[async_trait(?Send)]
 pub trait AsyncRuntimeRepository {
-    async fn load_generated_key(&self, license_key: &str)
-        -> anyhow::Result<Option<GeneratedKeyRecord>>;
+    async fn load_generated_key(
+        &self,
+        license_key: &str,
+    ) -> anyhow::Result<Option<GeneratedKeyRecord>>;
     async fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()>;
     async fn load_license(&self, license_key: &str) -> anyhow::Result<Option<LicenseRecord>>;
     async fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()>;
@@ -369,7 +373,11 @@ async fn runtime_load_usable_license<R: AsyncRuntimeRepository + ?Sized>(
         )));
     }
     if record.status == LicenseState::Revoked {
-        return Ok(Err(("该卡密已被吊销".into(), LicenseState::Revoked, Some(record))));
+        return Ok(Err((
+            "该卡密已被吊销".into(),
+            LicenseState::Revoked,
+            Some(record),
+        )));
     }
 
     let expires_at = DateTime::parse_from_rfc3339(&record.license_expires_at)?.with_timezone(&Utc);
@@ -387,7 +395,11 @@ async fn runtime_load_usable_license<R: AsyncRuntimeRepository + ?Sized>(
             created_at: now_iso_str,
         })
         .await?;
-        return Ok(Err(("授权已过期".into(), LicenseState::Expired, Some(record))));
+        return Ok(Err((
+            "授权已过期".into(),
+            LicenseState::Expired,
+            Some(record),
+        )));
     }
 
     Ok(Ok(record))
@@ -489,23 +501,19 @@ pub async fn runtime_verify<R: AsyncRuntimeRepository + ?Sized>(
     now: DateTime<Utc>,
 ) -> anyhow::Result<SignedLicenseApiResponse> {
     let normalized_key = normalize_key(&input.license_key);
-    let mut record = match runtime_load_usable_license(
-        repo,
-        &normalized_key,
-        &input.device_id,
-        now,
-        "verify",
-    )
-    .await? {
-        Ok(record) => record,
-        Err((message, state, record)) => {
-            return Ok(signed_failure_response_for_record(
-                &message,
-                state,
-                record.as_ref(),
-            ))
-        }
-    };
+    let mut record =
+        match runtime_load_usable_license(repo, &normalized_key, &input.device_id, now, "verify")
+            .await?
+        {
+            Ok(record) => record,
+            Err((message, state, record)) => {
+                return Ok(signed_failure_response_for_record(
+                    &message,
+                    state,
+                    record.as_ref(),
+                ))
+            }
+        };
 
     let now_iso_str = now_iso(now);
     record.status = LicenseState::Active;
@@ -534,7 +542,15 @@ pub async fn runtime_refresh_lease<R: AsyncRuntimeRepository + ?Sized>(
     input: LeaseRefreshRequest,
     now: DateTime<Utc>,
 ) -> anyhow::Result<LeaseRefreshResponse> {
-    let record = match runtime_load_usable_license(repo, &input.license_key, &input.device_id, now, "verify").await? {
+    let record = match runtime_load_usable_license(
+        repo,
+        &input.license_key,
+        &input.device_id,
+        now,
+        "verify",
+    )
+    .await?
+    {
         Ok(record) => record,
         Err((message, _, _)) => {
             return Ok(LeaseRefreshResponse {
@@ -573,7 +589,15 @@ pub async fn runtime_task_authorize<R: AsyncRuntimeRepository + ?Sized>(
     input: TaskAuthorizeRequest,
     now: DateTime<Utc>,
 ) -> anyhow::Result<RuntimeGrant> {
-    let record = match runtime_load_usable_license(repo, &input.license_key, &input.device_id, now, "verify").await? {
+    let record = match runtime_load_usable_license(
+        repo,
+        &input.license_key,
+        &input.device_id,
+        now,
+        "verify",
+    )
+    .await?
+    {
         Ok(record) => record,
         Err((message, _, _)) => return Ok(denied_grant(&input.task_type, message)),
     };
@@ -758,70 +782,75 @@ pub fn handle_json_request<R: LicenseRepository>(
     }
 }
 
+pub async fn handle_async_runtime_json<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    path: &str,
+    body: &str,
+    signer: Option<&LeaseTokenSigner>,
+    now: DateTime<Utc>,
+) -> anyhow::Result<String> {
+    let route = parse_route(path);
+    let payload: Value = serde_json::from_str(body)?;
+    match route {
+        WorkerRoute::Activate => {
+            let input: ActivationInput = serde_json::from_value(payload)?;
+            let signer = signer.ok_or_else(|| anyhow::anyhow!("missing signer for activate"))?;
+            Ok(serde_json::to_string(
+                &runtime_activate(repo, signer, input, now).await?,
+            )?)
+        }
+        WorkerRoute::Verify => {
+            let input: VerifyInput = serde_json::from_value(payload)?;
+            let signer = signer.ok_or_else(|| anyhow::anyhow!("missing signer for verify"))?;
+            Ok(serde_json::to_string(
+                &runtime_verify(repo, signer, input, now).await?,
+            )?)
+        }
+        WorkerRoute::LeaseRefresh => {
+            let input: LeaseRefreshRequest = serde_json::from_value(payload)?;
+            let signer =
+                signer.ok_or_else(|| anyhow::anyhow!("missing signer for lease_refresh"))?;
+            Ok(serde_json::to_string(
+                &runtime_refresh_lease(repo, signer, input, now).await?,
+            )?)
+        }
+        WorkerRoute::LeaseRevoke => Ok(serde_json::json!({
+            "success": false,
+            "message": "lease_revoke_pending",
+        })
+        .to_string()),
+        WorkerRoute::TaskAuthorize => {
+            let input: TaskAuthorizeRequest = serde_json::from_value(payload)?;
+            Ok(serde_json::to_string(
+                &runtime_task_authorize(repo, input, now).await?,
+            )?)
+        }
+        WorkerRoute::NotFound => {
+            let resp = SignedLicenseApiResponse {
+                success: false,
+                message: "not_found".into(),
+                license_state: LicenseState::Invalid,
+                license_lease: None,
+                license_expires_at: None,
+                activated_at: None,
+                device_id: None,
+                license_key: None,
+                lease_expires_at: None,
+                renew_after: None,
+                issued_at: None,
+                license_status: None,
+                task_policy: None,
+            };
+            Ok(serde_json::to_string(&resp)?)
+        }
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 mod cloudflare_entry {
     use super::*;
     use wasm_bindgen::JsValue;
     use worker::{event, D1Database, Env, Method, Request, Response, Result};
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct GeneratedKeyRow {
-        license_key: String,
-        plan_days: i64,
-        status: String,
-        #[serde(default)]
-        created_at: Option<String>,
-        #[serde(default)]
-        note: Option<String>,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct ActivationRow {
-        license_key: String,
-        device_id: String,
-        #[serde(default)]
-        device_fingerprint: Option<String>,
-        plan_days: i64,
-        activated_at: String,
-        expires_at: String,
-        updated_at: String,
-        binding_version: u32,
-        status: String,
-        #[serde(default)]
-        last_verify_at: Option<String>,
-        #[serde(default)]
-        last_session_issued_at: Option<String>,
-        #[serde(default)]
-        last_offline_grant_issued_at: Option<String>,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct DeviceRegistrationRow {
-        id: i64,
-        license_key: String,
-        #[serde(default)]
-        device_id: String,
-        #[serde(default)]
-        device_fingerprint_hash: Option<String>,
-        #[serde(default)]
-        registered_at: Option<String>,
-        #[serde(default)]
-        last_seen_at: Option<String>,
-        #[serde(default)]
-        registration_status: Option<String>,
-    }
-
-    fn normalize_key(value: &str) -> String {
-        value.trim().to_uppercase()
-    }
-
-    fn now_iso(now: DateTime<Utc>) -> String {
-        now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-    }
-
-    fn sha256_hex(value: &str) -> String {
-        format!("{:x}", Sha256::digest(value.as_bytes()))
-    }
 
     fn missing_secret(name: &str) -> Result<Response> {
         Response::from_json(&serde_json::json!({
@@ -845,531 +874,217 @@ mod cloudflare_entry {
         .to_string()
     }
 
-    async fn load_generated_key(
-        db: &D1Database,
-        license_key: &str,
-    ) -> anyhow::Result<Option<GeneratedKeyRow>> {
-        let stmt = db
-            .prepare(
-                "SELECT license_key, plan_days, status, created_at, note FROM generated_keys WHERE license_key = ? LIMIT 1",
-            )
-            .bind(&[JsValue::from_str(license_key)])?;
-        let result = stmt.all().await?;
-        let mut rows: Vec<GeneratedKeyRow> = result.results().unwrap_or_default();
-        Ok(rows.pop())
+    struct D1RuntimeRepo<'a> {
+        db: &'a D1Database,
     }
 
-    async fn load_activation(
-        db: &D1Database,
-        license_key: &str,
-    ) -> anyhow::Result<Option<ActivationRow>> {
-        let stmt = db
-            .prepare(
-                "SELECT license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at, last_session_issued_at, last_offline_grant_issued_at FROM activations WHERE license_key = ? LIMIT 1",
-            )
-            .bind(&[JsValue::from_str(license_key)])?;
-        let result = stmt.all().await?;
-        let mut rows: Vec<ActivationRow> = result.results().unwrap_or_default();
-        Ok(rows.pop())
-    }
-
-    async fn load_device_registration(
-        db: &D1Database,
-        license_key: &str,
-        device_id: &str,
-    ) -> anyhow::Result<Option<DeviceRegistrationRow>> {
-        let stmt = db
-            .prepare(
-                "SELECT id, license_key, device_id, device_fingerprint_hash, registered_at, last_seen_at, registration_status FROM device_registrations WHERE license_key = ? AND device_id = ? LIMIT 1",
-            )
-            .bind(&[JsValue::from_str(license_key), JsValue::from_str(device_id)])?;
-        let result = stmt.all().await?;
-        let mut rows: Vec<DeviceRegistrationRow> = result.results().unwrap_or_default();
-        Ok(rows.pop())
-    }
-
-    async fn append_audit(
-        db: &D1Database,
-        license_key: &str,
-        device_id: &str,
-        action: &str,
-        reason: &str,
-        now_iso: &str,
-    ) -> anyhow::Result<()> {
-        let sql = r#"
-            INSERT INTO license_audit_logs
-                (license_key, device_id, action, action_reason, created_at, operator, meta_json)
-            VALUES (?, ?, ?, ?, ?, 'worker', '{}')
-        "#;
-        db.prepare(sql)
-            .bind(&[
-                JsValue::from_str(license_key),
-                JsValue::from_str(device_id),
-                JsValue::from_str(action),
-                JsValue::from_str(reason),
-                JsValue::from_str(now_iso),
-            ])?
-            .run()
-            .await?;
-        Ok(())
-    }
-
-    async fn update_activation_markers(
-        db: &D1Database,
-        license_key: &str,
-        now_iso: &str,
-        session_issued: bool,
-        grant_issued: bool,
-        new_status: Option<&str>,
-    ) -> anyhow::Result<()> {
-        let session_sql = if session_issued {
-            ", last_session_issued_at = ?"
-        } else {
-            ""
-        };
-        let grant_sql = if grant_issued {
-            ", last_offline_grant_issued_at = ?"
-        } else {
-            ""
-        };
-        let status_sql = if new_status.is_some() { ", status = ?" } else { "" };
-        let sql = format!(
-            "UPDATE activations SET updated_at = ?, last_verify_at = ?{session_sql}{grant_sql}{status_sql} WHERE license_key = ?"
-        );
-        let mut binds = vec![JsValue::from_str(now_iso), JsValue::from_str(now_iso)];
-        if session_issued {
-            binds.push(JsValue::from_str(now_iso));
-        }
-        if grant_issued {
-            binds.push(JsValue::from_str(now_iso));
-        }
-        if let Some(status) = new_status {
-            binds.push(JsValue::from_str(status));
-        }
-        binds.push(JsValue::from_str(license_key));
-        db.prepare(&sql).bind(&binds)?.run().await?;
-        Ok(())
-    }
-
-    async fn upsert_device_registration(
-        db: &D1Database,
-        license_key: &str,
-        device_id: &str,
-        device_fingerprint: &str,
-        now_iso: &str,
-    ) -> anyhow::Result<()> {
-        let fingerprint_hash = sha256_hex(device_fingerprint);
-        if let Some(existing) = load_device_registration(db, license_key, device_id).await? {
-            let _ = (
-                &existing.license_key,
-                &existing.device_id,
-                &existing.device_fingerprint_hash,
-                &existing.registered_at,
-                &existing.last_seen_at,
-                &existing.registration_status,
-            );
-            db.prepare(
-                "UPDATE device_registrations SET device_fingerprint_hash = ?, last_seen_at = ?, registration_status = 'active' WHERE id = ?",
-            )
-            .bind(&[
-                JsValue::from_str(&fingerprint_hash),
-                JsValue::from_str(now_iso),
-                JsValue::from_f64(existing.id as f64),
-            ])?
-            .run()
-            .await?;
-            return Ok(());
-        }
-
-        db.prepare(
-            "INSERT INTO device_registrations (license_key, device_id, device_fingerprint_hash, registered_at, last_seen_at, registration_status) VALUES (?, ?, ?, ?, ?, 'active')",
-        )
-        .bind(&[
-            JsValue::from_str(license_key),
-            JsValue::from_str(device_id),
-            JsValue::from_str(&fingerprint_hash),
-            JsValue::from_str(now_iso),
-            JsValue::from_str(now_iso),
-        ])?
-        .run()
-        .await?;
-        Ok(())
-    }
-
-    fn build_license_lease_from_activation(row: &ActivationRow, now: DateTime<Utc>) -> LicenseLease {
-        let _ = (
-            &row.license_key,
-            &row.device_fingerprint,
-            row.plan_days,
-            &row.updated_at,
-            &row.last_verify_at,
-            &row.last_session_issued_at,
-            &row.last_offline_grant_issued_at,
-        );
-        let lease = license_service::issue_license_lease(
-            &row.license_key,
-            &row.device_id,
-            LicenseState::Active,
-            &row.expires_at,
-            &(now + chrono::Duration::hours(license_service::LEASE_HARD_EXPIRY_HOURS))
-                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            &(now + chrono::Duration::hours(license_service::LEASE_RENEWAL_HOURS))
-                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            &now_iso(now),
-        );
-        LicenseLease {
-            binding_version: row.binding_version,
-            ..lease
+    impl<'a> D1RuntimeRepo<'a> {
+        fn new(db: &'a D1Database) -> Self {
+            Self { db }
         }
     }
 
-    fn signed_success_response(
-        message: &str,
-        state: LicenseState,
-        activation: &ActivationRow,
-        signer: &LeaseTokenSigner,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<SignedLicenseApiResponse> {
-        let lease = build_license_lease_from_activation(activation, now);
-        let token = signer.sign_license_lease(&lease)?;
-        Ok(SignedLicenseApiResponse {
-            success: true,
-            message: message.to_string(),
-            license_state: state,
-            license_lease: Some(token),
-            license_expires_at: Some(activation.expires_at.clone()),
-            activated_at: Some(activation.activated_at.clone()),
-            device_id: Some(activation.device_id.clone()),
-            license_key: Some(activation.license_key.clone()),
-            lease_expires_at: Some(lease.lease_expires_at.clone()),
-            renew_after: Some(lease.renew_after.clone()),
-            issued_at: Some(lease.issued_at.clone()),
-            license_status: Some(state),
-            task_policy: Some(lease.task_policy.clone()),
-        })
+    fn enum_text<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
+        Ok(serde_json::to_string(value)?.trim_matches('"').to_string())
     }
 
-    fn signed_failure_response(
-        message: &str,
-        state: LicenseState,
-        activation: Option<&ActivationRow>,
-    ) -> SignedLicenseApiResponse {
-        SignedLicenseApiResponse {
-            success: false,
-            message: message.to_string(),
-            license_state: state,
-            license_lease: None,
-            license_expires_at: activation.map(|value| value.expires_at.clone()),
-            activated_at: activation.map(|value| value.activated_at.clone()),
-            device_id: activation.map(|value| value.device_id.clone()),
-            license_key: activation.map(|value| value.license_key.clone()),
-            lease_expires_at: None,
-            renew_after: None,
-            issued_at: None,
-            license_status: activation.map(|_| state),
-            task_policy: None,
-        }
-    }
-
-    async fn verify_license_for_runtime(
-        db: &D1Database,
-        license_key: &str,
-        device_id: &str,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<Result<LicenseLease, String>> {
-        let Some(key) = load_generated_key(db, license_key).await? else {
-            return Ok(Err("该卡密已被吊销".into()));
-        };
-        let _ = (&key.created_at, &key.note);
-        if key.status == "revoked" {
-            return Ok(Err("该卡密已被吊销".into()));
-        }
-        let Some(row) = load_activation(db, license_key).await? else {
-            return Ok(Err("该卡密尚未激活".into()));
-        };
-        if row.device_id != device_id {
-            return Ok(Err("设备不匹配：该卡密已绑定其他设备".into()));
-        }
-        if row.status == "revoked" {
-            return Ok(Err("该卡密已被吊销".into()));
-        }
-        let expires_at = DateTime::parse_from_rfc3339(&row.expires_at)?.with_timezone(&Utc);
-        if now >= expires_at {
-            let now_iso = now_iso(now);
-            update_activation_markers(db, license_key, &now_iso, false, false, Some("expired"))
-                .await?;
-            append_audit(db, license_key, device_id, "verify", "expired", &now_iso).await?;
-            return Ok(Err("授权已过期".into()));
-        }
-        Ok(Ok(build_license_lease_from_activation(&row, now)))
-    }
-
-    async fn handle_refresh_runtime(
-        db: &D1Database,
-        signer: &LeaseTokenSigner,
-        input: LeaseRefreshRequest,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<LeaseRefreshResponse> {
-        match verify_license_for_runtime(db, &input.license_key, &input.device_id, now).await? {
-            Ok(lease) => {
-                let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                update_activation_markers(db, &input.license_key, &now_iso, true, false, Some("active"))
-                    .await?;
-                append_audit(db, &input.license_key, &input.device_id, "lease_refresh", "ok", &now_iso)
-                    .await?;
-                Ok(LeaseRefreshResponse {
-                    success: true,
-                    message: "lease_refreshed".into(),
-                    new_token: signer.sign_license_lease(&lease)?,
-                })
-            }
-            Err(message) => Ok(LeaseRefreshResponse {
-                success: false,
-                message,
-                new_token: String::new(),
-            }),
-        }
-    }
-
-    async fn handle_activate_runtime(
-        db: &D1Database,
-        signer: &LeaseTokenSigner,
-        input: ActivationInput,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<SignedLicenseApiResponse> {
-        let license_key = normalize_key(&input.license_key);
-        let Some(key) = load_generated_key(db, &license_key).await? else {
-            return Ok(signed_failure_response(
-                "该卡密不存在或已被吊销",
-                LicenseState::Revoked,
-                None,
-            ));
-        };
-        let _ = (&key.created_at, &key.note);
-        if key.status == "revoked" {
-            return Ok(signed_failure_response(
-                "该卡密已被吊销，无法使用",
-                LicenseState::Revoked,
-                None,
-            ));
-        }
-        if key.plan_days <= 0 {
-            return Ok(signed_failure_response(
-                "卡密无效：有效期异常",
-                LicenseState::Invalid,
-                None,
-            ));
+    #[async_trait(?Send)]
+    impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
+        async fn load_generated_key(
+            &self,
+            license_key: &str,
+        ) -> anyhow::Result<Option<GeneratedKeyRecord>> {
+            let stmt = self
+                .db
+                .prepare(
+                    "SELECT license_key, CAST(plan_days AS INTEGER) AS plan_days, status, COALESCE(created_at, '') AS created_at, COALESCE(note, '') AS note FROM generated_keys WHERE license_key = ? LIMIT 1",
+                )
+                .bind(&[JsValue::from_str(license_key)])?;
+            let result = stmt.all().await?;
+            let mut rows: Vec<GeneratedKeyRecord> = result.results().unwrap_or_default();
+            Ok(rows.pop())
         }
 
-        let now_iso_str = now_iso(now);
-        let existing = load_activation(db, &license_key).await?;
-        let was_reactivation = existing.is_some();
-        let record = if let Some(existing) = existing {
-            if existing.device_id != input.device_id {
-                return Ok(signed_failure_response(
-                    "该卡密已在其他设备激活，不允许更换设备。如需帮助请联系作者。",
-                    LicenseState::DeviceMismatch,
-                    Some(&existing),
-                ));
-            }
-            db.prepare(
-                "UPDATE activations SET device_fingerprint = ?, updated_at = ?, binding_version = ?, status = 'active', last_verify_at = ? WHERE license_key = ?",
-            )
-            .bind(&[
-                JsValue::from_str(&input.device_fingerprint),
-                JsValue::from_str(&now_iso_str),
-                JsValue::from_f64(license_service::LICENSE_PROTOCOL_VERSION as f64),
-                JsValue::from_str(&now_iso_str),
-                JsValue::from_str(&license_key),
-            ])?
-            .run()
-            .await?;
-            load_activation(db, &license_key)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("激活更新后未找到记录"))?
-        } else {
-            let expires_at = now
-                + chrono::Duration::days(key.plan_days as i64);
-            db.prepare(
-                "INSERT INTO activations (license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at, last_session_issued_at, last_offline_grant_issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, '', '')",
-            )
-            .bind(&[
-                JsValue::from_str(&license_key),
-                JsValue::from_str(&input.device_id),
-                JsValue::from_str(&input.device_fingerprint),
-                JsValue::from_f64(key.plan_days as f64),
-                JsValue::from_str(&now_iso_str),
-                JsValue::from_str(&now_iso(expires_at)),
-                JsValue::from_str(&now_iso_str),
-                JsValue::from_f64(license_service::LICENSE_PROTOCOL_VERSION as f64),
-                JsValue::from_str(&now_iso_str),
-            ])?
-            .run()
-            .await?;
-            db.prepare("UPDATE generated_keys SET status = 'activated' WHERE license_key = ?")
-                .bind(&[JsValue::from_str(&license_key)])?
+        async fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()> {
+            self.db
+                .prepare(
+                    "INSERT INTO generated_keys (license_key, plan_days, status, created_at, note) VALUES (?, ?, ?, ?, ?) \
+                     ON CONFLICT(license_key) DO UPDATE SET plan_days = excluded.plan_days, status = excluded.status, created_at = excluded.created_at, note = excluded.note",
+                )
+                .bind(&[
+                    JsValue::from_str(&record.license_key),
+                    JsValue::from_f64(record.plan_days as f64),
+                    JsValue::from_str(&enum_text(&record.status)?),
+                    JsValue::from_str(&record.created_at),
+                    JsValue::from_str(&record.note),
+                ])?
                 .run()
                 .await?;
-            load_activation(db, &license_key)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("激活插入后未找到记录"))?
-        };
-
-        upsert_device_registration(
-            db,
-            &license_key,
-            &input.device_id,
-            &input.device_fingerprint,
-            &now_iso_str,
-        )
-        .await?;
-        let audit_reason = if input.client_version.is_empty() {
-            "client_activate".to_string()
-        } else {
-            format!("client_activate:{}", input.client_version)
-        };
-        append_audit(
-            db,
-            &license_key,
-            &input.device_id,
-            "activate",
-            &audit_reason,
-            &now_iso_str,
-        )
-        .await?;
-
-        Ok(signed_success_response(
-            if was_reactivation { "重新激活成功" } else { "激活成功" },
-            LicenseState::Active,
-            &record,
-            signer,
-            now,
-        )?)
-    }
-
-    async fn handle_verify_runtime(
-        db: &D1Database,
-        signer: &LeaseTokenSigner,
-        input: VerifyInput,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<SignedLicenseApiResponse> {
-        let license_key = normalize_key(&input.license_key);
-        let Some(key) = load_generated_key(db, &license_key).await? else {
-            return Ok(signed_failure_response(
-                "该卡密已被吊销",
-                LicenseState::Revoked,
-                None,
-            ));
-        };
-        let _ = (&key.created_at, &key.note);
-        if key.status == "revoked" {
-            return Ok(signed_failure_response(
-                "该卡密已被吊销",
-                LicenseState::Revoked,
-                None,
-            ));
+            Ok(())
         }
 
-        let Some(record) = load_activation(db, &license_key).await? else {
-            return Ok(signed_failure_response(
-                "该卡密尚未激活",
-                LicenseState::Invalid,
-                None,
-            ));
-        };
-        if record.device_id != input.device_id {
-            return Ok(signed_failure_response(
-                "设备不匹配：该卡密已绑定其他设备",
-                LicenseState::DeviceMismatch,
-                Some(&record),
-            ));
-        }
-        if record.status == "revoked" {
-            return Ok(signed_failure_response(
-                "该卡密已被吊销",
-                LicenseState::Revoked,
-                Some(&record),
-            ));
-        }
-
-        let now_iso_str = now_iso(now);
-        let expires_at = DateTime::parse_from_rfc3339(&record.expires_at)?.with_timezone(&Utc);
-        if now >= expires_at {
-            update_activation_markers(db, &license_key, &now_iso_str, false, false, Some("expired"))
-                .await?;
-            append_audit(db, &license_key, &input.device_id, "verify", "expired", &now_iso_str)
-                .await?;
-            let expired = load_activation(db, &license_key)
-                .await?
-                .unwrap_or(record);
-            return Ok(signed_failure_response(
-                "授权已过期",
-                LicenseState::Expired,
-                Some(&expired),
-            ));
-        }
-
-        update_activation_markers(db, &license_key, &now_iso_str, false, false, Some("active")).await?;
-        let audit_reason = if input.client_version.is_empty() {
-            "client_verify".to_string()
-        } else {
-            format!("client_verify:{}", input.client_version)
-        };
-        append_audit(
-            db,
-            &license_key,
-            &input.device_id,
-            "verify",
-            &audit_reason,
-            &now_iso_str,
-        )
-        .await?;
-        let active = load_activation(db, &license_key)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("校验后未找到激活记录"))?;
-        Ok(signed_success_response(
-            "授权有效",
-            LicenseState::Active,
-            &active,
-            signer,
-            now,
-        )?)
-    }
-
-    async fn handle_remote_task_authorize(
-        db: &D1Database,
-        input: TaskAuthorizeRequest,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<RuntimeGrant> {
-        match verify_license_for_runtime(db, &input.license_key, &input.device_id, now).await? {
-            Ok(lease) => {
-                let payload = lease_to_payload(&lease)?;
-                let mut grant = match authorize_task_local(
-                    &payload,
-                    &input.task_type,
-                    now.timestamp(),
-                    next_grant_id,
-                ) {
-                    Ok(grant) => grant,
-                    Err(err) => return Ok(denied_grant(&input.task_type, err.to_string())),
-                };
-                grant.risk_level = task_risk_level(&input.task_type);
-                let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                update_activation_markers(db, &input.license_key, &now_iso, false, true, Some("active"))
-                    .await?;
-                append_audit(
-                    db,
-                    &input.license_key,
-                    &input.device_id,
-                    "task_authorize",
-                    &input.task_type,
-                    &now_iso,
+        async fn load_license(&self, license_key: &str) -> anyhow::Result<Option<LicenseRecord>> {
+            let stmt = self
+                .db
+                .prepare(
+                    "SELECT license_key, device_id, COALESCE(device_fingerprint, '') AS device_fingerprint, CAST(plan_days AS INTEGER) AS plan_days, activated_at, expires_at AS license_expires_at, updated_at, binding_version, status, COALESCE(last_verify_at, '') AS last_verify_at FROM activations WHERE license_key = ? LIMIT 1",
                 )
-                .await?;
-                Ok(grant)
-            }
-            Err(message) => Ok(denied_grant(&input.task_type, message)),
+                .bind(&[JsValue::from_str(license_key)])?;
+            let result = stmt.all().await?;
+            let mut rows: Vec<LicenseRecord> = result.results().unwrap_or_default();
+            Ok(rows.pop())
         }
+
+        async fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()> {
+            self.db
+                .prepare(
+                    "INSERT INTO activations (license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at, last_session_issued_at, last_offline_grant_issued_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT last_session_issued_at FROM activations WHERE license_key = ?), ''), COALESCE((SELECT last_offline_grant_issued_at FROM activations WHERE license_key = ?), '')) \
+                     ON CONFLICT(license_key) DO UPDATE SET device_id = excluded.device_id, device_fingerprint = excluded.device_fingerprint, plan_days = excluded.plan_days, activated_at = excluded.activated_at, expires_at = excluded.expires_at, updated_at = excluded.updated_at, binding_version = excluded.binding_version, status = excluded.status, last_verify_at = excluded.last_verify_at",
+                )
+                .bind(&[
+                    JsValue::from_str(&record.license_key),
+                    JsValue::from_str(&record.device_id),
+                    JsValue::from_str(&record.device_fingerprint),
+                    JsValue::from_f64(record.plan_days as f64),
+                    JsValue::from_str(&record.activated_at),
+                    JsValue::from_str(&record.license_expires_at),
+                    JsValue::from_str(&record.updated_at),
+                    JsValue::from_f64(record.binding_version as f64),
+                    JsValue::from_str(&enum_text(&record.status)?),
+                    JsValue::from_str(&record.last_verify_at),
+                    JsValue::from_str(&record.license_key),
+                    JsValue::from_str(&record.license_key),
+                ])?
+                .run()
+                .await?;
+            Ok(())
+        }
+
+        async fn load_device_registration(
+            &self,
+            license_key: &str,
+            device_id: &str,
+        ) -> anyhow::Result<Option<DeviceRegistration>> {
+            let stmt = self
+                .db
+                .prepare(
+                    "SELECT license_key, device_id, COALESCE(device_fingerprint_hash, '') AS device_fingerprint_hash, COALESCE(registered_at, '') AS registered_at, COALESCE(last_seen_at, '') AS last_seen_at, COALESCE(registration_status, 'active') AS registration_status FROM device_registrations WHERE license_key = ? AND device_id = ? LIMIT 1",
+                )
+                .bind(&[JsValue::from_str(license_key), JsValue::from_str(device_id)])?;
+            let result = stmt.all().await?;
+            let mut rows: Vec<DeviceRegistration> = result.results().unwrap_or_default();
+            Ok(rows.pop())
+        }
+
+        async fn save_device_registration(
+            &self,
+            record: &DeviceRegistration,
+        ) -> anyhow::Result<()> {
+            if self
+                .load_device_registration(&record.license_key, &record.device_id)
+                .await?
+                .is_some()
+            {
+                self.db
+                    .prepare(
+                        "UPDATE device_registrations SET device_fingerprint_hash = ?, registered_at = ?, last_seen_at = ?, registration_status = ? WHERE license_key = ? AND device_id = ?",
+                    )
+                    .bind(&[
+                        JsValue::from_str(&record.device_fingerprint_hash),
+                        JsValue::from_str(&record.registered_at),
+                        JsValue::from_str(&record.last_seen_at),
+                        JsValue::from_str(&record.registration_status),
+                        JsValue::from_str(&record.license_key),
+                        JsValue::from_str(&record.device_id),
+                    ])?
+                    .run()
+                    .await?;
+            } else {
+                self.db
+                    .prepare(
+                        "INSERT INTO device_registrations (license_key, device_id, device_fingerprint_hash, registered_at, last_seen_at, registration_status) VALUES (?, ?, ?, ?, ?, ?)",
+                    )
+                    .bind(&[
+                        JsValue::from_str(&record.license_key),
+                        JsValue::from_str(&record.device_id),
+                        JsValue::from_str(&record.device_fingerprint_hash),
+                        JsValue::from_str(&record.registered_at),
+                        JsValue::from_str(&record.last_seen_at),
+                        JsValue::from_str(&record.registration_status),
+                    ])?
+                    .run()
+                    .await?;
+            }
+            Ok(())
+        }
+
+        async fn append_audit_event(&self, event: &AuditEvent) -> anyhow::Result<()> {
+            self.db
+                .prepare(
+                    "INSERT INTO license_audit_logs (license_key, device_id, action, action_reason, created_at, operator, meta_json) VALUES (?, ?, ?, ?, ?, 'worker', '{}')",
+                )
+                .bind(&[
+                    JsValue::from_str(&event.license_key),
+                    JsValue::from_str(&event.device_id),
+                    JsValue::from_str(&event.action),
+                    JsValue::from_str(&event.reason),
+                    JsValue::from_str(&event.created_at),
+                ])?
+                .run()
+                .await?;
+            Ok(())
+        }
+
+        async fn update_runtime_markers(
+            &self,
+            license_key: &str,
+            now_iso: &str,
+            session_issued: bool,
+            grant_issued: bool,
+            new_status: Option<LicenseState>,
+        ) -> anyhow::Result<()> {
+            let session_sql = if session_issued {
+                ", last_session_issued_at = ?"
+            } else {
+                ""
+            };
+            let grant_sql = if grant_issued {
+                ", last_offline_grant_issued_at = ?"
+            } else {
+                ""
+            };
+            let status_sql = if new_status.is_some() {
+                ", status = ?"
+            } else {
+                ""
+            };
+            let sql = format!(
+                "UPDATE activations SET updated_at = ?, last_verify_at = ?{session_sql}{grant_sql}{status_sql} WHERE license_key = ?"
+            );
+            let mut binds = vec![JsValue::from_str(now_iso), JsValue::from_str(now_iso)];
+            if session_issued {
+                binds.push(JsValue::from_str(now_iso));
+            }
+            if grant_issued {
+                binds.push(JsValue::from_str(now_iso));
+            }
+            if let Some(status) = new_status {
+                binds.push(JsValue::from_str(&enum_text(&status)?));
+            }
+            binds.push(JsValue::from_str(license_key));
+            self.db.prepare(&sql).bind(&binds)?.run().await?;
+            Ok(())
+        }
+    }
+
+    fn worker_error(err: impl ToString) -> worker::Error {
+        worker::Error::RustError(err.to_string())
+    }
+
+    fn response_from_json_string(payload: String) -> Result<Response> {
+        let value: Value = serde_json::from_str(&payload).map_err(worker_error)?;
+        Response::from_json(&value)
     }
 
     async fn route_fetch(req: Request, env: Env) -> Result<Response> {
@@ -1388,63 +1103,37 @@ mod cloudflare_entry {
             return Response::error("Method Not Allowed", 405);
         }
 
+        let route = parse_route(&path);
+        if route == WorkerRoute::NotFound {
+            return Response::error("not_found", 404);
+        }
+
         let body = req.text().await.unwrap_or_default();
-        match parse_route(&path) {
-            WorkerRoute::Activate => {
-                let signer = match load_signer(&env) {
-                    Ok(signer) => signer,
-                    Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
+        match route {
+            WorkerRoute::Activate
+            | WorkerRoute::Verify
+            | WorkerRoute::LeaseRefresh
+            | WorkerRoute::TaskAuthorize => {
+                let signer = if matches!(route, WorkerRoute::TaskAuthorize) {
+                    None
+                } else {
+                    match load_signer(&env) {
+                        Ok(signer) => Some(signer),
+                        Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
+                    }
                 };
                 let db = env.d1("DB")?;
-                let input: ActivationInput = serde_json::from_str(&body)
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                let resp = handle_activate_runtime(&db, &signer, input, Utc::now())
-                    .await
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                Response::from_json(&resp)
+                let repo = D1RuntimeRepo::new(&db);
+                let payload =
+                    handle_async_runtime_json(&repo, &path, &body, signer.as_ref(), Utc::now())
+                        .await
+                        .map_err(worker_error)?;
+                response_from_json_string(payload)
             }
-            WorkerRoute::Verify => {
-                let signer = match load_signer(&env) {
-                    Ok(signer) => signer,
-                    Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
-                };
-                let db = env.d1("DB")?;
-                let input: VerifyInput = serde_json::from_str(&body)
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                let resp = handle_verify_runtime(&db, &signer, input, Utc::now())
-                    .await
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                Response::from_json(&resp)
-            }
-            WorkerRoute::LeaseRefresh => {
-                let signer = match load_signer(&env) {
-                    Ok(signer) => signer,
-                    Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
-                };
-                let db = env.d1("DB")?;
-                let input: LeaseRefreshRequest = serde_json::from_str(&body)
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                let resp = handle_refresh_runtime(&db, &signer, input, Utc::now())
-                    .await
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                Response::from_json(&resp)
-            }
-            WorkerRoute::TaskAuthorize => {
-                let db = env.d1("DB")?;
-                let input: TaskAuthorizeRequest = serde_json::from_str(&body)
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                let resp = handle_remote_task_authorize(&db, input, Utc::now())
-                    .await
-                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
-                Response::from_json(&resp)
-            }
-            WorkerRoute::LeaseRevoke => {
-                // 管理员吊销仍走后台管理接口；公开 API 先保留占位响应。
-                Response::from_json(&serde_json::json!({
-                    "success": false,
-                    "message": "lease_revoke_pending",
-                }))
-            }
+            WorkerRoute::LeaseRevoke => Response::from_json(&serde_json::json!({
+                "success": false,
+                "message": "lease_revoke_pending",
+            })),
             WorkerRoute::NotFound => Response::error("not_found", 404),
         }
     }
@@ -1700,7 +1389,12 @@ mod tests {
         assert!(!payload.new_token.is_empty());
         let verifier = LeaseVerifier::from_public_key_b64(&signer.public_key_b64()).unwrap();
         let verified = verifier
-            .verify(&payload.new_token, Some("device-1"), Utc::now().timestamp(), false)
+            .verify(
+                &payload.new_token,
+                Some("device-1"),
+                Utc::now().timestamp(),
+                false,
+            )
             .unwrap();
         assert_eq!(verified.license_key, "TLS-TEST");
     }
@@ -1878,6 +1572,39 @@ mod tests {
         assert!(!verified.success);
         assert_eq!(verified.license_state, LicenseState::Expired);
         assert_eq!(verified.message, "授权已过期");
+    }
+
+    #[tokio::test]
+    async fn async_runtime_json_router_uses_shared_repo_flow() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let activated = handle_async_runtime_json(
+            &repo,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+        let activated_payload: SignedLicenseApiResponse = serde_json::from_str(&activated).unwrap();
+        assert!(activated_payload.success);
+
+        let grant = handle_async_runtime_json(
+            &repo,
+            "/api/task/authorize",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","task_type":"review_find","client_version":"5.2.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+        let grant_payload: RuntimeGrant = serde_json::from_str(&grant).unwrap();
+        assert!(grant_payload.granted);
     }
 
     #[test]
