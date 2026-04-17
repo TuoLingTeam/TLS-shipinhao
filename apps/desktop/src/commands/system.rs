@@ -10,6 +10,15 @@ use crate::state::{self, AppState};
 const STORE_LOGIN_URL: &str = "https://store.weixin.qq.com/";
 const COOKIE_LOGIN_WINDOW_LABEL: &str = "cookie-login";
 
+const DEFAULT_UI_SCALE: f64 = 1.0;
+const MIN_UI_SCALE: f64 = 0.82;
+const MAX_UI_SCALE: f64 = 1.0;
+
+fn clamp_ui_scale(scale: f64) -> f64 {
+    scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
+}
+
+
 #[tauri::command]
 pub async fn get_app_info() -> Result<serde_json::Value, AppError> {
     let version = env!("CARGO_PKG_VERSION");
@@ -21,6 +30,16 @@ pub async fn get_app_info() -> Result<serde_json::Value, AppError> {
         "window_title": get_window_title(version),
         "runtime": "tauri-2.0",
     }))
+}
+
+#[tauri::command]
+pub async fn get_ui_scale() -> Result<f64, AppError> {
+    Ok(DEFAULT_UI_SCALE)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_ui_scale(scale: f64) -> Result<f64, AppError> {
+    Ok(clamp_ui_scale(scale))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -258,5 +277,13 @@ mod tests {
         assert_eq!(payload["name_en"], APP_NAME_EN);
         assert_eq!(payload["author_wechat"], AUTHOR_WECHAT);
         assert!(payload["window_title"].as_str().unwrap_or("").contains(APP_NAME));
+    }
+
+    #[tokio::test]
+    async fn set_ui_scale_clamps_to_supported_range() {
+        assert_eq!(get_ui_scale().await.expect("default scale"), 1.0);
+        assert_eq!(set_ui_scale(0.6).await.expect("low scale"), 0.82);
+        assert_eq!(set_ui_scale(1.2).await.expect("high scale"), 1.0);
+        assert_eq!(set_ui_scale(0.9).await.expect("normal scale"), 0.9);
     }
 }

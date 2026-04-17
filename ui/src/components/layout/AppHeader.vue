@@ -3,6 +3,7 @@ import { useRoute } from "vue-router";
 import { computed } from "vue";
 import { useAppStore } from "../../stores/app";
 import { APP_NAME } from "../../constants/brand";
+import { useUiScale } from "../../composables/useUiScale";
 
 const route = useRoute();
 const appStore = useAppStore();
@@ -18,6 +19,7 @@ const titleMap: Record<string, string> = {
 
 const pageTitle = computed(() => titleMap[route.name as string] ?? APP_NAME);
 const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
+const { scalePercent, increment, decrement, reset } = useUiScale();
 </script>
 
 <template>
@@ -33,9 +35,16 @@ const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激
         </div>
       </div>
 
-      <div class="status-chip shrink-0">
-        <span class="status-dot" :class="appStore.isLicensed ? 'success' : ''"></span>
-        <div class="text-sm font-semibold text-slate-700">{{ licenseLabel }}</div>
+      <div class="flex items-center gap-3">
+        <div class="hidden items-center gap-1 rounded-full border border-brand-tint/80 bg-white/80 px-2 py-1 shadow-sm lg:flex">
+          <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-brand transition hover:bg-brand-soft" title="缩小界面（Ctrl/Cmd -）" @click="decrement">－</button>
+          <button type="button" class="rounded-full px-2 py-1 text-[11px] font-semibold tracking-[0.12em] text-brand-deep transition hover:bg-brand-soft" title="恢复默认缩放（Ctrl/Cmd 0）" @click="reset">{{ scalePercent }}</button>
+          <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-brand transition hover:bg-brand-soft" title="放大界面（Ctrl/Cmd +）" @click="increment">＋</button>
+        </div>
+        <div class="status-chip shrink-0">
+          <span class="status-dot" :class="appStore.isLicensed ? 'success' : ''"></span>
+          <div class="text-sm font-semibold text-slate-700">{{ licenseLabel }}</div>
+        </div>
       </div>
     </div>
   </header>

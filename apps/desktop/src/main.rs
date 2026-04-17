@@ -25,6 +25,8 @@ fn main() {
             commands::license::verify_license,
             commands::license::get_license_status,
             commands::system::get_app_info,
+            commands::system::get_ui_scale,
+            commands::system::set_ui_scale,
             commands::system::set_cookie,
             commands::system::get_cookie_status,
             commands::system::pick_cookie_save_dir,
