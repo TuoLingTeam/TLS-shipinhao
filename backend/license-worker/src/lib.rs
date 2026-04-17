@@ -340,6 +340,19 @@ pub fn revoke_response_status(payload: &SignedLicenseApiResponse) -> u16 {
     }
 }
 
+pub fn admin_auth_error_contract(
+    secret_configured: bool,
+    provided_secret_matches: bool,
+) -> Option<(u16, &'static str)> {
+    if !secret_configured {
+        Some((503, "secret_missing"))
+    } else if !provided_secret_matches {
+        Some((401, "unauthorized"))
+    } else {
+        None
+    }
+}
+
 async fn runtime_upsert_device_registration<R: AsyncRuntimeRepository + ?Sized>(
     repo: &R,
     license_key: &str,
@@ -1550,6 +1563,19 @@ mod tests {
         assert_eq!(WORKER_RUNTIME_ERROR_MESSAGE, "worker_runtime_error");
     }
 
+    #[test]
+    fn admin_auth_contract_covers_secret_missing_and_unauthorized() {
+        assert_eq!(
+            admin_auth_error_contract(false, false),
+            Some((503, "secret_missing"))
+        );
+        assert_eq!(
+            admin_auth_error_contract(true, false),
+            Some((401, "unauthorized"))
+        );
+        assert_eq!(admin_auth_error_contract(true, true), None);
+    }
+
     #[tokio::test]
     async fn async_runtime_service_activate_verify_refresh_and_authorize_share_repo_path() {
         let repo = Repo::seeded();
@@ -1888,6 +1914,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn admin_revoke_json_invalid_json_maps_to_400_contract() {
+        let repo = Repo::seeded();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let err = handle_admin_revoke_json(&repo, "{", now).await.unwrap_err();
+        assert_eq!(revoke_error_contract(&err.to_string()), (400, "invalid_json"));
+    }
+
+    #[tokio::test]
+    async fn admin_revoke_json_not_found_maps_to_404_contract() {
+        let repo = Repo::seeded();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let payload = handle_admin_revoke_json(&repo, r#"{"key":"TLS-MISSING"}"#, now)
+            .await
+            .unwrap();
+        let response: SignedLicenseApiResponse = serde_json::from_str(&payload).unwrap();
+        assert!(!response.success);
+        assert_eq!(response.message, "not_found");
+        assert_eq!(revoke_response_status(&response), 404);
+    }
+
+    #[tokio::test]
     async fn admin_revoke_revokes_all_registrations_under_same_license_key() {
         let repo = Repo::seeded();
         let signer = test_signer();
@@ -1933,6 +1986,29 @@ mod tests {
                 .map(|value| value.registration_status.as_str()),
             Some("revoked")
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_revoke_not_found_maps_to_404_contract() {
+        let repo = Repo::seeded();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let revoked = handle_async_runtime_json(
+            &repo,
+            "/api/lease/revoke",
+            r#"{"license_key":"TLS-MISSING","device_id":"device-1","reason":"admin"}"#,
+            None,
+            now,
+        )
+        .await
+        .unwrap();
+        let payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
+        assert!(!payload.success);
+        assert_eq!(payload.message, "not_found");
+        assert_eq!(payload.license_state, LicenseState::NotFound);
+        assert_eq!(revoke_response_status(&payload), 404);
     }
 
     #[tokio::test]

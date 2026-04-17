@@ -55,14 +55,16 @@ pub async fn handle_admin_request(mut req: Request, env: &Env) -> Result<Respons
 
 pub(crate) fn check_admin(headers: &worker::Headers, env: &Env) -> Result<Option<Response>> {
     let expected = match env.secret("ADMIN_SECRET") {
-        Ok(s) => s.to_string(),
-        Err(_) => {
-            return Ok(Some(json_err(503, "secret_missing")?));
-        }
+        Ok(s) => Some(s.to_string()),
+        Err(_) => None,
     };
     let got = headers.get("X-Admin-Secret")?.unwrap_or_default();
-    if got != expected {
-        return Ok(Some(json_err(401, "unauthorized")?));
+    let auth_error = crate::admin_auth_error_contract(
+        expected.is_some(),
+        expected.as_deref().map(|value| value == got).unwrap_or(false),
+    );
+    if let Some((status, message)) = auth_error {
+        return Ok(Some(json_err(status, message)?));
     }
     Ok(None)
 }
