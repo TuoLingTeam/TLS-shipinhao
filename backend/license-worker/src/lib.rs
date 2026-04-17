@@ -214,6 +214,13 @@ pub trait AsyncRuntimeRepository {
         grant_issued: bool,
         new_status: Option<LicenseState>,
     ) -> anyhow::Result<()>;
+    async fn revoke_license(
+        &self,
+        license_key: &str,
+        device_id: &str,
+        reason: &str,
+        revoked_at: &str,
+    ) -> anyhow::Result<bool>;
 }
 
 fn normalize_key(value: &str) -> String {
@@ -601,6 +608,59 @@ pub async fn runtime_task_authorize<R: AsyncRuntimeRepository + ?Sized>(
     Ok(grant)
 }
 
+pub async fn runtime_revoke<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    input: LeaseRevokeRequest,
+    now: DateTime<Utc>,
+) -> anyhow::Result<SignedLicenseApiResponse> {
+    let normalized_key = normalize_key(&input.license_key);
+    let now_iso_str = now_iso(now);
+    let reason = if input.reason.trim().is_empty() {
+        "admin_revoke".to_string()
+    } else {
+        input.reason.trim().to_string()
+    };
+
+    let existed = repo
+        .revoke_license(&normalized_key, &input.device_id, &reason, &now_iso_str)
+        .await?;
+    if !existed {
+        return Ok(signed_failure_response_for_record(
+            "not_found",
+            LicenseState::NotFound,
+            None,
+        ));
+    }
+
+    repo.append_audit_event(&AuditEvent {
+        action: "lease_revoke".into(),
+        license_key: normalized_key.clone(),
+        device_id: input.device_id,
+        reason,
+        created_at: now_iso_str,
+    })
+    .await?;
+
+    let record = repo.load_license(&normalized_key).await?;
+    Ok(SignedLicenseApiResponse {
+        success: true,
+        message: "license_revoked".into(),
+        license_state: LicenseState::Revoked,
+        license_lease: None,
+        license_expires_at: record
+            .as_ref()
+            .map(|value| value.license_expires_at.clone()),
+        activated_at: record.as_ref().map(|value| value.activated_at.clone()),
+        device_id: record.as_ref().map(|value| value.device_id.clone()),
+        license_key: Some(normalized_key),
+        lease_expires_at: None,
+        renew_after: None,
+        issued_at: None,
+        license_status: Some(LicenseState::Revoked),
+        task_policy: None,
+    })
+}
+
 pub fn parse_route(path: &str) -> WorkerRoute {
     match path {
         "/api/activate" => WorkerRoute::Activate,
@@ -655,11 +715,12 @@ pub async fn handle_async_runtime_json<R: AsyncRuntimeRepository + ?Sized>(
                 &runtime_refresh_lease(repo, signer, input, now).await?,
             )?)
         }
-        WorkerRoute::LeaseRevoke => Ok(serde_json::json!({
-            "success": false,
-            "message": "lease_revoke_pending",
-        })
-        .to_string()),
+        WorkerRoute::LeaseRevoke => {
+            let input: LeaseRevokeRequest = serde_json::from_value(payload)?;
+            Ok(serde_json::to_string(
+                &runtime_revoke(repo, input, now).await?,
+            )?)
+        }
         WorkerRoute::TaskAuthorize => {
             let input: TaskAuthorizeRequest = serde_json::from_value(payload)?;
             Ok(serde_json::to_string(
@@ -917,6 +978,71 @@ mod cloudflare_entry {
             self.db.prepare(&sql).bind(&binds)?.run().await?;
             Ok(())
         }
+
+        async fn revoke_license(
+            &self,
+            license_key: &str,
+            device_id: &str,
+            reason: &str,
+            revoked_at: &str,
+        ) -> anyhow::Result<bool> {
+            let Some(_key_record) = self.load_generated_key(license_key).await? else {
+                return Ok(false);
+            };
+
+            let advanced_update = self
+                .db
+                .prepare(
+                    "UPDATE generated_keys SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE license_key = ?",
+                )
+                .bind(&[
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(reason),
+                    JsValue::from_str(license_key),
+                ])?
+                .run()
+                .await;
+            if advanced_update.is_err() {
+                self.db
+                    .prepare("UPDATE generated_keys SET status = 'revoked' WHERE license_key = ?")
+                    .bind(&[JsValue::from_str(license_key)])?
+                    .run()
+                    .await?;
+            }
+
+            self.db
+                .prepare(
+                    "UPDATE activations SET status = 'revoked', updated_at = ?, last_verify_at = ? WHERE license_key = ?",
+                )
+                .bind(&[
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(license_key),
+                ])?
+                .run()
+                .await?;
+
+            self.db
+                .prepare(
+                    "UPDATE device_sessions SET revoked_at = ? WHERE license_key = ? AND (revoked_at IS NULL OR revoked_at = '')",
+                )
+                .bind(&[JsValue::from_str(revoked_at), JsValue::from_str(license_key)])?
+                .run()
+                .await?;
+
+            self.db
+                .prepare(
+                    "UPDATE device_registrations SET registration_status = 'revoked', last_seen_at = ? WHERE license_key = ? AND device_id = ?",
+                )
+                .bind(&[
+                    JsValue::from_str(revoked_at),
+                    JsValue::from_str(license_key),
+                    JsValue::from_str(device_id),
+                ])?
+                .run()
+                .await?;
+            Ok(true)
+        }
     }
 
     fn worker_error(err: impl ToString) -> worker::Error {
@@ -949,12 +1075,19 @@ mod cloudflare_entry {
             return Response::error("not_found", 404);
         }
 
+        if route == WorkerRoute::LeaseRevoke {
+            if let Some(resp) = crate::admin_d1::check_admin(req.headers(), &env)? {
+                return Ok(resp);
+            }
+        }
+
         let body = req.text().await.unwrap_or_default();
         match route {
             WorkerRoute::Activate
             | WorkerRoute::Verify
             | WorkerRoute::LeaseRefresh
-            | WorkerRoute::TaskAuthorize => {
+            | WorkerRoute::TaskAuthorize
+            | WorkerRoute::LeaseRevoke => {
                 let signer = if matches!(route, WorkerRoute::TaskAuthorize) {
                     None
                 } else {
@@ -971,10 +1104,6 @@ mod cloudflare_entry {
                         .map_err(worker_error)?;
                 response_from_json_string(payload)
             }
-            WorkerRoute::LeaseRevoke => Response::from_json(&serde_json::json!({
-                "success": false,
-                "message": "lease_revoke_pending",
-            })),
             WorkerRoute::NotFound => Response::error("not_found", 404),
         }
     }
@@ -1109,6 +1238,40 @@ mod tests {
                 }
             }
             Ok(())
+        }
+
+        async fn revoke_license(
+            &self,
+            license_key: &str,
+            device_id: &str,
+            _reason: &str,
+            revoked_at: &str,
+        ) -> anyhow::Result<bool> {
+            let mut generated = self.generated_keys.lock().unwrap();
+            let Some(key_record) = generated.get_mut(license_key) else {
+                return Ok(false);
+            };
+            key_record.status = GeneratedKeyStatus::Revoked;
+            drop(generated);
+
+            let mut licenses = self.licenses.lock().unwrap();
+            if let Some(record) = licenses.get_mut(license_key) {
+                record.status = LicenseState::Revoked;
+                record.updated_at = revoked_at.to_string();
+                record.last_verify_at = revoked_at.to_string();
+            }
+            drop(licenses);
+
+            if let Some(registration) = self
+                .registrations
+                .lock()
+                .unwrap()
+                .get_mut(&(license_key.to_string(), device_id.to_string()))
+            {
+                registration.registration_status = "revoked".into();
+                registration.last_seen_at = revoked_at.to_string();
+            }
+            Ok(true)
         }
     }
 
@@ -1351,8 +1514,85 @@ mod tests {
         )
         .await
         .unwrap();
-        let revoke_payload: Value = serde_json::from_str(&revoke).unwrap();
-        assert_eq!(revoke_payload["message"], "lease_revoke_pending");
+        let revoke_payload: SignedLicenseApiResponse = serde_json::from_str(&revoke).unwrap();
+        assert!(revoke_payload.success);
+        assert_eq!(revoke_payload.message, "license_revoked");
+        assert_eq!(revoke_payload.license_state, LicenseState::Revoked);
+    }
+
+    #[tokio::test]
+    async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let _ = handle_async_runtime_json(
+            &repo,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+
+        let revoked = handle_async_runtime_json(
+            &repo,
+            "/api/lease/revoke",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","reason":"admin"}"#,
+            None,
+            now,
+        )
+        .await
+        .unwrap();
+        let revoked_payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
+        assert!(revoked_payload.success);
+        assert_eq!(revoked_payload.license_state, LicenseState::Revoked);
+        assert_eq!(revoked_payload.message, "license_revoked");
+
+        let verified = handle_async_runtime_json(
+            &repo,
+            "/api/verify",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","client_version":"5.1.0"}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+        let verified_payload: SignedLicenseApiResponse = serde_json::from_str(&verified).unwrap();
+        assert!(!verified_payload.success);
+        assert_eq!(verified_payload.license_state, LicenseState::Revoked);
+
+        let refreshed = handle_async_runtime_json(
+            &repo,
+            "/api/lease/refresh",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","current_issued_at":1713312000}"#,
+            Some(&signer),
+            now,
+        )
+        .await
+        .unwrap();
+        let refreshed_payload: LeaseRefreshResponse = serde_json::from_str(&refreshed).unwrap();
+        assert!(!refreshed_payload.success);
+        assert_eq!(refreshed_payload.message, "该卡密已被吊销");
+
+        let grant = handle_async_runtime_json(
+            &repo,
+            "/api/task/authorize",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","task_type":"review_find","client_version":"5.2.0"}"#,
+            None,
+            now,
+        )
+        .await
+        .unwrap();
+        let grant_payload: RuntimeGrant = serde_json::from_str(&grant).unwrap();
+        assert!(!grant_payload.granted);
+        assert_eq!(
+            grant_payload.degraded_reason.as_deref(),
+            Some("该卡密已被吊销")
+        );
     }
 
     #[test]

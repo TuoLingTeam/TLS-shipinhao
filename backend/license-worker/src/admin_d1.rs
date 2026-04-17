@@ -58,7 +58,7 @@ pub async fn handle_admin_request(mut req: Request, env: &Env) -> Result<Respons
     }
 }
 
-fn check_admin(headers: &worker::Headers, env: &Env) -> Result<Option<Response>> {
+pub(crate) fn check_admin(headers: &worker::Headers, env: &Env) -> Result<Option<Response>> {
     let expected = match env.secret("ADMIN_SECRET") {
         Ok(s) => s.to_string(),
         Err(_) => {
