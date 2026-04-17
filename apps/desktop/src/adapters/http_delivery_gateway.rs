@@ -43,9 +43,10 @@ impl HttpDeliveryGateway {
             HeaderValue::from_static("https://store.weixin.qq.com"),
         );
         headers.insert(REFERER, HeaderValue::from_static(ORDER_LIST_REFERER));
-        headers.insert(USER_AGENT, HeaderValue::from_static(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
-        ));
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static(security_core::http_headers::get_user_agent()),
+        );
         if let Ok(v) = HeaderValue::from_str(&self.cookie_header) {
             headers.insert(COOKIE, v);
         }
@@ -58,7 +59,7 @@ impl HttpDeliveryGateway {
         );
         headers.insert(
             HeaderName::from_static("sec-ch-ua-platform"),
-            HeaderValue::from_static("\"macOS\""),
+            HeaderValue::from_static(security_core::http_headers::get_sec_ch_ua_platform()),
         );
         headers
     }

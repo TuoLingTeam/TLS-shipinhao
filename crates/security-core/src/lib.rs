@@ -9,6 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod http_headers;
+
 static BACKEND_NAME: &[u8] = b"rust-security-core\0";
 
 #[derive(Serialize)]
