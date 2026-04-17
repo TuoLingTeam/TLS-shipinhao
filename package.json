@@ -5,6 +5,8 @@
     "build": "pnpm --filter tls-shipinhao-ui build",
     "lint": "pnpm --filter tls-shipinhao-ui lint",
     "tauri:dev": "cd apps/desktop && cargo tauri dev",
-    "tauri:build": "cd apps/desktop && cargo tauri build -b app"
+    "tauri:build": "cd apps/desktop && cargo tauri build -b app",
+    "worker:deploy": "cd backend && npx wrangler deploy",
+    "worker:deploy:preview": "cd backend && npx wrangler versions upload"
   }
 }
