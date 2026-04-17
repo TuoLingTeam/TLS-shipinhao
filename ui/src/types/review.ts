@@ -6,6 +6,12 @@ export type MatchSource =
   | "receiver_and_amount"
   | "manual_fallback";
 
+export type MatchStrategy =
+  | "exact_match"
+  | "high_confidence"
+  | "probable_match"
+  | "fallback";
+
 export interface OrderMatchResult {
   evaluation_id: string;
   order_id: string;
@@ -17,6 +23,7 @@ export interface OrderMatchResult {
   product_name: string;
   matched: boolean;
   source: MatchSource;
+  strategy: MatchStrategy;
   confidence_score: number;
   match_reasons: string[];
   candidate_count: number;

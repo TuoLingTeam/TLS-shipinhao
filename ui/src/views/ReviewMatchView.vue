@@ -7,6 +7,7 @@ import { useOrderStore } from "../stores/order";
 import { useAppStore } from "../stores/app";
 import EmptyState from "../components/common/EmptyState.vue";
 import LoadingState from "../components/common/LoadingState.vue";
+import ReviewMatchStrategyBadge from "../components/review/ReviewMatchStrategyBadge.vue";
 
 const router = useRouter();
 const store = useReviewStore();
@@ -124,14 +125,20 @@ function displayId(record: { evaluation_id: string; order_id: string }) {
   return isQualityRefundMode.value ? record.order_id || record.evaluation_id : record.evaluation_id;
 }
 
-function matchedHint(record: { confidence_score: number }) {
+function matchedHint(record: { confidence_score: number; strategy: string }) {
   if (isQualityRefundMode.value) {
-    return "官方已返回订单号 · 点击本行可自动带入发货页。";
+    return "官方已返回订单号 · 点击上方策略徽章可查看命中说明，点击本行可自动带入发货页。";
   }
-  if (record.confidence_score === 100) {
-    return "评分 100 · 已加入自动发货候选，点击本行可立即覆盖发货单号。";
+  if (record.strategy === "exact_match") {
+    return "评分 100 · 已加入自动发货候选，点击上方策略徽章可查看说明。";
   }
-  return `评分 ${record.confidence_score} · 点击本行可手动带入发货页。`;
+  if (record.strategy === "high_confidence") {
+    return `评分 ${record.confidence_score} · 达到高置信阈值，建议复核后带入发货页。`;
+  }
+  if (record.strategy === "probable_match") {
+    return `评分 ${record.confidence_score} · 可能匹配，建议人工核对后再带入。`;
+  }
+  return `评分 ${record.confidence_score} · 当前结果仅供参考。`;
 }
 </script>
 
@@ -295,6 +302,7 @@ function matchedHint(record: { confidence_score: number }) {
                 >
                   {{ r.matched ? "已匹配" : "未匹配" }}
                 </span>
+                <ReviewMatchStrategyBadge :strategy="r.strategy" />
                 <div
                   class="max-w-[180px] text-center text-[11px] leading-5"
                   :class="r.matched ? 'text-slate-500' : 'text-amber-700'"

@@ -14,9 +14,9 @@ use desktop_services::order_sync_planner::ORDER_CACHE_COVERAGE_DAYS;
 use desktop_services::order_sync_service::OrderSyncService;
 use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
 use desktop_services::review_candidate_scoring::CandidateOrder;
-use desktop_services::review_match_flow::MatchStrategy;
+use desktop_services::review_match_flow::MatchStrategy as ServiceMatchStrategy;
 use desktop_services::ReviewQuery;
-use domain_core::{MatchSource, OrderMatchResult, TimeWindow};
+use domain_core::{MatchSource, MatchStrategy as ApiMatchStrategy, OrderMatchResult, TimeWindow};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -30,7 +30,6 @@ fn cache_data_dir() -> std::path::PathBuf {
 fn rich_order_cache_path() -> PathBuf {
     cache_data_dir().join("order_cache.sqlite3")
 }
-
 
 fn parse_iso_timestamp(value: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(value.trim())
@@ -49,11 +48,22 @@ pub struct ReviewMatchResponse {
     pub cache_sync_written_count: usize,
 }
 
-fn map_match_source(strategy: Option<MatchStrategy>) -> MatchSource {
+fn map_match_source(strategy: Option<ServiceMatchStrategy>) -> MatchSource {
     match strategy.unwrap_or_default() {
-        MatchStrategy::ExactMatch | MatchStrategy::HighConfidence => MatchSource::ExactOrderId,
-        MatchStrategy::ProbableMatch => MatchSource::ReceiverAndTimeWindow,
-        MatchStrategy::Fallback | MatchStrategy::None => MatchSource::ManualFallback,
+        ServiceMatchStrategy::ExactMatch | ServiceMatchStrategy::HighConfidence => {
+            MatchSource::ExactOrderId
+        }
+        ServiceMatchStrategy::ProbableMatch => MatchSource::ReceiverAndTimeWindow,
+        ServiceMatchStrategy::Fallback | ServiceMatchStrategy::None => MatchSource::ManualFallback,
+    }
+}
+
+fn map_match_strategy(strategy: Option<ServiceMatchStrategy>) -> ApiMatchStrategy {
+    match strategy.unwrap_or(ServiceMatchStrategy::Fallback) {
+        ServiceMatchStrategy::ExactMatch => ApiMatchStrategy::ExactMatch,
+        ServiceMatchStrategy::HighConfidence => ApiMatchStrategy::HighConfidence,
+        ServiceMatchStrategy::ProbableMatch => ApiMatchStrategy::ProbableMatch,
+        ServiceMatchStrategy::Fallback | ServiceMatchStrategy::None => ApiMatchStrategy::Fallback,
     }
 }
 
@@ -110,6 +120,7 @@ fn match_reviews_with_cache_records(
             product_name: matched.product_name,
             matched: matched.matched,
             source: map_match_source(matched.match_strategy),
+            strategy: map_match_strategy(matched.match_strategy),
             confidence_score: matched.match_score.max(0) as u32,
             match_reasons: matched.match_reasons,
             candidate_count: matched.candidate_count,
@@ -124,8 +135,9 @@ fn run_review_match_flow(
     magic: String,
     query: ReviewQuery,
 ) -> Result<ReviewMatchResponse, AppError> {
-    let (start_unix, end_unix) = parse_iso_window(&query.time_window.start_at, &query.time_window.end_at)
-        .map_err(|e| AppError::Message(e.to_string()))?;
+    let (start_unix, end_unix) =
+        parse_iso_window(&query.time_window.start_at, &query.time_window.end_at)
+            .map_err(|e| AppError::Message(e.to_string()))?;
     let source = HttpReviewSource::new(cookie.clone(), magic.clone());
     let evaluations = source
         .fetch_evaluation_records(&query)
@@ -140,10 +152,7 @@ fn run_review_match_flow(
             .coverage_start
             .as_deref()
             .and_then(parse_iso_timestamp);
-        let coverage_end = status
-            .coverage_end
-            .as_deref()
-            .and_then(parse_iso_timestamp);
+        let coverage_end = status.coverage_end.as_deref().and_then(parse_iso_timestamp);
         match (coverage_start, coverage_end) {
             (Some(coverage_start), Some(coverage_end))
                 if start_unix >= coverage_start && end_unix <= coverage_end =>
@@ -219,7 +228,10 @@ fn run_review_match_flow(
         "review_query",
         "match_reviews",
         76,
-        format!("订单缓存已就绪，正在对 {} 条差评执行评分匹配…", evaluations.len()),
+        format!(
+            "订单缓存已就绪，正在对 {} 条差评执行评分匹配…",
+            evaluations.len()
+        ),
     );
 
     let results = match_reviews_with_cache_records(&evaluations, &orders);
@@ -389,6 +401,7 @@ mod tests {
         assert!(results[0].matched);
         assert_eq!(results[0].order_id, "3735563912835389952");
         assert_eq!(results[0].source, MatchSource::ExactOrderId);
+        assert_eq!(results[0].strategy, domain_core::MatchStrategy::ExactMatch);
         assert_eq!(results[0].candidate_count, 2);
         assert_eq!(results[0].top_score, 100);
     }

@@ -1,4 +1,4 @@
-use domain_core::{MatchSource, OrderMatchResult, TimeWindow};
+use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, TimeWindow};
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, USER_AGENT,
 };
@@ -185,6 +185,7 @@ fn parse_quality_refund_record(
         product_name,
         matched: true,
         source: MatchSource::ExactOrderId,
+        strategy: MatchStrategy::ExactMatch,
         confidence_score: 100,
         match_reasons: Vec::new(),
         candidate_count: 0,
@@ -255,5 +256,6 @@ mod tests {
         assert_eq!(parsed.sku_name, "单瓶（体验装） 400*1瓶");
         assert_eq!(parsed.product_name, "仁和二硫化硒去屑洗发水");
         assert_eq!(parsed.evaluation_content, "品退原因：商品质量问题");
+        assert_eq!(parsed.strategy, domain_core::MatchStrategy::ExactMatch);
     }
 }

@@ -31,6 +31,21 @@ impl Default for MatchSource {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchStrategy {
+    ExactMatch,
+    HighConfidence,
+    ProbableMatch,
+    Fallback,
+}
+
+impl Default for MatchStrategy {
+    fn default() -> Self {
+        Self::Fallback
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct TimeWindow {
@@ -68,6 +83,8 @@ pub struct OrderMatchResult {
     pub product_name: String,
     pub matched: bool,
     pub source: MatchSource,
+    #[serde(default)]
+    pub strategy: MatchStrategy,
     pub confidence_score: u32,
     #[serde(default)]
     pub match_reasons: Vec<String>,

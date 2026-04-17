@@ -1,7 +1,7 @@
 use desktop_services::review_batch_match::EvaluationRecord;
 use desktop_services::ReviewQuery;
 use desktop_services::ReviewSource;
-use domain_core::{MatchSource, OrderMatchResult};
+use domain_core::{MatchSource, MatchStrategy, OrderMatchResult};
 use serde_json::Value;
 
 const EVALUATION_SEARCH_URL: &str =
@@ -97,7 +97,11 @@ impl HttpReviewSource {
             })
             .or_else(|_| {
                 chrono::NaiveDate::parse_from_str(trimmed.get(..10).unwrap_or(trimmed), "%Y-%m-%d")
-                    .map(|d| d.and_hms_opt(0, 0, 0).map(|dt| dt.and_utc().timestamp()).unwrap_or(0))
+                    .map(|d| {
+                        d.and_hms_opt(0, 0, 0)
+                            .map(|dt| dt.and_utc().timestamp())
+                            .unwrap_or(0)
+                    })
             })
             .unwrap_or(0)
     }
@@ -125,6 +129,7 @@ fn parse_review_record(eval: &Value) -> Option<OrderMatchResult> {
         product_name: evaluation.product_name,
         matched: false,
         source: MatchSource::ManualFallback,
+        strategy: MatchStrategy::Fallback,
         confidence_score: 0,
         match_reasons: Vec::new(),
         candidate_count: 0,

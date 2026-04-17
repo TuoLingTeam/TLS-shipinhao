@@ -7,8 +7,8 @@ use desktop_services::{
     ReviewSource,
 };
 use domain_core::{
-    DeliveryUpdateRequest, DeliveryUpdateResult, MatchSource, OrderCacheEntry, OrderMatchResult,
-    TimeWindow,
+    DeliveryUpdateRequest, DeliveryUpdateResult, MatchSource, MatchStrategy, OrderCacheEntry,
+    OrderMatchResult, TimeWindow,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -118,6 +118,7 @@ impl ReviewSource for StubReviewSource {
             product_name: "测试商品".into(),
             matched: true,
             source: MatchSource::ReceiverAndTimeWindow,
+            strategy: MatchStrategy::ExactMatch,
             confidence_score: 100,
             match_reasons: vec!["stub".into()],
             candidate_count: 1,

@@ -30,7 +30,9 @@ export function useReview() {
       source === "评价匹配"
         ? payload.results.find(
             (item) =>
-              item.matched && item.order_id?.trim() && item.confidence_score === 100,
+              item.matched &&
+              item.order_id?.trim() &&
+              ["exact_match", "high_confidence"].includes(item.strategy),
           )
         : payload.results.find((item) => item.matched && item.order_id?.trim());
 

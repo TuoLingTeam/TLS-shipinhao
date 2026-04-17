@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub const AUTO_FILL_SCORE_THRESHOLD: i32 = 100;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MatchStrategy {
     ExactMatch,
@@ -60,7 +60,11 @@ pub fn match_single_evaluation(
         };
     }
 
-    let top_score = best_matches.iter().map(|item| item.score).max().unwrap_or(0);
+    let top_score = best_matches
+        .iter()
+        .map(|item| item.score)
+        .max()
+        .unwrap_or(0);
     let candidate_count = best_matches.len();
 
     best_matches.sort_by(|left, right| {
@@ -201,5 +205,12 @@ mod tests {
         let result = match_single_evaluation(&ctx, &[a, b]);
         assert_eq!(result.matched_order.unwrap().order_id, "A");
         assert_eq!(result.match_strategy, MatchStrategy::ProbableMatch);
+    }
+
+    #[test]
+    fn maps_thresholds_to_expected_strategies() {
+        assert_eq!(match_strategy_by_score(100), MatchStrategy::ExactMatch);
+        assert_eq!(match_strategy_by_score(80), MatchStrategy::ProbableMatch);
+        assert_eq!(match_strategy_by_score(40), MatchStrategy::Fallback);
     }
 }
