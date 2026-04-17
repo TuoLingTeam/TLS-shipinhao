@@ -127,6 +127,22 @@ pub struct VerifyRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaseRefreshRequest {
+    pub license_key: String,
+    pub device_id: String,
+    pub current_issued_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaseRefreshResponse {
+    pub success: bool,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub new_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicenseApiResponse {
     pub success: bool,
     #[serde(default)]
@@ -268,6 +284,39 @@ impl HttpLicenseClient {
         };
         self.request_json("/api/verify", &req).await
     }
+
+    pub async fn refresh_lease(
+        &self,
+        license_key: &str,
+        device_id: &str,
+        current_issued_at: i64,
+    ) -> Result<LeaseRefreshResponse, LicenseHttpError> {
+        let req = LeaseRefreshRequest {
+            license_key: license_key.trim().to_uppercase(),
+            device_id: device_id.to_string(),
+            current_issued_at,
+        };
+        try_each_domain(&self.base_urls, |base_url| {
+            let url = format!("{base_url}/api/lease/refresh");
+            let client = self.client.clone();
+            let payload_value = serde_json::to_value(&req).ok();
+            async move {
+                let request = client
+                    .post(&url)
+                    .timeout(Duration::from_secs(LICENSE_API_TIMEOUT_SECS));
+                let request = match payload_value {
+                    Some(body) => request.json(&body),
+                    None => {
+                        return DomainAttempt::Final(Err(LicenseHttpError::InvalidResponse(
+                            "请求体无法序列化".into(),
+                        )))
+                    }
+                };
+                response_to_attempt(request.send().await).await
+            }
+        })
+        .await
+    }
 }
 
 #[cfg(test)]
@@ -302,6 +351,19 @@ mod tests {
         };
         assert!(response_allows_activation(&resp));
         assert_eq!(resp.normalized_state(), "active");
+    }
+
+    #[test]
+    fn lease_refresh_response_roundtrip_keeps_new_token() {
+        let response = LeaseRefreshResponse {
+            success: true,
+            message: "ok".into(),
+            new_token: "lease.token.next".into(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        let parsed: LeaseRefreshResponse = serde_json::from_str(&json).unwrap();
+        assert!(parsed.success);
+        assert_eq!(parsed.new_token, "lease.token.next");
     }
 
     // --- try_each_domain（M2-01） ---

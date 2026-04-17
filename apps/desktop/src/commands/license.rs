@@ -4,7 +4,8 @@ use crate::adapters::http_license_client::{
 use crate::app_settings::LICENSE_API_BASE_URLS;
 use crate::error::AppError;
 use crate::state::{self, AppState, StoredLicenseProfile};
-use api_contracts::{LicenseState, RuntimeState};
+use api_contracts::{LeasePayload, LicenseState, RuntimeState};
+use license_service::lease::RefreshOutcome;
 use sha2::{Digest, Sha256};
 use std::ffi::CStr;
 use tauri::State;
@@ -19,6 +20,7 @@ pub async fn ensure_feature_authorized(
     state: &AppState,
     feature_name: &str,
 ) -> Result<(), AppError> {
+    let _ = refresh_runtime_license_if_needed(state).await;
     let runtime = state.runtime_license_state.lock().await.clone();
     if runtime_state_allows_feature(&runtime) {
         return Ok(());
@@ -214,6 +216,99 @@ async fn sync_license_state_from_response(
     .await
 }
 
+fn parse_runtime_from_token(
+    state: &AppState,
+    token: &str,
+    now_epoch: i64,
+    allow_expired: bool,
+) -> Result<LeasePayload, AppError> {
+    state
+        .lease_verifier
+        .verify(token, Some(&state.device_id), now_epoch, allow_expired)
+        .map_err(|err| AppError::Message(format!("Lease 解析失败：{err}")))
+}
+
+async fn update_runtime_from_token(
+    state: &AppState,
+    token: &str,
+    fallback_license_key: String,
+    fallback_license_expires_at: Option<String>,
+) -> Result<StoredLicenseProfile, AppError> {
+    let runtime = state::verify_and_store_license_token(
+        state.lease_store.as_ref(),
+        token,
+        &state.device_id,
+        chrono::Utc::now().timestamp(),
+        &state.lease_verifier,
+    )
+    .map_err(|err| AppError::Message(format!("更新本地 Lease 失败：{err}")))?;
+
+    persist_runtime_profile(
+        state,
+        runtime,
+        fallback_license_key,
+        fallback_license_expires_at,
+    )
+    .await
+}
+
+async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppError> {
+    let token = match state.lease_store.get() {
+        Ok(Some(token)) if !token.trim().is_empty() => token,
+        Ok(_) => return Ok(()),
+        Err(err) => return Err(AppError::Message(format!("读取本地 Lease 失败：{err}"))),
+    };
+
+    let now_epoch = chrono::Utc::now().timestamp();
+    let payload = parse_runtime_from_token(state, &token, now_epoch, true)?;
+    let profile = state.license_profile.lock().await.clone();
+    let client = make_client();
+
+    let outcome = license_service::lease::refresh_lease_if_due(&payload, now_epoch, |req| async move {
+        let response = client
+            .refresh_lease(&req.license_key, &req.device_id, req.current_issued_at)
+            .await
+            .map_err(|err| err.to_string())?;
+        if !response.success {
+            return Err(response.message);
+        }
+        Ok(license_service::lease::RefreshResponse {
+            new_token: response.new_token,
+        })
+    })
+    .await;
+
+    match outcome {
+        Ok(RefreshOutcome::NotDue) => Ok(()),
+        Ok(RefreshOutcome::Renewed(new_token)) => {
+            update_runtime_from_token(
+                state,
+                &new_token,
+                if payload.license_key.is_empty() {
+                    profile.license_key
+                } else {
+                    payload.license_key
+                },
+                profile.license_expires_at,
+            )
+            .await?;
+            Ok(())
+        }
+        Err(license_service::lease::RefreshError::Network(_)) => Ok(()),
+        Err(license_service::lease::RefreshError::HardExpired) => {
+            persist_runtime_profile(
+                state,
+                RuntimeState::reason_only(LicenseState::Expired),
+                profile.license_key,
+                profile.license_expires_at,
+            )
+            .await?;
+            Ok(())
+        }
+        Err(err) => Err(AppError::Message(format!("Lease 续约失败：{err}"))),
+    }
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn activate_license(
     state: State<'_, AppState>,
@@ -272,6 +367,7 @@ pub async fn verify_license(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+    let _ = refresh_runtime_license_if_needed(&state).await;
     let runtime = state.runtime_license_state.lock().await.clone();
     let profile = state.license_profile.lock().await.clone();
     Ok(build_license_status_payload(&profile, &runtime))
