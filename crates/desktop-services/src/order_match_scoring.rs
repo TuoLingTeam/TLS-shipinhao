@@ -1,7 +1,15 @@
+//! 订单评分引擎：围绕"买家昵称 + 商品信息"合成 0~100 分。
+//!
+//! 昵称侧相似度算法由 [`crate::matching::nickname`] 提供；本模块聚焦商品侧相似度
+//! 与综合评分裁剪，同时 re-export [`similarity_percent`] 等给既有调用方保持不动。
+
+use crate::matching::nickname::{clamp_percent, sequence_similarity};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 use std::sync::OnceLock;
+
+pub use crate::matching::nickname::similarity_percent;
 
 const SIMILARITY_PENALTY_BANDS: &[(i32, i32)] = &[
     (100, 0),
@@ -45,36 +53,6 @@ pub struct MatchScoreResult {
     pub score: i32,
     #[serde(flatten)]
     pub product: ProductSimilarityResult,
-}
-
-pub fn clamp_percent(value: f64) -> i32 {
-    if !value.is_finite() {
-        return 0;
-    }
-    min(100, max(0, value.round() as i32))
-}
-
-pub fn similarity_percent(left: Option<&str>, right: Option<&str>) -> i32 {
-    let left_text = left.unwrap_or("");
-    let right_text = right.unwrap_or("");
-    if left_text == right_text {
-        return 100;
-    }
-    if left_text.is_empty() || right_text.is_empty() {
-        return 0;
-    }
-
-    let left_trimmed = left_text.trim();
-    let right_trimmed = right_text.trim();
-    if !left_trimmed.is_empty() && left_trimmed == right_trimmed {
-        return 95;
-    }
-
-    if let Some(similarity) = nickname_similarity_by_rename_patterns(left_trimmed, right_trimmed) {
-        return similarity;
-    }
-
-    sequence_similarity(left_text, right_text)
 }
 
 pub fn normalize_product_title_for_similarity(title: Option<&str>) -> String {
@@ -208,111 +186,6 @@ pub fn compute_match_score(
     }
 }
 
-fn strip_trailing_digit_tail(text: &str) -> String {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re =
-        RE.get_or_init(|| Regex::new(r"[0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s]+$").expect("valid regex"));
-    re.replace(text, "").trim().to_string()
-}
-
-fn is_subsequence(shorter: &str, longer: &str) -> bool {
-    if shorter.is_empty() {
-        return false;
-    }
-    let shorter_chars: Vec<char> = shorter.chars().collect();
-    let mut pos = 0usize;
-    for ch in longer.chars() {
-        if pos < shorter_chars.len() && ch == shorter_chars[pos] {
-            pos += 1;
-            if pos == shorter_chars.len() {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn single_char_containment_similarity(longer: &str) -> i32 {
-    let normalized_length = max(longer.chars().count(), 3);
-    clamp_percent(100.0 / normalized_length as f64)
-}
-
-fn subsequence_similarity_by_length(text: &str) -> Option<i32> {
-    let length = text.chars().count();
-    if length >= 4 {
-        Some(85)
-    } else if length == 3 {
-        Some(80)
-    } else if length == 2 {
-        Some(70)
-    } else {
-        None
-    }
-}
-
-fn nickname_similarity_by_rename_patterns(left: &str, right: &str) -> Option<i32> {
-    if left.is_empty() || right.is_empty() {
-        return None;
-    }
-
-    let left_core = strip_trailing_digit_tail(left);
-    let right_core = strip_trailing_digit_tail(right);
-
-    if !left_core.is_empty() && !right_core.is_empty() && left_core == right_core && left != right {
-        if left_core.chars().count() >= 2 {
-            return Some(95);
-        }
-        return Some(80);
-    }
-
-    let (shorter, longer) = if left.chars().count() <= right.chars().count() {
-        (left, right)
-    } else {
-        (right, left)
-    };
-    let (shorter_core, longer_core) = if left_core.chars().count() <= right_core.chars().count() {
-        (left_core.as_str(), right_core.as_str())
-    } else {
-        (right_core.as_str(), left_core.as_str())
-    };
-
-    if !shorter.is_empty() && longer.contains(shorter) {
-        let len = shorter.chars().count();
-        if len >= 3 {
-            return Some(90);
-        }
-        if len == 2 {
-            return Some(80);
-        }
-        return Some(single_char_containment_similarity(longer));
-    }
-
-    if !shorter_core.is_empty() && longer_core.contains(shorter_core) {
-        let len = shorter_core.chars().count();
-        if len >= 3 {
-            return Some(90);
-        }
-        if len == 2 {
-            return Some(80);
-        }
-        return Some(single_char_containment_similarity(longer_core));
-    }
-
-    if let Some(similarity) = subsequence_similarity_by_length(shorter) {
-        if is_subsequence(shorter, longer) {
-            return Some(similarity);
-        }
-    }
-
-    if let Some(similarity) = subsequence_similarity_by_length(shorter_core) {
-        if is_subsequence(shorter_core, longer_core) {
-            return Some(similarity);
-        }
-    }
-
-    None
-}
-
 fn weighted_product_similarity(
     product_id_similarity: i32,
     sku_id_similarity: i32,
@@ -323,34 +196,6 @@ fn weighted_product_similarity(
         + title_similarity * PRODUCT_TITLE_WEIGHT) as f64
         / PRODUCT_SIMILARITY_WEIGHT_TOTAL as f64;
     clamp_percent(weighted)
-}
-
-fn sequence_similarity(left: &str, right: &str) -> i32 {
-    let left_chars: Vec<char> = left.chars().collect();
-    let right_chars: Vec<char> = right.chars().collect();
-    if left_chars.is_empty() || right_chars.is_empty() {
-        return 0;
-    }
-    let lcs = lcs_length(&left_chars, &right_chars);
-    let ratio = (2.0 * lcs as f64) / (left_chars.len() + right_chars.len()) as f64 * 100.0;
-    clamp_percent(ratio)
-}
-
-fn lcs_length(left: &[char], right: &[char]) -> usize {
-    let mut prev = vec![0usize; right.len() + 1];
-    let mut curr = vec![0usize; right.len() + 1];
-    for l in left {
-        for (j, r) in right.iter().enumerate() {
-            curr[j + 1] = if l == r {
-                prev[j] + 1
-            } else {
-                max(prev[j + 1], curr[j])
-            };
-        }
-        std::mem::swap(&mut prev, &mut curr);
-        curr.fill(0);
-    }
-    prev[right.len()]
 }
 
 #[cfg(test)]
