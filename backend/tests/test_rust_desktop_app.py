@@ -57,6 +57,7 @@ class RustDesktopAppTests(unittest.TestCase):
             "pub fn start_review_find",
             "pub fn start_batch_delivery",
             "DesktopServices::new",
+            "run_batch_delivery_flow",
         ):
             self.assertIn(symbol, shell_text)
 

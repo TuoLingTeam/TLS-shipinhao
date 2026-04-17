@@ -83,20 +83,16 @@ target/
 # Tauri / Vue frontend
 apps/ui/dist/
 apps/ui/node_modules/
-<<<<<<< Updated upstream
 backend/tests/artifacts/
 backend/dist/
 
 # Local runtime secrets
 cookie.txt
-=======
 tests/artifacts/
 backend/tmp/
 backend/deploy/release/
-
-# Local runtime secrets
-cookie.txt
 .worktrees/
-
 tests/integration/__pycache__/
->>>>>>> Stashed changes
+.env
+.env.*
+!.env.example

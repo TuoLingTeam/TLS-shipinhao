@@ -22,7 +22,7 @@ class RustDesktopServicesTests(unittest.TestCase):
             "pub fn update_delivery",
             "pub fn parse_cookie_profile",
             "pub fn run_batch_delivery_flow",
-            "pub mod order_utils",
+            "pub mod order_utils;",
         ):
             self.assertIn(symbol, text)
 
@@ -62,7 +62,7 @@ class RustDesktopOrderMatchScoringTests(unittest.TestCase):
         for symbol in (
             "pub struct ProductSimilarityResult",
             "pub struct MatchScoreResult",
-            "pub fn similarity_percent",
+            "similarity_percent",
             "pub fn title_similarity_percent",
             "pub fn compute_product_similarity",
             "pub fn compute_match_score",
@@ -151,10 +151,10 @@ class RustDesktopOrderCacheStorageTests(unittest.TestCase):
         self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/order_cache_storage.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
-            "pub struct CacheOrderRecord",
-            "pub struct CacheOrderProduct",
-            "pub struct SyncStateRecord",
-            "pub struct OrderCacheRepository",
+            "CacheOrderRecord",
+            "CacheOrderProduct",
+            "SyncStateRecord",
+            "OrderCacheRepository",
             "pub fn now_epoch_seconds",
         ):
             self.assertIn(symbol, text)

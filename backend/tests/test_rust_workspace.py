@@ -20,6 +20,7 @@ class RustWorkspaceLayoutTests(unittest.TestCase):
             'backend/crates/security-core',
             'apps/desktop',
             'backend/license-worker',
+            'backend/xtask',
         ):
             self.assertIn(member, text)
 
@@ -32,8 +33,9 @@ class RustWorkspaceLayoutTests(unittest.TestCase):
             ROOT / "backend" / "crates" / "domain-core" / "Cargo.toml",
             ROOT / "backend" / "crates" / "license-service" / "Cargo.toml",
             ROOT / "backend" / "crates" / "security-core" / "Cargo.toml",
-            ROOT / "apps" / "desktop" / "README.md",
+            ROOT / "apps" / "desktop" / "Cargo.toml",
             ROOT / "backend" / "license-worker" / "README.md",
+            ROOT / "backend" / "xtask" / "Cargo.toml",
         ]
         for path in required_paths:
             self.assertTrue(path.exists(), f"缺少 workspace 路径: {path.relative_to(ROOT)}")
