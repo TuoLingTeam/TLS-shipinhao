@@ -1,4 +1,4 @@
-use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, TimeWindow};
+use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, QualityRefundInfo, TimeWindow};
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, USER_AGENT,
 };
@@ -170,6 +170,11 @@ fn parse_quality_refund_record(
         first_non_empty_string(order_info, &["name", "title", "spuName", "productName"]);
     let reason = first_non_empty_string(item, &["reason", "refundReason", "reasonDesc"]);
 
+    let quality_refund_info = (!reason.is_empty()).then(|| QualityRefundInfo {
+        reason: reason.clone(),
+        source: "quality_refund_api".to_string(),
+    });
+
     Some(OrderMatchResult {
         evaluation_id: order_id.clone(),
         order_id,
@@ -189,6 +194,7 @@ fn parse_quality_refund_record(
         replyable: true,
         reply_deadline: None,
         confidence_score: 100,
+        quality_refund_info,
         match_reasons: Vec::new(),
         candidate_count: 0,
         top_score: 0,
@@ -259,5 +265,29 @@ mod tests {
         assert_eq!(parsed.product_name, "仁和二硫化硒去屑洗发水");
         assert_eq!(parsed.evaluation_content, "品退原因：商品质量问题");
         assert_eq!(parsed.strategy, domain_core::MatchStrategy::ExactMatch);
+        assert_eq!(
+            parsed.quality_refund_info,
+            Some(domain_core::QualityRefundInfo {
+                reason: "商品质量问题".into(),
+                source: "quality_refund_api".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn quality_refund_without_reason_keeps_info_empty() {
+        let item = json!({
+            "orderInfo": {
+                "orderId": "3735739244192085761",
+                "createTime": 1776324243,
+                "spuId": "10000496403296",
+                "skuCode": "400-1",
+                "skuName": "单瓶（体验装） 400*1瓶",
+                "name": "仁和二硫化硒去屑洗发水"
+            }
+        });
+
+        let parsed = parse_quality_refund_record(&item, 0, 1776320000, 1776330000).expect("record");
+        assert_eq!(parsed.quality_refund_info, None);
     }
 }

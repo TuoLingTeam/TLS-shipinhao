@@ -64,6 +64,15 @@ pub struct OrderCacheEntry {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct QualityRefundInfo {
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub source: String,
+}
+
 fn default_replyable() -> bool {
     true
 }
@@ -94,6 +103,8 @@ pub struct OrderMatchResult {
     #[serde(default)]
     pub reply_deadline: Option<String>,
     pub confidence_score: u32,
+    #[serde(default)]
+    pub quality_refund_info: Option<QualityRefundInfo>,
     #[serde(default)]
     pub match_reasons: Vec<String>,
     #[serde(default)]

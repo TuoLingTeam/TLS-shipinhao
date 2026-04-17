@@ -140,6 +140,7 @@ fn parse_review_record(eval: &Value) -> Option<OrderMatchResult> {
         replyable,
         reply_deadline,
         confidence_score: 0,
+        quality_refund_info: None,
         match_reasons: Vec::new(),
         candidate_count: 0,
         top_score: 0,

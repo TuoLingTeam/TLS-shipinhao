@@ -16,8 +16,17 @@ const appStore = useAppStore();
 const { findReviews, findQualityRefundOrders, prefillMatchedOrder } = useReview();
 
 const days = ref(30);
+const qualityReasonFilter = ref("");
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const isQualityRefundMode = computed(() => store.lastMode === "quality_refund");
+const filteredResults = computed(() => {
+  if (!isQualityRefundMode.value) return store.results;
+  const keyword = qualityReasonFilter.value.trim();
+  if (!keyword) return store.results;
+  return store.results.filter((item) =>
+    item.quality_refund_info?.reason?.includes(keyword),
+  );
+});
 const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
 const unmatchedCount = computed(() => store.results.length - matchedCount.value);
 const loadingTitle = computed(() =>
@@ -62,6 +71,7 @@ const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : 
 function switchMode(mode: "bad_review" | "quality_refund") {
   store.setLastMode(mode);
   store.setError(null);
+  qualityReasonFilter.value = "";
 }
 
 function todayISO(): string {
@@ -190,6 +200,15 @@ function formatReplyDeadline(value: string | null) {
           <label class="field-label">查询天数</label>
           <input v-model.number="days" type="number" min="1" max="90" class="field-input w-28" />
         </div>
+        <div v-if="isQualityRefundMode">
+          <label class="field-label">品退原因过滤</label>
+          <input
+            v-model.trim="qualityReasonFilter"
+            type="text"
+            placeholder="输入原因关键字"
+            class="field-input w-48"
+          />
+        </div>
         <button
           :disabled="store.loading || licenseBlocked"
           class="action-btn action-btn-primary min-w-[128px]"
@@ -275,6 +294,7 @@ function formatReplyDeadline(value: string | null) {
               买家昵称
             </th>
             <th class="table-head-sticky px-5 py-4 text-left font-semibold">评价内容</th>
+            <th v-if="isQualityRefundMode" class="table-head-sticky px-5 py-4 text-left font-semibold">品退原因</th>
             <th class="table-head-sticky px-5 py-4 text-left font-semibold">订单详情</th>
             <th class="table-head-sticky px-5 py-4 text-left font-semibold">{{ idColumnLabel }}</th>
             <th class="table-head-sticky px-5 py-4 text-center font-semibold">匹配</th>
@@ -282,7 +302,7 @@ function formatReplyDeadline(value: string | null) {
         </thead>
         <tbody>
           <tr
-            v-for="r in store.results"
+            v-for="r in filteredResults"
             :key="r.evaluation_id"
             class="table-row border-t border-slate-100/80 align-top transition-colors"
             :class="[
@@ -297,6 +317,11 @@ function formatReplyDeadline(value: string | null) {
             <td class="max-w-md px-5 py-4">
               <div class="whitespace-pre-wrap break-all text-[15px] leading-7 text-slate-700">
                 {{ r.evaluation_content || "（无评价内容）" }}
+              </div>
+            </td>
+            <td v-if="isQualityRefundMode" class="px-5 py-4">
+              <div class="text-sm leading-6 text-slate-700">
+                {{ r.quality_refund_info?.reason || "—" }}
               </div>
             </td>
             <td class="px-5 py-4">

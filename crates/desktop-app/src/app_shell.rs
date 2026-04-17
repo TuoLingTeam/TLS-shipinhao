@@ -122,6 +122,7 @@ impl ReviewSource for StubReviewSource {
             replyable: true,
             reply_deadline: None,
             confidence_score: 100,
+            quality_refund_info: None,
             match_reasons: vec!["stub".into()],
             candidate_count: 1,
             top_score: 100,

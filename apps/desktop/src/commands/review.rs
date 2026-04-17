@@ -135,6 +135,7 @@ fn match_reviews_with_cache_records(
                 replyable,
                 reply_deadline,
                 confidence_score: matched.match_score.max(0) as u32,
+                quality_refund_info: None,
                 match_reasons: matched.match_reasons,
                 candidate_count: matched.candidate_count,
                 top_score: matched.top_score,

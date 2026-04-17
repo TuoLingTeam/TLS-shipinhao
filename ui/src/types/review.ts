@@ -12,6 +12,11 @@ export type MatchStrategy =
   | "probable_match"
   | "fallback";
 
+export interface QualityRefundInfo {
+  reason: string;
+  source: string;
+}
+
 export interface OrderMatchResult {
   evaluation_id: string;
   order_id: string;
@@ -27,6 +32,7 @@ export interface OrderMatchResult {
   replyable: boolean;
   reply_deadline: string | null;
   confidence_score: number;
+  quality_refund_info: QualityRefundInfo | null;
   match_reasons: string[];
   candidate_count: number;
   top_score: number;
