@@ -20,6 +20,7 @@ pub async fn ensure_feature_authorized(
     state: &AppState,
     feature_name: &str,
 ) -> Result<(), AppError> {
+    ensure_runtime_integrity(state).await?;
     let _ = refresh_runtime_license_if_needed(state).await;
     let runtime = state.runtime_license_state.lock().await.clone();
     if runtime_state_allows_feature(&runtime) {
@@ -309,6 +310,34 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
     }
 }
 
+async fn mark_runtime_compromised(
+    state: &AppState,
+    detail: String,
+) -> Result<(), AppError> {
+    let profile = state.license_profile.lock().await.clone();
+    persist_runtime_profile(
+        state,
+        RuntimeState {
+            reason: LicenseState::Compromised,
+            status_hint: LicenseState::Compromised,
+            compromised: true,
+            runtime_backend: "rust".to_string(),
+            ..RuntimeState::default()
+        },
+        profile.license_key,
+        profile.license_expires_at,
+    )
+    .await?;
+    Err(AppError::Message(format!("完整性校验失败：{detail}")))
+}
+
+pub async fn ensure_runtime_integrity(state: &AppState) -> Result<(), AppError> {
+    if let Err(err) = state::validate_integrity_if_present(state.integrity_manifest_path.as_deref()) {
+        return mark_runtime_compromised(state, err).await;
+    }
+    Ok(())
+}
+
 fn next_grant_id() -> String {
     format!(
         "grant-{}-{}",
@@ -321,6 +350,7 @@ pub async fn authorize_runtime_task(
     state: &AppState,
     task_type: &str,
 ) -> Result<RuntimeGrant, AppError> {
+    ensure_runtime_integrity(state).await?;
     let _ = refresh_runtime_license_if_needed(state).await;
     let now_epoch = chrono::Utc::now().timestamp();
     if let Some(grant) = state.task_grant_cache.get_valid(task_type, now_epoch) {
@@ -417,6 +447,7 @@ pub async fn verify_license(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+    let _ = ensure_runtime_integrity(&state).await;
     let _ = refresh_runtime_license_if_needed(&state).await;
     let runtime = state.runtime_license_state.lock().await.clone();
     let profile = state.license_profile.lock().await.clone();
@@ -520,6 +551,7 @@ mod tests {
             cookie_profile: Mutex::new(Default::default()),
             cookie_path: Mutex::new(PathBuf::from(".")),
             app_home_dir: std::env::temp_dir(),
+            integrity_manifest_path: None,
             device_id: device_id.to_string(),
             lease_store: store,
             lease_verifier: license_service::LeaseVerifier::from_public_key_b64(public_key_b64)

@@ -28,6 +28,7 @@ pub struct AppState {
     pub cookie_profile: Mutex<CookieProfile>,
     pub cookie_path: Mutex<PathBuf>,
     pub app_home_dir: PathBuf,
+    pub integrity_manifest_path: Option<PathBuf>,
     pub device_id: String,
     pub lease_store: Arc<dyn SecretStore>,
     pub lease_verifier: LeaseVerifier,
@@ -43,12 +44,26 @@ impl AppState {
         let lease_store = init_default_store(&app_home_dir, &device_id);
         let lease_verifier =
             LeaseVerifier::new().unwrap_or_else(|err| panic!("授权公钥加载失败：{err}"));
+        let integrity_manifest_path = find_integrity_manifest_path(&app_home_dir);
         let runtime_license_state =
             load_runtime_state_from_store(lease_store.as_ref(), &device_id, now_epoch(), &lease_verifier)
                 .unwrap_or_else(|err| {
                     tracing::warn!("启动时恢复本地 Lease 失败，降级为 invalid：{err}");
                     RuntimeState::reason_only(LicenseState::Invalid)
                 });
+        let runtime_license_state =
+            if let Err(err) = validate_integrity_if_present(integrity_manifest_path.as_deref()) {
+                tracing::error!("启动时完整性校验失败：{err}");
+                RuntimeState {
+                    reason: LicenseState::Compromised,
+                    status_hint: LicenseState::Compromised,
+                    compromised: true,
+                    runtime_backend: "rust".to_string(),
+                    ..runtime_license_state
+                }
+            } else {
+                runtime_license_state
+            };
         let cookie_path = resolve_cookie_path(&app_home_dir);
         let profile = load_cookie_from_file(&cookie_path);
         let license_profile = load_license_profile(&app_home_dir).unwrap_or_default();
@@ -56,6 +71,7 @@ impl AppState {
             cookie_profile: Mutex::new(profile),
             cookie_path: Mutex::new(cookie_path),
             app_home_dir,
+            integrity_manifest_path,
             device_id,
             lease_store,
             lease_verifier,
@@ -74,6 +90,25 @@ pub fn app_home_dir() -> PathBuf {
 
 pub fn login_webview_data_dir(app_home_dir: &Path) -> PathBuf {
     app_home_dir.join(LOGIN_WEBVIEW_DIR_NAME)
+}
+
+pub fn find_integrity_manifest_path(app_home_dir: &Path) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    candidates.push(app_home_dir.to_path_buf());
+    if let Ok(mut dir) = std::env::current_dir() {
+        candidates.push(dir.clone());
+        for _ in 0..5 {
+            if !dir.pop() {
+                break;
+            }
+            candidates.push(dir.clone());
+        }
+    }
+
+    candidates
+        .into_iter()
+        .map(|dir| dir.join(security_core::INTEGRITY_MANIFEST_FILE_NAME))
+        .find(|path| path.exists())
 }
 
 pub fn cookie_path_in_dir(dir: &Path) -> PathBuf {
@@ -250,6 +285,17 @@ fn now_epoch() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
+pub fn validate_integrity_if_present(manifest_path: Option<&Path>) -> Result<(), String> {
+    let Some(manifest_path) = manifest_path else {
+        return Ok(());
+    };
+    security_core::validate_runtime_continuity(
+        manifest_path,
+        license_service::LICENSE_PUBLIC_KEY_B64,
+    )
+    .map_err(|err| err.to_string())
+}
+
 trait ExpandHome {
     fn expand_home(&self) -> std::io::Result<PathBuf>;
 }
@@ -398,5 +444,18 @@ mod tests {
             .expect("device drift should map to runtime state");
 
         assert_eq!(runtime_state_to_license_state(&runtime), "reactivation_required");
+    }
+
+    #[test]
+    fn validate_integrity_if_present_allows_missing_manifest() {
+        assert!(validate_integrity_if_present(None).is_ok());
+    }
+
+    #[test]
+    fn find_integrity_manifest_path_picks_existing_file() {
+        let home = unique_temp_dir("integrity_home");
+        let manifest = home.join(security_core::INTEGRITY_MANIFEST_FILE_NAME);
+        std::fs::write(&manifest, "{}").unwrap();
+        assert_eq!(find_integrity_manifest_path(&home), Some(manifest));
     }
 }
