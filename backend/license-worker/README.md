@@ -53,6 +53,6 @@ npx wrangler dev
 
 ## 当前边界
 
-- 旧的 `license-service + handle_json_request()` 同步路径仍保留，用于兼容既有契约测试
 - Cloudflare 线上路径已改为 `D1RuntimeRepo + handle_async_runtime_json()` 统一路径
+- 本 crate 内的测试入口也已切换到异步主路径，不再依赖旧的同步兼容入口
 - `/api/lease/revoke` 仍保留占位响应，管理员吊销继续走 `/api/admin/*`
