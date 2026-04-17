@@ -369,7 +369,39 @@ pub fn handle_json_request<R: LicenseRepository>(
 #[cfg(target_arch = "wasm32")]
 mod cloudflare_entry {
     use super::*;
-    use worker::{event, Env, Method, Request, Response, Result};
+    use wasm_bindgen::JsValue;
+    use worker::{event, D1Database, Env, Method, Request, Response, Result};
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct VerifyRow {
+        license_key: String,
+        key_status: String,
+        #[serde(default)]
+        device_id: Option<String>,
+        #[serde(default)]
+        plan_days: Option<i64>,
+        #[serde(default)]
+        activated_at: Option<String>,
+        #[serde(default)]
+        license_expires_at: Option<String>,
+        #[serde(default)]
+        activation_status: Option<String>,
+        #[serde(default)]
+        binding_version: Option<u32>,
+    }
+
+    fn missing_secret(name: &str) -> Result<Response> {
+        Response::from_json(&serde_json::json!({
+            "success": false,
+            "message": format!("{name} 未配置"),
+        }))
+        .map(|resp| resp.with_status(503))
+    }
+
+    fn load_signer(env: &Env) -> anyhow::Result<LeaseTokenSigner> {
+        let value = env.secret("LICENSE_SIGNING_PRIVATE_KEY_B64")?;
+        LeaseTokenSigner::from_private_key_b64(&value.to_string())
+    }
 
     fn compatibility_payload(path: &str) -> String {
         serde_json::json!({
@@ -378,6 +410,211 @@ mod cloudflare_entry {
             "path": path,
         })
         .to_string()
+    }
+
+    async fn load_verify_row(
+        db: &D1Database,
+        license_key: &str,
+    ) -> anyhow::Result<Option<VerifyRow>> {
+        let sql = r#"
+            SELECT
+                g.license_key AS license_key,
+                g.status AS key_status,
+                a.device_id AS device_id,
+                a.plan_days AS plan_days,
+                a.activated_at AS activated_at,
+                a.expires_at AS license_expires_at,
+                a.status AS activation_status,
+                a.binding_version AS binding_version
+            FROM generated_keys g
+            LEFT JOIN activations a ON a.license_key = g.license_key
+            WHERE g.license_key = ?
+            LIMIT 1
+        "#;
+        let stmt = db.prepare(sql).bind(&[JsValue::from_str(license_key)])?;
+        let result = stmt.all().await?;
+        let mut rows: Vec<VerifyRow> = result.results().unwrap_or_default();
+        Ok(rows.pop())
+    }
+
+    async fn append_audit(
+        db: &D1Database,
+        license_key: &str,
+        device_id: &str,
+        action: &str,
+        reason: &str,
+        now_iso: &str,
+    ) -> anyhow::Result<()> {
+        let sql = r#"
+            INSERT INTO license_audit_logs
+                (license_key, device_id, action, action_reason, created_at, operator, meta_json)
+            VALUES (?, ?, ?, ?, ?, 'worker', '{}')
+        "#;
+        db.prepare(sql)
+            .bind(&[
+                JsValue::from_str(license_key),
+                JsValue::from_str(device_id),
+                JsValue::from_str(action),
+                JsValue::from_str(reason),
+                JsValue::from_str(now_iso),
+            ])?
+            .run()
+            .await?;
+        Ok(())
+    }
+
+    async fn update_activation_markers(
+        db: &D1Database,
+        license_key: &str,
+        now_iso: &str,
+        session_issued: bool,
+        grant_issued: bool,
+        new_status: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let session_sql = if session_issued {
+            ", last_session_issued_at = ?"
+        } else {
+            ""
+        };
+        let grant_sql = if grant_issued {
+            ", last_offline_grant_issued_at = ?"
+        } else {
+            ""
+        };
+        let status_sql = if new_status.is_some() { ", status = ?" } else { "" };
+        let sql = format!(
+            "UPDATE activations SET updated_at = ?, last_verify_at = ?{session_sql}{grant_sql}{status_sql} WHERE license_key = ?"
+        );
+        let mut binds = vec![JsValue::from_str(now_iso), JsValue::from_str(now_iso)];
+        if session_issued {
+            binds.push(JsValue::from_str(now_iso));
+        }
+        if grant_issued {
+            binds.push(JsValue::from_str(now_iso));
+        }
+        if let Some(status) = new_status {
+            binds.push(JsValue::from_str(status));
+        }
+        binds.push(JsValue::from_str(license_key));
+        db.prepare(&sql).bind(&binds)?.run().await?;
+        Ok(())
+    }
+
+    async fn verify_license_for_runtime(
+        db: &D1Database,
+        license_key: &str,
+        device_id: &str,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<Result<LicenseLease, String>> {
+        let Some(row) = load_verify_row(db, license_key).await? else {
+            return Ok(Err("该卡密已被吊销".into()));
+        };
+        if row.key_status == "revoked" {
+            return Ok(Err("该卡密已被吊销".into()));
+        }
+        let Some(bound_device) = row.device_id.as_deref() else {
+            return Ok(Err("该卡密尚未激活".into()));
+        };
+        if bound_device != device_id {
+            return Ok(Err("设备不匹配：该卡密已绑定其他设备".into()));
+        }
+        if row.activation_status.as_deref() == Some("revoked") {
+            return Ok(Err("该卡密已被吊销".into()));
+        }
+        let Some(license_expires_at) = row.license_expires_at.as_deref() else {
+            return Ok(Err("授权记录异常：缺少过期时间".into()));
+        };
+        let expires_at = DateTime::parse_from_rfc3339(license_expires_at)?.with_timezone(&Utc);
+        if now >= expires_at {
+            let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            update_activation_markers(db, license_key, &now_iso, false, false, Some("expired"))
+                .await?;
+            append_audit(db, license_key, device_id, "verify", "expired", &now_iso).await?;
+            return Ok(Err("授权已过期".into()));
+        }
+        let activated_at = row
+            .activated_at
+            .unwrap_or_else(|| now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+        let binding_version = row.binding_version.unwrap_or(license_service::LICENSE_PROTOCOL_VERSION);
+        let lease = license_service::issue_license_lease(
+            &row.license_key,
+            device_id,
+            LicenseState::Active,
+            license_expires_at,
+            &(now + chrono::Duration::hours(license_service::LEASE_HARD_EXPIRY_HOURS))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            &(now + chrono::Duration::hours(license_service::LEASE_RENEWAL_HOURS))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            &now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        );
+        Ok(Ok(LicenseLease {
+            binding_version,
+            issued_at: lease.issued_at,
+            ..lease
+        }))
+    }
+
+    async fn handle_refresh_runtime(
+        db: &D1Database,
+        signer: &LeaseTokenSigner,
+        input: LeaseRefreshRequest,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<LeaseRefreshResponse> {
+        match verify_license_for_runtime(db, &input.license_key, &input.device_id, now).await? {
+            Ok(lease) => {
+                let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                update_activation_markers(db, &input.license_key, &now_iso, true, false, Some("active"))
+                    .await?;
+                append_audit(db, &input.license_key, &input.device_id, "lease_refresh", "ok", &now_iso)
+                    .await?;
+                Ok(LeaseRefreshResponse {
+                    success: true,
+                    message: "lease_refreshed".into(),
+                    new_token: signer.sign_license_lease(&lease)?,
+                })
+            }
+            Err(message) => Ok(LeaseRefreshResponse {
+                success: false,
+                message,
+                new_token: String::new(),
+            }),
+        }
+    }
+
+    async fn handle_remote_task_authorize(
+        db: &D1Database,
+        input: TaskAuthorizeRequest,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<RuntimeGrant> {
+        match verify_license_for_runtime(db, &input.license_key, &input.device_id, now).await? {
+            Ok(lease) => {
+                let payload = lease_to_payload(&lease)?;
+                let mut grant = match authorize_task_local(
+                    &payload,
+                    &input.task_type,
+                    now.timestamp(),
+                    next_grant_id,
+                ) {
+                    Ok(grant) => grant,
+                    Err(err) => return Ok(denied_grant(&input.task_type, err.to_string())),
+                };
+                grant.risk_level = task_risk_level(&input.task_type);
+                let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                update_activation_markers(db, &input.license_key, &now_iso, false, true, Some("active"))
+                    .await?;
+                append_audit(
+                    db,
+                    &input.license_key,
+                    &input.device_id,
+                    "task_authorize",
+                    &input.task_type,
+                    &now_iso,
+                )
+                .await?;
+                Ok(grant)
+            }
+            Err(message) => Ok(denied_grant(&input.task_type, message)),
+        }
     }
 
     async fn route_fetch(req: Request, env: Env) -> Result<Response> {
@@ -396,19 +633,37 @@ mod cloudflare_entry {
             return Response::error("Method Not Allowed", 405);
         }
 
-        let _ = req.text().await;
+        let body = req.text().await.unwrap_or_default();
         match parse_route(&path) {
-            WorkerRoute::Activate
-            | WorkerRoute::Verify
-            | WorkerRoute::LeaseRefresh
-            | WorkerRoute::LeaseRevoke
-            | WorkerRoute::TaskAuthorize => {
+            WorkerRoute::Activate | WorkerRoute::Verify | WorkerRoute::LeaseRevoke => {
                 // D1 Repository 与 Ed25519 签发逻辑尚未接通，统一返回占位响应。
                 Response::from_json(&serde_json::json!({
                     "success": false,
                     "message": "rust_worker_repository_pending",
                     "path": path,
                 }))
+            }
+            WorkerRoute::LeaseRefresh => {
+                let signer = match load_signer(&env) {
+                    Ok(signer) => signer,
+                    Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
+                };
+                let db = env.d1("DB")?;
+                let input: LeaseRefreshRequest = serde_json::from_str(&body)
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                let resp = handle_refresh_runtime(&db, &signer, input, Utc::now())
+                    .await
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                Response::from_json(&resp)
+            }
+            WorkerRoute::TaskAuthorize => {
+                let db = env.d1("DB")?;
+                let input: TaskAuthorizeRequest = serde_json::from_str(&body)
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                let resp = handle_remote_task_authorize(&db, input, Utc::now())
+                    .await
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                Response::from_json(&resp)
             }
             WorkerRoute::NotFound => Response::error("not_found", 404),
         }

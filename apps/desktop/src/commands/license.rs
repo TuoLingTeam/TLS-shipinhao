@@ -346,6 +346,15 @@ fn next_grant_id() -> String {
     )
 }
 
+fn task_requires_remote_authorization(task_type: &str) -> bool {
+    matches!(
+        task_type,
+        api_contracts::LICENSE_TASK_BATCH_DELIVERY
+            | api_contracts::LICENSE_TASK_REVIEW_FULL_SCAN
+            | api_contracts::LICENSE_TASK_CACHE_MANAGE
+    )
+}
+
 pub async fn authorize_runtime_task(
     state: &AppState,
     task_type: &str,
@@ -365,10 +374,11 @@ pub async fn authorize_runtime_task(
     let payload = parse_runtime_from_token(state, &token, now_epoch, false)?;
 
     let local_grant = authorize_task_local(&payload, task_type, now_epoch, next_grant_id);
-    let needs_remote = match &local_grant {
-        Ok(grant) => grant.risk_level == Some(RiskLevel::High),
-        Err(_) => true,
-    };
+    let needs_remote = task_requires_remote_authorization(task_type)
+        || match &local_grant {
+            Ok(grant) => grant.risk_level == Some(RiskLevel::High),
+            Err(_) => true,
+        };
 
     let grant = if needs_remote {
         let client = make_client();
@@ -688,6 +698,22 @@ mod tests {
         assert!(first.granted);
         assert_eq!(first.grant_id, second.grant_id);
         assert_eq!(first.task_type, api_contracts::LICENSE_TASK_REVIEW_FIND);
+    }
+
+    #[test]
+    fn high_risk_tasks_require_remote_authorization() {
+        assert!(task_requires_remote_authorization(
+            api_contracts::LICENSE_TASK_BATCH_DELIVERY
+        ));
+        assert!(task_requires_remote_authorization(
+            api_contracts::LICENSE_TASK_REVIEW_FULL_SCAN
+        ));
+        assert!(task_requires_remote_authorization(
+            api_contracts::LICENSE_TASK_CACHE_MANAGE
+        ));
+        assert!(!task_requires_remote_authorization(
+            api_contracts::LICENSE_TASK_REVIEW_FIND
+        ));
     }
 
     #[test]
