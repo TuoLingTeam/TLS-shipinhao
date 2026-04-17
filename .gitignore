@@ -84,3 +84,7 @@ target/
 apps/ui/dist/
 apps/ui/node_modules/
 backend/tests/artifacts/
+backend/dist/
+
+# Local runtime secrets
+cookie.txt

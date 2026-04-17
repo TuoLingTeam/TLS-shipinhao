@@ -31,7 +31,7 @@ pub fn run_release_command(args: &[std::ffi::OsString]) -> Result<()> {
     let output_dir = args
         .get(1)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("dist/release"));
+        .unwrap_or_else(|| PathBuf::from("backend/dist/release"));
 
     fs::create_dir_all(&output_dir)
         .with_context(|| format!("创建发布目录失败：{}", output_dir.display()))?;

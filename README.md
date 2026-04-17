@@ -26,6 +26,7 @@ TLS-shipinhao/
 │   ├── xtask/                    # 构建 / manifest / 发布命令
 │   └── db/                       # D1 schema / migration
 ├── Cargo.toml                    # 顶层 Rust workspace
+├── openspec/                     # 变更提案与迁移设计
 └── .github/workflows/            # CI/CD
 ```
 

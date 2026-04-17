@@ -81,7 +81,7 @@ jobs:
         working-directory: apps/desktop
         run: cargo tauri build
       - name: Generate version.json
-        run: cargo run -p xtask -- release '${{ needs.prepare.outputs.app_version }}' dist/release
+        run: cargo run -p xtask -- release '${{ needs.prepare.outputs.app_version }}' backend/dist/release
       - name: Generate integrity manifest (best effort)
         shell: bash
         run: |
@@ -89,7 +89,7 @@ jobs:
           asset=$(find target/release/bundle -type f \( -name '*.dmg' -o -name '*.exe' \) | head -1 || true)
           if [ -n "$asset" ]; then
             asset_name=$(basename "$asset")
-            cargo run -p xtask -- manifest target/release/bundle dist/release/integrity_manifest.json "$asset_name"
+            cargo run -p xtask -- manifest target/release/bundle backend/dist/release/integrity_manifest.json "$asset_name"
           else
             echo 'no bundle asset found, skip manifest generation'
           fi
@@ -101,7 +101,7 @@ jobs:
           set -euo pipefail
           tag='${{ needs.prepare.outputs.release_tag }}'
           shopt -s nullglob
-          for asset in ${{ matrix.artifact_glob }} dist/release/version.json dist/release/integrity_manifest.json; do
+          for asset in ${{ matrix.artifact_glob }} backend/dist/release/version.json backend/dist/release/integrity_manifest.json; do
             if [ -f "$asset" ]; then
               gh release upload "$tag" "$asset" --repo '${{ github.repository }}' --clobber
             fi

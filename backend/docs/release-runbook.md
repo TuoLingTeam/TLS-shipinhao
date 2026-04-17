@@ -17,12 +17,12 @@
 ### 3.1 生成 release 元数据
 
 ```bash
-cargo run -p xtask -- release 5.1.0 dist/release
+cargo run -p xtask -- release 5.1.0 backend/dist/release
 ```
 
 产物：
 
-- `dist/release/version.json`
+- `backend/dist/release/version.json`
 - `rolling.percentage = 10`
 - `mandatory = false`
 
