@@ -3,6 +3,7 @@ use reqwest::Url;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::error::AppError;
+use crate::migration::{LegacyPythonMigrator, MigrationPaths, MigrationReport};
 use crate::state::{self, AppState};
 
 const STORE_LOGIN_URL: &str = "https://store.weixin.qq.com/";
@@ -206,6 +207,20 @@ fn serialize_store_cookie_header(cookies: &[tauri::webview::Cookie<'static>]) ->
         .map(|(name, value)| format!("{name}={value}"))
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+/// 触发从 Python 4.3.0 旧目录的一次性数据迁移。
+///
+/// 幂等：新目录已有同名文件时直接跳过，不覆盖。所有错误聚合在 `MigrationReport.errors`。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn start_legacy_migration() -> Result<MigrationReport, AppError> {
+    tokio::task::spawn_blocking(|| {
+        let paths = MigrationPaths::default_platform()
+            .map_err(|e| AppError::Message(format!("解析迁移路径失败：{e}")))?;
+        Ok::<MigrationReport, AppError>(LegacyPythonMigrator::new(paths).run())
+    })
+    .await
+    .map_err(|e| AppError::Message(e.to_string()))?
 }
 
 fn looks_like_logged_in_store_session(cookies: &[tauri::webview::Cookie<'static>]) -> bool {

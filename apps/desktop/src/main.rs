@@ -4,6 +4,7 @@ mod adapters;
 mod app_settings;
 mod commands;
 mod error;
+mod migration;
 mod state;
 
 use state::AppState;
@@ -29,6 +30,7 @@ fn main() {
             commands::system::pick_cookie_save_dir,
             commands::system::open_cookie_login,
             commands::system::extract_cookie_from_login,
+            commands::system::start_legacy_migration,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
