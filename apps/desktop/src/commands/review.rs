@@ -8,7 +8,8 @@ use crate::commands::license::ensure_feature_authorized;
 use crate::commands::order::{emit_order_sync_progress, recent_order_cache_status};
 use crate::error::AppError;
 use crate::state::AppState;
-use desktop_services::order_cache_storage::{CacheOrderRecord, OrderCacheRepository};
+use desktop_services::order_cache_repository::{CacheOrderRecord, OrderCacheRepository};
+use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_planner::ORDER_CACHE_COVERAGE_DAYS;
 use desktop_services::order_sync_service::OrderSyncService;
 use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
@@ -18,6 +19,7 @@ use desktop_services::ReviewQuery;
 use domain_core::{MatchSource, OrderMatchResult, TimeWindow};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 fn cache_data_dir() -> std::path::PathBuf {
     dirs::data_local_dir()
@@ -162,7 +164,8 @@ fn run_review_match_flow(
             22,
             "最近 30 天缓存完整，直接读取本地订单并进入评分匹配…",
         );
-        let repository = OrderCacheRepository::open(&rich_order_cache_path()).map_err(AppError::Internal)?;
+        let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
+            .map_err(AppError::Internal)?;
         let orders = repository
             .fetch_orders_in_range(start_unix, end_unix.min(coverage_end))
             .map_err(AppError::Internal)?;
@@ -177,7 +180,9 @@ fn run_review_match_flow(
         );
 
         let finder = HttpOrderCacheFinder::new(cookie, magic);
-        let repository = OrderCacheRepository::open(&rich_order_cache_path()).map_err(AppError::Internal)?;
+        let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
+            .map_err(AppError::Internal)?;
+        let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
         let now = chrono::Utc::now();
         let retention_start = now - chrono::Duration::days(ORDER_CACHE_COVERAGE_DAYS);
@@ -309,7 +314,7 @@ pub async fn find_quality_refund_orders(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use desktop_services::order_cache_storage::{CacheOrderProduct, CacheOrderRecord};
+    use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
     use desktop_services::review_batch_match::EvaluationRecord;
 
     #[test]

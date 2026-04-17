@@ -1,7 +1,7 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
 use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
-use desktop_services::order_cache_storage::{CacheOrderProduct, CacheOrderRecord};
+use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
 use domain_core::OrderCacheEntry;
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, USER_AGENT,

@@ -3,12 +3,14 @@ use crate::adapters::sqlite_order_cache::SqliteOrderCache;
 use crate::commands::license::ensure_feature_authorized;
 use crate::error::AppError;
 use crate::state::AppState;
-use desktop_services::order_cache_storage::OrderCacheRepository;
+use desktop_services::order_cache_repository::OrderCacheRepository;
+use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_service::{
     OrderSyncService, ORDER_CACHE_SCOPE, MERGE_TOLERANCE_SECONDS, MIN_GAP_WIDTH_SECONDS,
 };
 use domain_core::{OrderCacheEntry, TimeWindow};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 fn cache_data_dir() -> std::path::PathBuf {
@@ -83,7 +85,7 @@ pub(crate) fn emit_order_sync_progress(
 
 pub(crate) fn recent_order_cache_status() -> anyhow::Result<OrderCacheStatus> {
     let rich_cache_path = rich_order_cache_path();
-    let repository = OrderCacheRepository::open(&rich_cache_path)?;
+    let repository = SqliteOrderCacheRepository::open(&rich_cache_path)?;
     repository.initialize()?;
     let count = repository.count_orders()?;
     let state = repository.get_state(ORDER_CACHE_SCOPE)?;
@@ -121,7 +123,7 @@ fn write_lightweight_recent_cache() -> anyhow::Result<Vec<OrderCacheEntry>> {
     use desktop_services::OrderCacheStore;
 
     let status_window = recent_window();
-    let repository = OrderCacheRepository::open(&rich_order_cache_path())?;
+    let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())?;
     repository.initialize()?;
     let (start_unix, end_unix) = parse_iso_window(&status_window.start_at, &status_window.end_at)?;
     let orders = repository.fetch_orders_in_range(start_unix, end_unix)?;
@@ -200,7 +202,7 @@ pub async fn sync_orders(
         let cache = SqliteOrderCache::new(data_dir);
         cache.save_orders(&snapshot.ui_entries)?;
 
-        let mut repository = OrderCacheRepository::open(&rich_cache_path)?;
+        let repository = SqliteOrderCacheRepository::open(&rich_cache_path)?;
         repository.initialize()?;
         repository.upsert_orders(&snapshot.cache_records)?;
         Ok::<(), anyhow::Error>(())
@@ -243,8 +245,9 @@ pub async fn sync_recent_order_cache(
     let app_clone = app.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<OrderSyncResult, AppError> {
         let finder = HttpOrderCacheFinder::new(cookie, magic);
-        let repository = OrderCacheRepository::open(&rich_order_cache_path())
+        let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
             .map_err(AppError::Internal)?;
+        let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
         let (written, warnings, coverage_start, coverage_end) = service
             .ensure_recent_cache(Some(chrono::Utc::now()))

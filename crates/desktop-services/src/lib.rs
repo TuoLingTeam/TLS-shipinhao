@@ -1,6 +1,7 @@
 pub mod day_window;
 pub mod delivery_batch_runner;
 pub mod delivery_update;
+pub mod order_cache_repository;
 pub mod order_cache_storage;
 pub mod order_fetcher;
 pub mod order_fetcher_risk;

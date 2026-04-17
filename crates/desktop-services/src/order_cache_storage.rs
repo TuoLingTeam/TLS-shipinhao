@@ -1,9 +1,19 @@
+//! 订单富缓存的 SQLite 实现 + DDL/迁移辅助。
+//!
+//! trait `OrderCacheRepository` 与 DTO 定义在 [`crate::order_cache_repository`]。
+//! 这里通过 `pub use` 对外兼容导出，避免破坏旧的 import 路径
+//! `desktop_services::order_cache_storage::{CacheOrderRecord, ...}`。
+
 use anyhow::Context;
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+pub use crate::order_cache_repository::{
+    CacheOrderProduct, CacheOrderRecord, OrderCacheRepository, SyncStateRecord,
+};
 
 pub const CURRENT_SCHEMA_VERSION: i32 = 2;
 
@@ -87,54 +97,16 @@ const ORDERS_V2_COLUMNS: &[(&str, &str)] = &[
     ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct CacheOrderProduct {
-    pub product_id: String,
-    pub sku_id: String,
-    pub sale_param: String,
-    pub product_name: String,
-    pub thumb_img: String,
+/// `OrderCacheRepository` 的 SQLite 实现。
+///
+/// 内部使用 `Mutex<Connection>` 串行化对单文件数据库的访问，
+/// 使得 trait 方法可以保持 `&self` 并通过 `Arc<dyn OrderCacheRepository>`
+/// 在多个 Tauri 线程间共享。
+pub struct SqliteOrderCacheRepository {
+    connection: Mutex<Connection>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct CacheOrderRecord {
-    pub order_id: String,
-    pub buyer_nickname: String,
-    pub normalized_nickname: String,
-    pub receiver_name: String,
-    pub amount_cent: i64,
-    pub create_time: i64,
-    pub confirm_receipt_time: i64,
-    pub is_waybill_received: bool,
-    pub waybill_received_time: i64,
-    pub is_education_order: bool,
-    pub order_status: i64,
-    pub openid: String,
-    pub raw_source: String,
-    pub updated_at: i64,
-    pub products: Vec<CacheOrderProduct>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncStateRecord {
-    pub scope: String,
-    pub coverage_start: i64,
-    pub coverage_end: i64,
-    pub last_incremental_start: i64,
-    pub last_incremental_end: i64,
-    pub last_success_at: i64,
-    pub last_mode: String,
-    pub last_error: String,
-}
-
-pub struct OrderCacheRepository {
-    connection: Connection,
-}
-
-impl OrderCacheRepository {
+impl SqliteOrderCacheRepository {
     pub fn open(db_path: &Path) -> anyhow::Result<Self> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -143,43 +115,48 @@ impl OrderCacheRepository {
         connection.pragma_update(None, "journal_mode", "WAL")?;
         // 打开外键约束：order_products → orders 的 ON DELETE CASCADE 需要这一步。
         connection.pragma_update(None, "foreign_keys", "ON")?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection: Mutex::new(connection),
+        })
     }
 
-    pub fn initialize(&self) -> anyhow::Result<()> {
-        let existing_version = self.read_user_version()?;
-        if existing_version >= CURRENT_SCHEMA_VERSION {
-            // 已处于目标版本：仅确保 DDL 幂等语句执行一次，兼容手工删除过索引的场景。
-            self.connection
-                .execute_batch(CREATE_INDEXES_SQL)
-                .context("ensure indexes on up-to-date schema")?;
-            return Ok(());
-        }
-
-        self.migrate_to_current(existing_version)
-            .with_context(|| format!("migrate order cache schema from v{existing_version}"))?;
-        self.write_user_version(CURRENT_SCHEMA_VERSION)?;
-        Ok(())
-    }
-
-    fn read_user_version(&self) -> anyhow::Result<i32> {
-        let value: i32 = self
+    fn with_connection<R>(
+        &self,
+        f: impl FnOnce(&Connection) -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        let guard = self
             .connection
-            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+            .lock()
+            .map_err(|e| anyhow::anyhow!("order cache connection mutex poisoned: {e}"))?;
+        f(&guard)
+    }
+
+    fn with_connection_mut<R>(
+        &self,
+        f: impl FnOnce(&mut Connection) -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        let mut guard = self
+            .connection
+            .lock()
+            .map_err(|e| anyhow::anyhow!("order cache connection mutex poisoned: {e}"))?;
+        f(&mut guard)
+    }
+
+    fn read_user_version(conn: &Connection) -> anyhow::Result<i32> {
+        let value: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
         Ok(value)
     }
 
-    fn write_user_version(&self, version: i32) -> anyhow::Result<()> {
-        // PRAGMA user_version 不支持参数占位符，只能把整数直接拼进语句；该值来自常量，不可被外部输入污染。
-        self.connection
-            .execute_batch(&format!("PRAGMA user_version = {version};"))?;
+    fn write_user_version(conn: &Connection, version: i32) -> anyhow::Result<()> {
+        // PRAGMA user_version 不支持参数占位符；version 来自常量，不受外部输入污染。
+        conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
         Ok(())
     }
 
     /// v0（空库）/ v1（单表 orders，字段不全）→ v2（4 表 + 索引）统一迁移入口。
-    /// 所有变更在单事务内完成，失败回滚；成功后由调用方写入 user_version。
-    fn migrate_to_current(&self, _from_version: i32) -> anyhow::Result<()> {
-        let tx = self.connection.unchecked_transaction()?;
+    /// 所有变更在单事务内完成，失败回滚；成功后写入 user_version。
+    fn migrate_to_current(conn: &Connection) -> anyhow::Result<()> {
+        let tx = conn.unchecked_transaction()?;
         tx.execute_batch(CREATE_ORDERS_SQL)?;
         tx.execute_batch(CREATE_ORDER_PRODUCTS_SQL)?;
         tx.execute_batch(CREATE_SYNC_STATE_SQL)?;
@@ -199,97 +176,122 @@ impl OrderCacheRepository {
         tx.commit()?;
         Ok(())
     }
+}
 
-    pub fn clear_all(&self) -> anyhow::Result<()> {
-        self.connection.execute("DELETE FROM order_products", [])?;
-        self.connection.execute("DELETE FROM orders", [])?;
-        self.connection.execute("DELETE FROM sync_state", [])?;
-        self.connection.execute("DELETE FROM cache_segments", [])?;
-        Ok(())
+impl OrderCacheRepository for SqliteOrderCacheRepository {
+    fn initialize(&self) -> anyhow::Result<()> {
+        self.with_connection(|conn| {
+            let existing_version = Self::read_user_version(conn)?;
+            if existing_version >= CURRENT_SCHEMA_VERSION {
+                // 已处于目标版本：仅确保索引幂等创建，兼容手工删除过索引的场景。
+                conn.execute_batch(CREATE_INDEXES_SQL)
+                    .context("ensure indexes on up-to-date schema")?;
+                return Ok(());
+            }
+
+            Self::migrate_to_current(conn)
+                .with_context(|| format!("migrate order cache schema from v{existing_version}"))?;
+            Self::write_user_version(conn, CURRENT_SCHEMA_VERSION)?;
+            Ok(())
+        })
     }
 
-    pub fn upsert_orders(&mut self, orders: &[CacheOrderRecord]) -> anyhow::Result<usize> {
+    fn clear_all(&self) -> anyhow::Result<()> {
+        self.with_connection(|conn| {
+            conn.execute("DELETE FROM order_products", [])?;
+            conn.execute("DELETE FROM orders", [])?;
+            conn.execute("DELETE FROM sync_state", [])?;
+            conn.execute("DELETE FROM cache_segments", [])?;
+            Ok(())
+        })
+    }
+
+    fn upsert_orders(&self, orders: &[CacheOrderRecord]) -> anyhow::Result<usize> {
         if orders.is_empty() {
             return Ok(0);
         }
-        let tx = self.connection.transaction()?;
-        for order in orders {
-            tx.execute(
-                "DELETE FROM order_products WHERE order_id = ?1",
-                params![order.order_id],
-            )?;
-            tx.execute(
-                r#"
-                INSERT OR REPLACE INTO orders (
-                    order_id, buyer_nickname, normalized_nickname, create_time,
-                    receiver_name, amount_cent, confirm_receipt_time, is_waybill_received, waybill_received_time,
-                    is_education_order, order_status, openid, raw_source, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
-                "#,
-                params![
-                    order.order_id,
-                    order.buyer_nickname,
-                    order.normalized_nickname,
-                    order.create_time,
-                    order.receiver_name,
-                    order.amount_cent,
-                    order.confirm_receipt_time,
-                    bool_to_int(order.is_waybill_received),
-                    order.waybill_received_time,
-                    bool_to_int(order.is_education_order),
-                    order.order_status,
-                    order.openid,
-                    order.raw_source,
-                    order.updated_at,
-                ],
-            )?;
-            for product in &order.products {
+        self.with_connection_mut(|conn| {
+            let tx = conn.transaction()?;
+            for order in orders {
+                tx.execute(
+                    "DELETE FROM order_products WHERE order_id = ?1",
+                    params![order.order_id],
+                )?;
                 tx.execute(
                     r#"
-                    INSERT INTO order_products (
-                        order_id, product_id, sku_id, sale_param, product_name, thumb_img
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    INSERT OR REPLACE INTO orders (
+                        order_id, buyer_nickname, normalized_nickname, create_time,
+                        receiver_name, amount_cent, confirm_receipt_time, is_waybill_received, waybill_received_time,
+                        is_education_order, order_status, openid, raw_source, updated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                     "#,
                     params![
                         order.order_id,
-                        product.product_id,
-                        product.sku_id,
-                        product.sale_param,
-                        product.product_name,
-                        product.thumb_img,
+                        order.buyer_nickname,
+                        order.normalized_nickname,
+                        order.create_time,
+                        order.receiver_name,
+                        order.amount_cent,
+                        order.confirm_receipt_time,
+                        bool_to_int(order.is_waybill_received),
+                        order.waybill_received_time,
+                        bool_to_int(order.is_education_order),
+                        order.order_status,
+                        order.openid,
+                        order.raw_source,
+                        order.updated_at,
                     ],
                 )?;
+                for product in &order.products {
+                    tx.execute(
+                        r#"
+                        INSERT INTO order_products (
+                            order_id, product_id, sku_id, sale_param, product_name, thumb_img
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                        "#,
+                        params![
+                            order.order_id,
+                            product.product_id,
+                            product.sku_id,
+                            product.sale_param,
+                            product.product_name,
+                            product.thumb_img,
+                        ],
+                    )?;
+                }
             }
-        }
-        tx.commit()?;
-        Ok(orders.len())
+            tx.commit()?;
+            Ok(orders.len())
+        })
     }
 
-    pub fn save_state(&self, state: &SyncStateRecord) -> anyhow::Result<()> {
-        self.connection.execute(
-            r#"
-            INSERT OR REPLACE INTO sync_state (
-                scope, coverage_start, coverage_end, last_incremental_start,
-                last_incremental_end, last_success_at, last_mode, last_error
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-            "#,
-            params![
-                state.scope,
-                state.coverage_start,
-                state.coverage_end,
-                state.last_incremental_start,
-                state.last_incremental_end,
-                state.last_success_at,
-                state.last_mode,
-                state.last_error,
-            ],
-        )?;
-        Ok(())
+    fn save_state(&self, state: &SyncStateRecord) -> anyhow::Result<()> {
+        self.with_connection(|conn| {
+            conn.execute(
+                r#"
+                INSERT OR REPLACE INTO sync_state (
+                    scope, coverage_start, coverage_end, last_incremental_start,
+                    last_incremental_end, last_success_at, last_mode, last_error
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                "#,
+                params![
+                    state.scope,
+                    state.coverage_start,
+                    state.coverage_end,
+                    state.last_incremental_start,
+                    state.last_incremental_end,
+                    state.last_success_at,
+                    state.last_mode,
+                    state.last_error,
+                ],
+            )?;
+            Ok(())
+        })
     }
 
-    pub fn get_state(&self, scope: &str) -> anyhow::Result<Option<SyncStateRecord>> {
-        self.connection
-            .query_row(
+    fn get_state(&self, scope: &str) -> anyhow::Result<Option<SyncStateRecord>> {
+        self.with_connection(|conn| {
+            conn.query_row(
                 r#"
                 SELECT scope, coverage_start, coverage_end, last_incremental_start,
                        last_incremental_end, last_success_at, last_mode, last_error
@@ -311,98 +313,104 @@ impl OrderCacheRepository {
             )
             .optional()
             .context("query sync_state")
+        })
     }
 
-    pub fn fetch_order(&self, order_id: &str) -> anyhow::Result<Option<CacheOrderRecord>> {
-        let order = self
-            .connection
-            .query_row(
-                r#"
-                SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
-                       confirm_receipt_time, is_waybill_received, waybill_received_time,
-                       is_education_order, order_status, openid, raw_source, updated_at
-                FROM orders WHERE order_id = ?1
-                "#,
-                params![order_id],
-                |row| {
-                    Ok(CacheOrderRecord {
-                        order_id: row.get(0)?,
-                        buyer_nickname: row.get(1)?,
-                        normalized_nickname: row.get(2)?,
-                        receiver_name: row.get(3)?,
-                        amount_cent: row.get(4)?,
-                        create_time: row.get(5)?,
-                        confirm_receipt_time: row.get(6)?,
-                        is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
-                        waybill_received_time: row.get(8)?,
-                        is_education_order: int_to_bool(row.get::<_, i64>(9)?),
-                        order_status: row.get(10)?,
-                        openid: row.get(11)?,
-                        raw_source: row.get(12)?,
-                        updated_at: row.get(13)?,
-                        products: Vec::new(),
-                    })
-                },
-            )
-            .optional()?;
+    fn fetch_order(&self, order_id: &str) -> anyhow::Result<Option<CacheOrderRecord>> {
+        self.with_connection(|conn| {
+            let order = conn
+                .query_row(
+                    r#"
+                    SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
+                           confirm_receipt_time, is_waybill_received, waybill_received_time,
+                           is_education_order, order_status, openid, raw_source, updated_at
+                    FROM orders WHERE order_id = ?1
+                    "#,
+                    params![order_id],
+                    |row| {
+                        Ok(CacheOrderRecord {
+                            order_id: row.get(0)?,
+                            buyer_nickname: row.get(1)?,
+                            normalized_nickname: row.get(2)?,
+                            receiver_name: row.get(3)?,
+                            amount_cent: row.get(4)?,
+                            create_time: row.get(5)?,
+                            confirm_receipt_time: row.get(6)?,
+                            is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
+                            waybill_received_time: row.get(8)?,
+                            is_education_order: int_to_bool(row.get::<_, i64>(9)?),
+                            order_status: row.get(10)?,
+                            openid: row.get(11)?,
+                            raw_source: row.get(12)?,
+                            updated_at: row.get(13)?,
+                            products: Vec::new(),
+                        })
+                    },
+                )
+                .optional()?;
 
-        let Some(mut order) = order else {
-            return Ok(None);
-        };
-        let mut stmt = self.connection.prepare(
-            r#"SELECT product_id, sku_id, sale_param, product_name, thumb_img
-               FROM order_products WHERE order_id = ?1 ORDER BY id ASC"#,
-        )?;
-        let rows = stmt.query_map(params![order_id], |row| {
-            Ok(CacheOrderProduct {
-                product_id: row.get(0)?,
-                sku_id: row.get(1)?,
-                sale_param: row.get(2)?,
-                product_name: row.get(3)?,
-                thumb_img: row.get(4)?,
-            })
-        })?;
-        order.products = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(Some(order))
+            let Some(mut order) = order else {
+                return Ok(None);
+            };
+            let mut stmt = conn.prepare(
+                r#"SELECT product_id, sku_id, sale_param, product_name, thumb_img
+                   FROM order_products WHERE order_id = ?1 ORDER BY id ASC"#,
+            )?;
+            let rows = stmt.query_map(params![order_id], |row| {
+                Ok(CacheOrderProduct {
+                    product_id: row.get(0)?,
+                    sku_id: row.get(1)?,
+                    sale_param: row.get(2)?,
+                    product_name: row.get(3)?,
+                    thumb_img: row.get(4)?,
+                })
+            })?;
+            order.products = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(Some(order))
+        })
     }
 
-    pub fn mark_segment_complete(
+    fn mark_segment_complete(
         &self,
         scope: &str,
         start_timestamp: i64,
         end_timestamp: i64,
     ) -> anyhow::Result<()> {
-        self.connection.execute(
-            r#"
-            INSERT OR REPLACE INTO cache_segments (scope, start_ts, end_ts, status, updated_at)
-            VALUES (?1, ?2, ?3, 'complete', ?4)
-            "#,
-            params![scope, start_timestamp, end_timestamp, now_epoch_seconds()],
-        )?;
-        Ok(())
+        self.with_connection(|conn| {
+            conn.execute(
+                r#"
+                INSERT OR REPLACE INTO cache_segments (scope, start_ts, end_ts, status, updated_at)
+                VALUES (?1, ?2, ?3, 'complete', ?4)
+                "#,
+                params![scope, start_timestamp, end_timestamp, now_epoch_seconds()],
+            )?;
+            Ok(())
+        })
     }
 
-    pub fn get_complete_segments(
+    fn get_complete_segments(
         &self,
         scope: &str,
         start_timestamp: i64,
         end_timestamp: i64,
     ) -> anyhow::Result<Vec<(i64, i64)>> {
-        let mut stmt = self.connection.prepare(
-            r#"
-            SELECT start_ts, end_ts
-            FROM cache_segments
-            WHERE scope = ?1 AND status = 'complete' AND end_ts >= ?2 AND start_ts <= ?3
-            ORDER BY start_ts ASC, end_ts ASC
-            "#,
-        )?;
-        let rows = stmt.query_map(params![scope, start_timestamp, end_timestamp], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        self.with_connection(|conn| {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT start_ts, end_ts
+                FROM cache_segments
+                WHERE scope = ?1 AND status = 'complete' AND end_ts >= ?2 AND start_ts <= ?3
+                ORDER BY start_ts ASC, end_ts ASC
+                "#,
+            )?;
+            let rows = stmt.query_map(params![scope, start_timestamp, end_timestamp], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            })?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
     }
 
-    pub fn get_missing_segments(
+    fn get_missing_segments(
         &self,
         scope: &str,
         start_timestamp: i64,
@@ -414,159 +422,142 @@ impl OrderCacheRepository {
             return Ok(Vec::new());
         }
 
-        let mut segments = self
-            .get_complete_segments(scope, start_timestamp, end_timestamp)?
-            .into_iter()
-            .map(|(seg_start, seg_end)| {
-                (seg_start.max(start_timestamp), seg_end.min(end_timestamp))
-            })
-            .filter(|(seg_start, seg_end)| seg_start <= seg_end)
-            .collect::<Vec<_>>();
-
-        if segments.is_empty() {
-            return Ok(vec![(start_timestamp, end_timestamp)]);
-        }
-
-        segments.sort_by_key(|(start, end)| (*start, *end));
-        let mut merged: Vec<(i64, i64)> = Vec::new();
-        for (seg_start, seg_end) in segments {
-            match merged.last_mut() {
-                Some((_, last_end)) if seg_start <= *last_end + merge_tolerance => {
-                    *last_end = (*last_end).max(seg_end);
-                }
-                _ => merged.push((seg_start, seg_end)),
-            }
-        }
-
-        let mut missing = Vec::new();
-        let mut cursor = start_timestamp;
-        for (seg_start, seg_end) in merged {
-            if cursor < seg_start {
-                let gap_width = seg_start - cursor;
-                if gap_width >= min_gap_width {
-                    missing.push((cursor, seg_start - 1));
-                }
-            }
-            cursor = cursor.max(seg_end + 1);
-        }
-        if cursor <= end_timestamp {
-            let gap_width = end_timestamp - cursor + 1;
-            if gap_width >= min_gap_width {
-                missing.push((cursor, end_timestamp));
-            }
-        }
-        Ok(missing)
+        let raw_segments = self.get_complete_segments(scope, start_timestamp, end_timestamp)?;
+        Ok(compute_missing_segments(
+            start_timestamp,
+            end_timestamp,
+            merge_tolerance,
+            min_gap_width,
+            raw_segments,
+        ))
     }
 
-    pub fn delete_older_than(&self, scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
-        let expired_rows =
-            stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
-        let order_ids = expired_rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        if !order_ids.is_empty() {
-            let tx = self.connection.unchecked_transaction()?;
-            for order_id in &order_ids {
+    fn has_dirty_sale_param(&self) -> anyhow::Result<bool> {
+        self.with_connection(|conn| {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM order_products WHERE sale_param LIKE '[%'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count > 0)
+        })
+    }
+
+    fn delete_older_than(&self, scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize> {
+        self.with_connection(|conn| {
+            let mut stmt =
+                conn.prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
+            let expired_rows =
+                stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
+            let order_ids = expired_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+            if !order_ids.is_empty() {
+                let tx = conn.unchecked_transaction()?;
+                for order_id in &order_ids {
+                    tx.execute(
+                        "DELETE FROM order_products WHERE order_id = ?1",
+                        params![order_id],
+                    )?;
+                    tx.execute(
+                        "DELETE FROM orders WHERE order_id = ?1",
+                        params![order_id],
+                    )?;
+                }
                 tx.execute(
-                    "DELETE FROM order_products WHERE order_id = ?1",
-                    params![order_id],
+                    "DELETE FROM cache_segments WHERE scope = ?1 AND end_ts < ?2",
+                    params![scope, cutoff_timestamp],
                 )?;
-                tx.execute("DELETE FROM orders WHERE order_id = ?1", params![order_id])?;
+                tx.execute(
+                    r#"
+                    UPDATE cache_segments
+                    SET start_ts = ?1, updated_at = ?2
+                    WHERE scope = ?3 AND start_ts < ?1 AND end_ts >= ?1
+                    "#,
+                    params![cutoff_timestamp, now_epoch_seconds(), scope],
+                )?;
+                tx.commit()?;
             }
-            tx.execute(
-                "DELETE FROM cache_segments WHERE scope = ?1 AND end_ts < ?2",
-                params![scope, cutoff_timestamp],
-            )?;
-            tx.execute(
-                r#"
-                UPDATE cache_segments
-                SET start_ts = ?1, updated_at = ?2
-                WHERE scope = ?3 AND start_ts < ?1 AND end_ts >= ?1
-                "#,
-                params![cutoff_timestamp, now_epoch_seconds(), scope],
-            )?;
-            tx.commit()?;
-        }
-        Ok(order_ids.len())
+            Ok(order_ids.len())
+        })
     }
 
-    pub fn fetch_orders_in_range(
+    fn fetch_orders_in_range(
         &self,
         start_timestamp: i64,
         end_timestamp: i64,
     ) -> anyhow::Result<Vec<CacheOrderRecord>> {
-        let mut order_stmt = self.connection.prepare(
-            r#"
-            SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
-                   confirm_receipt_time, is_waybill_received, waybill_received_time,
-                   is_education_order, order_status, openid, raw_source, updated_at
-            FROM orders
-            WHERE create_time >= ?1 AND create_time <= ?2
-            ORDER BY create_time DESC, order_id DESC
-            "#,
-        )?;
-        let order_rows = order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
-            Ok(CacheOrderRecord {
-                order_id: row.get(0)?,
-                buyer_nickname: row.get(1)?,
-                normalized_nickname: row.get(2)?,
-                receiver_name: row.get(3)?,
-                amount_cent: row.get(4)?,
-                create_time: row.get(5)?,
-                confirm_receipt_time: row.get(6)?,
-                is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
-                waybill_received_time: row.get(8)?,
-                is_education_order: int_to_bool(row.get::<_, i64>(9)?),
-                order_status: row.get(10)?,
-                openid: row.get(11)?,
-                raw_source: row.get(12)?,
-                updated_at: row.get(13)?,
-                products: Vec::new(),
-            })
-        })?;
-        let mut orders = order_rows.collect::<rusqlite::Result<Vec<_>>>()?;
-
-        let mut product_stmt = self.connection.prepare(
-            r#"
-            SELECT p.order_id, p.product_id, p.sku_id, p.sale_param, p.product_name, p.thumb_img
-            FROM order_products p
-            JOIN orders o ON o.order_id = p.order_id
-            WHERE o.create_time >= ?1 AND o.create_time <= ?2
-            ORDER BY o.create_time DESC, p.order_id ASC, p.id ASC
-            "#,
-        )?;
-        let product_rows =
-            product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    CacheOrderProduct {
-                        product_id: row.get(1)?,
-                        sku_id: row.get(2)?,
-                        sale_param: row.get(3)?,
-                        product_name: row.get(4)?,
-                        thumb_img: row.get(5)?,
-                    },
-                ))
+        self.with_connection(|conn| {
+            let mut order_stmt = conn.prepare(
+                r#"
+                SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
+                       confirm_receipt_time, is_waybill_received, waybill_received_time,
+                       is_education_order, order_status, openid, raw_source, updated_at
+                FROM orders
+                WHERE create_time >= ?1 AND create_time <= ?2
+                ORDER BY create_time DESC, order_id DESC
+                "#,
+            )?;
+            let order_rows = order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+                Ok(CacheOrderRecord {
+                    order_id: row.get(0)?,
+                    buyer_nickname: row.get(1)?,
+                    normalized_nickname: row.get(2)?,
+                    receiver_name: row.get(3)?,
+                    amount_cent: row.get(4)?,
+                    create_time: row.get(5)?,
+                    confirm_receipt_time: row.get(6)?,
+                    is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
+                    waybill_received_time: row.get(8)?,
+                    is_education_order: int_to_bool(row.get::<_, i64>(9)?),
+                    order_status: row.get(10)?,
+                    openid: row.get(11)?,
+                    raw_source: row.get(12)?,
+                    updated_at: row.get(13)?,
+                    products: Vec::new(),
+                })
             })?;
-        let mut products_by_order: HashMap<String, Vec<CacheOrderProduct>> = HashMap::new();
-        for row in product_rows {
-            let (order_id, product) = row?;
-            products_by_order.entry(order_id).or_default().push(product);
-        }
-        for order in &mut orders {
-            order.products = products_by_order
-                .remove(&order.order_id)
-                .unwrap_or_default();
-        }
-        Ok(orders)
+            let mut orders = order_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+            let mut product_stmt = conn.prepare(
+                r#"
+                SELECT p.order_id, p.product_id, p.sku_id, p.sale_param, p.product_name, p.thumb_img
+                FROM order_products p
+                JOIN orders o ON o.order_id = p.order_id
+                WHERE o.create_time >= ?1 AND o.create_time <= ?2
+                ORDER BY o.create_time DESC, p.order_id ASC, p.id ASC
+                "#,
+            )?;
+            let product_rows =
+                product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        CacheOrderProduct {
+                            product_id: row.get(1)?,
+                            sku_id: row.get(2)?,
+                            sale_param: row.get(3)?,
+                            product_name: row.get(4)?,
+                            thumb_img: row.get(5)?,
+                        },
+                    ))
+                })?;
+            let mut products_by_order: HashMap<String, Vec<CacheOrderProduct>> = HashMap::new();
+            for row in product_rows {
+                let (order_id, product) = row?;
+                products_by_order.entry(order_id).or_default().push(product);
+            }
+            for order in &mut orders {
+                order.products = products_by_order
+                    .remove(&order.order_id)
+                    .unwrap_or_default();
+            }
+            Ok(orders)
+        })
     }
 
-    pub fn count_orders(&self) -> anyhow::Result<usize> {
-        let count = self
-            .connection
-            .query_row("SELECT COUNT(*) FROM orders", [], |row| row.get::<_, i64>(0))?;
-        Ok(count.max(0) as usize)
+    fn count_orders(&self) -> anyhow::Result<usize> {
+        self.with_connection(|conn| {
+            let count = conn.query_row("SELECT COUNT(*) FROM orders", [], |row| row.get::<_, i64>(0))?;
+            Ok(count.max(0) as usize)
+        })
     }
 }
 
@@ -577,6 +568,7 @@ fn bool_to_int(value: bool) -> i64 {
         0
     }
 }
+
 fn int_to_bool(value: i64) -> bool {
     value != 0
 }
@@ -597,6 +589,55 @@ pub fn now_epoch_seconds() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// 计算 [start, end] 内未覆盖的缺口段。分离成纯函数便于单元测试和外部调用。
+pub(crate) fn compute_missing_segments(
+    start_timestamp: i64,
+    end_timestamp: i64,
+    merge_tolerance: i64,
+    min_gap_width: i64,
+    raw_segments: Vec<(i64, i64)>,
+) -> Vec<(i64, i64)> {
+    let mut segments = raw_segments
+        .into_iter()
+        .map(|(seg_start, seg_end)| (seg_start.max(start_timestamp), seg_end.min(end_timestamp)))
+        .filter(|(seg_start, seg_end)| seg_start <= seg_end)
+        .collect::<Vec<_>>();
+
+    if segments.is_empty() {
+        return vec![(start_timestamp, end_timestamp)];
+    }
+
+    segments.sort_by_key(|(start, end)| (*start, *end));
+    let mut merged: Vec<(i64, i64)> = Vec::new();
+    for (seg_start, seg_end) in segments {
+        match merged.last_mut() {
+            Some((_, last_end)) if seg_start <= *last_end + merge_tolerance => {
+                *last_end = (*last_end).max(seg_end);
+            }
+            _ => merged.push((seg_start, seg_end)),
+        }
+    }
+
+    let mut missing = Vec::new();
+    let mut cursor = start_timestamp;
+    for (seg_start, seg_end) in merged {
+        if cursor < seg_start {
+            let gap_width = seg_start - cursor;
+            if gap_width >= min_gap_width {
+                missing.push((cursor, seg_start - 1));
+            }
+        }
+        cursor = cursor.max(seg_end + 1);
+    }
+    if cursor <= end_timestamp {
+        let gap_width = end_timestamp - cursor + 1;
+        if gap_width >= min_gap_width {
+            missing.push((cursor, end_timestamp));
+        }
+    }
+    missing
 }
 
 #[cfg(test)]
@@ -630,11 +671,15 @@ mod tests {
         }
     }
 
+    fn open_repo(path: &Path) -> SqliteOrderCacheRepository {
+        SqliteOrderCacheRepository::open(path).unwrap()
+    }
+
     #[test]
     fn initialize_and_persist_state() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
         let state = SyncStateRecord {
             scope: "tls_order_cache".into(),
@@ -654,7 +699,7 @@ mod tests {
     fn upsert_and_fetch_order() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
         repo.upsert_orders(&[sample_order()]).unwrap();
         let loaded = repo.fetch_order("o-1").unwrap().unwrap();
@@ -668,7 +713,7 @@ mod tests {
     fn computes_missing_segments_and_range_fetch() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
         let mut first = sample_order();
         first.create_time = 1_000;
@@ -693,7 +738,7 @@ mod tests {
     fn delete_older_than_removes_old_orders_and_trims_segments() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
         let mut first = sample_order();
         first.create_time = 1_000;
@@ -718,69 +763,79 @@ mod tests {
     fn clear_all_removes_records() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
         repo.upsert_orders(&[sample_order()]).unwrap();
         repo.clear_all().unwrap();
         assert!(repo.fetch_order("o-1").unwrap().is_none());
     }
 
-    fn table_exists(conn: &Connection, name: &str) -> bool {
-        conn.query_row(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?1",
-            params![name],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()
+    fn table_exists(repo: &SqliteOrderCacheRepository, name: &str) -> bool {
+        repo.with_connection(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?1",
+                    params![name],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .unwrap()
+                .is_some())
+        })
         .unwrap()
-        .is_some()
     }
 
-    fn index_exists(conn: &Connection, name: &str) -> bool {
-        conn.query_row(
-            "SELECT 1 FROM sqlite_master WHERE type='index' AND name = ?1",
-            params![name],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()
+    fn index_exists(repo: &SqliteOrderCacheRepository, name: &str) -> bool {
+        repo.with_connection(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT 1 FROM sqlite_master WHERE type='index' AND name = ?1",
+                    params![name],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .unwrap()
+                .is_some())
+        })
         .unwrap()
-        .is_some()
     }
 
     #[test]
     fn fresh_schema_contains_all_tables_indexes_and_wal_mode() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
 
         for table in ["orders", "order_products", "sync_state", "cache_segments"] {
-            assert!(table_exists(&repo.connection, table), "missing table {table}");
+            assert!(table_exists(&repo, table), "missing table {table}");
         }
         for index in [
             "idx_orders_create_time",
             "idx_products_order_id",
             "idx_cache_segments_scope_start",
         ] {
-            assert!(index_exists(&repo.connection, index), "missing index {index}");
+            assert!(index_exists(&repo, index), "missing index {index}");
         }
 
-        let columns = columns_of_table(&repo.connection, "orders").unwrap();
-        for (column_name, _) in ORDERS_V2_COLUMNS {
-            assert!(columns.contains(*column_name), "orders missing column {column_name}");
-        }
+        repo.with_connection(|conn| {
+            let columns = columns_of_table(conn, "orders")?;
+            for (column_name, _) in ORDERS_V2_COLUMNS {
+                assert!(
+                    columns.contains(*column_name),
+                    "orders missing column {column_name}"
+                );
+            }
+            let user_version: i32 =
+                conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
 
-        let user_version: i32 = repo
-            .connection
-            .pragma_query_value(None, "user_version", |row| row.get(0))
-            .unwrap();
-        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
-
-        let journal_mode: String = repo
-            .connection
-            .pragma_query_value(None, "journal_mode", |row| row.get(0))
-            .unwrap();
-        assert_eq!(journal_mode.to_lowercase(), "wal");
+            let journal_mode: String =
+                conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+            assert_eq!(journal_mode.to_lowercase(), "wal");
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -804,73 +859,111 @@ mod tests {
                 .unwrap();
         }
 
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
 
         for table in ["order_products", "sync_state", "cache_segments"] {
-            assert!(table_exists(&repo.connection, table), "missing table {table}");
-        }
-        let columns = columns_of_table(&repo.connection, "orders").unwrap();
-        for (column_name, _) in ORDERS_V2_COLUMNS {
-            assert!(
-                columns.contains(*column_name),
-                "orders missing migrated column {column_name}"
-            );
+            assert!(table_exists(&repo, table), "missing table {table}");
         }
 
-        let legacy_row = repo
-            .connection
-            .query_row(
+        repo.with_connection(|conn| {
+            let columns = columns_of_table(conn, "orders")?;
+            for (column_name, _) in ORDERS_V2_COLUMNS {
+                assert!(
+                    columns.contains(*column_name),
+                    "orders missing migrated column {column_name}"
+                );
+            }
+
+            let legacy_row = conn.query_row(
                 "SELECT buyer_nickname, raw_source FROM orders WHERE order_id = 'legacy-1'",
                 [],
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-            )
-            .unwrap();
-        assert_eq!(legacy_row.0, "old buyer");
-        // raw_source 默认值 'order_api' 对 v1 历史行同样生效
-        assert_eq!(legacy_row.1, "order_api");
+            )?;
+            assert_eq!(legacy_row.0, "old buyer");
+            assert_eq!(legacy_row.1, "order_api");
 
-        let user_version: i32 = repo
-            .connection
-            .pragma_query_value(None, "user_version", |row| row.get(0))
-            .unwrap();
-        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+            let user_version: i32 =
+                conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
     fn foreign_key_cascade_deletes_products_when_order_removed() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let mut repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
         repo.upsert_orders(&[sample_order()]).unwrap();
 
-        repo.connection
-            .execute("DELETE FROM orders WHERE order_id = 'o-1'", [])
-            .unwrap();
-        let remaining: i64 = repo
-            .connection
-            .query_row(
+        repo.with_connection(|conn| {
+            conn.execute("DELETE FROM orders WHERE order_id = 'o-1'", [])?;
+            let remaining: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM order_products WHERE order_id = 'o-1'",
                 [],
                 |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(remaining, 0, "ON DELETE CASCADE 必须级联删除 order_products");
+            )?;
+            assert_eq!(remaining, 0, "ON DELETE CASCADE 必须级联删除 order_products");
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
     fn initialize_is_idempotent_when_already_at_current_version() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_repo(&path);
         repo.initialize().unwrap();
-        // 第二次 initialize 不应重置或污染数据，且仍保持 user_version。
         repo.initialize().unwrap();
-        let user_version: i32 = repo
-            .connection
-            .pragma_query_value(None, "user_version", |row| row.get(0))
-            .unwrap();
-        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+        repo.with_connection(|conn| {
+            let user_version: i32 =
+                conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn detects_dirty_sale_param_when_legacy_json_value_present() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let repo = open_repo(&path);
+        repo.initialize().unwrap();
+        repo.upsert_orders(&[sample_order()]).unwrap();
+        assert!(!repo.has_dirty_sale_param().unwrap());
+
+        let mut dirty = sample_order();
+        dirty.order_id = "o-dirty".into();
+        dirty.products[0].sale_param = "[\"legacy-json\"]".into();
+        repo.upsert_orders(&[dirty]).unwrap();
+        assert!(repo.has_dirty_sale_param().unwrap());
+    }
+
+    #[test]
+    fn compute_missing_segments_handles_boundary_cases() {
+        // 无已完成段 → 返回整段
+        assert_eq!(
+            compute_missing_segments(100, 200, 10, 1, vec![]),
+            vec![(100, 200)]
+        );
+        // 完整覆盖 → 返回空
+        assert_eq!(
+            compute_missing_segments(100, 200, 10, 1, vec![(100, 200)]),
+            Vec::<(i64, i64)>::new()
+        );
+        // 非法输入（在调用方过滤）
+        // 中间小于 min_gap_width 的缺口 → 过滤
+        assert_eq!(
+            compute_missing_segments(100, 300, 10, 50, vec![(100, 150), (180, 300)]),
+            Vec::<(i64, i64)>::new()
+        );
+        // 中间 ≥ min_gap_width 的缺口 → 保留
+        let gaps = compute_missing_segments(100, 300, 10, 20, vec![(100, 150), (180, 300)]);
+        assert_eq!(gaps, vec![(151, 179)]);
     }
 }

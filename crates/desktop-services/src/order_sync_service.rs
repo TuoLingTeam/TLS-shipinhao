@@ -1,10 +1,10 @@
-use crate::order_cache_storage::{CacheOrderRecord, OrderCacheRepository, SyncStateRecord};
+use crate::order_cache_repository::{CacheOrderRecord, OrderCacheRepository, SyncStateRecord};
 use crate::order_sync_planner::{
     incremental_refresh_start, retention_start, sync_now, SyncPlannerState,
 };
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::sync::Arc;
 
 pub const ORDER_CACHE_SCOPE: &str = "tls_order_cache";
 pub const MERGE_TOLERANCE_SECONDS: i64 = 120;
@@ -40,7 +40,7 @@ pub trait CacheOrderFinder {
 
 pub struct OrderSyncService<F> {
     pub finder: F,
-    pub repository: OrderCacheRepository,
+    pub repository: Arc<dyn OrderCacheRepository>,
     stopped: bool,
 }
 
@@ -48,17 +48,16 @@ impl<F> OrderSyncService<F>
 where
     F: CacheOrderFinder,
 {
-    pub fn new(finder: F, repository: OrderCacheRepository) -> Self {
+    /// 新建实例，持有一个共享的仓储实现（trait object）。
+    ///
+    /// 传入 `Arc<dyn OrderCacheRepository>` 允许业务层复用同一 sqlite 连接，
+    /// 也方便单元测试用内存 Mock 替换真实数据库。
+    pub fn new(finder: F, repository: Arc<dyn OrderCacheRepository>) -> Self {
         Self {
             finder,
             repository,
             stopped: false,
         }
-    }
-
-    pub fn open(finder: F, db_path: &Path) -> anyhow::Result<Self> {
-        let repository = OrderCacheRepository::open(db_path)?;
-        Ok(Self::new(finder, repository))
     }
 
     pub fn stop(&mut self) {
@@ -299,9 +298,15 @@ pub fn deduplicate_orders_by_id(orders: Vec<CacheOrderRecord>) -> Vec<CacheOrder
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::order_cache_storage::{CacheOrderProduct, CacheOrderRecord};
+    use crate::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
+    use crate::order_cache_storage::SqliteOrderCacheRepository;
     use chrono::{DateTime, Utc};
     use tempfile::tempdir;
+
+    fn open_shared_repo(path: &std::path::Path) -> Arc<dyn OrderCacheRepository> {
+        let repo = SqliteOrderCacheRepository::open(path).unwrap();
+        Arc::new(repo)
+    }
 
     #[derive(Default)]
     struct FakeFinder {
@@ -393,7 +398,7 @@ mod tests {
             )],
             warnings: vec!["warn-1".into()],
         }]);
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_shared_repo(&path);
         let mut service = OrderSyncService::new(finder, repo);
         let now = DateTime::parse_from_rfc3339("1970-02-05T16:30:45Z")
             .unwrap()
@@ -423,7 +428,7 @@ mod tests {
             )],
             warnings: vec![],
         }]);
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_shared_repo(&path);
         repo.initialize().unwrap();
         repo.save_state(&SyncStateRecord {
             scope: ORDER_CACHE_SCOPE.into(),
@@ -462,7 +467,7 @@ mod tests {
             )],
             warnings: vec!["bootstrapped".into()],
         }]);
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_shared_repo(&path);
         let mut service = OrderSyncService::new(finder, repo);
         let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
             .unwrap()
@@ -470,6 +475,203 @@ mod tests {
         let (orders, warnings) = service.ensure_orders(880_000, Some(now)).unwrap();
         assert_eq!(orders.len(), 2);
         assert_eq!(warnings, vec!["bootstrapped"]);
+    }
+
+    /// 内存 Mock：不依赖 sqlite，只实现测试覆盖流程所需的行为。
+    /// M3-02 AC 要求 Mock Repository 能跑通 OrderSyncService 主流程。
+    #[derive(Default)]
+    struct InMemoryRepository {
+        inner: std::sync::Mutex<InMemoryData>,
+    }
+
+    #[derive(Default)]
+    struct InMemoryData {
+        orders: std::collections::BTreeMap<String, CacheOrderRecord>,
+        states: std::collections::BTreeMap<String, SyncStateRecord>,
+        segments: std::collections::BTreeMap<String, Vec<(i64, i64)>>,
+        initialized: bool,
+    }
+
+    impl OrderCacheRepository for InMemoryRepository {
+        fn initialize(&self) -> anyhow::Result<()> {
+            self.inner.lock().unwrap().initialized = true;
+            Ok(())
+        }
+
+        fn clear_all(&self) -> anyhow::Result<()> {
+            let mut data = self.inner.lock().unwrap();
+            data.orders.clear();
+            data.states.clear();
+            data.segments.clear();
+            Ok(())
+        }
+
+        fn upsert_orders(&self, orders: &[CacheOrderRecord]) -> anyhow::Result<usize> {
+            let mut data = self.inner.lock().unwrap();
+            for order in orders {
+                data.orders.insert(order.order_id.clone(), order.clone());
+            }
+            Ok(orders.len())
+        }
+
+        fn save_state(&self, state: &SyncStateRecord) -> anyhow::Result<()> {
+            self.inner
+                .lock()
+                .unwrap()
+                .states
+                .insert(state.scope.clone(), state.clone());
+            Ok(())
+        }
+
+        fn get_state(&self, scope: &str) -> anyhow::Result<Option<SyncStateRecord>> {
+            Ok(self.inner.lock().unwrap().states.get(scope).cloned())
+        }
+
+        fn fetch_order(&self, order_id: &str) -> anyhow::Result<Option<CacheOrderRecord>> {
+            Ok(self.inner.lock().unwrap().orders.get(order_id).cloned())
+        }
+
+        fn mark_segment_complete(
+            &self,
+            scope: &str,
+            start_timestamp: i64,
+            end_timestamp: i64,
+        ) -> anyhow::Result<()> {
+            self.inner
+                .lock()
+                .unwrap()
+                .segments
+                .entry(scope.to_string())
+                .or_default()
+                .push((start_timestamp, end_timestamp));
+            Ok(())
+        }
+
+        fn get_complete_segments(
+            &self,
+            scope: &str,
+            start_timestamp: i64,
+            end_timestamp: i64,
+        ) -> anyhow::Result<Vec<(i64, i64)>> {
+            let data = self.inner.lock().unwrap();
+            let Some(items) = data.segments.get(scope) else {
+                return Ok(Vec::new());
+            };
+            let mut filtered = items
+                .iter()
+                .filter(|(s, e)| *e >= start_timestamp && *s <= end_timestamp)
+                .copied()
+                .collect::<Vec<_>>();
+            filtered.sort_by_key(|(s, e)| (*s, *e));
+            Ok(filtered)
+        }
+
+        fn get_missing_segments(
+            &self,
+            scope: &str,
+            start_timestamp: i64,
+            end_timestamp: i64,
+            merge_tolerance: i64,
+            min_gap_width: i64,
+        ) -> anyhow::Result<Vec<(i64, i64)>> {
+            if start_timestamp <= 0 || end_timestamp <= 0 || start_timestamp > end_timestamp {
+                return Ok(Vec::new());
+            }
+            let raw = self.get_complete_segments(scope, start_timestamp, end_timestamp)?;
+            Ok(crate::order_cache_storage::compute_missing_segments(
+                start_timestamp,
+                end_timestamp,
+                merge_tolerance,
+                min_gap_width,
+                raw,
+            ))
+        }
+
+        fn has_dirty_sale_param(&self) -> anyhow::Result<bool> {
+            let data = self.inner.lock().unwrap();
+            Ok(data.orders.values().any(|order| {
+                order
+                    .products
+                    .iter()
+                    .any(|product| product.sale_param.starts_with('['))
+            }))
+        }
+
+        fn delete_older_than(
+            &self,
+            _scope: &str,
+            cutoff_timestamp: i64,
+        ) -> anyhow::Result<usize> {
+            let mut data = self.inner.lock().unwrap();
+            let ids = data
+                .orders
+                .iter()
+                .filter(|(_, order)| order.create_time < cutoff_timestamp)
+                .map(|(id, _)| id.clone())
+                .collect::<Vec<_>>();
+            let removed = ids.len();
+            for id in ids {
+                data.orders.remove(&id);
+            }
+            Ok(removed)
+        }
+
+        fn fetch_orders_in_range(
+            &self,
+            start_timestamp: i64,
+            end_timestamp: i64,
+        ) -> anyhow::Result<Vec<CacheOrderRecord>> {
+            let data = self.inner.lock().unwrap();
+            let mut orders = data
+                .orders
+                .values()
+                .filter(|order| {
+                    order.create_time >= start_timestamp && order.create_time <= end_timestamp
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            orders.sort_by(|a, b| {
+                b.create_time
+                    .cmp(&a.create_time)
+                    .then_with(|| b.order_id.cmp(&a.order_id))
+            });
+            Ok(orders)
+        }
+
+        fn count_orders(&self) -> anyhow::Result<usize> {
+            Ok(self.inner.lock().unwrap().orders.len())
+        }
+    }
+
+    #[test]
+    fn rebuild_and_refresh_work_with_in_memory_repository_mock() {
+        let finder = FakeFinder::with_responses(vec![CacheFetchResult {
+            windows: vec![sample_window(
+                "w1",
+                432_000,
+                3_110_399,
+                vec![sample_order("o-1", 500_000)],
+            )],
+            warnings: vec![],
+        }]);
+        let repo: Arc<dyn OrderCacheRepository> = Arc::new(InMemoryRepository::default());
+        let mut service = OrderSyncService::new(finder, repo);
+        let now = DateTime::parse_from_rfc3339("1970-02-05T16:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let (written, warnings) = service.rebuild_cache(Some(now)).unwrap();
+        assert_eq!(written, 1);
+        assert!(warnings.is_empty());
+
+        let state = service
+            .repository
+            .get_state(ORDER_CACHE_SCOPE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.last_mode, "rebuild");
+        assert!(service.repository.fetch_order("o-1").unwrap().is_some());
+        assert_eq!(service.repository.count_orders().unwrap(), 1);
     }
 
     #[test]
@@ -496,7 +698,7 @@ mod tests {
                 warnings: vec!["temporary".into()],
             },
         ]);
-        let repo = OrderCacheRepository::open(&path).unwrap();
+        let repo = open_shared_repo(&path);
         let mut service = OrderSyncService::new(finder, repo);
         let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
             .unwrap()
