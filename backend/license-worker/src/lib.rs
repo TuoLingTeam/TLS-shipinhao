@@ -1,8 +1,22 @@
+use api_contracts::{
+    LeasePayload, LicenseLease, LicenseState, RiskLevel, RuntimeGrant, LEASE_KIND_LICENSE,
+    LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE, LICENSE_TASK_QUALITY_REFUND,
+    LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
+};
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use base64::Engine;
+use chrono::{DateTime, Utc};
+use ed25519_dalek::pkcs8::DecodePrivateKey;
+use ed25519_dalek::{Signer, SigningKey};
 use license_service::{
-    ActivationInput, LicenseRepository, LicenseService, LicenseServiceResponse, VerifyInput,
+    authorize_task_local, ActivationInput, LicenseRepository, LicenseService,
+    LicenseServiceResponse, VerifyInput,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_GRANT_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_arch = "wasm32")]
 mod admin_d1;
@@ -63,6 +77,200 @@ pub struct TaskAuthorizeRequest {
     pub client_version: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignedLicenseApiResponse {
+    pub success: bool,
+    #[serde(default)]
+    pub message: String,
+    pub license_state: LicenseState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_lease: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renew_after: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issued_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_status: Option<LicenseState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_policy: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LeaseTokenSigner {
+    signing_key: SigningKey,
+}
+
+impl LeaseTokenSigner {
+    pub fn from_private_key_b64(private_key_b64: &str) -> anyhow::Result<Self> {
+        let raw = STANDARD.decode(private_key_b64.trim())?;
+        if let Ok(text) = String::from_utf8(raw.clone()) {
+            if text.contains("BEGIN PRIVATE KEY") {
+                let body = text
+                    .lines()
+                    .filter(|line| !line.starts_with("-----"))
+                    .collect::<String>();
+                let der = STANDARD.decode(body.as_bytes())?;
+                return Ok(Self {
+                    signing_key: SigningKey::from_pkcs8_der(&der)?,
+                });
+            }
+        }
+        Ok(Self {
+            signing_key: SigningKey::from_pkcs8_der(&raw)?,
+        })
+    }
+
+    pub fn public_key_b64(&self) -> String {
+        URL_SAFE_NO_PAD.encode(self.signing_key.verifying_key().as_bytes())
+    }
+
+    pub fn sign_license_lease(&self, lease: &LicenseLease) -> anyhow::Result<String> {
+        let payload = lease_to_payload(lease)?;
+        let payload_bytes = serde_json::to_vec(&payload)?;
+        let payload_b64 = URL_SAFE_NO_PAD.encode(payload_bytes);
+        let signature = self.signing_key.sign(payload_b64.as_bytes());
+        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+        Ok(format!("{payload_b64}.{signature_b64}"))
+    }
+}
+
+fn parse_iso_epoch(value: &str) -> anyhow::Result<i64> {
+    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc).timestamp())
+}
+
+fn lease_to_payload(lease: &LicenseLease) -> anyhow::Result<LeasePayload> {
+    Ok(LeasePayload {
+        kind: LEASE_KIND_LICENSE.to_string(),
+        license_key: lease.license_key.clone(),
+        device_id: lease.device_id.clone(),
+        issued_at: parse_iso_epoch(&lease.issued_at)?,
+        exp: parse_iso_epoch(&lease.lease_expires_at)?,
+        renew_after: parse_iso_epoch(&lease.renew_after)?,
+        task_policy: lease.task_policy.clone(),
+        risk_level: "low".to_string(),
+    })
+}
+
+fn task_risk_level(task_type: &str) -> Option<RiskLevel> {
+    match task_type {
+        LICENSE_TASK_BATCH_DELIVERY => Some(RiskLevel::High),
+        LICENSE_TASK_REVIEW_FULL_SCAN | LICENSE_TASK_CACHE_MANAGE => Some(RiskLevel::Medium),
+        LICENSE_TASK_REVIEW_FIND | LICENSE_TASK_QUALITY_REFUND => Some(RiskLevel::Low),
+        _ => None,
+    }
+}
+
+fn next_grant_id() -> String {
+    let seq = NEXT_GRANT_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("worker-grant-{}-{seq}", Utc::now().timestamp_millis())
+}
+
+fn denied_grant(task_type: &str, message: impl Into<String>) -> RuntimeGrant {
+    RuntimeGrant {
+        task_type: task_type.to_string(),
+        granted: false,
+        grant_id: String::new(),
+        valid_until: String::new(),
+        risk_level: task_risk_level(task_type),
+        degraded_reason: Some(message.into()),
+    }
+}
+
+fn map_service_response(
+    response: LicenseServiceResponse,
+    signer: &LeaseTokenSigner,
+) -> anyhow::Result<SignedLicenseApiResponse> {
+    let signed_lease = match response.license_lease.as_ref() {
+        Some(lease) => Some(signer.sign_license_lease(lease)?),
+        None => None,
+    };
+    let lease = response.license_lease;
+    Ok(SignedLicenseApiResponse {
+        success: response.success,
+        message: response.message,
+        license_state: response.license_state,
+        license_lease: signed_lease,
+        license_expires_at: response.license_expires_at,
+        activated_at: response.activated_at,
+        device_id: lease.as_ref().map(|value| value.device_id.clone()),
+        license_key: lease.as_ref().map(|value| value.license_key.clone()),
+        lease_expires_at: lease.as_ref().map(|value| value.lease_expires_at.clone()),
+        renew_after: lease.as_ref().map(|value| value.renew_after.clone()),
+        issued_at: lease.as_ref().map(|value| value.issued_at.clone()),
+        license_status: lease.as_ref().map(|value| value.license_status),
+        task_policy: lease.as_ref().map(|value| value.task_policy.clone()),
+    })
+}
+
+fn handle_lease_refresh<R: LicenseRepository>(
+    service: &LicenseService<R>,
+    input: LeaseRefreshRequest,
+    signer: &LeaseTokenSigner,
+    now: DateTime<Utc>,
+) -> anyhow::Result<LeaseRefreshResponse> {
+    let verify = service.verify_at(
+        VerifyInput {
+            license_key: input.license_key,
+            device_id: input.device_id,
+            client_version: "worker_refresh".into(),
+        },
+        now,
+    )?;
+    let Some(lease) = verify.license_lease else {
+        return Ok(LeaseRefreshResponse {
+            success: false,
+            message: verify.message,
+            new_token: String::new(),
+        });
+    };
+    let token = signer.sign_license_lease(&lease)?;
+    Ok(LeaseRefreshResponse {
+        success: true,
+        message: "lease_refreshed".into(),
+        new_token: token,
+    })
+}
+
+fn handle_task_authorize<R: LicenseRepository>(
+    service: &LicenseService<R>,
+    input: TaskAuthorizeRequest,
+    now: DateTime<Utc>,
+) -> anyhow::Result<RuntimeGrant> {
+    let verify = service.verify_at(
+        VerifyInput {
+            license_key: input.license_key,
+            device_id: input.device_id,
+            client_version: if input.client_version.is_empty() {
+                "worker_task_authorize".into()
+            } else {
+                format!("worker_task_authorize:{}", input.client_version)
+            },
+        },
+        now,
+    )?;
+    let Some(lease) = verify.license_lease else {
+        return Ok(denied_grant(&input.task_type, verify.message));
+    };
+    let payload = lease_to_payload(&lease)?;
+    match authorize_task_local(&payload, &input.task_type, now.timestamp(), next_grant_id) {
+        Ok(mut grant) => {
+            grant.risk_level = task_risk_level(&input.task_type);
+            Ok(grant)
+        }
+        Err(err) => Ok(denied_grant(&input.task_type, err.to_string())),
+    }
+}
+
 pub fn handle_activate<R: LicenseRepository>(
     service: &LicenseService<R>,
     input: ActivationInput,
@@ -103,6 +311,7 @@ pub fn handle_json_request<R: LicenseRepository>(
     service: &LicenseService<R>,
     path: &str,
     body: &str,
+    signer: &LeaseTokenSigner,
 ) -> anyhow::Result<String> {
     let route = parse_route(path);
     let payload: Value = serde_json::from_str(body)?;
@@ -110,22 +319,21 @@ pub fn handle_json_request<R: LicenseRepository>(
         WorkerRoute::Activate => {
             let input: ActivationInput = serde_json::from_value(payload)?;
             let resp = handle_activate(service, input)?;
-            Ok(serde_json::to_string(&resp)?)
+            Ok(serde_json::to_string(&map_service_response(resp, signer)?)?)
         }
         WorkerRoute::Verify => {
             let input: VerifyInput = serde_json::from_value(payload)?;
             let resp = handle_verify(service, input)?;
-            Ok(serde_json::to_string(&resp)?)
+            Ok(serde_json::to_string(&map_service_response(resp, signer)?)?)
         }
         WorkerRoute::LeaseRefresh => {
-            // 真正的续约签名待 D1 repository + Ed25519 私钥接入后完成；
-            // 这里先做契约 pinning，保证客户端可以按 `LeaseRefreshResponse` 解析。
-            let _input: LeaseRefreshRequest = serde_json::from_value(payload)?;
-            Ok(serde_json::to_string(&LeaseRefreshResponse {
-                success: false,
-                message: "lease_refresh_pending".into(),
-                new_token: String::new(),
-            })?)
+            let input: LeaseRefreshRequest = serde_json::from_value(payload)?;
+            Ok(serde_json::to_string(&handle_lease_refresh(
+                service,
+                input,
+                signer,
+                Utc::now(),
+            )?)?)
         }
         WorkerRoute::LeaseRevoke => {
             let _input: LeaseRevokeRequest = serde_json::from_value(payload)?;
@@ -136,12 +344,12 @@ pub fn handle_json_request<R: LicenseRepository>(
             .to_string())
         }
         WorkerRoute::TaskAuthorize => {
-            let _input: TaskAuthorizeRequest = serde_json::from_value(payload)?;
-            Ok(serde_json::json!({
-                "success": false,
-                "message": "task_authorize_pending",
-            })
-            .to_string())
+            let input: TaskAuthorizeRequest = serde_json::from_value(payload)?;
+            Ok(serde_json::to_string(&handle_task_authorize(
+                service,
+                input,
+                Utc::now(),
+            )?)?)
         }
         WorkerRoute::NotFound => {
             let resp = LicenseServiceResponse {
@@ -153,7 +361,7 @@ pub fn handle_json_request<R: LicenseRepository>(
                 license_expires_at: None,
                 license_lease: None,
             };
-            Ok(serde_json::to_string(&resp)?)
+            Ok(serde_json::to_string(&map_service_response(resp, signer)?)?)
         }
     }
 }
@@ -217,6 +425,8 @@ mod cloudflare_entry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::pkcs8::EncodePrivateKey;
+    use license_service::LeaseVerifier;
     use license_service::{
         AuditEvent, DeviceRegistration, GeneratedKeyRecord, GeneratedKeyStatus, LicenseRecord,
     };
@@ -246,6 +456,12 @@ mod tests {
             );
             repo
         }
+    }
+
+    fn test_signer() -> LeaseTokenSigner {
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let der = signing_key.to_pkcs8_der().unwrap();
+        LeaseTokenSigner::from_private_key_b64(&STANDARD.encode(der.as_bytes())).unwrap()
     }
 
     impl LicenseRepository for Repo {
@@ -341,40 +557,68 @@ mod tests {
     fn handles_activate_json() {
         let repo = Repo::seeded();
         let service = LicenseService::new(repo);
+        let signer = test_signer();
         let response = handle_json_request(
             &service,
             "/api/activate",
             r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"4.3.0"}"#,
+            &signer,
         )
         .unwrap();
-        let payload: Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(payload["success"], true);
-        assert_eq!(payload["license_state"], "active");
-        assert_eq!(payload["license_lease"]["device_id"], "device-1");
+        let payload: SignedLicenseApiResponse = serde_json::from_str(&response).unwrap();
+        assert!(payload.success);
+        assert_eq!(payload.license_state, LicenseState::Active);
+        assert!(payload.license_lease.is_some());
+        let verifier = LeaseVerifier::from_public_key_b64(&signer.public_key_b64()).unwrap();
+        let verified = verifier
+            .verify(
+                payload.license_lease.as_deref().unwrap(),
+                Some("device-1"),
+                Utc::now().timestamp(),
+                false,
+            )
+            .unwrap();
+        assert_eq!(verified.device_id, "device-1");
     }
 
     #[test]
-    fn lease_refresh_returns_pending_contract_response() {
+    fn lease_refresh_returns_signed_new_token() {
         let service = LicenseService::new(Repo::seeded());
+        let signer = test_signer();
+        let _ = handle_json_request(
+            &service,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"4.3.0"}"#,
+            &signer,
+        )
+        .unwrap();
         let resp = handle_json_request(
             &service,
             "/api/lease/refresh",
             r#"{"license_key":"TLS-TEST","device_id":"device-1","current_issued_at":1700000000}"#,
+            &signer,
         )
         .unwrap();
         let payload: LeaseRefreshResponse = serde_json::from_str(&resp).unwrap();
-        assert!(!payload.success);
-        assert_eq!(payload.message, "lease_refresh_pending");
-        assert!(payload.new_token.is_empty());
+        assert!(payload.success);
+        assert_eq!(payload.message, "lease_refreshed");
+        assert!(!payload.new_token.is_empty());
+        let verifier = LeaseVerifier::from_public_key_b64(&signer.public_key_b64()).unwrap();
+        let verified = verifier
+            .verify(&payload.new_token, Some("device-1"), Utc::now().timestamp(), false)
+            .unwrap();
+        assert_eq!(verified.license_key, "TLS-TEST");
     }
 
     #[test]
     fn lease_revoke_route_returns_pending_marker() {
         let service = LicenseService::new(Repo::seeded());
+        let signer = test_signer();
         let resp = handle_json_request(
             &service,
             "/api/lease/revoke",
             r#"{"license_key":"TLS-TEST","device_id":"device-1","reason":"admin"}"#,
+            &signer,
         )
         .unwrap();
         let payload: Value = serde_json::from_str(&resp).unwrap();
@@ -382,16 +626,27 @@ mod tests {
     }
 
     #[test]
-    fn task_authorize_route_returns_pending_marker() {
+    fn task_authorize_route_returns_runtime_grant() {
         let service = LicenseService::new(Repo::seeded());
+        let signer = test_signer();
+        let _ = handle_json_request(
+            &service,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"4.3.0"}"#,
+            &signer,
+        )
+        .unwrap();
         let resp = handle_json_request(
             &service,
             "/api/task/authorize",
             r#"{"license_key":"TLS-TEST","device_id":"device-1","task_type":"review_find","client_version":"5.1.0"}"#,
+            &signer,
         )
         .unwrap();
-        let payload: Value = serde_json::from_str(&resp).unwrap();
-        assert_eq!(payload["message"], "task_authorize_pending");
+        let payload: RuntimeGrant = serde_json::from_str(&resp).unwrap();
+        assert!(payload.granted);
+        assert_eq!(payload.task_type, "review_find");
+        assert!(!payload.grant_id.is_empty());
     }
 
     #[test]
