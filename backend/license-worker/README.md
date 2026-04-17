@@ -26,6 +26,12 @@ npx wrangler dev
 ## 已实现能力
 
 - `GET /admin`、`POST /api/admin/list|generate|revoke`（D1 + `ADMIN_SECRET`），见源码 `src/admin_d1.rs`。
+- `POST /api/activate`
+  - Cloudflare 路径已接入 D1 查询/写入
+  - 激活成功后返回真实签名 Lease Token
+- `POST /api/verify`
+  - Cloudflare 路径已接入 D1 校验
+  - 校验成功后返回真实签名 Lease Token
 - `POST /api/lease/refresh`
   - Cloudflare 路径已接入 D1 查询 + `LICENSE_SIGNING_PRIVATE_KEY_B64`
   - 返回真实签名 `new_token`
@@ -33,8 +39,8 @@ npx wrangler dev
   - Cloudflare 路径已接入 D1 查询
   - 返回真实 `RuntimeGrant`
 
-## 当前仍未完成
+## 当前边界
 
-- `/api/activate`、`/api/verify` 的 Cloudflare D1 运行时仍返回 `rust_worker_repository_pending`
-- 原因：`license-service::LicenseRepository` 目前是同步 trait，而 Worker D1 API 是 async；
-  本轮只先打通 refresh / task authorize 两条联调链路
+- 非 wasm 单元测试路径仍通过 `license-service + 内存仓库` 验证契约
+- Cloudflare 线上路径通过 D1 直连实现 `activate / verify / lease_refresh / task_authorize`
+- `/api/lease/revoke` 仍保留占位响应，管理员吊销继续走 `/api/admin/*`
