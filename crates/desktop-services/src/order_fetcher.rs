@@ -144,6 +144,39 @@ pub fn is_api_rate_limited(payload: &Value) -> bool {
     false
 }
 
+/// 风控关键字。命中任意一条即视为触发平台风控。
+///
+/// 关键字选自 Python 4.3.0 线上抓包样本，默认区分大小写（中文语境下无副作用，
+/// 英文关键字需在此处同时提供大小写形式）。
+const RISK_CONTROL_MESSAGE_MARKERS: &[&str] = &["异常行为", "拒绝访问"];
+
+/// 判断响应是否为平台风控信号（PRD §14.1、PRD §7.1.3）。
+///
+/// 满足任一条件即判风控：
+/// - `code == 430`
+/// - `respStatusCode == 430`
+/// - `msg` 中包含 `异常行为` 或 `拒绝访问`
+///
+/// 命中后业务层应跳过重试，直接进入冷却 + 降级流程（M1-05）。
+pub fn is_risk_control_result(payload: &Value) -> bool {
+    for field in ["code", "respStatusCode"] {
+        if payload.get(field).and_then(Value::as_i64) == Some(430) {
+            return true;
+        }
+    }
+    let message = payload
+        .get("msg")
+        .or_else(|| payload.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if message.is_empty() {
+        return false;
+    }
+    RISK_CONTROL_MESSAGE_MARKERS
+        .iter()
+        .any(|marker| message.contains(marker))
+}
+
 /// 业务层辅助：把「HTTP 响应 + JSON payload」映射成 `LimitOutcome`。
 ///
 /// 使用示例（业务层）：
@@ -246,6 +279,63 @@ mod tests {
             "code": 430,
             "msg": "检测到异常行为"
         })));
+    }
+
+    // --- is_risk_control_result（M1-04） ---
+
+    #[test]
+    fn risk_control_detects_code_430() {
+        assert!(is_risk_control_result(&json!({"code": 430})));
+    }
+
+    #[test]
+    fn risk_control_detects_resp_status_code_430() {
+        assert!(is_risk_control_result(&json!({"respStatusCode": 430})));
+    }
+
+    #[test]
+    fn risk_control_detects_abnormal_behavior_message() {
+        assert!(is_risk_control_result(&json!({
+            "code": 0,
+            "msg": "检测到异常行为，请联系客服"
+        })));
+    }
+
+    #[test]
+    fn risk_control_detects_access_denied_message() {
+        assert!(is_risk_control_result(&json!({
+            "code": 0,
+            "msg": "拒绝访问，请稍后"
+        })));
+    }
+
+    #[test]
+    fn risk_control_accepts_message_field_alias() {
+        // 部分接口用 `message` 字段而非 `msg`；都要覆盖。
+        assert!(is_risk_control_result(&json!({
+            "code": 0,
+            "message": "请求被拒绝访问"
+        })));
+    }
+
+    #[test]
+    fn risk_control_rejects_normal_responses() {
+        assert!(!is_risk_control_result(&json!({"code": 0, "msg": "ok"})));
+        assert!(!is_risk_control_result(&json!({"code": 429})));
+        assert!(!is_risk_control_result(&json!({"code": 10003})));
+        assert!(!is_risk_control_result(&json!({})));
+    }
+
+    #[test]
+    fn risk_control_is_separate_from_rate_limit() {
+        // 风控与限流需要保持分类互斥，避免上层用错分支。
+        let risk = json!({"code": 430, "msg": "拒绝访问"});
+        assert!(is_risk_control_result(&risk));
+        assert!(!is_api_rate_limited(&risk));
+
+        let rate_limit = json!({"code": 429, "msg": "请稍后再试"});
+        assert!(is_api_rate_limited(&rate_limit));
+        assert!(!is_risk_control_result(&rate_limit));
     }
 
     #[test]
