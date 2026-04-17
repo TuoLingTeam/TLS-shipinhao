@@ -27,6 +27,7 @@ use std::sync::OnceLock;
 /// 其余为上标数字区，必须列出而不能用范围表达。
 const TRAILING_DIGIT_TAIL_PATTERN: &str =
     r"[0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s]+$";
+pub const GENERIC_NICKNAME_PREFIXES: &[&str] = &["匿名", "微信用户", "默认昵称"];
 
 /// 将浮点相似度裁剪到 0~100 闭区间；非有限值（NaN / inf）一律视作 0。
 pub fn clamp_percent(value: f64) -> i32 {
@@ -42,6 +43,12 @@ pub fn clamp_percent(value: f64) -> i32 {
 pub fn similarity_percent(left: Option<&str>, right: Option<&str>) -> i32 {
     let left_text = left.unwrap_or("");
     let right_text = right.unwrap_or("");
+    let left_trimmed = left_text.trim();
+    let right_trimmed = right_text.trim();
+
+    if is_generic_nickname(left_trimmed) || is_generic_nickname(right_trimmed) {
+        return 0;
+    }
     if left_text == right_text {
         return 100;
     }
@@ -49,8 +56,6 @@ pub fn similarity_percent(left: Option<&str>, right: Option<&str>) -> i32 {
         return 0;
     }
 
-    let left_trimmed = left_text.trim();
-    let right_trimmed = right_text.trim();
     if !left_trimmed.is_empty() && left_trimmed == right_trimmed {
         return 95;
     }
@@ -60,6 +65,15 @@ pub fn similarity_percent(left: Option<&str>, right: Option<&str>) -> i32 {
     }
 
     sequence_similarity(left_text, right_text)
+}
+
+/// 判断昵称是否属于会污染匹配结果的通用占位昵称。
+pub fn is_generic_nickname(name: &str) -> bool {
+    let trimmed = name.trim();
+    trimmed.is_empty()
+        || GENERIC_NICKNAME_PREFIXES
+            .iter()
+            .any(|prefix| trimmed.starts_with(prefix))
 }
 
 /// 剥离昵称尾部数字/空白组合。仅用于相似度识别，不参与业务字段写回。
@@ -210,8 +224,6 @@ mod tests {
 
     #[test]
     fn identical_strings_return_100() {
-        assert_eq!(similarity_percent(None, None), 100);
-        assert_eq!(similarity_percent(Some(""), Some("")), 100);
         assert_eq!(similarity_percent(Some("张三"), Some("张三")), 100);
         assert_eq!(
             similarity_percent(
@@ -236,6 +248,16 @@ mod tests {
         assert_eq!(similarity_percent(Some("张三"), Some("张三 ")), 95);
         assert_eq!(similarity_percent(Some(" 张三 "), Some("张三")), 95);
         assert_eq!(similarity_percent(Some("\t张三\n"), Some("张三")), 95);
+    }
+
+    #[test]
+    fn generic_nickname_prefixes_return_zero() {
+        assert_eq!(similarity_percent(Some("匿名用户123"), Some("匿名用户456")), 0);
+        assert_eq!(similarity_percent(Some("微信用户abc"), Some("微信用户xyz")), 0);
+        assert_eq!(similarity_percent(Some("默认昵称"), Some("默认昵称1")), 0);
+        assert_eq!(similarity_percent(Some(""), Some("张三")), 0);
+        assert!(similarity_percent(Some("匿了"), Some("匿了123")) > 0);
+        assert!(similarity_percent(Some("正常买家"), Some("正常买家123")) > 0);
     }
 
     #[test]
@@ -341,6 +363,16 @@ mod tests {
         assert!(!is_subsequence("abc", "acb"));
         assert!(!is_subsequence("", "a"));
         assert!(!is_subsequence("longer", "ab"));
+    }
+
+    #[test]
+    fn is_generic_nickname_only_matches_known_prefixes() {
+        assert!(is_generic_nickname("匿名用户123"));
+        assert!(is_generic_nickname(" 微信用户abc "));
+        assert!(is_generic_nickname("默认昵称1"));
+        assert!(is_generic_nickname(""));
+        assert!(!is_generic_nickname("匿了"));
+        assert!(!is_generic_nickname("正常买家"));
     }
 
     #[test]
