@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde_json::Value;
 use thiserror::Error;
 
 /// 允许的退避重试次数（首次调用之后的额外尝试次数）。
@@ -120,6 +121,60 @@ pub fn backoff_seconds(attempt: u32) -> u64 {
     2u64.saturating_pow(attempt.saturating_add(1))
 }
 
+/// 判断 HTTP 响应状态是否为平台频率限制。
+///
+/// 用 `u16` 而不是 `reqwest::StatusCode`，避免 `desktop-services` 被迫依赖 reqwest；
+/// 业务层通常写：`if is_http_rate_limited(response.status().as_u16()) { ... }`。
+pub fn is_http_rate_limited(status_code: u16) -> bool {
+    status_code == 429
+}
+
+/// 判断 JSON 响应体是否为 API 层频率限制。
+///
+/// 平台在某些接口上即便 HTTP 返回 200，JSON 里也会带 `code: 429` 或
+/// `respStatusCode: 429` 表示被限流。这里把两种字段都覆盖，避免漏检。
+///
+/// 备注：`msg` 中的"异常行为"/"拒绝访问"被归类为风控（M1-04），不在本函数范围内。
+pub fn is_api_rate_limited(payload: &Value) -> bool {
+    for field in ["code", "respStatusCode"] {
+        if payload.get(field).and_then(Value::as_i64) == Some(429) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 业务层辅助：把「HTTP 响应 + JSON payload」映射成 `LimitOutcome`。
+///
+/// 使用示例（业务层）：
+/// ```ignore
+/// let response = client.send().await?;
+/// let status = response.status().as_u16();
+/// if is_http_rate_limited(status) {
+///     return Ok(LimitOutcome::RateLimited { api_level: false });
+/// }
+/// let payload: Value = response.json().await?;
+/// classify_rate_limit(status, Some(&payload))
+///     .map(|outcome| match outcome {
+///         LimitOutcome::Ok(()) => LimitOutcome::Ok(payload),
+///         LimitOutcome::RateLimited { api_level } => LimitOutcome::RateLimited { api_level },
+///     })
+/// ```
+pub fn classify_rate_limit(
+    status_code: u16,
+    payload: Option<&Value>,
+) -> LimitOutcome<()> {
+    if is_http_rate_limited(status_code) {
+        return LimitOutcome::RateLimited { api_level: false };
+    }
+    if let Some(body) = payload {
+        if is_api_rate_limited(body) {
+            return LimitOutcome::RateLimited { api_level: true };
+        }
+    }
+    LimitOutcome::Ok(())
+}
+
 /// 可中断的 sleep。每 100ms 检查一次 `stop_flag`。
 async fn interruptible_sleep(
     total: Duration,
@@ -146,6 +201,7 @@ async fn interruptible_sleep(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::sync::Mutex;
 
     fn make_progress(
@@ -155,6 +211,74 @@ mod tests {
             sink.lock().unwrap().push(msg);
         })
     }
+
+    // --- is_http_rate_limited / is_api_rate_limited / classify_rate_limit ---
+
+    #[test]
+    fn http_rate_limit_detection_only_matches_429() {
+        assert!(is_http_rate_limited(429));
+        assert!(!is_http_rate_limited(200));
+        assert!(!is_http_rate_limited(500));
+        assert!(!is_http_rate_limited(430));
+    }
+
+    #[test]
+    fn api_rate_limit_detects_code_field() {
+        assert!(is_api_rate_limited(&json!({"code": 429})));
+    }
+
+    #[test]
+    fn api_rate_limit_detects_resp_status_code_field() {
+        assert!(is_api_rate_limited(&json!({"respStatusCode": 429})));
+    }
+
+    #[test]
+    fn api_rate_limit_ignores_normal_responses() {
+        assert!(!is_api_rate_limited(&json!({"code": 0, "msg": "ok"})));
+        assert!(!is_api_rate_limited(&json!({"code": 10003})));
+        assert!(!is_api_rate_limited(&json!({})));
+    }
+
+    #[test]
+    fn api_rate_limit_ignores_risk_control_messages() {
+        // 风控信号由 M1-04 的 is_risk_control_result 处理，不应被误判为限流。
+        assert!(!is_api_rate_limited(&json!({
+            "code": 430,
+            "msg": "检测到异常行为"
+        })));
+    }
+
+    #[test]
+    fn classify_rate_limit_prioritizes_http_over_body() {
+        let outcome = classify_rate_limit(429, Some(&json!({"code": 0})));
+        assert!(matches!(
+            outcome,
+            LimitOutcome::RateLimited { api_level: false }
+        ));
+    }
+
+    #[test]
+    fn classify_rate_limit_falls_back_to_api_level_when_http_ok() {
+        let outcome = classify_rate_limit(200, Some(&json!({"code": 429})));
+        assert!(matches!(
+            outcome,
+            LimitOutcome::RateLimited { api_level: true }
+        ));
+    }
+
+    #[test]
+    fn classify_rate_limit_returns_ok_when_both_normal() {
+        let outcome = classify_rate_limit(200, Some(&json!({"code": 0})));
+        assert!(matches!(outcome, LimitOutcome::Ok(())));
+    }
+
+    #[test]
+    fn classify_rate_limit_handles_missing_body() {
+        let outcome = classify_rate_limit(200, None);
+        assert!(matches!(outcome, LimitOutcome::Ok(())));
+    }
+
+    // --- retry_on_rate_limit 与 backoff 行为（M1-02） ---
 
     #[test]
     fn backoff_sequence_matches_python_reference() {
@@ -258,6 +382,43 @@ mod tests {
         let msgs = messages.lock().unwrap();
         assert_eq!(msgs.len(), 1);
         assert!(msgs[0].contains("(API)"), "API 级限流必须带 (API) 标记: {}", msgs[0]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn http_and_api_rate_limits_share_retry_budget() {
+        // 混合场景：HTTP 429 → API 429 → HTTP 429 → 成功。
+        // 验证「合并计数不超过 3 次」：4 次尝试中前 3 次限流仍能成功。
+        let stop = Arc::new(AtomicBool::new(false));
+        let messages = Arc::new(Mutex::new(Vec::new()));
+        let on_progress = make_progress(messages.clone());
+
+        let call_count = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let cc = call_count.clone();
+        let result = retry_on_rate_limit::<u32, _, _>(11, stop, on_progress, move || {
+            let cc = cc.clone();
+            async move {
+                let n = cc.fetch_add(1, Ordering::SeqCst);
+                match n {
+                    0 => Ok(LimitOutcome::RateLimited { api_level: false }),
+                    1 => Ok(LimitOutcome::RateLimited { api_level: true }),
+                    2 => Ok(LimitOutcome::RateLimited { api_level: false }),
+                    _ => Ok(LimitOutcome::Ok(77)),
+                }
+            }
+        })
+        .await;
+
+        assert_eq!(result.unwrap(), 77);
+        let msgs = messages.lock().unwrap();
+        assert_eq!(msgs.len(), 3);
+        assert!(msgs[0].contains("第 11 页"));
+        assert!(!msgs[0].contains("(API)"));
+        assert!(msgs[1].contains("(API)"));
+        assert!(!msgs[2].contains("(API)"));
+        // 时长依次递增：HTTP 429 与 API 429 共享 attempt 计数。
+        assert!(msgs[0].contains("2 秒"));
+        assert!(msgs[1].contains("4 秒"));
+        assert!(msgs[2].contains("8 秒"));
     }
 
     #[tokio::test(start_paused = true)]
