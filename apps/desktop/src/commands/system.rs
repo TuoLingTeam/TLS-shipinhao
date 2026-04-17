@@ -1,4 +1,5 @@
 use desktop_services::parse_cookie_profile;
+use domain_core::brand::{get_window_title, APP_NAME, APP_NAME_EN, AUTHOR_WECHAT};
 use reqwest::Url;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
@@ -11,9 +12,13 @@ const COOKIE_LOGIN_WINDOW_LABEL: &str = "cookie-login";
 
 #[tauri::command]
 pub async fn get_app_info() -> Result<serde_json::Value, AppError> {
+    let version = env!("CARGO_PKG_VERSION");
     Ok(serde_json::json!({
-        "name": "TLS-shipinhao",
-        "version": env!("CARGO_PKG_VERSION"),
+        "name": APP_NAME,
+        "name_en": APP_NAME_EN,
+        "version": version,
+        "author_wechat": AUTHOR_WECHAT,
+        "window_title": get_window_title(version),
         "runtime": "tauri-2.0",
     }))
 }
@@ -239,4 +244,19 @@ fn looks_like_logged_in_store_session(cookies: &[tauri::webview::Cookie<'static>
             .iter()
             .any(|keyword| name.contains(keyword))
     })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn get_app_info_returns_brand_fields() {
+        let payload = get_app_info().await.expect("app info");
+        assert_eq!(payload["name"], APP_NAME);
+        assert_eq!(payload["name_en"], APP_NAME_EN);
+        assert_eq!(payload["author_wechat"], AUTHOR_WECHAT);
+        assert!(payload["window_title"].as_str().unwrap_or("").contains(APP_NAME));
+    }
 }

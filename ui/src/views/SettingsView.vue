@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { AUTHOR_WECHAT, APP_NAME } from "../constants/brand";
 
 const cookieHeader = ref("");
 const saved = ref(false);
@@ -121,6 +122,12 @@ onMounted(() => {
       </div>
 
       <div class="mt-5 space-y-4">
+        <div class="rounded-[20px] border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+          <div class="font-semibold">品牌信息</div>
+          <div class="mt-2">应用：{{ APP_NAME }}</div>
+          <div class="mt-1">作者微信：<span class="font-mono">{{ AUTHOR_WECHAT }}</span></div>
+        </div>
+
         <div class="rounded-[20px] border border-slate-200 bg-slate-50/80 p-4">
           <div class="text-sm font-semibold text-slate-700">当前保存位置</div>
           <div class="mt-2 break-all font-mono text-xs leading-6 text-slate-500">{{ cookiePath || "未设置" }}</div>

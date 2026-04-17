@@ -1,11 +1,12 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { LicenseState } from "../types/license";
+import { APP_VERSION } from "../constants/brand";
 
 export const useAppStore = defineStore("app", () => {
   const licenseState = ref<LicenseState>("invalid");
   const isLicensed = ref(false);
-  const appVersion = ref("5.0.0");
+  const appVersion = ref(APP_VERSION);
   const licenseKey = ref("");
   const licenseExpiresAt = ref<string | null>(null);
   const lastVerifiedAt = ref<string | null>(null);

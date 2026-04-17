@@ -15,9 +15,9 @@ members = [
 
 [workspace.package]
 edition = "2021"
-version = "5.0.0"
+version = "5.1.0"
 license = "Proprietary"
-authors = ["TLS Team"]
+authors = ["TLS-801"]
 
 [workspace.dependencies]
 anyhow = "1"

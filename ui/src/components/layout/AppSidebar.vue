@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
 import AppNavIcon from "./AppNavIcon.vue";
+import { APP_NAME_EN, APP_VERSION, AUTHOR_WECHAT } from "../../constants/brand";
 
 const route = useRoute();
 
@@ -27,8 +28,8 @@ function isActive(path: string): boolean {
           <AppNavIcon name="spark" icon-class="h-5 w-5" />
         </div>
         <div>
-          <div class="text-lg font-semibold tracking-tight text-white">TLS 视频号</div>
-          <div class="mt-1 text-xs text-slate-300">运营工作台</div>
+          <div class="text-lg font-semibold tracking-tight text-white">驼铃·视频小店差评处理</div>
+          <div class="mt-1 text-xs text-slate-300">作者微信 {{ AUTHOR_WECHAT }}</div>
         </div>
       </div>
     </div>
@@ -48,6 +49,6 @@ function isActive(path: string): boolean {
       </RouterLink>
     </nav>
 
-    <div class="pt-4 text-xs text-slate-400">TLS-shipinhao v5.0.0</div>
+    <div class="pt-4 text-xs text-slate-400">{{ APP_NAME_EN }} v{{ APP_VERSION }}</div>
   </aside>
 </template>

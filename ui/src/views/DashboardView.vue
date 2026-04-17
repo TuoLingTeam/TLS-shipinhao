@@ -7,14 +7,15 @@ import { useOrderStore } from "../stores/order";
 import { useReviewStore } from "../stores/review";
 import { useDeliveryStore } from "../stores/delivery";
 import AppNavIcon from "../components/layout/AppNavIcon.vue";
+import { AUTHOR_WECHAT } from "../constants/brand";
 
 const appStore = useAppStore();
 const orderStore = useOrderStore();
 const reviewStore = useReviewStore();
 const deliveryStore = useDeliveryStore();
 
-const appInfo = useTauriInvoke<{ name: string; version: string; runtime: string }>("get_app_info");
-const info = ref<{ name: string; version: string; runtime: string } | null>(null);
+const appInfo = useTauriInvoke<{ name: string; name_en: string; version: string; author_wechat: string; window_title: string; runtime: string }>("get_app_info");
+const info = ref<{ name: string; name_en: string; version: string; author_wechat: string; window_title: string; runtime: string } | null>(null);
 
 const metrics = computed(() => [
   {
@@ -58,7 +59,7 @@ onMounted(async () => {
     <section class="surface-panel p-5 lg:p-6">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-xl font-semibold tracking-tight text-slate-900">高频入口</h3>
-        <div class="text-xs text-slate-400">{{ info?.runtime ?? 'tauri' }} · v{{ info?.version ?? appStore.appVersion }}</div>
+        <div class="text-xs text-slate-400">{{ info?.runtime ?? 'tauri' }} · v{{ info?.version ?? appStore.appVersion }} · 作者微信 {{ info?.author_wechat ?? AUTHOR_WECHAT }}</div>
       </div>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">

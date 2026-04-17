@@ -1,6 +1,6 @@
 {
-  "productName": "TLS-shipinhao",
-  "version": "5.0.0",
+  "productName": "驼铃·视频小店差评处理",
+  "version": "5.1.0",
   "identifier": "com.tls.shipinhao",
   "build": {
     "frontendDist": "../../ui/dist",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "TLS-shipinhao",
+        "title": "驼铃·视频小店差评处理 5.1.0",
         "width": 1280,
         "height": 860,
         "minWidth": 960,

@@ -2,6 +2,7 @@
 import { useRoute } from "vue-router";
 import { computed } from "vue";
 import { useAppStore } from "../../stores/app";
+import { APP_NAME } from "../../constants/brand";
 
 const route = useRoute();
 const appStore = useAppStore();
@@ -15,7 +16,7 @@ const titleMap: Record<string, string> = {
   settings: "设置",
 };
 
-const pageTitle = computed(() => titleMap[route.name as string] ?? "TLS-shipinhao");
+const pageTitle = computed(() => titleMap[route.name as string] ?? APP_NAME);
 const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
 </script>
 
