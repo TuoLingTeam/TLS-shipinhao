@@ -716,6 +716,13 @@ pub fn route_request(path: &str) -> &'static str {
     }
 }
 
+pub fn route_requires_signer(route: WorkerRoute) -> bool {
+    matches!(
+        route,
+        WorkerRoute::Activate | WorkerRoute::Verify | WorkerRoute::LeaseRefresh
+    )
+}
+
 pub async fn handle_async_runtime_json<R: AsyncRuntimeRepository + ?Sized>(
     repo: &R,
     path: &str,
@@ -1121,13 +1128,13 @@ mod cloudflare_entry {
             | WorkerRoute::LeaseRefresh
             | WorkerRoute::TaskAuthorize
             | WorkerRoute::LeaseRevoke => {
-                let signer = if matches!(route, WorkerRoute::TaskAuthorize) {
-                    None
-                } else {
+                let signer = if route_requires_signer(route) {
                     match load_signer(&env) {
                         Ok(signer) => Some(signer),
                         Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
                     }
+                } else {
+                    None
                 };
                 let db = env.d1("DB")?;
                 let repo = D1RuntimeRepo::new(&db);
@@ -1329,6 +1336,16 @@ mod tests {
         assert_eq!(route_request("/api/lease/revoke"), "lease_revoke");
         assert_eq!(route_request("/api/task/authorize"), "task_authorize");
         assert_eq!(route_request("/nope"), "not_found");
+    }
+
+    #[test]
+    fn signer_requirement_matches_runtime_route_contract() {
+        assert!(route_requires_signer(WorkerRoute::Activate));
+        assert!(route_requires_signer(WorkerRoute::Verify));
+        assert!(route_requires_signer(WorkerRoute::LeaseRefresh));
+        assert!(!route_requires_signer(WorkerRoute::LeaseRevoke));
+        assert!(!route_requires_signer(WorkerRoute::TaskAuthorize));
+        assert!(!route_requires_signer(WorkerRoute::NotFound));
     }
 
     #[tokio::test]
