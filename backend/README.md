@@ -1,8 +1,8 @@
 # TLS-shipinhao 卡密后端
 
-**正式部署入口为本目录**：在 `backend/` 执行 `npx wrangler deploy`（`wrangler.toml` 会编译 `apps/license-worker` 并指向其 `build/worker/shim.mjs`）。
+**正式部署入口为本目录**：在 `backend/` 执行 `npx wrangler deploy`（`wrangler.toml` 会编译 `backend/license-worker` 并指向其 `build/worker/shim.mjs`）。
 
-- **管理后台页面**唯一源文件：`backend/src/admin/admin.html`（由 Rust Worker 在编译期 `include_str!` 嵌入，勿在 `apps/license-worker` 再复制一份正文）。
+- **管理后台页面**唯一源文件：`backend/src/admin/admin.html`（由 Rust Worker 在编译期 `include_str!` 嵌入，勿在 `backend/license-worker` 再复制一份正文）。
 - **D1 schema / 迁移**：`backend/db/`。
 - **遗留 JS 壳**：`backend/src/worker/index.js` 仅作本地对照，生产路由不应再以它为 `main`。
 
@@ -29,7 +29,7 @@ https://sphapi.199908.top/admin
 - 管理员查看卡密列表与统计：`POST /api/admin/list`
 - 管理员吊销卡密：`POST /api/admin/revoke`
 
-**说明**：若线上仍绑定旧版 **仅 `index.js` 壳** 的 Worker，则除静态页外会 **HTTP 410**。请改用本目录 `wrangler.toml` 部署 **Rust Worker**；管理员接口由 `apps/license-worker` 内 D1 逻辑提供（需配置 `ADMIN_SECRET` 与 D1）。
+**说明**：若线上仍绑定旧版 **仅 `index.js` 壳** 的 Worker，则除静态页外会 **HTTP 410**。请改用本目录 `wrangler.toml` 部署 **Rust Worker**；管理员接口由 `backend/license-worker` 内 D1 逻辑提供（需配置 `ADMIN_SECRET` 与 D1）。
 - 管理员重置设备绑定：`POST /api/admin/device/rebind`
 - 管理员吊销短期会话：`POST /api/admin/device/revoke_sessions`
 - 管理员查看授权审计：`POST /api/admin/audit/list`
@@ -58,7 +58,7 @@ npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
 npx wrangler deploy
 ```
 
-（`wrangler` 会在部署前执行 `[build]`，在 `apps/license-worker` 内运行 `worker-build`。）
+（`wrangler` 会在部署前执行 `[build]`，在 `backend/license-worker` 内运行 `worker-build`。）
 
 ## 线上升级到授权协议 V2
 

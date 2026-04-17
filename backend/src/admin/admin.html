@@ -769,7 +769,7 @@ function adminEndpointUnavailable(res) {
   if (res.__httpStatus === 410) {
     return true;
   }
-  return res.message === "legacy_js_worker_retired_use_apps_license_worker";
+  return res.message === "legacy_js_worker_retired_use_backend_license_worker";
 }
 
 function loginErrorMessage(res) {

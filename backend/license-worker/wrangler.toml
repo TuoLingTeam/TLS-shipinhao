@@ -1,4 +1,4 @@
-# 仅用于在 apps/license-worker 目录本地调试：`npx wrangler dev`。
+# 仅用于在 backend/license-worker 目录本地调试：`npx wrangler dev`。
 # 线上生产部署请使用 ../../backend/wrangler.toml（管理页与 D1 配置以 backend 为入口）。
 
 name = "tls-shipinhao-license-worker"

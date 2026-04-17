@@ -19,7 +19,6 @@ TLS-shipinhao/
 ├── apps/                        # 当前正式应用层
 │   ├── desktop/                 # Tauri 桌面端（命令、适配器、状态、图标）
 │   ├── ui/                      # Vue 3 前端（Vite + Pinia + vue-router）
-│   └── license-worker/          # Rust Cloudflare Worker 授权服务
 ├── backend/                     # 后端与共享实现
 │   ├── crates/                  # Rust 共享库与核心业务能力
 │   ├── db/                      # D1 schema / migration
@@ -28,6 +27,7 @@ TLS-shipinhao/
 │   ├── src/                     # Worker 管理页与兼容壳
 │   ├── tests/                   # Rust / Python 回归测试与夹具
 │   ├── xtask/                   # 构建、manifest、性能、发布辅助命令
+│   ├── license-worker/          # Rust Cloudflare Worker 授权服务
 │   └── wrangler.toml            # Cloudflare Worker 生产部署入口
 ├── backup/                      # 旧版 Python 资产备份（不参与当前主运行链路）
 │   ├── legacy-src/              # 旧版 Python 源码快照
@@ -138,7 +138,7 @@ npx wrangler deploy
 
 更详细的后端说明见：
 - [backend/README.md](backend/README.md)
-- [apps/license-worker/README.md](apps/license-worker/README.md)
+- [backend/license-worker/README.md](backend/license-worker/README.md)
 
 ## 备份目录说明
 

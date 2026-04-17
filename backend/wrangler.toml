@@ -1,13 +1,13 @@
 # 生产部署入口：在 backend/ 目录执行 `npx wrangler deploy`。
-# Rust 源码在 apps/license-worker；管理页 HTML 唯一源文件为 src/admin/admin.html（由 Worker include 编译进 wasm）。
+# Rust 源码在 backend/license-worker；管理页 HTML 唯一源文件为 src/admin/admin.html（由 Worker include 编译进 wasm）。
 
 name = "tls-shipinhao"
-main = "../apps/license-worker/build/worker/shim.mjs"
+main = "./license-worker/build/worker/shim.mjs"
 compatibility_date = "2024-12-01"
 workers_dev = false
 
 [build]
-command = "sh -c 'cd ../apps/license-worker && (command -v worker-build >/dev/null 2>&1 || cargo install worker-build 2>/dev/null) && worker-build --release'"
+command = "sh -c 'cd ./license-worker && (command -v worker-build >/dev/null 2>&1 || cargo install worker-build 2>/dev/null) && worker-build --release'"
 
 routes = [
   { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }

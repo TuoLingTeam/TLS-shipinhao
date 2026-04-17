@@ -17,7 +17,7 @@ npx wrangler deploy
 ## 仅本地调试本 crate
 
 ```bash
-cd apps/license-worker
+cd backend/license-worker
 npx wrangler dev
 ```
 
