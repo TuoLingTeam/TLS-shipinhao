@@ -1,33 +1,30 @@
-use crate::adapters::http_license_client::{normalize_license_state, HttpLicenseClient};
+use crate::adapters::http_license_client::{
+    normalize_license_state, HttpLicenseClient, LicenseApiResponse,
+};
 use crate::app_settings::LICENSE_API_BASE_URLS;
 use crate::error::AppError;
 use crate::state::{self, AppState, StoredLicenseProfile};
+use api_contracts::{LicenseState, RuntimeState};
 use sha2::{Digest, Sha256};
 use std::ffi::CStr;
 use tauri::State;
 
 const LICENSE_PROTOCOL_VERSION: u32 = 3;
 
-fn license_state_allows_feature(state: &str) -> bool {
-    matches!(state, "active" | "renewal_due" | "ok")
+fn runtime_state_allows_feature(runtime: &RuntimeState) -> bool {
+    runtime.reason.is_locally_allowed()
 }
 
 pub async fn ensure_feature_authorized(
     state: &AppState,
     feature_name: &str,
 ) -> Result<(), AppError> {
-    let profile = state.license_profile.lock().await.clone();
-    if license_state_allows_feature(profile.license_state.as_str()) {
+    let runtime = state.runtime_license_state.lock().await.clone();
+    if runtime_state_allows_feature(&runtime) {
         return Ok(());
     }
 
-    let detail = match profile.license_state.as_str() {
-        "expired" => "当前授权已过期，请续费后再试",
-        "revoked" => "当前授权已吊销，请联系管理员",
-        "device_mismatch" => "当前设备与授权不匹配，请重新激活",
-        "compromised" => "当前授权状态异常，请联系管理员",
-        _ => "请先激活授权后再使用此功能",
-    };
+    let detail = license_state_detail(runtime.reason);
     Err(AppError::Message(format!("{feature_name}：{detail}")))
 }
 
@@ -104,6 +101,119 @@ fn hostname() -> String {
         .unwrap_or_else(|_| "unknown".to_string())
 }
 
+fn license_state_detail(state: LicenseState) -> &'static str {
+    match state {
+        LicenseState::Expired => "当前授权已过期，请续费后再试",
+        LicenseState::Revoked => "当前授权已吊销，请联系管理员",
+        LicenseState::DeviceMismatch => "当前设备与授权不匹配，请重新激活",
+        LicenseState::ReactivationRequired => "当前设备授权需要重新激活，请重新绑定",
+        LicenseState::Compromised => "当前授权状态异常，请联系管理员",
+        LicenseState::Invalid | LicenseState::NotFound => "请先激活授权后再使用此功能",
+        LicenseState::OnlineRefreshRequired => "当前授权需要联网刷新，请稍后重试",
+        _ => "当前授权不可用，请检查授权状态后重试",
+    }
+}
+
+fn parse_license_state(raw: &str) -> LicenseState {
+    match normalize_license_state(raw).as_str() {
+        "active" => LicenseState::Active,
+        "renewal_due" => LicenseState::RenewalDue,
+        "expired" => LicenseState::Expired,
+        "revoked" => LicenseState::Revoked,
+        "device_mismatch" => LicenseState::DeviceMismatch,
+        "reactivation_required" => LicenseState::ReactivationRequired,
+        "online_refresh_required" => LicenseState::OnlineRefreshRequired,
+        "compromised" => LicenseState::Compromised,
+        "not_found" => LicenseState::NotFound,
+        _ => LicenseState::Invalid,
+    }
+}
+
+async fn persist_runtime_profile(
+    state: &AppState,
+    runtime: RuntimeState,
+    fallback_license_key: String,
+    fallback_license_expires_at: Option<String>,
+) -> Result<StoredLicenseProfile, AppError> {
+    let last_verified_at = current_timestamp();
+    let profile = StoredLicenseProfile {
+        license_key: if runtime.license_key.trim().is_empty() {
+            fallback_license_key
+        } else {
+            runtime.license_key.clone()
+        },
+        license_state: state::runtime_state_to_license_state(&runtime),
+        license_expires_at: if runtime.license_expires_at.trim().is_empty() {
+            fallback_license_expires_at
+        } else {
+            Some(runtime.license_expires_at.clone())
+        },
+        last_verified_at: Some(last_verified_at),
+    };
+
+    {
+        let mut current = state.runtime_license_state.lock().await;
+        *current = runtime;
+    }
+    persist_license_profile(state, profile.clone()).await?;
+    Ok(profile)
+}
+
+async fn sync_license_state_from_response(
+    state: &AppState,
+    requested_key: &str,
+    response: &LicenseApiResponse,
+) -> Result<StoredLicenseProfile, AppError> {
+    let normalized_key = response
+        .license_key
+        .clone()
+        .unwrap_or_else(|| requested_key.trim().to_uppercase());
+
+    if let Some(token) = response
+        .license_lease
+        .as_deref()
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        let runtime = state::verify_and_store_license_token(
+            state.lease_store.as_ref(),
+            token,
+            &state.device_id,
+            chrono::Utc::now().timestamp(),
+            &state.lease_verifier,
+        )
+        .map_err(|err| AppError::Message(format!("授权 Lease 校验失败：{err}")))?;
+
+        return persist_runtime_profile(
+            state,
+            runtime,
+            normalized_key,
+            response.license_expires_at.clone(),
+        )
+        .await;
+    }
+
+    let reason = parse_license_state(&response.normalized_state());
+    if reason.is_locally_allowed() {
+        return Err(AppError::Message(
+            "授权服务未返回签名 Lease，已拒绝信任裸授权状态".to_string(),
+        ));
+    }
+
+    state
+        .lease_store
+        .delete()
+        .map_err(|err| AppError::Message(format!("清理本地授权材料失败：{err}")))?;
+
+    persist_runtime_profile(
+        state,
+        RuntimeState::reason_only(reason),
+        normalized_key,
+        response.license_expires_at.clone(),
+    )
+    .await
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn activate_license(
     state: State<'_, AppState>,
@@ -119,31 +229,17 @@ pub async fn activate_license(
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
-    let normalized_state = normalize_license_state(&resp.normalized_state());
-
-    persist_license_profile(
-        &state,
-        StoredLicenseProfile {
-            license_key: resp
-                .license_key
-                .clone()
-                .unwrap_or_else(|| license_key.trim().to_uppercase()),
-            license_state: normalized_state.clone(),
-            license_expires_at: resp.license_expires_at.clone(),
-            last_verified_at: Some(current_timestamp()),
-        },
-    )
-    .await?;
+    let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
 
     Ok(serde_json::json!({
         "success": resp.success,
         "message": resp.message,
-        "license_state": normalized_state,
-        "license_key": resp.license_key,
+        "license_state": profile.license_state,
+        "license_key": profile.license_key,
         "device_id": resp.device_id,
-        "license_expires_at": resp.license_expires_at,
+        "license_expires_at": profile.license_expires_at,
         "license_lease": resp.license_lease.is_some(),
-        "last_verified_at": current_timestamp(),
+        "last_verified_at": profile.last_verified_at,
     }))
 }
 
@@ -161,30 +257,16 @@ pub async fn verify_license(
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
-    let normalized_state = normalize_license_state(&resp.normalized_state());
-
-    persist_license_profile(
-        &state,
-        StoredLicenseProfile {
-            license_key: resp
-                .license_key
-                .clone()
-                .unwrap_or_else(|| license_key.trim().to_uppercase()),
-            license_state: normalized_state.clone(),
-            license_expires_at: resp.license_expires_at.clone(),
-            last_verified_at: Some(current_timestamp()),
-        },
-    )
-    .await?;
+    let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
 
     Ok(serde_json::json!({
         "success": resp.success,
         "message": resp.message,
-        "license_state": normalized_state,
-        "license_key": resp.license_key,
-        "license_expires_at": resp.license_expires_at,
+        "license_state": profile.license_state,
+        "license_key": profile.license_key,
+        "license_expires_at": profile.license_expires_at,
         "license_lease": resp.license_lease.is_some(),
-        "last_verified_at": current_timestamp(),
+        "last_verified_at": profile.last_verified_at,
     }))
 }
 
@@ -220,23 +302,74 @@ fn current_timestamp() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapters::secure_storage::{InMemorySecretStore, SecretStore};
+    use crate::state::AppState;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    use ed25519_dalek::{Signer, SigningKey};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    fn signed_lease_token(device_id: &str, renew_after: i64, exp: i64) -> (String, String) {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let verifying_key_b64 = URL_SAFE_NO_PAD.encode(signing_key.verifying_key().as_bytes());
+        let payload = serde_json::json!({
+            "kind": "license_lease",
+            "license_key": "TLS-TEST",
+            "device_id": device_id,
+            "issued_at": 1_700_000_000i64,
+            "exp": exp,
+            "renew_after": renew_after,
+            "task_policy": ["review_find"],
+            "risk_level": "low",
+        });
+        let payload_bytes = serde_json::to_vec(&payload).unwrap();
+        let payload_b64 = URL_SAFE_NO_PAD.encode(payload_bytes);
+        let signature = signing_key.sign(payload_b64.as_bytes());
+        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+        (format!("{payload_b64}.{signature_b64}"), verifying_key_b64)
+    }
+
+    fn test_state(
+        device_id: &str,
+        store: Arc<dyn SecretStore>,
+        public_key_b64: &str,
+    ) -> AppState {
+        AppState {
+            cookie_profile: Mutex::new(Default::default()),
+            cookie_path: Mutex::new(PathBuf::from(".")),
+            app_home_dir: std::env::temp_dir(),
+            device_id: device_id.to_string(),
+            lease_store: store,
+            lease_verifier: license_service::LeaseVerifier::from_public_key_b64(public_key_b64)
+                .unwrap(),
+            runtime_license_state: Mutex::new(RuntimeState::reason_only(LicenseState::Invalid)),
+            license_profile: Mutex::new(StoredLicenseProfile::default()),
+        }
+    }
 
     #[test]
-    fn license_state_allows_active_and_renewal_due_only() {
-        assert!(license_state_allows_feature("active"));
-        assert!(license_state_allows_feature("renewal_due"));
+    fn runtime_state_allows_active_and_renewal_due_only() {
+        assert!(runtime_state_allows_feature(&RuntimeState::reason_only(
+            LicenseState::Active
+        )));
+        assert!(runtime_state_allows_feature(&RuntimeState {
+            reason: LicenseState::Active,
+            status_hint: LicenseState::RenewalDue,
+            ..RuntimeState::default()
+        }));
 
         for state in [
-            "invalid",
-            "expired",
-            "revoked",
-            "device_mismatch",
-            "compromised",
-            "",
+            LicenseState::Invalid,
+            LicenseState::Expired,
+            LicenseState::Revoked,
+            LicenseState::DeviceMismatch,
+            LicenseState::Compromised,
         ] {
             assert!(
-                !license_state_allows_feature(state),
-                "state {state} should be blocked"
+                !runtime_state_allows_feature(&RuntimeState::reason_only(state)),
+                "state {state:?} should be blocked"
             );
         }
     }
@@ -247,5 +380,77 @@ mod tests {
             legacy_compatible_device_id_from_raw("SERIAL-123"),
             "0c04dee8a171fce9"
         );
+    }
+
+    #[test]
+    fn parse_license_state_supports_reactivation_required() {
+        assert_eq!(
+            parse_license_state("reactivation_required"),
+            LicenseState::ReactivationRequired
+        );
+        assert_eq!(parse_license_state("ok"), LicenseState::Active);
+    }
+
+    #[tokio::test]
+    async fn sync_license_state_accepts_signed_lease_and_updates_runtime_gate() {
+        let store: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::new());
+        let (token, public_key_b64) = signed_lease_token("dev-1", 1_800_000_000, 1_900_000_000);
+        let state = test_state("dev-1", store.clone(), &public_key_b64);
+        let response = LicenseApiResponse {
+            success: true,
+            message: "ok".into(),
+            license_state: "active".into(),
+            license_lease: Some(token.clone()),
+            license_expires_at: Some("2030-01-01T00:00:00Z".into()),
+            activated_at: None,
+            device_id: Some("dev-1".into()),
+            license_key: Some("TLS-TEST".into()),
+            lease_expires_at: None,
+            renew_after: None,
+            issued_at: None,
+            license_status: None,
+            task_policy: None,
+        };
+
+        let profile = sync_license_state_from_response(&state, "tls-test", &response)
+            .await
+            .expect("signed lease should be accepted");
+
+        assert_eq!(profile.license_state, "active");
+        assert_eq!(store.get().unwrap().as_deref(), Some(token.as_str()));
+        assert_eq!(
+            state.runtime_license_state.lock().await.reason,
+            LicenseState::Active
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_license_state_rejects_allowed_state_without_signed_lease() {
+        let store: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::new());
+        let state = test_state(
+            "dev-1",
+            store,
+            "H0KTidHIXV0nvzkUNmssrx5t5IrUvEQi1WVelkuCJm8",
+        );
+        let response = LicenseApiResponse {
+            success: true,
+            message: "ok".into(),
+            license_state: "active".into(),
+            license_lease: None,
+            license_expires_at: Some("2030-01-01T00:00:00Z".into()),
+            activated_at: None,
+            device_id: None,
+            license_key: Some("TLS-TEST".into()),
+            lease_expires_at: None,
+            renew_after: None,
+            issued_at: None,
+            license_status: None,
+            task_policy: None,
+        };
+
+        let err = sync_license_state_from_response(&state, "tls-test", &response)
+            .await
+            .expect_err("bare active state must be rejected");
+        assert!(err.to_string().contains("未返回签名 Lease"));
     }
 }
