@@ -1,10 +1,15 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$BACKEND_DIR/.." && pwd)"
-TEMP_WORKSPACE="$(mktemp -d "${TMPDIR:-/tmp}/license-worker-workspace.XXXXXX")"
+SCRIPT_PATH=$0
+case "$SCRIPT_PATH" in
+  /*) ;;
+  *) SCRIPT_PATH="$(pwd)/$SCRIPT_PATH" ;;
+esac
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
+BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$BACKEND_DIR/.." && pwd)
+TEMP_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/license-worker-workspace.XXXXXX")
 REAL_WORKER_DIR="$BACKEND_DIR/license-worker"
 TEMP_BACKEND_DIR="$TEMP_WORKSPACE/backend"
 TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/license-worker"
@@ -12,7 +17,7 @@ TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/license-worker"
 cleanup() {
   rm -rf "$TEMP_WORKSPACE"
 }
-trap cleanup EXIT
+trap cleanup EXIT HUP INT TERM
 
 mkdir -p "$TEMP_BACKEND_DIR/crates" "$TEMP_BACKEND_DIR/src/admin"
 cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"

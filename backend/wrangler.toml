@@ -11,7 +11,7 @@ routes = [
 ]
 
 [build]
-command = "bash ./scripts/build_license_worker.sh --release"
+command = "./scripts/build_license_worker.sh --release"
 
 [vars]
 # HMAC_SECRET / ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置

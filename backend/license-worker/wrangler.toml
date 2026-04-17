@@ -7,7 +7,7 @@ compatibility_date = "2024-12-01"
 workers_dev = true
 
 [build]
-command = "bash ../scripts/build_license_worker.sh --release"
+command = "../scripts/build_license_worker.sh --release"
 
 # 勿在此文件配置 routes，避免与 backend/wrangler.toml 线上路由冲突。
 
