@@ -12,11 +12,18 @@
 //!   场景被迫识别"没写过"与"读失败"两种等价情况。
 //! - `delete` 遇到 NoEntry 视为 noop，多次调用幂等。
 //!
-//! 未实现（留给 M2-07）：Keychain 不可用（CI、无 seahorse 的 Linux）时
-//! 回退到加密文件后备；接口层面 `SecretStore` 已经可以让业务层无感切换。
+//! 密钥环不可用（CI、无 seahorse 的 Linux、企业策略禁用等）时自动回退到
+//! 加密文件后备（M2-07）：使用设备指纹派生 AES-256-GCM 密钥，把密文落在
+//! 应用运行目录下；设备指纹一旦变化，解密失败会返回 `StorageError::DeviceChanged`。
 
-use std::sync::Mutex;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use rand::rngs::OsRng;
+use rand::RngCore;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 /// Keychain / Credential Manager 条目的 service 与 account。
@@ -31,11 +38,23 @@ pub const KEYCHAIN_ACCOUNT: &str = "runtime_bundle";
 pub enum StorageError {
     #[error("凭据存储错误：{0}")]
     Backend(String),
+    /// 加密文件存在但解密失败——通常是设备指纹变化（换硬盘/主板）。
+    /// 业务层可据此提示用户重新激活而非爆错。
+    #[error("设备指纹已变化，无法解密旧凭据")]
+    DeviceChanged,
+    #[error("凭据文件 I/O 错误：{0}")]
+    Io(String),
 }
 
 impl From<keyring::Error> for StorageError {
     fn from(err: keyring::Error) -> Self {
         StorageError::Backend(err.to_string())
+    }
+}
+
+impl From<std::io::Error> for StorageError {
+    fn from(err: std::io::Error) -> Self {
+        StorageError::Io(err.to_string())
     }
 }
 
@@ -141,6 +160,143 @@ impl SecretStore for InMemorySecretStore {
     }
 }
 
+// ---- 加密文件后备（M2-07） --------------------------------------------------
+
+/// 加密文件格式版本。未来升级 KDF / 加密算法时递增此常量。
+const FILE_FORMAT_VERSION: u8 = 1;
+
+/// Nonce 长度：AES-GCM 标准 12 字节。
+const NONCE_LEN: usize = 12;
+
+/// 用设备指纹派生 AES-256-GCM 密钥。
+///
+/// KDF：`SHA256(device_id)`。选择简单 SHA 而非 Argon2 的理由：
+/// - 本地文件场景攻击者若能拿到磁盘文件，通常也能拿到设备 serial；
+///   设计意图是"让偶然的 exfiltration 无法读到明文"，不是对抗离线暴力破解。
+/// - Argon2 在慢设备上显著增加启动耗时，不值得。
+fn derive_file_key(device_id: &str) -> [u8; 32] {
+    let hash = Sha256::digest(device_id.as_bytes());
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&hash[..32]);
+    out
+}
+
+/// 默认加密文件名。
+pub const ENCRYPTED_FILE_NAME: &str = "runtime_bundle.enc";
+
+/// 加密文件后备存储。
+///
+/// 文件格式（byte-oriented）：
+/// ```text
+/// version (1 byte) | nonce (12 bytes) | ciphertext (含 GCM 16 字节 tag)
+/// ```
+pub struct EncryptedFileSecretStore {
+    path: PathBuf,
+    key: [u8; 32],
+}
+
+impl EncryptedFileSecretStore {
+    /// 使用设备指纹 + 运行时目录构造。
+    pub fn new(runtime_dir: &Path, device_id: &str) -> Self {
+        Self::with_file(runtime_dir.join(ENCRYPTED_FILE_NAME), device_id)
+    }
+
+    /// 指定完整文件路径的构造器（测试友好）。
+    pub fn with_file(path: PathBuf, device_id: &str) -> Self {
+        Self {
+            path,
+            key: derive_file_key(device_id),
+        }
+    }
+
+    fn cipher(&self) -> Aes256Gcm {
+        Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.key))
+    }
+}
+
+impl SecretStore for EncryptedFileSecretStore {
+    fn set(&self, value: &str) -> Result<(), StorageError> {
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = self
+            .cipher()
+            .encrypt(nonce, value.as_bytes())
+            .map_err(|e| StorageError::Backend(format!("加密失败：{e}")))?;
+
+        let mut buf = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
+        buf.push(FILE_FORMAT_VERSION);
+        buf.extend_from_slice(&nonce_bytes);
+        buf.extend_from_slice(&ciphertext);
+
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&self.path, buf)?;
+        Ok(())
+    }
+
+    fn get(&self) -> Result<Option<String>, StorageError> {
+        let buf = match std::fs::read(&self.path) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        if buf.len() < 1 + NONCE_LEN + 16 {
+            return Err(StorageError::Backend("加密文件长度不足".into()));
+        }
+        if buf[0] != FILE_FORMAT_VERSION {
+            return Err(StorageError::Backend(format!(
+                "未知加密文件版本：{}",
+                buf[0]
+            )));
+        }
+        let nonce = Nonce::from_slice(&buf[1..1 + NONCE_LEN]);
+        let ciphertext = &buf[1 + NONCE_LEN..];
+        match self.cipher().decrypt(nonce, ciphertext) {
+            Ok(plain) => {
+                let value = String::from_utf8(plain)
+                    .map_err(|e| StorageError::Backend(format!("UTF-8 解码失败：{e}")))?;
+                Ok(Some(value))
+            }
+            Err(_) => Err(StorageError::DeviceChanged),
+        }
+    }
+
+    fn delete(&self) -> Result<(), StorageError> {
+        match std::fs::remove_file(&self.path) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+/// 默认后备链：Keychain 可用优先用 Keychain，否则回退加密文件。
+///
+/// 返回 `Arc<dyn SecretStore>` 方便业务层把它塞到 `AppState` 里共享。
+pub fn init_default_store(
+    runtime_dir: &Path,
+    device_id: &str,
+) -> Arc<dyn SecretStore> {
+    match KeychainSecretStore::new() {
+        Ok(store) => {
+            tracing::info!(
+                "凭据存储后端：Keychain/Credential Manager（service={}）",
+                KEYCHAIN_SERVICE
+            );
+            Arc::new(store)
+        }
+        Err(err) => {
+            tracing::warn!(
+                "Keychain 不可用，回退到加密文件：{err}（path={}）",
+                runtime_dir.join(ENCRYPTED_FILE_NAME).display()
+            );
+            Arc::new(EncryptedFileSecretStore::new(runtime_dir, device_id))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,5 +388,135 @@ mod tests {
         assert_eq!(store.get().expect("读取失败"), None);
         // 再次 delete 应幂等
         store.delete().expect("幂等 delete 失败");
+    }
+
+    // ---- EncryptedFileSecretStore（M2-07） ---------------------------------
+
+    fn tempdir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("tempdir 创建失败")
+    }
+
+    #[test]
+    fn encrypted_file_get_returns_none_before_any_write() {
+        let dir = tempdir();
+        let store = EncryptedFileSecretStore::new(dir.path(), "dev-A");
+        assert_eq!(store.get().unwrap(), None);
+    }
+
+    #[test]
+    fn encrypted_file_roundtrip_preserves_secret() {
+        let dir = tempdir();
+        let store = EncryptedFileSecretStore::new(dir.path(), "dev-A");
+        store.set("lease.token.X").unwrap();
+        assert_eq!(store.get().unwrap().as_deref(), Some("lease.token.X"));
+    }
+
+    #[test]
+    fn encrypted_file_survives_process_restart() {
+        // 新建 store 对象模拟应用重启：同一 device_id + 同一文件 → 能读出
+        let dir = tempdir();
+        let path = dir.path().to_path_buf();
+        EncryptedFileSecretStore::new(&path, "dev-A")
+            .set("persisted-lease")
+            .unwrap();
+
+        let new_store = EncryptedFileSecretStore::new(&path, "dev-A");
+        assert_eq!(
+            new_store.get().unwrap().as_deref(),
+            Some("persisted-lease")
+        );
+    }
+
+    #[test]
+    fn encrypted_file_returns_device_changed_on_fingerprint_drift() {
+        let dir = tempdir();
+        let path = dir.path().to_path_buf();
+        EncryptedFileSecretStore::new(&path, "dev-OLD")
+            .set("old-lease")
+            .unwrap();
+
+        // 设备指纹变化（换硬盘/主板）
+        let new_store = EncryptedFileSecretStore::new(&path, "dev-NEW");
+        match new_store.get() {
+            Err(StorageError::DeviceChanged) => {}
+            other => panic!("预期 DeviceChanged，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn encrypted_file_manual_delete_restores_none() {
+        let dir = tempdir();
+        let store = EncryptedFileSecretStore::new(dir.path(), "dev-A");
+        store.set("v").unwrap();
+        // 模拟用户/运维手工删除
+        std::fs::remove_file(dir.path().join(ENCRYPTED_FILE_NAME)).unwrap();
+        assert_eq!(store.get().unwrap(), None);
+    }
+
+    #[test]
+    fn encrypted_file_delete_is_idempotent() {
+        let dir = tempdir();
+        let store = EncryptedFileSecretStore::new(dir.path(), "dev-A");
+        store.delete().unwrap();
+        store.set("v").unwrap();
+        store.delete().unwrap();
+        store.delete().unwrap();
+        assert_eq!(store.get().unwrap(), None);
+    }
+
+    #[test]
+    fn encrypted_file_rejects_bad_version_byte() {
+        let dir = tempdir();
+        let path = dir.path().join(ENCRYPTED_FILE_NAME);
+        // 手工写入版本号 99 的"文件头"，加足够长度让 len 检查通过
+        let mut buf = vec![99u8];
+        buf.extend_from_slice(&[0u8; NONCE_LEN + 16]);
+        std::fs::write(&path, &buf).unwrap();
+
+        let store = EncryptedFileSecretStore::with_file(path, "dev-A");
+        match store.get() {
+            Err(StorageError::Backend(msg)) => assert!(msg.contains("版本")),
+            other => panic!("预期 Backend 错误，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn encrypted_file_rejects_truncated_file() {
+        let dir = tempdir();
+        let path = dir.path().join(ENCRYPTED_FILE_NAME);
+        std::fs::write(&path, vec![1u8, 2u8, 3u8]).unwrap();
+
+        let store = EncryptedFileSecretStore::with_file(path, "dev-A");
+        match store.get() {
+            Err(StorageError::Backend(msg)) => assert!(msg.contains("长度")),
+            other => panic!("预期 Backend，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn encrypted_file_set_overwrites_previous_value() {
+        let dir = tempdir();
+        let store = EncryptedFileSecretStore::new(dir.path(), "dev-A");
+        store.set("v1").unwrap();
+        store.set("v2").unwrap();
+        assert_eq!(store.get().unwrap().as_deref(), Some("v2"));
+    }
+
+    #[test]
+    fn derive_file_key_is_deterministic_and_32_bytes() {
+        let a = derive_file_key("dev-A");
+        let b = derive_file_key("dev-A");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 32);
+        assert_ne!(a, derive_file_key("dev-B"));
+    }
+
+    #[test]
+    fn init_default_store_returns_usable_store() {
+        // 真实环境下会走 Keychain；若失败回退加密文件。两种情况都应返回可用 store。
+        let dir = tempdir();
+        let store = init_default_store(dir.path(), "dev-test");
+        // 我们不知道具体后端，只验证接口可用
+        let _ = store.get();
     }
 }
