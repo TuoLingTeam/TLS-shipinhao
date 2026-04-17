@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::time::Duration;
 
+use api_contracts::RuntimeGrant;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -140,6 +141,15 @@ pub struct LeaseRefreshResponse {
     pub message: String,
     #[serde(default)]
     pub new_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskAuthorizeRequest {
+    pub license_key: String,
+    pub device_id: String,
+    pub task_type: String,
+    #[serde(default)]
+    pub client_version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -298,6 +308,41 @@ impl HttpLicenseClient {
         };
         try_each_domain(&self.base_urls, |base_url| {
             let url = format!("{base_url}/api/lease/refresh");
+            let client = self.client.clone();
+            let payload_value = serde_json::to_value(&req).ok();
+            async move {
+                let request = client
+                    .post(&url)
+                    .timeout(Duration::from_secs(LICENSE_API_TIMEOUT_SECS));
+                let request = match payload_value {
+                    Some(body) => request.json(&body),
+                    None => {
+                        return DomainAttempt::Final(Err(LicenseHttpError::InvalidResponse(
+                            "请求体无法序列化".into(),
+                        )))
+                    }
+                };
+                response_to_attempt(request.send().await).await
+            }
+        })
+        .await
+    }
+
+    pub async fn authorize_task(
+        &self,
+        license_key: &str,
+        device_id: &str,
+        task_type: &str,
+        client_version: &str,
+    ) -> Result<RuntimeGrant, LicenseHttpError> {
+        let req = TaskAuthorizeRequest {
+            license_key: license_key.trim().to_uppercase(),
+            device_id: device_id.to_string(),
+            task_type: task_type.to_string(),
+            client_version: client_version.to_string(),
+        };
+        try_each_domain(&self.base_urls, |base_url| {
+            let url = format!("{base_url}/api/task/authorize");
             let client = self.client.clone();
             let payload_value = serde_json::to_value(&req).ok();
             async move {

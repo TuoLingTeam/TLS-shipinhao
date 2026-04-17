@@ -12,11 +12,20 @@ const REQUEST_TIMEOUT_SECS: u64 = 30;
 pub struct HttpQualityRefundSource {
     cookie_header: String,
     biz_magic: String,
+    grant_id: Option<String>,
     client: reqwest::Client,
 }
 
 impl HttpQualityRefundSource {
     pub fn new(cookie_header: String, biz_magic: String) -> Self {
+        Self::new_with_grant(cookie_header, biz_magic, None)
+    }
+
+    pub fn new_with_grant(
+        cookie_header: String,
+        biz_magic: String,
+        grant_id: Option<String>,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
             .build()
@@ -24,6 +33,7 @@ impl HttpQualityRefundSource {
         Self {
             cookie_header,
             biz_magic,
+            grant_id,
             client,
         }
     }
@@ -45,6 +55,11 @@ impl HttpQualityRefundSource {
         }
         if let Ok(v) = HeaderValue::from_str(&self.biz_magic) {
             headers.insert(HeaderName::from_static("biz_magic"), v);
+        }
+        if let Some(grant_id) = self.grant_id.as_deref() {
+            if let Ok(v) = HeaderValue::from_str(grant_id) {
+                headers.insert(HeaderName::from_static("x-grant-id"), v);
+            }
         }
         headers.insert(
             HeaderName::from_static("potter-scene"),

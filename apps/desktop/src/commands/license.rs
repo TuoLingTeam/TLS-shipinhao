@@ -4,8 +4,8 @@ use crate::adapters::http_license_client::{
 use crate::app_settings::LICENSE_API_BASE_URLS;
 use crate::error::AppError;
 use crate::state::{self, AppState, StoredLicenseProfile};
-use api_contracts::{LeasePayload, LicenseState, RuntimeState};
-use license_service::lease::RefreshOutcome;
+use api_contracts::{LeasePayload, LicenseState, RiskLevel, RuntimeGrant, RuntimeState};
+use license_service::{authorize_task_local, lease::RefreshOutcome};
 use sha2::{Digest, Sha256};
 use std::ffi::CStr;
 use tauri::State;
@@ -309,6 +309,56 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
     }
 }
 
+fn next_grant_id() -> String {
+    format!(
+        "grant-{}-{}",
+        chrono::Utc::now().timestamp_millis(),
+        rand::random::<u32>()
+    )
+}
+
+pub async fn authorize_runtime_task(
+    state: &AppState,
+    task_type: &str,
+) -> Result<RuntimeGrant, AppError> {
+    let _ = refresh_runtime_license_if_needed(state).await;
+    let now_epoch = chrono::Utc::now().timestamp();
+    if let Some(grant) = state.task_grant_cache.get_valid(task_type, now_epoch) {
+        return Ok(grant);
+    }
+
+    let token = state
+        .lease_store
+        .get()
+        .map_err(|err| AppError::Message(format!("读取本地 Lease 失败：{err}")))?
+        .ok_or_else(|| AppError::Message("当前缺少有效 Lease，请重新激活".to_string()))?;
+    let payload = parse_runtime_from_token(state, &token, now_epoch, false)?;
+
+    let local_grant = authorize_task_local(&payload, task_type, now_epoch, next_grant_id);
+    let needs_remote = match &local_grant {
+        Ok(grant) => grant.risk_level == Some(RiskLevel::High),
+        Err(_) => true,
+    };
+
+    let grant = if needs_remote {
+        let client = make_client();
+        client
+            .authorize_task(
+                &payload.license_key,
+                &state.device_id,
+                task_type,
+                env!("CARGO_PKG_VERSION"),
+            )
+            .await
+            .map_err(|err| AppError::Message(format!("任务授权失败：{err}")))?
+    } else {
+        local_grant.map_err(|err| AppError::Message(format!("任务授权失败：{err}")))?
+    };
+
+    state.task_grant_cache.put(grant.clone());
+    Ok(grant)
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn activate_license(
     state: State<'_, AppState>,
@@ -474,6 +524,7 @@ mod tests {
             lease_store: store,
             lease_verifier: license_service::LeaseVerifier::from_public_key_b64(public_key_b64)
                 .unwrap(),
+            task_grant_cache: license_service::TaskGrantCache::new(),
             runtime_license_state: Mutex::new(RuntimeState::reason_only(LicenseState::Invalid)),
             license_profile: Mutex::new(StoredLicenseProfile::default()),
         }
@@ -582,6 +633,29 @@ mod tests {
             .await
             .expect_err("bare active state must be rejected");
         assert!(err.to_string().contains("未返回签名 Lease"));
+    }
+
+    #[tokio::test]
+    async fn authorize_runtime_task_uses_local_policy_and_cache() {
+        let store: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::new());
+        let (token, public_key_b64) = signed_lease_token("dev-1", 1_900_000_000, 1_999_999_999);
+        store.set(&token).unwrap();
+        let state = test_state("dev-1", store, &public_key_b64);
+        {
+            let mut runtime = state.runtime_license_state.lock().await;
+            *runtime = RuntimeState::reason_only(LicenseState::Active);
+        }
+
+        let first = authorize_runtime_task(&state, api_contracts::LICENSE_TASK_REVIEW_FIND)
+            .await
+            .expect("local grant should be issued");
+        let second = authorize_runtime_task(&state, api_contracts::LICENSE_TASK_REVIEW_FIND)
+            .await
+            .expect("cached grant should be reused");
+
+        assert!(first.granted);
+        assert_eq!(first.grant_id, second.grant_id);
+        assert_eq!(first.task_type, api_contracts::LICENSE_TASK_REVIEW_FIND);
     }
 
     #[test]

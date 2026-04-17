@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::adapters::secure_storage::{init_default_store, SecretStore, StorageError};
 use api_contracts::{LicenseState, RuntimeState};
 use desktop_services::{parse_cookie_profile, CookieProfile};
-use license_service::{verify_stored_lease_local, LeaseVerifier};
+use license_service::{verify_stored_lease_local, LeaseVerifier, TaskGrantCache};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -31,6 +31,7 @@ pub struct AppState {
     pub device_id: String,
     pub lease_store: Arc<dyn SecretStore>,
     pub lease_verifier: LeaseVerifier,
+    pub task_grant_cache: TaskGrantCache,
     pub runtime_license_state: Mutex<RuntimeState>,
     pub license_profile: Mutex<StoredLicenseProfile>,
 }
@@ -58,6 +59,7 @@ impl AppState {
             device_id,
             lease_store,
             lease_verifier,
+            task_grant_cache: TaskGrantCache::new(),
             runtime_license_state: Mutex::new(runtime_license_state),
             license_profile: Mutex::new(license_profile),
         }

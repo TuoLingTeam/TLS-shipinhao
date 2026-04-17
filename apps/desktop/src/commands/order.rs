@@ -1,8 +1,9 @@
 use crate::adapters::http_order_search::{parse_iso_window, HttpOrderCacheFinder, HttpOrderSearchClient};
 use crate::adapters::sqlite_order_cache::SqliteOrderCache;
-use crate::commands::license::ensure_feature_authorized;
+use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::error::AppError;
 use crate::state::AppState;
+use api_contracts::LICENSE_TASK_CACHE_MANAGE;
 use desktop_services::order_cache_repository::OrderCacheRepository;
 use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_service::{
@@ -177,6 +178,7 @@ pub async fn sync_orders(
     end_at: String,
 ) -> Result<OrderSyncResult, AppError> {
     ensure_feature_authorized(&state, "订单同步").await?;
+    let grant = authorize_runtime_task(&state, LICENSE_TASK_CACHE_MANAGE).await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
@@ -188,7 +190,7 @@ pub async fn sync_orders(
     let (start_unix, end_unix) =
         parse_iso_window(&start_at, &end_at).map_err(|e| AppError::Message(e.to_string()))?;
 
-    let client = HttpOrderSearchClient::new(cookie, magic);
+    let client = HttpOrderSearchClient::new_with_grant(cookie, magic, Some(grant.grant_id));
     let snapshot = client
         .fetch_order_snapshots_in_window(start_unix, end_unix)
         .await
@@ -226,6 +228,7 @@ pub async fn sync_recent_order_cache(
     state: State<'_, AppState>,
 ) -> Result<OrderSyncResult, AppError> {
     ensure_feature_authorized(&state, "订单同步").await?;
+    let grant = authorize_runtime_task(&state, LICENSE_TASK_CACHE_MANAGE).await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
@@ -244,7 +247,7 @@ pub async fn sync_recent_order_cache(
 
     let app_clone = app.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<OrderSyncResult, AppError> {
-        let finder = HttpOrderCacheFinder::new(cookie, magic);
+        let finder = HttpOrderCacheFinder::new_with_grant(cookie, magic, Some(grant.grant_id));
         let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
             .map_err(AppError::Internal)?;
         let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);

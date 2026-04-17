@@ -23,12 +23,14 @@ const FETCH_PAGE_INTERVAL: Duration = Duration::from_millis(300);
 pub struct HttpOrderSearchClient {
     cookie_header: String,
     biz_magic: String,
+    grant_id: Option<String>,
     client: reqwest::Client,
 }
 
 pub struct HttpOrderCacheFinder {
     cookie_header: String,
     biz_magic: String,
+    grant_id: Option<String>,
     stopped: bool,
 }
 
@@ -40,6 +42,14 @@ pub struct SyncedOrderSnapshot {
 
 impl HttpOrderSearchClient {
     pub fn new(cookie_header: String, biz_magic: String) -> Self {
+        Self::new_with_grant(cookie_header, biz_magic, None)
+    }
+
+    pub fn new_with_grant(
+        cookie_header: String,
+        biz_magic: String,
+        grant_id: Option<String>,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
             .build()
@@ -47,6 +57,7 @@ impl HttpOrderSearchClient {
         Self {
             cookie_header,
             biz_magic,
+            grant_id,
             client,
         }
     }
@@ -68,6 +79,11 @@ impl HttpOrderSearchClient {
         }
         if let Ok(v) = HeaderValue::from_str(&self.biz_magic) {
             headers.insert(HeaderName::from_static("biz_magic"), v);
+        }
+        if let Some(grant_id) = self.grant_id.as_deref() {
+            if let Ok(v) = HeaderValue::from_str(grant_id) {
+                headers.insert(HeaderName::from_static("x-grant-id"), v);
+            }
         }
         headers.insert(
             HeaderName::from_static("potter-scene"),
@@ -231,9 +247,18 @@ async fn post_order_search_with_retry_inner(
 
 impl HttpOrderCacheFinder {
     pub fn new(cookie_header: String, biz_magic: String) -> Self {
+        Self::new_with_grant(cookie_header, biz_magic, None)
+    }
+
+    pub fn new_with_grant(
+        cookie_header: String,
+        biz_magic: String,
+        grant_id: Option<String>,
+    ) -> Self {
         Self {
             cookie_header,
             biz_magic,
+            grant_id,
             stopped: false,
         }
     }
@@ -257,7 +282,11 @@ impl CacheOrderFinder for HttpOrderCacheFinder {
         let start = earliest_time.max(create_time_start);
         let end = create_time_end;
         let rt = tokio::runtime::Runtime::new()?;
-        let client = HttpOrderSearchClient::new(self.cookie_header.clone(), self.biz_magic.clone());
+        let client = HttpOrderSearchClient::new_with_grant(
+            self.cookie_header.clone(),
+            self.biz_magic.clone(),
+            self.grant_id.clone(),
+        );
         let snapshot = rt.block_on(client.fetch_order_snapshots_in_window_parallel(start, end, 3))?;
 
         Ok(CacheFetchResult {

@@ -4,10 +4,11 @@ use crate::adapters::http_order_search::parse_iso_window;
 use crate::adapters::http_order_search::HttpOrderCacheFinder;
 use crate::adapters::http_quality_refund_source::HttpQualityRefundSource;
 use crate::adapters::http_review_source::HttpReviewSource;
-use crate::commands::license::ensure_feature_authorized;
+use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::order::{emit_order_sync_progress, recent_order_cache_status};
 use crate::error::AppError;
 use crate::state::AppState;
+use api_contracts::{LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND};
 use desktop_services::order_cache_repository::{CacheOrderRecord, OrderCacheRepository};
 use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_planner::ORDER_CACHE_COVERAGE_DAYS;
@@ -153,7 +154,11 @@ fn run_review_match_flow(
     let (start_unix, end_unix) =
         parse_iso_window(&query.time_window.start_at, &query.time_window.end_at)
             .map_err(|e| AppError::Message(e.to_string()))?;
-    let source = HttpReviewSource::new(cookie.clone(), magic.clone());
+    let source = HttpReviewSource::new_with_grant(
+        cookie.clone(),
+        magic.clone(),
+        query.runtime_grant.as_ref().map(|grant| grant.grant_id.clone()),
+    );
     let evaluations = source
         .fetch_evaluation_records(&query)
         .map_err(AppError::Internal)?;
@@ -279,6 +284,7 @@ pub async fn find_reviews(
     end_at: String,
 ) -> Result<ReviewMatchResponse, AppError> {
     ensure_feature_authorized(&state, "评价管理").await?;
+    let grant = authorize_runtime_task(&state, LICENSE_TASK_REVIEW_FIND).await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
@@ -290,7 +296,7 @@ pub async fn find_reviews(
     let query = ReviewQuery {
         days,
         time_window: TimeWindow { start_at, end_at },
-        runtime_grant: None,
+        runtime_grant: Some(grant.clone()),
     };
 
     tokio::task::spawn_blocking(move || run_review_match_flow(app, cookie, magic, query))
@@ -306,6 +312,7 @@ pub async fn find_quality_refund_orders(
     end_at: String,
 ) -> Result<ReviewMatchResponse, AppError> {
     ensure_feature_authorized(&state, "品退订单").await?;
+    let grant = authorize_runtime_task(&state, LICENSE_TASK_QUALITY_REFUND).await?;
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
         return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
@@ -317,11 +324,11 @@ pub async fn find_quality_refund_orders(
     let query = ReviewQuery {
         days,
         time_window: TimeWindow { start_at, end_at },
-        runtime_grant: None,
+        runtime_grant: Some(grant.clone()),
     };
 
     let results = tokio::task::spawn_blocking(move || {
-        let source = HttpQualityRefundSource::new(cookie, magic);
+        let source = HttpQualityRefundSource::new_with_grant(cookie, magic, Some(grant.grant_id));
         source.fetch_quality_refund_orders(&query.time_window)
     })
     .await
