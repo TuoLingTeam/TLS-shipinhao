@@ -25,3 +25,4 @@ sha2 = { workspace = true }
 rusqlite = { workspace = true }
 dirs = "6"
 rfd = "0.15"
+keyring = "3"
