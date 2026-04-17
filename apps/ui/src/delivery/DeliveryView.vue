@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useDelivery } from "../delivery/useDelivery";
 import { useDeliveryStore } from "../delivery/delivery.store";
-import { useAppStore } from "../stores/app";
+import { useAppStore } from "../app.store";
 import EmptyState from "../shared/EmptyState.vue";
 
 const store = useDeliveryStore();

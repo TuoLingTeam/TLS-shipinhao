@@ -1,5 +1,5 @@
-import { useAppStore } from "../stores/app";
-import { useTauriInvoke } from "../composables/useTauriInvoke";
+import { useAppStore } from "../app.store";
+import { useTauriInvoke } from "../shared/useTauriInvoke";
 import type { LicenseState } from "./license.types";
 
 type LicensePayload = {

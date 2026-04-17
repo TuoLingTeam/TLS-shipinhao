@@ -4,11 +4,11 @@ import { useRouter } from "vue-router";
 import { useReview } from "../review/useReview";
 import { useReviewStore } from "../review/review.store";
 import { useOrderStore } from "../order/order.store";
-import { useAppStore } from "../stores/app";
+import { useAppStore } from "../app.store";
 import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
-import { useLayout } from "../composables/useLayout";
+import { useLayout } from "../layout/useLayout";
 
 const router = useRouter();
 const { mode } = useLayout();

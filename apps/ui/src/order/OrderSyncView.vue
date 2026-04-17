@@ -2,13 +2,13 @@
 import { computed, onMounted, ref } from "vue";
 import { useOrder } from "../order/useOrder";
 import { useOrderStore } from "../order/order.store";
-import { useAppStore } from "../stores/app";
+import { useAppStore } from "../app.store";
 import OrderSearchBar from "../order/OrderSearchBar.vue";
 import OrderCacheStats from "../order/OrderCacheStats.vue";
 import { formatCent } from "../shared/format";
 import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
-import { useLayout } from "../composables/useLayout";
+import { useLayout } from "../layout/useLayout";
 
 const store = useOrderStore();
 const { mode } = useLayout();

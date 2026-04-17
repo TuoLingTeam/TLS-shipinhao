@@ -1,5 +1,5 @@
 import { useDeliveryStore } from "./delivery.store";
-import { useTauriInvoke } from "../composables/useTauriInvoke";
+import { useTauriInvoke } from "../shared/useTauriInvoke";
 import type { DeliveryUpdateResult } from "./delivery.types";
 
 interface BatchResult {

@@ -2,7 +2,7 @@ import { computed } from "vue";
 import { useReviewStore } from "./review.store";
 import { useDeliveryStore } from "../delivery/delivery.store";
 import { useOrderStore } from "../order/order.store";
-import { useTauriInvoke } from "../composables/useTauriInvoke";
+import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { useOrder } from "../order/useOrder";
 import type { OrderMatchResult, ReviewMatchResponse } from "./review.types";
 

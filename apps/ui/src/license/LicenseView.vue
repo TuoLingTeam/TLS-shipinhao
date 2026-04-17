@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useLicense } from "../license/useLicense";
-import { useAppStore } from "../stores/app";
+import { useAppStore } from "../app.store";
 import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
 

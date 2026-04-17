@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
 import { computed } from "vue";
-import { useAppStore } from "../stores/app";
+import { useAppStore } from "../app.store";
 import { APP_NAME } from "../shared/brand";
-import { useUiScale } from "../composables/useUiScale";
+import { useUiScale } from "../layout/useUiScale";
 
 const route = useRoute();
 const appStore = useAppStore();

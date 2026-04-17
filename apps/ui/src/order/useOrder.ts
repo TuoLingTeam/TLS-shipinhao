@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useOrderStore } from "./order.store";
-import { useTauriInvoke } from "../composables/useTauriInvoke";
+import { useTauriInvoke } from "../shared/useTauriInvoke";
 import type {
   OrderCacheEntry,
   OrderCacheStatus,

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { useTauriInvoke } from "../composables/useTauriInvoke";
-import { useAppStore } from "../stores/app";
+import { useTauriInvoke } from "../shared/useTauriInvoke";
+import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/order.store";
 import { useReviewStore } from "../review/review.store";
 import { useDeliveryStore } from "../delivery/delivery.store";
