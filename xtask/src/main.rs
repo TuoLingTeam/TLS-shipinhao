@@ -1,8 +1,9 @@
 mod bench_match;
 mod perf;
+mod release;
 
 use anyhow::{anyhow, Context, Result};
-use build_tools::{attach_signature, generate_integrity_manifest, inject_version, sign_manifest};
+use build_tools::{attach_signature, generate_integrity_manifest, sign_manifest};
 use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
@@ -19,28 +20,13 @@ fn run(args: Vec<OsString>) -> Result<()> {
         .and_then(|value| value.to_str())
         .unwrap_or("release");
     match command {
-        "release" => run_release_command(&args[1..]),
+        "release" => release::run_release_command(&args[1..]),
         "manifest" => run_manifest_command(&args[1..]),
         "desktop-build" => run_desktop_build_command(&args[1..]),
         "bench-match" => bench_match::run_bench_match_command(&args[1..]),
         "perf" => perf::run_perf_command(&args[1..]),
         other => Err(anyhow!("unknown command: {other}")),
     }
-}
-
-fn release_note_for_version(version: &str) -> Result<String> {
-    inject_version("release-__APP_VERSION__", version)
-}
-
-fn run_release_command(args: &[OsString]) -> Result<()> {
-    let version = args
-        .first()
-        .and_then(|value| value.to_str())
-        .unwrap_or("dev");
-    let release_note = release_note_for_version(version)?;
-    println!("preparing {release_note}");
-    run_desktop_build_command(&[OsString::from("--release")])?;
-    Ok(())
 }
 
 fn run_manifest_command(args: &[OsString]) -> Result<()> {
@@ -92,12 +78,6 @@ mod tests {
     use ed25519_dalek::pkcs8::EncodePrivateKey;
     use ed25519_dalek::SigningKey;
     use tempfile::tempdir;
-
-    #[test]
-    fn injects_version_in_release_command() {
-        let result = release_note_for_version("4.3.0").unwrap();
-        assert_eq!(result, "release-4.3.0");
-    }
 
     #[test]
     fn manifest_command_writes_json_file() {
