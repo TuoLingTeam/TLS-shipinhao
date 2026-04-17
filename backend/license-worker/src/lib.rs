@@ -16,6 +16,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(target_arch = "wasm32")]
+use sha2::{Digest, Sha256};
+
 static NEXT_GRANT_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_arch = "wasm32")]
@@ -373,21 +376,62 @@ mod cloudflare_entry {
     use worker::{event, D1Database, Env, Method, Request, Response, Result};
 
     #[derive(Debug, Clone, Deserialize)]
-    struct VerifyRow {
+    struct GeneratedKeyRow {
         license_key: String,
-        key_status: String,
+        plan_days: i64,
+        status: String,
         #[serde(default)]
-        device_id: Option<String>,
+        created_at: Option<String>,
         #[serde(default)]
-        plan_days: Option<i64>,
+        note: Option<String>,
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct ActivationRow {
+        license_key: String,
+        device_id: String,
         #[serde(default)]
-        activated_at: Option<String>,
+        device_fingerprint: Option<String>,
+        plan_days: i64,
+        activated_at: String,
+        expires_at: String,
+        updated_at: String,
+        binding_version: u32,
+        status: String,
         #[serde(default)]
-        license_expires_at: Option<String>,
+        last_verify_at: Option<String>,
         #[serde(default)]
-        activation_status: Option<String>,
+        last_session_issued_at: Option<String>,
         #[serde(default)]
-        binding_version: Option<u32>,
+        last_offline_grant_issued_at: Option<String>,
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct DeviceRegistrationRow {
+        id: i64,
+        license_key: String,
+        #[serde(default)]
+        device_id: String,
+        #[serde(default)]
+        device_fingerprint_hash: Option<String>,
+        #[serde(default)]
+        registered_at: Option<String>,
+        #[serde(default)]
+        last_seen_at: Option<String>,
+        #[serde(default)]
+        registration_status: Option<String>,
+    }
+
+    fn normalize_key(value: &str) -> String {
+        value.trim().to_uppercase()
+    }
+
+    fn now_iso(now: DateTime<Utc>) -> String {
+        now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    }
+
+    fn sha256_hex(value: &str) -> String {
+        format!("{:x}", Sha256::digest(value.as_bytes()))
     }
 
     fn missing_secret(name: &str) -> Result<Response> {
@@ -412,28 +456,46 @@ mod cloudflare_entry {
         .to_string()
     }
 
-    async fn load_verify_row(
+    async fn load_generated_key(
         db: &D1Database,
         license_key: &str,
-    ) -> anyhow::Result<Option<VerifyRow>> {
-        let sql = r#"
-            SELECT
-                g.license_key AS license_key,
-                g.status AS key_status,
-                a.device_id AS device_id,
-                a.plan_days AS plan_days,
-                a.activated_at AS activated_at,
-                a.expires_at AS license_expires_at,
-                a.status AS activation_status,
-                a.binding_version AS binding_version
-            FROM generated_keys g
-            LEFT JOIN activations a ON a.license_key = g.license_key
-            WHERE g.license_key = ?
-            LIMIT 1
-        "#;
-        let stmt = db.prepare(sql).bind(&[JsValue::from_str(license_key)])?;
+    ) -> anyhow::Result<Option<GeneratedKeyRow>> {
+        let stmt = db
+            .prepare(
+                "SELECT license_key, plan_days, status, created_at, note FROM generated_keys WHERE license_key = ? LIMIT 1",
+            )
+            .bind(&[JsValue::from_str(license_key)])?;
         let result = stmt.all().await?;
-        let mut rows: Vec<VerifyRow> = result.results().unwrap_or_default();
+        let mut rows: Vec<GeneratedKeyRow> = result.results().unwrap_or_default();
+        Ok(rows.pop())
+    }
+
+    async fn load_activation(
+        db: &D1Database,
+        license_key: &str,
+    ) -> anyhow::Result<Option<ActivationRow>> {
+        let stmt = db
+            .prepare(
+                "SELECT license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at, last_session_issued_at, last_offline_grant_issued_at FROM activations WHERE license_key = ? LIMIT 1",
+            )
+            .bind(&[JsValue::from_str(license_key)])?;
+        let result = stmt.all().await?;
+        let mut rows: Vec<ActivationRow> = result.results().unwrap_or_default();
+        Ok(rows.pop())
+    }
+
+    async fn load_device_registration(
+        db: &D1Database,
+        license_key: &str,
+        device_id: &str,
+    ) -> anyhow::Result<Option<DeviceRegistrationRow>> {
+        let stmt = db
+            .prepare(
+                "SELECT id, license_key, device_id, device_fingerprint_hash, registered_at, last_seen_at, registration_status FROM device_registrations WHERE license_key = ? AND device_id = ? LIMIT 1",
+            )
+            .bind(&[JsValue::from_str(license_key), JsValue::from_str(device_id)])?;
+        let result = stmt.all().await?;
+        let mut rows: Vec<DeviceRegistrationRow> = result.results().unwrap_or_default();
         Ok(rows.pop())
     }
 
@@ -500,58 +562,157 @@ mod cloudflare_entry {
         Ok(())
     }
 
+    async fn upsert_device_registration(
+        db: &D1Database,
+        license_key: &str,
+        device_id: &str,
+        device_fingerprint: &str,
+        now_iso: &str,
+    ) -> anyhow::Result<()> {
+        let fingerprint_hash = sha256_hex(device_fingerprint);
+        if let Some(existing) = load_device_registration(db, license_key, device_id).await? {
+            let _ = (
+                &existing.license_key,
+                &existing.device_id,
+                &existing.device_fingerprint_hash,
+                &existing.registered_at,
+                &existing.last_seen_at,
+                &existing.registration_status,
+            );
+            db.prepare(
+                "UPDATE device_registrations SET device_fingerprint_hash = ?, last_seen_at = ?, registration_status = 'active' WHERE id = ?",
+            )
+            .bind(&[
+                JsValue::from_str(&fingerprint_hash),
+                JsValue::from_str(now_iso),
+                JsValue::from_f64(existing.id as f64),
+            ])?
+            .run()
+            .await?;
+            return Ok(());
+        }
+
+        db.prepare(
+            "INSERT INTO device_registrations (license_key, device_id, device_fingerprint_hash, registered_at, last_seen_at, registration_status) VALUES (?, ?, ?, ?, ?, 'active')",
+        )
+        .bind(&[
+            JsValue::from_str(license_key),
+            JsValue::from_str(device_id),
+            JsValue::from_str(&fingerprint_hash),
+            JsValue::from_str(now_iso),
+            JsValue::from_str(now_iso),
+        ])?
+        .run()
+        .await?;
+        Ok(())
+    }
+
+    fn build_license_lease_from_activation(row: &ActivationRow, now: DateTime<Utc>) -> LicenseLease {
+        let _ = (
+            &row.license_key,
+            &row.device_fingerprint,
+            row.plan_days,
+            &row.updated_at,
+            &row.last_verify_at,
+            &row.last_session_issued_at,
+            &row.last_offline_grant_issued_at,
+        );
+        let lease = license_service::issue_license_lease(
+            &row.license_key,
+            &row.device_id,
+            LicenseState::Active,
+            &row.expires_at,
+            &(now + chrono::Duration::hours(license_service::LEASE_HARD_EXPIRY_HOURS))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            &(now + chrono::Duration::hours(license_service::LEASE_RENEWAL_HOURS))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            &now_iso(now),
+        );
+        LicenseLease {
+            binding_version: row.binding_version,
+            ..lease
+        }
+    }
+
+    fn signed_success_response(
+        message: &str,
+        state: LicenseState,
+        activation: &ActivationRow,
+        signer: &LeaseTokenSigner,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<SignedLicenseApiResponse> {
+        let lease = build_license_lease_from_activation(activation, now);
+        let token = signer.sign_license_lease(&lease)?;
+        Ok(SignedLicenseApiResponse {
+            success: true,
+            message: message.to_string(),
+            license_state: state,
+            license_lease: Some(token),
+            license_expires_at: Some(activation.expires_at.clone()),
+            activated_at: Some(activation.activated_at.clone()),
+            device_id: Some(activation.device_id.clone()),
+            license_key: Some(activation.license_key.clone()),
+            lease_expires_at: Some(lease.lease_expires_at.clone()),
+            renew_after: Some(lease.renew_after.clone()),
+            issued_at: Some(lease.issued_at.clone()),
+            license_status: Some(state),
+            task_policy: Some(lease.task_policy.clone()),
+        })
+    }
+
+    fn signed_failure_response(
+        message: &str,
+        state: LicenseState,
+        activation: Option<&ActivationRow>,
+    ) -> SignedLicenseApiResponse {
+        SignedLicenseApiResponse {
+            success: false,
+            message: message.to_string(),
+            license_state: state,
+            license_lease: None,
+            license_expires_at: activation.map(|value| value.expires_at.clone()),
+            activated_at: activation.map(|value| value.activated_at.clone()),
+            device_id: activation.map(|value| value.device_id.clone()),
+            license_key: activation.map(|value| value.license_key.clone()),
+            lease_expires_at: None,
+            renew_after: None,
+            issued_at: None,
+            license_status: activation.map(|_| state),
+            task_policy: None,
+        }
+    }
+
     async fn verify_license_for_runtime(
         db: &D1Database,
         license_key: &str,
         device_id: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<Result<LicenseLease, String>> {
-        let Some(row) = load_verify_row(db, license_key).await? else {
+        let Some(key) = load_generated_key(db, license_key).await? else {
             return Ok(Err("该卡密已被吊销".into()));
         };
-        if row.key_status == "revoked" {
+        let _ = (&key.created_at, &key.note);
+        if key.status == "revoked" {
             return Ok(Err("该卡密已被吊销".into()));
         }
-        let Some(bound_device) = row.device_id.as_deref() else {
+        let Some(row) = load_activation(db, license_key).await? else {
             return Ok(Err("该卡密尚未激活".into()));
         };
-        if bound_device != device_id {
+        if row.device_id != device_id {
             return Ok(Err("设备不匹配：该卡密已绑定其他设备".into()));
         }
-        if row.activation_status.as_deref() == Some("revoked") {
+        if row.status == "revoked" {
             return Ok(Err("该卡密已被吊销".into()));
         }
-        let Some(license_expires_at) = row.license_expires_at.as_deref() else {
-            return Ok(Err("授权记录异常：缺少过期时间".into()));
-        };
-        let expires_at = DateTime::parse_from_rfc3339(license_expires_at)?.with_timezone(&Utc);
+        let expires_at = DateTime::parse_from_rfc3339(&row.expires_at)?.with_timezone(&Utc);
         if now >= expires_at {
-            let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            let now_iso = now_iso(now);
             update_activation_markers(db, license_key, &now_iso, false, false, Some("expired"))
                 .await?;
             append_audit(db, license_key, device_id, "verify", "expired", &now_iso).await?;
             return Ok(Err("授权已过期".into()));
         }
-        let activated_at = row
-            .activated_at
-            .unwrap_or_else(|| now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
-        let binding_version = row.binding_version.unwrap_or(license_service::LICENSE_PROTOCOL_VERSION);
-        let lease = license_service::issue_license_lease(
-            &row.license_key,
-            device_id,
-            LicenseState::Active,
-            license_expires_at,
-            &(now + chrono::Duration::hours(license_service::LEASE_HARD_EXPIRY_HOURS))
-                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            &(now + chrono::Duration::hours(license_service::LEASE_RENEWAL_HOURS))
-                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            &now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-        );
-        Ok(Ok(LicenseLease {
-            binding_version,
-            issued_at: lease.issued_at,
-            ..lease
-        }))
+        Ok(Ok(build_license_lease_from_activation(&row, now)))
     }
 
     async fn handle_refresh_runtime(
@@ -579,6 +740,211 @@ mod cloudflare_entry {
                 new_token: String::new(),
             }),
         }
+    }
+
+    async fn handle_activate_runtime(
+        db: &D1Database,
+        signer: &LeaseTokenSigner,
+        input: ActivationInput,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<SignedLicenseApiResponse> {
+        let license_key = normalize_key(&input.license_key);
+        let Some(key) = load_generated_key(db, &license_key).await? else {
+            return Ok(signed_failure_response(
+                "该卡密不存在或已被吊销",
+                LicenseState::Revoked,
+                None,
+            ));
+        };
+        let _ = (&key.created_at, &key.note);
+        if key.status == "revoked" {
+            return Ok(signed_failure_response(
+                "该卡密已被吊销，无法使用",
+                LicenseState::Revoked,
+                None,
+            ));
+        }
+        if key.plan_days <= 0 {
+            return Ok(signed_failure_response(
+                "卡密无效：有效期异常",
+                LicenseState::Invalid,
+                None,
+            ));
+        }
+
+        let now_iso_str = now_iso(now);
+        let existing = load_activation(db, &license_key).await?;
+        let was_reactivation = existing.is_some();
+        let record = if let Some(existing) = existing {
+            if existing.device_id != input.device_id {
+                return Ok(signed_failure_response(
+                    "该卡密已在其他设备激活，不允许更换设备。如需帮助请联系作者。",
+                    LicenseState::DeviceMismatch,
+                    Some(&existing),
+                ));
+            }
+            db.prepare(
+                "UPDATE activations SET device_fingerprint = ?, updated_at = ?, binding_version = ?, status = 'active', last_verify_at = ? WHERE license_key = ?",
+            )
+            .bind(&[
+                JsValue::from_str(&input.device_fingerprint),
+                JsValue::from_str(&now_iso_str),
+                JsValue::from_f64(license_service::LICENSE_PROTOCOL_VERSION as f64),
+                JsValue::from_str(&now_iso_str),
+                JsValue::from_str(&license_key),
+            ])?
+            .run()
+            .await?;
+            load_activation(db, &license_key)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("激活更新后未找到记录"))?
+        } else {
+            let expires_at = now
+                + chrono::Duration::days(key.plan_days as i64);
+            db.prepare(
+                "INSERT INTO activations (license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at, last_session_issued_at, last_offline_grant_issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, '', '')",
+            )
+            .bind(&[
+                JsValue::from_str(&license_key),
+                JsValue::from_str(&input.device_id),
+                JsValue::from_str(&input.device_fingerprint),
+                JsValue::from_f64(key.plan_days as f64),
+                JsValue::from_str(&now_iso_str),
+                JsValue::from_str(&now_iso(expires_at)),
+                JsValue::from_str(&now_iso_str),
+                JsValue::from_f64(license_service::LICENSE_PROTOCOL_VERSION as f64),
+                JsValue::from_str(&now_iso_str),
+            ])?
+            .run()
+            .await?;
+            db.prepare("UPDATE generated_keys SET status = 'activated' WHERE license_key = ?")
+                .bind(&[JsValue::from_str(&license_key)])?
+                .run()
+                .await?;
+            load_activation(db, &license_key)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("激活插入后未找到记录"))?
+        };
+
+        upsert_device_registration(
+            db,
+            &license_key,
+            &input.device_id,
+            &input.device_fingerprint,
+            &now_iso_str,
+        )
+        .await?;
+        let audit_reason = if input.client_version.is_empty() {
+            "client_activate".to_string()
+        } else {
+            format!("client_activate:{}", input.client_version)
+        };
+        append_audit(
+            db,
+            &license_key,
+            &input.device_id,
+            "activate",
+            &audit_reason,
+            &now_iso_str,
+        )
+        .await?;
+
+        Ok(signed_success_response(
+            if was_reactivation { "重新激活成功" } else { "激活成功" },
+            LicenseState::Active,
+            &record,
+            signer,
+            now,
+        )?)
+    }
+
+    async fn handle_verify_runtime(
+        db: &D1Database,
+        signer: &LeaseTokenSigner,
+        input: VerifyInput,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<SignedLicenseApiResponse> {
+        let license_key = normalize_key(&input.license_key);
+        let Some(key) = load_generated_key(db, &license_key).await? else {
+            return Ok(signed_failure_response(
+                "该卡密已被吊销",
+                LicenseState::Revoked,
+                None,
+            ));
+        };
+        let _ = (&key.created_at, &key.note);
+        if key.status == "revoked" {
+            return Ok(signed_failure_response(
+                "该卡密已被吊销",
+                LicenseState::Revoked,
+                None,
+            ));
+        }
+
+        let Some(record) = load_activation(db, &license_key).await? else {
+            return Ok(signed_failure_response(
+                "该卡密尚未激活",
+                LicenseState::Invalid,
+                None,
+            ));
+        };
+        if record.device_id != input.device_id {
+            return Ok(signed_failure_response(
+                "设备不匹配：该卡密已绑定其他设备",
+                LicenseState::DeviceMismatch,
+                Some(&record),
+            ));
+        }
+        if record.status == "revoked" {
+            return Ok(signed_failure_response(
+                "该卡密已被吊销",
+                LicenseState::Revoked,
+                Some(&record),
+            ));
+        }
+
+        let now_iso_str = now_iso(now);
+        let expires_at = DateTime::parse_from_rfc3339(&record.expires_at)?.with_timezone(&Utc);
+        if now >= expires_at {
+            update_activation_markers(db, &license_key, &now_iso_str, false, false, Some("expired"))
+                .await?;
+            append_audit(db, &license_key, &input.device_id, "verify", "expired", &now_iso_str)
+                .await?;
+            let expired = load_activation(db, &license_key)
+                .await?
+                .unwrap_or(record);
+            return Ok(signed_failure_response(
+                "授权已过期",
+                LicenseState::Expired,
+                Some(&expired),
+            ));
+        }
+
+        update_activation_markers(db, &license_key, &now_iso_str, false, false, Some("active")).await?;
+        let audit_reason = if input.client_version.is_empty() {
+            "client_verify".to_string()
+        } else {
+            format!("client_verify:{}", input.client_version)
+        };
+        append_audit(
+            db,
+            &license_key,
+            &input.device_id,
+            "verify",
+            &audit_reason,
+            &now_iso_str,
+        )
+        .await?;
+        let active = load_activation(db, &license_key)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("校验后未找到激活记录"))?;
+        Ok(signed_success_response(
+            "授权有效",
+            LicenseState::Active,
+            &active,
+            signer,
+            now,
+        )?)
     }
 
     async fn handle_remote_task_authorize(
@@ -635,13 +1001,31 @@ mod cloudflare_entry {
 
         let body = req.text().await.unwrap_or_default();
         match parse_route(&path) {
-            WorkerRoute::Activate | WorkerRoute::Verify | WorkerRoute::LeaseRevoke => {
-                // D1 Repository 与 Ed25519 签发逻辑尚未接通，统一返回占位响应。
-                Response::from_json(&serde_json::json!({
-                    "success": false,
-                    "message": "rust_worker_repository_pending",
-                    "path": path,
-                }))
+            WorkerRoute::Activate => {
+                let signer = match load_signer(&env) {
+                    Ok(signer) => signer,
+                    Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
+                };
+                let db = env.d1("DB")?;
+                let input: ActivationInput = serde_json::from_str(&body)
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                let resp = handle_activate_runtime(&db, &signer, input, Utc::now())
+                    .await
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                Response::from_json(&resp)
+            }
+            WorkerRoute::Verify => {
+                let signer = match load_signer(&env) {
+                    Ok(signer) => signer,
+                    Err(_) => return missing_secret("LICENSE_SIGNING_PRIVATE_KEY_B64"),
+                };
+                let db = env.d1("DB")?;
+                let input: VerifyInput = serde_json::from_str(&body)
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                let resp = handle_verify_runtime(&db, &signer, input, Utc::now())
+                    .await
+                    .map_err(|e| worker::Error::RustError(e.to_string()))?;
+                Response::from_json(&resp)
             }
             WorkerRoute::LeaseRefresh => {
                 let signer = match load_signer(&env) {
@@ -664,6 +1048,13 @@ mod cloudflare_entry {
                     .await
                     .map_err(|e| worker::Error::RustError(e.to_string()))?;
                 Response::from_json(&resp)
+            }
+            WorkerRoute::LeaseRevoke => {
+                // 管理员吊销仍走后台管理接口；公开 API 先保留占位响应。
+                Response::from_json(&serde_json::json!({
+                    "success": false,
+                    "message": "lease_revoke_pending",
+                }))
             }
             WorkerRoute::NotFound => Response::error("not_found", 404),
         }
@@ -863,6 +1254,30 @@ mod tests {
             .verify(&payload.new_token, Some("device-1"), Utc::now().timestamp(), false)
             .unwrap();
         assert_eq!(verified.license_key, "TLS-TEST");
+    }
+
+    #[test]
+    fn handles_verify_json_with_signed_lease() {
+        let service = LicenseService::new(Repo::seeded());
+        let signer = test_signer();
+        let _ = handle_json_request(
+            &service,
+            "/api/activate",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"4.3.0"}"#,
+            &signer,
+        )
+        .unwrap();
+        let response = handle_json_request(
+            &service,
+            "/api/verify",
+            r#"{"license_key":"TLS-TEST","device_id":"device-1","client_version":"5.1.0"}"#,
+            &signer,
+        )
+        .unwrap();
+        let payload: SignedLicenseApiResponse = serde_json::from_str(&response).unwrap();
+        assert!(payload.success);
+        assert_eq!(payload.license_state, LicenseState::Active);
+        assert!(payload.license_lease.is_some());
     }
 
     #[test]
