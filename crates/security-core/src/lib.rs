@@ -10,8 +10,13 @@ use std::path::{Path, PathBuf};
 
 pub mod device_id;
 pub mod http_headers;
+pub mod integrity;
 
 pub use device_id::{collect_raw_fingerprint, derive_device_id, get_device_id, DEVICE_ID_HEX_LEN};
+pub use integrity::{
+    validate_runtime_continuity, IntegrityError, ManifestFile, ManifestPayload, SignedManifest,
+    INTEGRITY_MANIFEST_FILE_NAME,
+};
 
 static BACKEND_NAME: &[u8] = b"rust-security-core\0";
 
