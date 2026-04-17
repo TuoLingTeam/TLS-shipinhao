@@ -136,7 +136,7 @@ async fn admin_generate(db: &D1Database, body: &str) -> Result<Response> {
 }
 
 async fn admin_revoke(db: &D1Database, body: &str) -> Result<Response> {
-    let repo = crate::cloudflare_entry::D1RuntimeRepo::new(db);
+    let repo = crate::runtime_repo_d1::D1RuntimeRepo::new(db);
     let payload = match crate::handle_admin_revoke_json(&repo, body, chrono::Utc::now()).await {
         Ok(payload) => payload,
         Err(err) => {

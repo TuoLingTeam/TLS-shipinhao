@@ -53,11 +53,12 @@ npx wrangler dev
   - `task_authorize`
 - `runtime_activate()` / `runtime_verify()` / `runtime_refresh_lease()` / `runtime_task_authorize()`
   共享同一套运行时授权逻辑
-- `D1RuntimeRepo` 作为 Cloudflare 运行时实现，负责把 D1 表结构映射到异步仓库接口
+- `src/runtime_repo_d1.rs` 中的 `D1RuntimeRepo` 作为 Cloudflare 运行时实现，
+  负责把 D1 表结构映射到异步仓库接口
 - 单元测试中的内存仓库也实现相同 `AsyncRuntimeRepository`，用于验证统一路径
 
 ## 当前边界
 
 - Cloudflare 线上路径已改为 `D1RuntimeRepo + handle_async_runtime_json()` 统一路径
 - 本 crate 内的测试入口也已切换到异步主路径，不再依赖旧的同步兼容入口
-- 管理端 `/api/admin/revoke` 已复用统一异步吊销服务
+- 管理端 `/api/admin/revoke` 已复用统一异步吊销服务，并与主路由共用独立仓储模块
