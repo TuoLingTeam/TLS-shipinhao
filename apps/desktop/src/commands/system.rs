@@ -1,4 +1,5 @@
 use desktop_services::parse_cookie_profile;
+use desktop_services::update_service::{fetch_latest_version_info, UpdateInfo};
 use domain_core::brand::{get_window_title, APP_NAME, APP_NAME_EN, AUTHOR_WECHAT};
 use reqwest::Url;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -18,6 +19,13 @@ fn clamp_ui_scale(scale: f64) -> f64 {
     scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
 }
 
+
+#[tauri::command]
+pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
+    fetch_latest_version_info(None)
+        .await
+        .map_err(|e| AppError::Message(format!("检查更新失败：{e}")))
+}
 
 #[tauri::command]
 pub async fn get_app_info() -> Result<serde_json::Value, AppError> {

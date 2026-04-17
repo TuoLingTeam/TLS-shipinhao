@@ -7,11 +7,29 @@ mod error;
 mod migration;
 mod state;
 
+use desktop_services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
 use state::AppState;
+use tauri::Emitter;
 
 fn main() {
     tauri::Builder::default()
         .manage(AppState::new())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(UPDATE_CHECK_DELAY_MS)).await;
+                match fetch_latest_version_info(None).await {
+                    Ok(info) if info.has_update => {
+                        let _ = app_handle.emit("update-available", info);
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        eprintln!("update check skipped: {err}");
+                    }
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::review::find_reviews,
             commands::review::find_quality_refund_orders,
@@ -24,6 +42,7 @@ fn main() {
             commands::license::activate_license,
             commands::license::verify_license,
             commands::license::get_license_status,
+            commands::system::check_for_update,
             commands::system::get_app_info,
             commands::system::get_ui_scale,
             commands::system::set_ui_scale,

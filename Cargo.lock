@@ -1654,6 +1654,7 @@ dependencies = [
  "chrono",
  "domain-core",
  "regex",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
