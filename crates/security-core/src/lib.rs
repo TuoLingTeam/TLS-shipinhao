@@ -7,9 +7,11 @@ use sha2::{Digest, Sha256};
 use std::ffi::{c_char, CStr, CString};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
+pub mod device_id;
 pub mod http_headers;
+
+pub use device_id::{collect_raw_fingerprint, derive_device_id, get_device_id, DEVICE_ID_HEX_LEN};
 
 static BACKEND_NAME: &[u8] = b"rust-security-core\0";
 
@@ -56,79 +58,6 @@ fn verifying_key_from_b64url(public_key_b64url: &str) -> Result<VerifyingKey, St
         .try_into()
         .map_err(|_| "invalid public key length".to_string())?;
     VerifyingKey::from_bytes(&key_bytes).map_err(|err| format!("invalid public key: {err}"))
-}
-
-fn current_device_fingerprint() -> Option<String> {
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(output) = Command::new("ioreg")
-            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            for line in text.lines() {
-                if line.contains("IOPlatformSerialNumber") {
-                    let parts: Vec<&str> = line.split('=').collect();
-                    if let Some(last) = parts.last() {
-                        return Some(last.trim().trim_matches('"').to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let commands = [
-            ("wmic", vec!["csproduct", "get", "UUID"]),
-            (
-                "powershell",
-                vec![
-                    "-Command",
-                    "(Get-CimInstance Win32_ComputerSystemProduct).UUID",
-                ],
-            ),
-        ];
-        for (program, args) in commands {
-            if let Ok(output) = Command::new(program).args(args).output() {
-                let text = String::from_utf8_lossy(&output.stdout);
-                for line in text.lines() {
-                    let trimmed = line.trim();
-                    if !trimmed.is_empty() && trimmed.to_uppercase() != "UUID" {
-                        return Some(trimmed.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
-            if let Ok(raw) = fs::read_to_string(path) {
-                let trimmed = raw.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
-            }
-        }
-    }
-
-    Some(format!(
-        "{}-{}-{}",
-        std::env::var("HOSTNAME").unwrap_or_default(),
-        std::env::consts::ARCH,
-        std::env::consts::OS
-    ))
-}
-
-fn derive_device_id(raw: &str) -> String {
-    let digest = Sha256::digest(raw.as_bytes());
-    digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
 }
 
 fn verify_lease_impl(
@@ -317,10 +246,7 @@ pub extern "C" fn security_core_free_string(ptr: *mut c_char) {
 
 #[no_mangle]
 pub extern "C" fn security_core_collect_device_id() -> *mut c_char {
-    let value = current_device_fingerprint()
-        .map(|raw| derive_device_id(&raw))
-        .unwrap_or_default();
-    into_c_string(value)
+    into_c_string(get_device_id())
 }
 
 #[no_mangle]
