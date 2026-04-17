@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useOrder } from "../composables/useOrder";
-import { useOrderStore } from "../stores/order";
+import { useOrder } from "../order/useOrder";
+import { useOrderStore } from "../order/order.store";
 import { useAppStore } from "../stores/app";
-import OrderSearchBar from "../components/order/OrderSearchBar.vue";
-import OrderCacheStats from "../components/order/OrderCacheStats.vue";
+import OrderSearchBar from "../order/OrderSearchBar.vue";
+import OrderCacheStats from "../order/OrderCacheStats.vue";
 import { formatCent } from "../shared/format";
 import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";

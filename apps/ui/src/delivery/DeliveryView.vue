@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useDelivery } from "../composables/useDelivery";
-import { useDeliveryStore } from "../stores/delivery";
+import { useDelivery } from "../delivery/useDelivery";
+import { useDeliveryStore } from "../delivery/delivery.store";
 import { useAppStore } from "../stores/app";
 import EmptyState from "../shared/EmptyState.vue";
 

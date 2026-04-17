@@ -1,6 +1,6 @@
 import { useAppStore } from "../stores/app";
-import { useTauriInvoke } from "./useTauriInvoke";
-import type { LicenseState } from "../types/license";
+import { useTauriInvoke } from "../composables/useTauriInvoke";
+import type { LicenseState } from "./license.types";
 
 type LicensePayload = {
   success?: boolean;

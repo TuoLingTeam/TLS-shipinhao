@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useLicense } from "../composables/useLicense";
+import { useLicense } from "../license/useLicense";
 import { useAppStore } from "../stores/app";
 import { formatDateTime } from "../shared/format";
-import { LICENSE_STATE_LABELS } from "../types/license";
+import { LICENSE_STATE_LABELS } from "../license/license.types";
 
 const appStore = useAppStore();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();

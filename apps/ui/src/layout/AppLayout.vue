@@ -2,7 +2,7 @@
 import { onMounted } from "vue";
 import AppSidebar from "./AppSidebar.vue";
 import AppHeader from "./AppHeader.vue";
-import { useLicense } from "../composables/useLicense";
+import { useLicense } from "../license/useLicense";
 
 const { refreshStoredLicenseStatus } = useLicense();
 

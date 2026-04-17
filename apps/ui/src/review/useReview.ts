@@ -1,10 +1,10 @@
 import { computed } from "vue";
-import { useReviewStore } from "../stores/review";
-import { useDeliveryStore } from "../stores/delivery";
-import { useOrderStore } from "../stores/order";
-import { useTauriInvoke } from "./useTauriInvoke";
-import { useOrder } from "./useOrder";
-import type { OrderMatchResult, ReviewMatchResponse } from "../types/review";
+import { useReviewStore } from "./review.store";
+import { useDeliveryStore } from "../delivery/delivery.store";
+import { useOrderStore } from "../order/order.store";
+import { useTauriInvoke } from "../composables/useTauriInvoke";
+import { useOrder } from "../order/useOrder";
+import type { OrderMatchResult, ReviewMatchResponse } from "./review.types";
 
 export function useReview() {
   const store = useReviewStore();

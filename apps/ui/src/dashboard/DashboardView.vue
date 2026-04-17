@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useTauriInvoke } from "../composables/useTauriInvoke";
 import { useAppStore } from "../stores/app";
-import { useOrderStore } from "../stores/order";
-import { useReviewStore } from "../stores/review";
-import { useDeliveryStore } from "../stores/delivery";
+import { useOrderStore } from "../order/order.store";
+import { useReviewStore } from "../review/review.store";
+import { useDeliveryStore } from "../delivery/delivery.store";
 import AppNavIcon from "../layout/AppNavIcon.vue";
 import { AUTHOR_WECHAT } from "../shared/brand";
 

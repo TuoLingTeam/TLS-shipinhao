@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { MatchStrategy } from "../../types/review";
+import type { MatchStrategy } from "./review.types";
 
 const props = defineProps<{ strategy: MatchStrategy }>();
 const tooltipOpen = ref(false);

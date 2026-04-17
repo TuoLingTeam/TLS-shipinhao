@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useOrderStore } from "../stores/order";
-import { useTauriInvoke } from "./useTauriInvoke";
+import { useOrderStore } from "./order.store";
+import { useTauriInvoke } from "../composables/useTauriInvoke";
 import type {
   OrderCacheEntry,
   OrderCacheStatus,
   OrderSyncProgressEvent,
   OrderSyncResult,
-} from "../types/order";
+} from "./order.types";
 
 function todayISO(): string {
   return `${new Date().toISOString().split("T")[0]}T23:59:59Z`;

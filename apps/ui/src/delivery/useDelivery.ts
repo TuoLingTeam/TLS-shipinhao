@@ -1,6 +1,6 @@
-import { useDeliveryStore } from "../stores/delivery";
-import { useTauriInvoke } from "./useTauriInvoke";
-import type { DeliveryUpdateResult } from "../types/delivery";
+import { useDeliveryStore } from "./delivery.store";
+import { useTauriInvoke } from "../composables/useTauriInvoke";
+import type { DeliveryUpdateResult } from "./delivery.types";
 
 interface BatchResult {
   total_count: number;

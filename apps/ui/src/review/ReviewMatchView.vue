@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { useReview } from "../composables/useReview";
-import { useReviewStore } from "../stores/review";
-import { useOrderStore } from "../stores/order";
+import { useReview } from "../review/useReview";
+import { useReviewStore } from "../review/review.store";
+import { useOrderStore } from "../order/order.store";
 import { useAppStore } from "../stores/app";
 import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
-import ReviewMatchStrategyBadge from "../components/review/ReviewMatchStrategyBadge.vue";
+import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../composables/useLayout";
 
 const router = useRouter();
