@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useLicense } from "../composables/useLicense";
 import { useAppStore } from "../stores/app";
 import { formatDateTime } from "../utils/format";
+import { LICENSE_STATE_LABELS } from "../types/license";
 
 const appStore = useAppStore();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
@@ -34,17 +35,7 @@ async function handleRefresh() {
   }
 }
 
-const stateLabel: Record<string, string> = {
-  active: "已激活",
-  renewal_due: "待续期",
-  expired: "已过期",
-  revoked: "已吊销",
-  device_mismatch: "设备不匹配",
-  invalid: "未激活",
-  compromised: "异常",
-};
-
-const currentStateText = computed(() => stateLabel[appStore.licenseState] ?? appStore.licenseState);
+const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? LICENSE_STATE_LABELS.unknown);
 const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-600'));
 </script>
 

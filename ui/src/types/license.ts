@@ -5,7 +5,23 @@ export type LicenseState =
   | "revoked"
   | "device_mismatch"
   | "invalid"
-  | "compromised";
+  | "compromised"
+  | "offline_grace"
+  | "pending_activation"
+  | "unknown";
+
+export const LICENSE_STATE_LABELS: Record<LicenseState, string> = {
+  active: "已激活",
+  renewal_due: "待续期",
+  expired: "已过期",
+  revoked: "已吊销",
+  device_mismatch: "设备不匹配",
+  invalid: "未激活",
+  compromised: "异常",
+  offline_grace: "离线宽限",
+  pending_activation: "待激活",
+  unknown: "未知状态",
+};
 
 export type RiskLevel = "low" | "medium" | "high";
 

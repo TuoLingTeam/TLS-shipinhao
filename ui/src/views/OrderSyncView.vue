@@ -160,6 +160,9 @@ onMounted(async () => {
           </div>
         </div>
         <div class="mt-5 space-y-3">
+          <div v-if="store.cacheStatus?.last_error" class="soft-alert warn">
+            最近一次缓存维护提示：{{ store.cacheStatus.last_error }}
+          </div>
           <div class="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3">
             <div class="text-xs text-slate-400">筛选关键词</div>
             <div class="mt-1 text-sm font-semibold text-slate-800">
