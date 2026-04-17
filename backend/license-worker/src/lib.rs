@@ -19,6 +19,7 @@ use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_GRANT_SEQ: AtomicU64 = AtomicU64::new(1);
+pub const WORKER_RUNTIME_ERROR_MESSAGE: &str = "worker_runtime_error";
 
 #[cfg(target_arch = "wasm32")]
 mod admin_d1;
@@ -884,7 +885,7 @@ mod cloudflare_entry {
     fn compatibility_payload(path: &str) -> String {
         serde_json::json!({
             "success": false,
-            "message": "rust_worker_repository_pending",
+            "message": WORKER_RUNTIME_ERROR_MESSAGE,
             "path": path,
         })
         .to_string()
@@ -1542,6 +1543,11 @@ mod tests {
             revoke_error_contract("missing field `key`"),
             (400, "invalid_json")
         );
+    }
+
+    #[test]
+    fn worker_runtime_error_message_is_stable() {
+        assert_eq!(WORKER_RUNTIME_ERROR_MESSAGE, "worker_runtime_error");
     }
 
     #[tokio::test]
