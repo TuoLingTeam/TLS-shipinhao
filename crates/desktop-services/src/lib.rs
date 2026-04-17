@@ -3,6 +3,7 @@ pub mod delivery_batch_runner;
 pub mod delivery_update;
 pub mod order_cache_storage;
 pub mod order_fetcher;
+pub mod order_fetcher_risk;
 pub mod order_match_scoring;
 pub mod order_sync_planner;
 pub mod order_sync_service;
