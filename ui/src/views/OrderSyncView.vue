@@ -8,8 +8,10 @@ import OrderCacheStats from "../components/order/OrderCacheStats.vue";
 import { formatCent } from "../utils/format";
 import EmptyState from "../components/common/EmptyState.vue";
 import LoadingState from "../components/common/LoadingState.vue";
+import { useLayout } from "../composables/useLayout";
 
 const store = useOrderStore();
+const { mode } = useLayout();
 const appStore = useAppStore();
 const { syncRecentCache, loadRecentCache, loadCacheStatus } = useOrder();
 const licenseBlocked = computed(() => !appStore.isLicensed);
@@ -33,6 +35,8 @@ const activeCoverageLabel = computed(() => {
     ? "缓存覆盖完整，可直接支撑差评评分匹配。"
     : `存在 ${store.cacheStatus.missing_segment_count} 个覆盖缺口，建议立即维护缓存。`;
 });
+const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
+const isWideLayout = computed(() => mode.value === "wide");
 const syncSteps = computed(() => [
   {
     key: "ensure_recent_cache",
@@ -83,7 +87,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-5">
-    <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+    <section class="grid grid-cols-1 gap-4" :class="isWideLayout ? 'xl:grid-cols-[1.4fr_0.9fr]' : 'xl:grid-cols-1'">
       <div class="hero-panel p-5 lg:p-6">
         <div class="flex flex-col gap-5">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -112,7 +116,7 @@ onMounted(async () => {
       />
     </section>
 
-    <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+    <section class="grid grid-cols-1 gap-4" :class="isWideLayout ? 'xl:grid-cols-[1.15fr_0.85fr]' : 'xl:grid-cols-1'">
       <div class="surface-panel p-5 lg:p-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div class="min-w-0">
@@ -129,7 +133,7 @@ onMounted(async () => {
             {{ store.loading ? "同步中..." : "立即同步缓存" }}
           </button>
         </div>
-        <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div class="mt-5 grid grid-cols-1 gap-3" :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'">
           <div class="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3">
             <div class="text-xs text-slate-400">当前列表</div>
             <div class="mt-1 text-xl font-semibold tracking-tight text-slate-900">{{ visibleOrders.length }}</div>

@@ -453,3 +453,48 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+
+
+.app-shell {
+  min-height: 100%;
+}
+
+.app-frame,
+.app-content-shell,
+.app-page-shell {
+  transition: padding 160ms ease, gap 160ms ease, max-width 160ms ease;
+}
+
+.app-shell[data-layout="wide"] .app-page-shell {
+  max-width: 1480px;
+}
+
+.app-shell[data-layout="normal"] .app-page-shell {
+  max-width: 1320px;
+}
+
+.app-shell[data-layout="compact"] .app-frame,
+.app-shell[data-layout="high_dpi_compact"] .app-frame {
+  padding: 0.75rem;
+}
+
+.app-shell[data-layout="compact"] .app-content-shell,
+.app-shell[data-layout="high_dpi_compact"] .app-content-shell {
+  gap: 0.75rem;
+}
+
+.app-shell[data-layout="compact"] .app-page-shell,
+.app-shell[data-layout="high_dpi_compact"] .app-page-shell {
+  gap: 1rem;
+  max-width: 100%;
+  padding-bottom: 1rem;
+}
+
+.app-shell[data-layout="compact"] .surface-panel,
+.app-shell[data-layout="high_dpi_compact"] .surface-panel,
+.app-shell[data-layout="compact"] .surface-panel-strong,
+.app-shell[data-layout="high_dpi_compact"] .surface-panel-strong,
+.app-shell[data-layout="compact"] .hero-panel,
+.app-shell[data-layout="high_dpi_compact"] .hero-panel {
+  border-radius: 20px;
+}

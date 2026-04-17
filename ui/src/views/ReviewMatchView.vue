@@ -8,8 +8,10 @@ import { useAppStore } from "../stores/app";
 import EmptyState from "../components/common/EmptyState.vue";
 import LoadingState from "../components/common/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../components/review/ReviewMatchStrategyBadge.vue";
+import { useLayout } from "../composables/useLayout";
 
 const router = useRouter();
+const { mode } = useLayout();
 const store = useReviewStore();
 const orderStore = useOrderStore();
 const appStore = useAppStore();
@@ -28,6 +30,7 @@ const filteredResults = computed(() => {
   );
 });
 const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
+const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
 const unmatchedCount = computed(() => store.results.length - matchedCount.value);
 const loadingTitle = computed(() =>
   orderStore.syncSource === "review_query"
@@ -167,7 +170,7 @@ function formatReplyDeadline(value: string | null) {
 
 <template>
   <div class="space-y-5">
-    <section class="surface-panel flex flex-col gap-4 p-5 lg:flex-row lg:items-end lg:justify-between lg:p-6">
+    <section class="hero-panel flex flex-col gap-4 p-5" :class="isCompactLayout ? '' : 'lg:flex-row lg:items-end lg:justify-between lg:p-6'">
       <div class="min-w-0">
         <h2 class="text-xl font-semibold tracking-tight text-slate-900">评价检索</h2>
         <div class="mt-3 inline-flex rounded-2xl bg-slate-100/90 p-1">
@@ -195,7 +198,7 @@ function formatReplyDeadline(value: string | null) {
           </button>
         </div>
       </div>
-      <div class="flex flex-wrap items-end gap-3">
+      <div class="flex flex-wrap items-end gap-3" :class="isCompactLayout ? 'w-full' : ''">
         <div>
           <label class="field-label">查询天数</label>
           <input v-model.number="days" type="number" min="1" max="90" class="field-input w-28" />
@@ -252,7 +255,7 @@ function formatReplyDeadline(value: string | null) {
           :style="{ width: `${orderStore.syncProgress}%` }"
         ></div>
       </div>
-      <div class="grid grid-cols-1 gap-3 text-xs text-slate-500 md:grid-cols-3">
+      <div class="grid grid-cols-1 gap-3 text-xs text-slate-500" :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'">
         <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
           <div class="font-semibold text-slate-700">1. 缓存保障</div>
           <div class="mt-1">{{ ['ensure_recent_cache', 'match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}</div>
@@ -284,7 +287,7 @@ function formatReplyDeadline(value: string | null) {
       </div>
 
       <section class="data-table-shell overflow-x-auto">
-      <table class="w-full min-w-[980px] text-sm">
+      <table class="w-full text-sm" :class="isCompactLayout ? 'min-w-[820px]' : 'min-w-[980px]'">
         <thead class="table-head text-slate-600">
           <tr>
             <th
