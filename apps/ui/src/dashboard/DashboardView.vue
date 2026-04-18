@@ -225,8 +225,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <section class="hero-panel flex flex-col gap-3 p-5 lg:flex-row lg:items-end lg:justify-between lg:p-6">
+  <div class="space-y-4">
+    <section class="hero-panel flex flex-col gap-2.5 p-4 lg:flex-row lg:items-end lg:justify-between lg:p-5">
       <div>
         <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">TLS 工作台</p>
         <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{{ greeting }}</h2>
@@ -250,16 +250,19 @@ onMounted(async () => {
       </RouterLink>
     </section>
 
-    <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <section
+      data-testid="dashboard-metrics"
+      class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
+    >
       <article
         v-for="metric in metrics"
         :key="metric.key"
-        class="surface-panel metric-card p-5 lg:p-6"
+        class="surface-panel metric-card metric-card-compact p-4"
       >
         <div class="flex items-center justify-between">
           <div class="metric-label">{{ metric.label }}</div>
           <span
-            class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
+            class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
             :class="toneClass[metric.tone]"
           >
             {{ metric.tone === 'success' ? '正常' : metric.tone === 'warn' ? '注意' : metric.tone === 'error' ? '需处理' : '待更新' }}

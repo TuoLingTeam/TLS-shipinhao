@@ -181,84 +181,90 @@ function formatReplyDeadline(value: string | null) {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <section class="hero-panel overflow-hidden p-5 lg:p-6">
-      <div class="grid gap-5 xl:grid-cols-[1.25fr_0.95fr]">
+  <div class="space-y-4">
+    <section class="hero-panel overflow-hidden p-4 lg:p-5">
+      <div class="flex flex-col gap-4">
         <div class="min-w-0">
           <span class="card-eyebrow">REVIEW MATCH</span>
-          <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            一个入口同时处理差评和品退：命中订单后可自动带入发货页，未命中的结果也会保留提示便于人工复核。
-          </p>
-
-          <div class="mt-5 inline-flex rounded-[20px] bg-white/80 p-1.5 shadow-sm">
-          <button
-            class="min-w-[120px] rounded-2xl px-4 py-2.5 text-sm font-semibold transition"
-            :class="
-              !isQualityRefundMode
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            "
-            @click="switchMode('bad_review')"
-          >
-            差评
-          </button>
-          <button
-            class="min-w-[104px] rounded-xl px-4 py-2 text-sm font-semibold transition"
-            :class="
-              isQualityRefundMode
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            "
-            @click="switchMode('quality_refund')"
-          >
-            品退
-          </button>
+          <div class="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div class="min-w-0">
+              <h2 class="text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
+              <p class="mt-1 text-sm leading-6 text-slate-500">
+                差评与品退共用一个入口，命中订单后可直接带入发货。
+              </p>
+            </div>
+            <div class="inline-flex rounded-[16px] bg-white/80 p-1 shadow-sm">
+              <button
+                class="min-w-[92px] rounded-[12px] px-3 py-1.5 text-sm font-semibold transition"
+                :class="
+                  !isQualityRefundMode
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                "
+                @click="switchMode('bad_review')"
+              >
+                差评
+              </button>
+              <button
+                class="min-w-[92px] rounded-[12px] px-3 py-1.5 text-sm font-semibold transition"
+                :class="
+                  isQualityRefundMode
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                "
+                @click="switchMode('quality_refund')"
+              >
+                品退
+              </button>
+            </div>
           </div>
 
-          <div class="mt-5 grid gap-3" :class="isQualityRefundMode ? 'lg:grid-cols-[120px_minmax(0,1fr)_180px]' : 'lg:grid-cols-[120px_180px]'">
+          <div class="mt-4 grid gap-2.5" :class="isQualityRefundMode ? 'lg:grid-cols-[96px_minmax(0,1fr)_148px]' : 'lg:grid-cols-[96px_148px]'">
             <div>
-              <label class="field-label">查询天数</label>
+              <label class="field-label">天数</label>
               <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
             </div>
             <div v-if="isQualityRefundMode">
-              <label class="field-label">品退原因过滤</label>
+              <label class="field-label">原因过滤</label>
               <input
                 v-model.trim="qualityReasonFilter"
                 type="text"
-                placeholder="输入原因关键字"
+                placeholder="输入关键字"
                 class="field-input"
               />
             </div>
             <button
               :disabled="store.loading || licenseBlocked"
-              class="action-btn action-btn-primary mt-auto min-h-[48px]"
+              class="action-btn action-btn-primary min-h-[40px]"
               @click="handleFetchCurrentMode"
             >
               {{
                 store.loading
                   ? "处理中..."
                   : isQualityRefundMode
-                    ? "获取品退订单"
-                    : "获取差评订单"
+                    ? "获取品退"
+                    : "获取差评"
               }}
             </button>
           </div>
 
-          <p class="mt-3 text-xs leading-6 text-slate-500">
-            {{ isQualityRefundMode ? '品退接口返回订单号时，可直接进入发货。' : '差评模式会自动确保缓存覆盖后再执行评分匹配。' }}
+          <p class="mt-2 text-[11px] leading-5 text-slate-500">
+            {{ isQualityRefundMode ? '品退接口返回订单号时可直接发货。' : '差评模式会先确保缓存覆盖。' }}
           </p>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+        <div
+          data-testid="review-summary-strip"
+          class="grid gap-2 sm:grid-cols-3 xl:grid-cols-3"
+        >
           <article
             v-for="card in summaryCards"
             :key="card.label"
-            class="rounded-[22px] border border-white/65 bg-white/85 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.3)] backdrop-blur"
+            class="rounded-[16px] border border-white/65 bg-white/85 px-3.5 py-3 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.22)] backdrop-blur"
           >
             <div class="text-xs uppercase tracking-[0.18em] text-slate-400">{{ card.label }}</div>
-            <div class="mt-2 text-xl font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
-            <div class="mt-2 text-sm leading-6 text-slate-500">{{ card.hint }}</div>
+            <div class="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
+            <div class="mt-1 text-xs leading-5 text-slate-500">{{ card.hint }}</div>
           </article>
         </div>
       </div>

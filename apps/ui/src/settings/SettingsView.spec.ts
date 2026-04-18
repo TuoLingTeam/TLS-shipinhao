@@ -42,7 +42,7 @@ describe("SettingsView", () => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it("keeps the first screen compact by removing duplicated status summary cards", async () => {
+  it("shows only three dense horizontal settings panels", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [...routes],
@@ -58,8 +58,12 @@ describe("SettingsView", () => {
 
     await Promise.resolve();
 
-    expect(wrapper.text()).not.toContain("把授权与设置收口到一个面板里");
-    expect(wrapper.text()).not.toContain("授权状态");
-    expect(wrapper.text()).not.toContain("Cookie 健康");
+    expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("xl:grid-cols-3");
+    expect(wrapper.text()).toContain("授权与激活");
+    expect(wrapper.text()).toContain("Cookie 配置");
+    expect(wrapper.text()).toContain("应用信息");
+    expect(wrapper.text()).not.toContain("当前授权快照");
+    expect(wrapper.text()).not.toContain("推荐顺序");
+    expect(wrapper.text()).not.toContain("环境检查");
   });
 });

@@ -156,12 +156,12 @@ textarea {
 
 .field-input,
 .field-select {
-  min-height: 44px;
-  padding: 0 0.85rem;
+  min-height: 40px;
+  padding: 0 0.78rem;
 }
 
 .field-textarea {
-  padding: 0.78rem 0.85rem;
+  padding: 0.7rem 0.78rem;
   resize: vertical;
 }
 
@@ -193,8 +193,8 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  min-height: 38px;
-  padding: 0 1rem;
+  min-height: 36px;
+  padding: 0 0.9rem;
   border-radius: 10px;
   border: 1px solid transparent;
   font-size: 0.9rem;
@@ -347,6 +347,10 @@ textarea {
   overflow: hidden;
 }
 
+.metric-card-compact {
+  min-height: 132px;
+}
+
 .metric-card::after {
   content: "";
   position: absolute;
@@ -364,6 +368,10 @@ textarea {
   font-weight: 600;
 }
 
+.metric-card-compact .metric-label {
+  font-size: 0.82rem;
+}
+
 .metric-value {
   margin-top: 0.7rem;
   font-size: 2rem;
@@ -373,10 +381,21 @@ textarea {
   color: var(--color-heading);
 }
 
+.metric-card-compact .metric-value {
+  margin-top: 0.55rem;
+  font-size: 1.5rem;
+}
+
 .metric-hint {
   margin-top: 0.7rem;
   color: var(--color-muted);
   font-size: 0.85rem;
+}
+
+.metric-card-compact .metric-hint {
+  margin-top: 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .data-table-shell {
