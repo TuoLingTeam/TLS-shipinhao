@@ -11,15 +11,15 @@ class RustWorkspaceLayoutTests(unittest.TestCase):
         self.assertTrue(manifest.exists(), "缺少顶层 Cargo.toml workspace 清单")
         text = manifest.read_text(encoding="utf-8")
         for member in (
-            'backend/crates/core/api-contracts',
-            'backend/crates/tooling/build-tools',
-            'backend/crates/desktop-services',
-            'backend/crates/core/domain-core',
-            'backend/crates/license-service',
-            'backend/crates/core/security-core',
+            'backend/shared/api-contracts',
+            'backend/infra/tooling/build-tools',
+            'backend/modules/desktop-services',
+            'backend/shared/domain-core',
+            'backend/modules/license-service',
+            'backend/shared/security-core',
             'apps/desktop',
-            'backend/worker/license-worker',
-            'backend/crates/tooling/xtask',
+            'backend/apps/license-worker',
+            'backend/infra/tooling/xtask',
         ):
             self.assertIn(member, text)
 

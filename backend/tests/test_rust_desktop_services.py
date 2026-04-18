@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class RustDesktopServicesTests(unittest.TestCase):
     def test_desktop_services_expose_review_cache_delivery_and_cookie_flows(self):
         lib_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "lib.rs"
-        self.assertTrue(lib_rs.exists(), "缺少 backend/crates/desktop-services/src/lib.rs")
+        self.assertTrue(lib_rs.exists(), "缺少 backend/modules/desktop-services/src/lib.rs")
         text = lib_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub struct CookieProfile",
@@ -28,7 +28,7 @@ class RustDesktopServicesTests(unittest.TestCase):
 
     def test_desktop_services_depend_on_domain_and_contract_crates(self):
         cargo_toml = ROOT / "backend" / "crates" / "desktop-services" / "Cargo.toml"
-        self.assertTrue(cargo_toml.exists(), "缺少 backend/crates/desktop-services/Cargo.toml")
+        self.assertTrue(cargo_toml.exists(), "缺少 backend/modules/desktop-services/Cargo.toml")
         text = cargo_toml.read_text(encoding="utf-8")
         self.assertIn('api-contracts = { path = "../api-contracts" }', text)
         self.assertIn('domain-core = { path = "../domain-core" }', text)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
 class RustDesktopOrderUtilsTests(unittest.TestCase):
     def test_order_utils_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "order_utils.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/order_utils.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/order_utils.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub fn first_non_empty",
@@ -57,7 +57,7 @@ class RustDesktopOrderUtilsTests(unittest.TestCase):
 class RustDesktopOrderMatchScoringTests(unittest.TestCase):
     def test_order_match_scoring_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "order_match_scoring.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/order_match_scoring.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/order_match_scoring.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub struct ProductSimilarityResult",
@@ -73,7 +73,7 @@ class RustDesktopOrderMatchScoringTests(unittest.TestCase):
 class RustDesktopReviewMatcherHelperTests(unittest.TestCase):
     def test_review_matcher_helper_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "review_matcher_helpers.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/review_matcher_helpers.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/review_matcher_helpers.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub struct CandidateMatch",
@@ -87,7 +87,7 @@ class RustDesktopReviewMatcherHelperTests(unittest.TestCase):
 class RustDesktopReviewCandidateScoringTests(unittest.TestCase):
     def test_review_candidate_scoring_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "review_candidate_scoring.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/review_candidate_scoring.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/review_candidate_scoring.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub const MATCH_MIN_SCORE",
@@ -103,7 +103,7 @@ class RustDesktopReviewCandidateScoringTests(unittest.TestCase):
 class RustDesktopReviewMatchFlowTests(unittest.TestCase):
     def test_review_match_flow_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "review_match_flow.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/review_match_flow.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/review_match_flow.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub const AUTO_FILL_SCORE_THRESHOLD",
@@ -118,7 +118,7 @@ class RustDesktopReviewMatchFlowTests(unittest.TestCase):
 class RustDesktopReviewIndexTests(unittest.TestCase):
     def test_review_index_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "review_index.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/review_index.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/review_index.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub type ProductIndex",
@@ -134,7 +134,7 @@ class RustDesktopReviewIndexTests(unittest.TestCase):
 class RustDesktopReviewBatchMatchTests(unittest.TestCase):
     def test_review_batch_match_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "review_batch_match.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/review_batch_match.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/review_batch_match.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub struct EvaluationRecord",
@@ -148,7 +148,7 @@ class RustDesktopReviewBatchMatchTests(unittest.TestCase):
 class RustDesktopOrderCacheStorageTests(unittest.TestCase):
     def test_order_cache_storage_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "order_cache_storage.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/order_cache_storage.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/order_cache_storage.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "CacheOrderRecord",
@@ -163,7 +163,7 @@ class RustDesktopOrderCacheStorageTests(unittest.TestCase):
 class RustDesktopOrderSyncPlannerTests(unittest.TestCase):
     def test_order_sync_planner_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "order_sync_planner.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/order_sync_planner.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/order_sync_planner.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub const ORDER_CACHE_COVERAGE_DAYS",
@@ -180,7 +180,7 @@ class RustDesktopOrderSyncPlannerTests(unittest.TestCase):
 class RustDesktopDayWindowTests(unittest.TestCase):
     def test_day_window_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "day_window.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/day_window.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/day_window.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub fn start_of_day_timestamp",
@@ -193,7 +193,7 @@ class RustDesktopDayWindowTests(unittest.TestCase):
 class RustDesktopOrderSyncServiceTests(unittest.TestCase):
     def test_order_sync_service_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "order_sync_service.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/order_sync_service.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/order_sync_service.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub const ORDER_CACHE_SCOPE",
@@ -209,7 +209,7 @@ class RustDesktopOrderSyncServiceTests(unittest.TestCase):
 class RustDesktopDeliveryUpdateTests(unittest.TestCase):
     def test_delivery_update_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "delivery_update.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/delivery_update.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/delivery_update.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub const DELIVERY_MISMATCH_MESSAGE",
@@ -228,7 +228,7 @@ class RustDesktopDeliveryUpdateTests(unittest.TestCase):
 class RustDesktopDeliveryBatchRunnerTests(unittest.TestCase):
     def test_delivery_batch_runner_module_exists(self):
         module_rs = ROOT / "backend" / "crates" / "desktop-services" / "src" / "delivery_batch_runner.rs"
-        self.assertTrue(module_rs.exists(), "缺少 backend/crates/desktop-services/src/delivery_batch_runner.rs")
+        self.assertTrue(module_rs.exists(), "缺少 backend/modules/desktop-services/src/delivery_batch_runner.rs")
         text = module_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub const BATCH_DELIVERY_TASK_TYPE",

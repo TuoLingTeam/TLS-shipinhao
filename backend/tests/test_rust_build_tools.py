@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class RustBuildToolsTests(unittest.TestCase):
     def test_build_tools_define_manifest_and_release_helpers(self):
         lib_rs = ROOT / "backend" / "crates" / "tooling" / "build-tools" / "src" / "lib.rs"
-        self.assertTrue(lib_rs.exists(), "缺少 backend/crates/tooling/build-tools/src/lib.rs")
+        self.assertTrue(lib_rs.exists(), "缺少 backend/infra/tooling/build-tools/src/lib.rs")
         text = lib_rs.read_text(encoding="utf-8")
         for symbol in (
             "pub struct ReleaseArtifact",
@@ -24,8 +24,8 @@ class RustBuildToolsTests(unittest.TestCase):
     def test_xtask_release_entry_exists(self):
         cargo_toml = ROOT / "backend" / "crates" / "tooling" / "xtask" / "Cargo.toml"
         main_rs = ROOT / "backend" / "crates" / "tooling" / "xtask" / "src" / "main.rs"
-        self.assertTrue(cargo_toml.exists(), "缺少 backend/crates/tooling/xtask/Cargo.toml")
-        self.assertTrue(main_rs.exists(), "缺少 backend/crates/tooling/xtask/src/main.rs")
+        self.assertTrue(cargo_toml.exists(), "缺少 backend/infra/tooling/xtask/Cargo.toml")
+        self.assertTrue(main_rs.exists(), "缺少 backend/infra/tooling/xtask/src/main.rs")
         text = main_rs.read_text(encoding="utf-8")
         for symbol in (
             'fn main()',
