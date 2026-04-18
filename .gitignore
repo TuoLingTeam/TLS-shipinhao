@@ -96,3 +96,6 @@ tests/integration/__pycache__/
 .env
 .env.*
 !.env.example
+
+backend/worker/license-worker/build/
+backend/.wrangler/

@@ -15,7 +15,7 @@ workspace/
 │   ├── crates/
 │   ├── domain-core           # 订单、评价、缓存、授权共享模型
 │   ├── security-core         # 设备绑定、验签、完整性、风险检测
-│   ├── desktop-app           # 桌面客户端入口与 UI 壳层
+│   ├── apps/desktop          # Tauri 桌面客户端入口与 UI 壳层
 │   ├── desktop-services      # 本地业务编排（查评、发货、缓存同步）
 │   ├── license-service       # 授权 HTTP 服务
 │   ├── build-tools           # manifest、版本、发布辅助工具
@@ -51,7 +51,7 @@ workspace/
 
 输出：
 - 顶层 `Cargo.toml` workspace
-- `domain-core / api-contracts / security-core / license-service / desktop-services / desktop-app / build-tools`
+- `domain-core / api-contracts / security-core / license-service / desktop-services / build-tools`
 - 基础 lint/test/build 命令统一
 
 ### Phase 1：先抽共享域模型

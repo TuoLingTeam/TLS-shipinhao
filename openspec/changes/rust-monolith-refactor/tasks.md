@@ -151,12 +151,12 @@ Depends on: 10
 - [x] 11.3 GREEN: 将批量发货入口接入 Rust services
 - [x] 11.4 REFACTOR: 下线 Python `delivery_api.py` 正式职责
 
-## 12. desktop-app 真正接线
+## 12. 桌面壳真正接线（已归并到 desktop）
 
 Depends on: 9, 10, 11
 
 - [x] 12.1 RED: 为 Slint 主界面命令流建立端到端/命令级测试
-- [x] 12.2 GREEN: 让 desktop-app 调用真实 desktop-services，而不是占位回调
+- [x] 12.2 GREEN: 让 desktop 调用真实 desktop-services，而不是占位回调
 - [x] 12.3 GREEN: 接入授权状态展示、任务启动、日志输出、错误反馈
 - [x] 12.4 REFACTOR: 停止给 PySide6 UI 增加任何正式功能
 

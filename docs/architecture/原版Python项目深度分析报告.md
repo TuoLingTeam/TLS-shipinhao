@@ -40,8 +40,8 @@
 ```
 _legacy/app/
 ├── __init__.py
-├── main.py                      # 兼容入口（委托 Rust desktop-app）
-├── bootstrap.py                 # 启动脚本（调用 cargo run -p desktop-app）
+├── main.py                      # 兼容入口（委托 Rust desktop）
+├── bootstrap.py                 # 启动脚本（调用 cargo run -p desktop）
 ├── settings.py                  # 全局配置（425 行，含 UI 主题/API/授权常量）
 ├── assets/
 │   └── favicon.png
