@@ -20,6 +20,7 @@ pub use review::index as review_index;
 pub use review::match_flow as review_match_flow;
 pub use review::matcher_helpers as review_matcher_helpers;
 pub use shared::day_window;
+pub use shared::http_client;
 pub use shared::matching;
 pub use shared::update_service;
 

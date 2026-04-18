@@ -222,10 +222,11 @@ pub struct HttpLicenseClient {
 
 impl HttpLicenseClient {
     pub fn new(base_urls: Vec<String>) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(LICENSE_API_TIMEOUT_SECS))
-            .build()
-            .unwrap_or_default();
+        // 必须走统一 builder：Cloudflare 对 reqwest 默认 UA 直接返 403 + 挑战页，
+        // 解析失败会被 useTauriInvoke 吞成静默错误。详见 `build_desktop_http_client`。
+        let client = desktop_services::http_client::build_desktop_http_client(
+            std::time::Duration::from_secs(LICENSE_API_TIMEOUT_SECS),
+        );
         Self { base_urls, client }
     }
 

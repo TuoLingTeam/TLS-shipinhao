@@ -26,10 +26,9 @@ impl HttpQualityRefundSource {
         biz_magic: String,
         grant_id: Option<String>,
     ) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
-            .build()
-            .unwrap_or_default();
+        let client = desktop_services::http_client::build_desktop_http_client(
+            std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS),
+        );
         Self {
             cookie_header,
             biz_magic,
