@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/order.store";
@@ -12,6 +12,7 @@ import AppNavIcon from "../layout/AppNavIcon.vue";
 import { AUTHOR_WECHAT } from "../shared/brand";
 import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
+import { buildSettingsLocation } from "../layout/navigation";
 
 const appStore = useAppStore();
 const orderStore = useOrderStore();
@@ -54,7 +55,7 @@ const metrics = computed(() => [
     value: licenseText.value,
     hint:
       daysUntilLicenseExpires.value === null
-        ? (appStore.isLicensed ? "已激活" : "请前往授权管理激活")
+        ? (appStore.isLicensed ? "已激活" : "请前往设置中心激活")
         : daysUntilLicenseExpires.value < 0
           ? `已过期 ${Math.abs(daysUntilLicenseExpires.value)} 天`
           : daysUntilLicenseExpires.value <= 7
@@ -133,15 +134,15 @@ const metrics = computed(() => [
 ]);
 
 const alerts = computed(() => {
-  const items: { key: string; text: string; to: string; tone: "warn" | "error" }[] = [];
+  const items: { key: string; text: string; to: RouteLocationRaw; tone: "warn" | "error" }[] = [];
   if (!appStore.isLicensed) {
-    items.push({ key: "license-invalid", text: "授权尚未激活，所有业务功能已暂停", to: "/license", tone: "error" });
+    items.push({ key: "license-invalid", text: "授权尚未激活，所有业务功能已暂停", to: buildSettingsLocation("license"), tone: "error" });
   } else if ((daysUntilLicenseExpires.value ?? Infinity) <= 7) {
     const days = daysUntilLicenseExpires.value ?? 0;
     items.push({
       key: "license-renewal",
       text: days < 0 ? `授权已过期 ${Math.abs(days)} 天，请尽快续费` : `授权将在 ${days} 天后到期，建议提前续费`,
-      to: "/license",
+      to: buildSettingsLocation("license"),
       tone: days < 0 ? "error" : "warn",
     });
   }
@@ -149,14 +150,14 @@ const alerts = computed(() => {
     items.push({
       key: "cookie-unhealthy",
       text: cookieHealth.snapshot.hint || "Cookie 可能已失效，请重新登录小店",
-      to: "/settings",
+      to: buildSettingsLocation("cookie"),
       tone: "error",
     });
   } else if (cookieHealth.status === "unconfigured") {
     items.push({
       key: "cookie-missing",
-      text: "尚未配置 Cookie，前往设置完成登录后才可一键发货",
-      to: "/settings",
+      text: "尚未配置 Cookie，前往设置中心完成登录后才可一键发货",
+      to: buildSettingsLocation("cookie"),
       tone: "warn",
     });
   }
@@ -179,11 +180,11 @@ const alerts = computed(() => {
   return items;
 });
 
-const quickLinks = [
+const quickLinks: readonly { to: RouteLocationRaw; title: string; icon: "review" | "order" | "delivery" | "settings"; description: string }[] = [
   { to: "/review", title: "中差评/品退", icon: "review", description: "一键匹配订单并带入发货" },
   { to: "/order", title: "订单缓存同步", icon: "order", description: "维护 30 天订单缓存与本地检索" },
   { to: "/delivery", title: "批量发货", icon: "delivery", description: "逐条进度·失败明细·支持取消" },
-  { to: "/license", title: "授权管理", icon: "license", description: "激活卡密与查看到期信息" },
+  { to: buildSettingsLocation("license"), title: "设置中心", icon: "settings", description: "统一管理授权、Cookie 与应用信息" },
 ] as const;
 
 const toneClass: Record<string, string> = {
@@ -278,7 +279,7 @@ onMounted(async () => {
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <RouterLink
           v-for="item in quickLinks"
-          :key="item.to"
+          :key="item.title"
           :to="item.to"
           class="quick-link surface-panel-strong flex min-h-[144px] flex-col justify-between p-5"
         >

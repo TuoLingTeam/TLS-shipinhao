@@ -33,6 +33,23 @@ const filteredResults = computed(() => {
 const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
 const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
 const unmatchedCount = computed(() => store.results.length - matchedCount.value);
+const summaryCards = computed(() => [
+  {
+    label: "当前模式",
+    value: isQualityRefundMode.value ? "品退直连" : "差评评分匹配",
+    hint: isQualityRefundMode.value ? "优先使用接口直返订单号" : "依赖缓存评分寻找最优订单",
+  },
+  {
+    label: "最近结果",
+    value: store.results.length ? `${store.results.length} 条` : "等待查询",
+    hint: store.lastQuery ? `${store.lastQuery.days} 天范围内的数据` : "尚未发起检索",
+  },
+  {
+    label: "已匹配",
+    value: store.results.length ? `${matchedCount.value} / ${store.results.length}` : "--",
+    hint: unmatchedCount.value > 0 ? `${unmatchedCount.value} 条待人工核实` : "命中后可直接带入发货",
+  },
+]);
 const loadingTitle = computed(() =>
   orderStore.syncSource === "review_query"
     ? "正在准备订单缓存并执行评分匹配"
@@ -165,12 +182,18 @@ function formatReplyDeadline(value: string | null) {
 
 <template>
   <div class="space-y-5">
-    <section class="hero-panel flex flex-col gap-4 p-5" :class="isCompactLayout ? '' : 'lg:flex-row lg:items-end lg:justify-between lg:p-6'">
-      <div class="min-w-0">
-        <h2 class="text-xl font-semibold tracking-tight text-slate-900">评价检索</h2>
-        <div class="mt-3 inline-flex rounded-2xl bg-slate-100/90 p-1">
+    <section class="hero-panel overflow-hidden p-5 lg:p-6">
+      <div class="grid gap-5 xl:grid-cols-[1.25fr_0.95fr]">
+        <div class="min-w-0">
+          <span class="card-eyebrow">REVIEW MATCH</span>
+          <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            一个入口同时处理差评和品退：命中订单后可自动带入发货页，未命中的结果也会保留提示便于人工复核。
+          </p>
+
+          <div class="mt-5 inline-flex rounded-[20px] bg-white/80 p-1.5 shadow-sm">
           <button
-            class="min-w-[104px] rounded-xl px-4 py-2 text-sm font-semibold transition"
+            class="min-w-[120px] rounded-2xl px-4 py-2.5 text-sm font-semibold transition"
             :class="
               !isQualityRefundMode
                 ? 'bg-white text-slate-900 shadow-sm'
@@ -191,40 +214,58 @@ function formatReplyDeadline(value: string | null) {
           >
             品退
           </button>
+          </div>
+
+          <div class="mt-5 grid gap-3" :class="isQualityRefundMode ? 'lg:grid-cols-[120px_minmax(0,1fr)_180px]' : 'lg:grid-cols-[120px_180px]'">
+            <div>
+              <label class="field-label">查询天数</label>
+              <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
+            </div>
+            <div v-if="isQualityRefundMode">
+              <label class="field-label">品退原因过滤</label>
+              <input
+                v-model.trim="qualityReasonFilter"
+                type="text"
+                placeholder="输入原因关键字"
+                class="field-input"
+              />
+            </div>
+            <button
+              :disabled="store.loading || licenseBlocked"
+              class="action-btn action-btn-primary mt-auto min-h-[48px]"
+              @click="handleFetchCurrentMode"
+            >
+              {{
+                store.loading
+                  ? "处理中..."
+                  : isQualityRefundMode
+                    ? "获取品退订单"
+                    : "获取差评订单"
+              }}
+            </button>
+          </div>
+
+          <p class="mt-3 text-xs leading-6 text-slate-500">
+            {{ isQualityRefundMode ? '品退接口返回订单号时，可直接进入发货。' : '差评模式会自动确保缓存覆盖后再执行评分匹配。' }}
+          </p>
         </div>
-      </div>
-      <div class="flex flex-wrap items-end gap-3" :class="isCompactLayout ? 'w-full' : ''">
-        <div>
-          <label class="field-label">查询天数</label>
-          <input v-model.number="days" type="number" min="1" max="90" class="field-input w-28" />
+
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <article
+            v-for="card in summaryCards"
+            :key="card.label"
+            class="rounded-[22px] border border-white/65 bg-white/85 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.3)] backdrop-blur"
+          >
+            <div class="text-xs uppercase tracking-[0.18em] text-slate-400">{{ card.label }}</div>
+            <div class="mt-2 text-xl font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
+            <div class="mt-2 text-sm leading-6 text-slate-500">{{ card.hint }}</div>
+          </article>
         </div>
-        <div v-if="isQualityRefundMode">
-          <label class="field-label">品退原因过滤</label>
-          <input
-            v-model.trim="qualityReasonFilter"
-            type="text"
-            placeholder="输入原因关键字"
-            class="field-input w-48"
-          />
-        </div>
-        <button
-          :disabled="store.loading || licenseBlocked"
-          class="action-btn action-btn-primary min-w-[128px]"
-          @click="handleFetchCurrentMode"
-        >
-          {{
-            store.loading
-              ? "处理中..."
-              : isQualityRefundMode
-                ? "获取品退订单"
-                : "获取差评订单"
-          }}
-        </button>
       </div>
     </section>
 
     <div v-if="licenseBlocked" class="soft-alert warn">
-      当前未激活授权，评价管理不可用。请先前往授权管理完成激活。
+      当前未激活授权，评价管理不可用。请先前往设置中心完成激活。
     </div>
 
     <div v-if="store.error" class="soft-alert error">

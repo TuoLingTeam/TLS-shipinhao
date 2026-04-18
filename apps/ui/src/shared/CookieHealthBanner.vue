@@ -18,7 +18,7 @@ const title = computed(() =>
   store.snapshot.configured ? "Cookie 可能已失效" : "尚未配置 Cookie",
 );
 const description = computed(
-  () => store.snapshot.hint || "请前往设置页重新登录小店并保存最新 Cookie。",
+  () => store.snapshot.hint || "请前往设置中心重新登录小店并保存最新 Cookie。",
 );
 </script>
 

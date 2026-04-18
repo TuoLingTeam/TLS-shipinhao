@@ -5,7 +5,7 @@ import { useOrderStore } from "../order/order.store";
 import { useAppStore } from "../app.store";
 import OrderSearchBar from "../order/OrderSearchBar.vue";
 import OrderCacheStats from "../order/OrderCacheStats.vue";
-import { formatCent } from "../shared/format";
+import { formatCent, formatDateTime } from "../shared/format";
 import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
 import { useLayout } from "../layout/useLayout";
@@ -37,6 +37,23 @@ const activeCoverageLabel = computed(() => {
 });
 const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
 const isWideLayout = computed(() => mode.value === "wide");
+const overviewCards = computed(() => [
+  {
+    label: "缓存订单",
+    value: String((store.cacheStatus?.cached_order_count ?? store.cachedOrders.length) || 0),
+    hint: store.cacheStatus?.coverage_complete ? "缓存覆盖完整" : "建议保持最近 30 天覆盖",
+  },
+  {
+    label: "检索状态",
+    value: searchKeyword.value ? "已筛选" : "全部订单",
+    hint: searchKeyword.value || "未输入关键词，当前展示全部副本",
+  },
+  {
+    label: "最近同步",
+    value: store.cacheStatus?.last_sync_at ? "已同步" : "待建立",
+    hint: store.cacheStatus?.last_sync_at ? formatDateTime(store.cacheStatus.last_sync_at) : "尚未建立本地缓存",
+  },
+]);
 const syncSteps = computed(() => [
   {
     key: "ensure_recent_cache",
@@ -102,6 +119,17 @@ onMounted(async () => {
               <div class="font-semibold text-brand-deep">当前状态</div>
               <div class="mt-1 leading-6">{{ activeCoverageLabel }}</div>
             </div>
+          </div>
+          <div class="grid gap-3 md:grid-cols-3">
+            <article
+              v-for="card in overviewCards"
+              :key="card.label"
+              class="rounded-[22px] border border-white/60 bg-white/80 px-4 py-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.22)] backdrop-blur"
+            >
+              <div class="text-xs uppercase tracking-[0.18em] text-slate-400">{{ card.label }}</div>
+              <div class="mt-2 text-xl font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
+              <div class="mt-2 text-sm leading-6 text-slate-500">{{ card.hint }}</div>
+            </article>
           </div>
           <OrderSearchBar @search="handleSearch" />
         </div>
@@ -180,7 +208,7 @@ onMounted(async () => {
     </section>
 
     <div v-if="licenseBlocked" class="soft-alert warn">
-      当前未激活授权，订单同步不可用。请先前往授权管理完成激活。
+      当前未激活授权，订单同步不可用。请先前往设置中心完成激活。
     </div>
 
     <div v-if="store.error" class="soft-alert error">

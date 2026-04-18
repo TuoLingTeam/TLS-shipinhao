@@ -52,6 +52,23 @@ const recentSteps = computed(() => {
 const canRetryFailed = computed(() =>
   Boolean(progress.value && !progress.value.running && failedSteps.value.length > 0),
 );
+const overviewCards = computed(() => [
+  {
+    label: "待发订单",
+    value: orderId.value || "未带入",
+    hint: store.draftSource ? `来源：${store.draftSource}` : "可从评价匹配结果自动带入",
+  },
+  {
+    label: "批量条数",
+    value: parsedBatchItems.value.length ? `${parsedBatchItems.value.length} 条` : "0 条",
+    hint: parsedBatchItems.value.length ? "支持确认后统一提交" : "粘贴订单号和单号后自动识别",
+  },
+  {
+    label: "执行进度",
+    value: progress.value ? `${progressPercent.value}%` : "待开始",
+    hint: progress.value ? `成功 ${progress.value.successCount} · 失败 ${progress.value.failureCount}` : "尚未启动批量发货任务",
+  },
+]);
 const confirmMessage = computed(() => {
   const count = parsedBatchItems.value.length;
   const eta = Math.max(1, Math.ceil(count * 0.5));
@@ -93,10 +110,36 @@ async function handleCancelBatch() {
 
 <template>
   <div class="space-y-5">
+    <section class="hero-panel p-5 lg:p-6">
+      <div class="flex flex-col gap-5">
+        <div>
+          <span class="card-eyebrow">DELIVERY DESK</span>
+          <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">发货操作台</h2>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            单个发货与批量提交共用同一工作台：左侧适合快速改单，右侧适合批量录入与统一确认。
+          </p>
+        </div>
+        <div class="grid gap-3 md:grid-cols-3">
+          <article
+            v-for="card in overviewCards"
+            :key="card.label"
+            class="rounded-[22px] border border-white/60 bg-white/80 px-4 py-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.22)] backdrop-blur"
+          >
+            <div class="text-xs uppercase tracking-[0.18em] text-slate-400">{{ card.label }}</div>
+            <div class="mt-2 break-all text-lg font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
+            <div class="mt-2 text-sm leading-6 text-slate-500">{{ card.hint }}</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
       <div class="hero-panel p-5 lg:p-6">
         <div class="flex items-center justify-between gap-4">
-          <h2 class="text-xl font-semibold tracking-tight text-slate-900">单个发货</h2>
+          <div>
+            <h2 class="text-xl font-semibold tracking-tight text-slate-900">单个发货</h2>
+            <p class="mt-1 text-sm text-slate-500">适合处理临时补发、复核后手动修正的订单。</p>
+          </div>
           <div v-if="store.draftOrderId" class="text-xs text-brand">
             已自动带入：{{ store.draftSource || '匹配订单' }}
           </div>
@@ -134,7 +177,10 @@ async function handleCancelBatch() {
 
       <div class="surface-panel p-5 lg:p-6">
         <div class="flex items-center justify-between gap-4">
-          <h2 class="text-xl font-semibold tracking-tight text-slate-900">批量发货</h2>
+          <div>
+            <h2 class="text-xl font-semibold tracking-tight text-slate-900">批量发货</h2>
+            <p class="mt-1 text-sm text-slate-500">一行一单，确认后统一执行，并自动记录失败明细。</p>
+          </div>
           <div class="text-xs text-slate-400">{{ parsedBatchItems.length }} 条可提交</div>
         </div>
 
@@ -298,7 +344,7 @@ async function handleCancelBatch() {
     </section>
 
     <div v-if="licenseBlocked" class="soft-alert warn">
-      当前未激活授权，发货功能不可用。请先前往授权管理完成激活。
+      当前未激活授权，发货功能不可用。请先前往设置中心完成激活。
     </div>
 
     <div v-if="store.error" class="soft-alert error">

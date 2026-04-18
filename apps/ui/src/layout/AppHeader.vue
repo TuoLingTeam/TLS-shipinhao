@@ -2,25 +2,16 @@
 import { useRoute, useRouter } from "vue-router";
 import { computed } from "vue";
 import { useAppStore } from "../app.store";
-import { APP_NAME } from "../shared/brand";
 import { useUiScale } from "../layout/useUiScale";
 import { useCookieHealthStore } from "../shared/cookieHealth";
+import { buildSettingsLocation, pageMetaMap, type PageName } from "./navigation";
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
 
-const titleMap: Record<string, string> = {
-  dashboard: "仪表盘",
-  review: "评价管理",
-  order: "订单管理",
-  delivery: "发货管理",
-  license: "授权管理",
-  settings: "设置",
-};
-
-const pageTitle = computed(() => titleMap[route.name as string] ?? APP_NAME);
+const pageMeta = computed(() => pageMetaMap[(route.name as PageName) || "dashboard"] ?? pageMetaMap.dashboard);
 const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
 const { scalePercent, increment, decrement, reset } = useUiScale();
 
@@ -31,7 +22,7 @@ const cookieChip = computed(() => {
     case "unhealthy":
       return { label: "Cookie 失效", tone: "error", hint: cookieHealth.snapshot.hint ?? "请重新登录" };
     case "unconfigured":
-      return { label: "未配置 Cookie", tone: "warn", hint: "请前往设置完成登录" };
+      return { label: "未配置 Cookie", tone: "warn", hint: "请前往设置中心完成登录" };
     default:
       return { label: "Cookie 待探测", tone: "idle", hint: "尚未完成首次探测" };
   }
@@ -42,32 +33,38 @@ function handleCookieChipClick() {
     void cookieHealth.probe();
     return;
   }
-  void router.push("/settings");
+  void router.push(buildSettingsLocation("cookie"));
+}
+
+function handleLicenseChipClick() {
+  void router.push(buildSettingsLocation("license"));
 }
 </script>
 
 <template>
-  <header class="surface-panel px-5 py-4 lg:px-6 lg:py-4">
-    <div class="flex items-center justify-between gap-4">
+  <header class="surface-panel relative overflow-hidden px-4 py-4 lg:px-5 lg:py-4">
+    <div class="pointer-events-none absolute inset-y-0 right-0 w-[220px] bg-[radial-gradient(circle_at_top_right,rgba(167,243,208,0.24),transparent_70%)]"></div>
+    <div class="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div class="min-w-0">
-        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">TLS · VIDEO COMMERCE DESK</p>
-        <div class="mt-2 flex items-center gap-3">
-          <h1 class="truncate text-2xl font-bold tracking-tight text-slate-900">{{ pageTitle }}</h1>
-          <span class="hidden rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700 sm:inline-flex">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{{ pageMeta.eyebrow }}</p>
+        <div class="mt-2 flex flex-wrap items-center gap-2.5">
+          <h1 class="truncate text-[1.7rem] font-bold tracking-tight text-slate-950">{{ pageMeta.title }}</h1>
+          <span class="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 shadow-sm">
             v{{ appStore.appVersion }}
           </span>
         </div>
+        <p class="mt-1 max-w-2xl text-[13px] leading-5 text-slate-500">{{ pageMeta.description }}</p>
       </div>
 
-      <div class="flex items-center gap-3">
-        <div class="hidden items-center gap-1 rounded-full border border-brand-tint/80 bg-white/80 px-2 py-1 shadow-sm lg:flex">
-          <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-brand transition hover:bg-brand-soft" title="缩小界面（Ctrl/Cmd -）" @click="decrement">－</button>
-          <button type="button" class="rounded-full px-2 py-1 text-[11px] font-semibold tracking-[0.12em] text-brand-deep transition hover:bg-brand-soft" title="恢复默认缩放（Ctrl/Cmd 0）" @click="reset">{{ scalePercent }}</button>
-          <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-brand transition hover:bg-brand-soft" title="放大界面（Ctrl/Cmd +）" @click="increment">＋</button>
+      <div class="flex flex-wrap items-center gap-2 xl:justify-end">
+        <div class="hidden items-center gap-1 rounded-full border border-brand-tint/80 bg-white/90 px-1.5 py-1 shadow-sm lg:flex">
+          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-brand transition hover:bg-brand-soft" title="缩小界面（Ctrl/Cmd -）" @click="decrement">－</button>
+          <button type="button" class="rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.12em] text-brand-deep transition hover:bg-brand-soft" title="恢复默认缩放（Ctrl/Cmd 0）" @click="reset">{{ scalePercent }}</button>
+          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-brand transition hover:bg-brand-soft" title="放大界面（Ctrl/Cmd +）" @click="increment">＋</button>
         </div>
         <button
           type="button"
-          class="status-chip shrink-0 cursor-pointer transition hover:bg-slate-50"
+          class="status-chip shrink-0 cursor-pointer transition hover:border-brand-tint hover:bg-white"
           :title="cookieChip.hint"
           @click="handleCookieChipClick"
         >
@@ -79,12 +76,12 @@ function handleCookieChipClick() {
               error: cookieChip.tone === 'error',
             }"
           ></span>
-          <div class="text-sm font-semibold text-slate-700">{{ cookieChip.label }}</div>
+          <div class="text-[13px] font-semibold text-slate-700">{{ cookieChip.label }}</div>
         </button>
-        <div class="status-chip shrink-0">
-          <span class="status-dot" :class="appStore.isLicensed ? 'success' : ''"></span>
-          <div class="text-sm font-semibold text-slate-700">{{ licenseLabel }}</div>
-        </div>
+        <button type="button" class="status-chip shrink-0 cursor-pointer transition hover:border-brand-tint hover:bg-white" @click="handleLicenseChipClick">
+          <span class="status-dot" :class="appStore.isLicensed ? 'success' : 'warn'"></span>
+          <div class="text-[13px] font-semibold text-slate-700">{{ licenseLabel }}</div>
+        </button>
       </div>
     </div>
   </header>
