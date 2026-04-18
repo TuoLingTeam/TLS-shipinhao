@@ -58,11 +58,11 @@ fn run_manifest_command(args: &[OsString]) -> Result<()> {
 
 fn run_desktop_build_command(args: &[OsString]) -> Result<()> {
     let mut command = Command::new("cargo");
-    command.args(["build", "-p", "desktop-app"]);
+    command.args(["build", "-p", "desktop"]);
     command.args(args);
     let status = command
         .status()
-        .context("spawn cargo build -p desktop-app")?;
+        .context("spawn cargo build -p desktop")?;
     if !status.success() {
         return Err(anyhow!("desktop-build failed with status {status}"));
     }

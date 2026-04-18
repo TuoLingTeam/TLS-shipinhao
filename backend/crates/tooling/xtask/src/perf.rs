@@ -121,7 +121,7 @@ fn collect_perf_report(overrides: &PerfOverrides) -> PerfReport {
             evidence: if overrides.package_mb.is_some() {
                 "人工录入安装包体积".into()
             } else {
-                "target/release/desktop-app 或 desktop 二进制大小".into()
+                "target/release/desktop 二进制大小".into()
             },
         },
     ];
@@ -213,7 +213,6 @@ fn benchmark_match_100() -> f64 {
 
 fn find_release_binary_size_mb() -> Option<f64> {
     [
-        PathBuf::from("target/release/desktop-app"),
         PathBuf::from("target/release/desktop"),
     ]
     .into_iter()

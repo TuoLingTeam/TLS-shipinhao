@@ -35,7 +35,7 @@ class BootstrapUpdateTests(unittest.TestCase):
                     bootstrap.main()
 
         subprocess_mock.run.assert_called_once_with(
-            ['/usr/bin/cargo', 'run', '-p', 'desktop-app', '--', '--demo'],
+            ['/usr/bin/cargo', 'run', '-p', 'desktop', '--', '--demo'],
             check=False,
         )
 

@@ -1,1 +1,0 @@
-//! Slint desktop application shell.

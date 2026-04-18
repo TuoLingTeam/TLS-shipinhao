@@ -8,9 +8,9 @@ license.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
-desktop-services = { path = "../crates/desktop-services" }
+desktop-services = { path = "../../desktop-services" }
 serde.workspace = true
-build-tools = { path = "../crates/build-tools" }
+build-tools = { path = "../build-tools" }
 
 [dev-dependencies]
 base64 = "0.22"

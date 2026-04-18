@@ -1,16 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-  "backend/crates/api-contracts",
-  "backend/crates/build-tools",
-  "backend/crates/desktop-app",
+  "backend/crates/core/api-contracts",
+  "backend/crates/tooling/build-tools",
   "backend/crates/desktop-services",
-  "backend/crates/domain-core",
+  "backend/crates/core/domain-core",
   "backend/crates/license-service",
-  "backend/crates/security-core",
+  "backend/crates/core/security-core",
   "apps/desktop",
-  "backend/license-worker",
-  "backend/xtask",
+  "backend/worker/license-worker",
+  "backend/crates/tooling/xtask",
 ]
 
 [workspace.package]

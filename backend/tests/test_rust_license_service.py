@@ -11,32 +11,35 @@ class RustLicenseServiceTests(unittest.TestCase):
         self.assertTrue(lib_rs.exists(), "缺少 backend/crates/license-service/src/lib.rs")
         text = lib_rs.read_text(encoding="utf-8")
         for symbol in (
-            "pub trait LicenseRepository",
-            "pub struct LicenseService",
-            "pub struct LicenseRecord",
-            "pub struct GeneratedKeyRecord",
-            "pub struct DeviceRegistration",
-            "pub struct LicenseServiceResponse",
-            "pub struct ActivationInput",
-            "pub struct VerifyInput",
-            "pub fn issue_license_lease",
-            "pub fn activate",
-            "pub fn verify",
-            "pub struct AuditEvent",
-            "pub const LEASE_RENEWAL_HOURS",
-            "pub const LEASE_HARD_EXPIRY_HOURS",
+            "pub mod model",
+            "pub mod repository",
+            "pub mod service",
+            "pub use repository::LicenseRepository",
+            "pub use model::{",
+            "pub use service::{",
+            "issue_license_lease",
+            "LicenseService",
+            "LicenseRecord",
+            "GeneratedKeyRecord",
+            "DeviceRegistration",
+            "LicenseServiceResponse",
+            "ActivationInput",
+            "VerifyInput",
+            "AuditEvent",
+            "LEASE_RENEWAL_HOURS",
+            "LEASE_HARD_EXPIRY_HOURS",
         ):
             self.assertIn(symbol, text)
 
     def test_license_worker_adapter_exists_and_depends_on_rust_service(self):
-        cargo_toml = ROOT / "backend" / "license-worker" / "Cargo.toml"
-        lib_rs = ROOT / "backend" / "license-worker" / "src" / "lib.rs"
+        cargo_toml = ROOT / "backend" / "worker" / "license-worker" / "Cargo.toml"
+        lib_rs = ROOT / "backend" / "worker" / "license-worker" / "src" / "lib.rs"
         wrangler = ROOT / "backend" / "wrangler.toml"
-        self.assertTrue(cargo_toml.exists(), "缺少 backend/license-worker/Cargo.toml")
-        self.assertTrue(lib_rs.exists(), "缺少 backend/license-worker/src/lib.rs")
+        self.assertTrue(cargo_toml.exists(), "缺少 backend/worker/license-worker/Cargo.toml")
+        self.assertTrue(lib_rs.exists(), "缺少 backend/worker/license-worker/src/lib.rs")
         self.assertTrue(wrangler.exists(), "缺少 backend/wrangler.toml")
         cargo_text = cargo_toml.read_text(encoding="utf-8")
-        self.assertIn('license-service = { path = "../../backend/crates/license-service" }', cargo_text)
+        self.assertIn('license-service = { path = "../../crates/license-service" }', cargo_text)
         self.assertIn('crate-type = ["cdylib", "rlib"]', cargo_text)
         lib_text = lib_rs.read_text(encoding="utf-8")
         for symbol in (
@@ -51,8 +54,8 @@ class RustLicenseServiceTests(unittest.TestCase):
             self.assertIn(symbol, lib_text)
         wrangler_text = wrangler.read_text(encoding="utf-8")
         for symbol in (
-            'main = "./license-worker/build/worker/shim.mjs"',
-            'worker-build --release',
+            'main = "./worker/license-worker/build/worker/shim.mjs"',
+            'command = "./scripts/build_license_worker.sh --release"',
             'binding = "DB"',
         ):
             self.assertIn(symbol, wrangler_text)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""兼容期 Python 启动入口：委托 Rust desktop-app。"""
+"""兼容期 Python 启动入口：委托 Rust desktop。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET_DIR = REPO_ROOT / "target"
-DESKTOP_BINARY_NAME = "desktop-app.exe" if sys.platform.startswith("win") else "desktop-app"
+DESKTOP_BINARY_NAME = "desktop.exe" if sys.platform.startswith("win") else "desktop"
 
 
 def resolve_rust_desktop_command(extra_args: list[str] | None = None) -> list[str]:
@@ -24,10 +24,10 @@ def resolve_rust_desktop_command(extra_args: list[str] | None = None) -> list[st
 
     cargo = shutil.which("cargo")
     if cargo:
-        return [cargo, "run", "-p", "desktop-app", "--", *args]
+        return [cargo, "run", "-p", "desktop", "--", *args]
 
     raise RuntimeError(
-        "未找到 Rust desktop-app 可执行文件，也未检测到 cargo；请先运行 `cargo run -p desktop-app`。"
+        "未找到 Rust desktop 可执行文件，也未检测到 cargo；请先运行 `cargo run -p desktop`。"
     )
 
 
