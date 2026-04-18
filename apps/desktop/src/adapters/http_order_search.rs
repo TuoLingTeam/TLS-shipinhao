@@ -1,15 +1,19 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
-use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
 use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
+use desktop_services::order_fetcher::{
+    backoff_seconds, is_api_rate_limited, is_http_rate_limited, RATE_LIMIT_RETRY_COUNT,
+};
+use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
 use domain_core::OrderCacheEntry;
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, USER_AGENT,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const ORDER_SEARCH_URL: &str =
@@ -17,8 +21,84 @@ const ORDER_SEARCH_URL: &str =
 const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
 const ORDER_PAGE_SIZE: i64 = 100;
 const REQUEST_TIMEOUT_SECS: u64 = 30;
+const ORDER_CACHE_FETCH_WORKERS: usize = 5;
 /// 与 `FETCH_PAGE_INTERVAL_SECONDS` 对齐（秒）。
 const FETCH_PAGE_INTERVAL: Duration = Duration::from_millis(300);
+
+#[derive(Debug, PartialEq)]
+enum OrderSearchRequestOutcome<T> {
+    Ready(T),
+    RetryRateLimited,
+}
+
+fn cache_fetch_worker_count() -> usize {
+    ORDER_CACHE_FETCH_WORKERS
+}
+
+async fn retry_order_search_with_sleep<T, F, Fut, S, SleepFut>(
+    mut operation: F,
+    mut sleep_fn: S,
+) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = anyhow::Result<OrderSearchRequestOutcome<T>>>,
+    S: FnMut(u64) -> SleepFut,
+    SleepFut: Future<Output = ()>,
+{
+    let mut attempt = 0u32;
+    loop {
+        match operation().await? {
+            OrderSearchRequestOutcome::Ready(value) => return Ok(value),
+            OrderSearchRequestOutcome::RetryRateLimited => {
+                if attempt >= RATE_LIMIT_RETRY_COUNT {
+                    anyhow::bail!("订单搜索持续触发频率限制，请稍后再试");
+                }
+                let wait_secs = backoff_seconds(attempt);
+                sleep_fn(wait_secs).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct OrderRateLimitGate {
+    pause_until: Mutex<std::time::Instant>,
+}
+
+impl Default for OrderRateLimitGate {
+    fn default() -> Self {
+        Self {
+            pause_until: Mutex::new(std::time::Instant::now()),
+        }
+    }
+}
+
+impl OrderRateLimitGate {
+    fn pause_for(&self, wait_secs: u64) {
+        let until = std::time::Instant::now() + Duration::from_secs(wait_secs);
+        let mut guard = self.pause_until.lock().expect("rate limit gate lock");
+        if until > *guard {
+            *guard = until;
+        }
+    }
+
+    async fn wait_if_needed(&self) {
+        loop {
+            let until = *self.pause_until.lock().expect("rate limit gate lock");
+            let now = std::time::Instant::now();
+            if now >= until {
+                return;
+            }
+            tokio::time::sleep(
+                until
+                    .saturating_duration_since(now)
+                    .min(Duration::from_millis(50)),
+            )
+            .await;
+        }
+    }
+}
 
 pub struct HttpOrderSearchClient {
     cookie_header: String,
@@ -113,7 +193,8 @@ impl HttpOrderSearchClient {
         start_unix: i64,
         end_unix: i64,
     ) -> anyhow::Result<SyncedOrderSnapshot> {
-        self.fetch_order_snapshots_in_window_parallel(start_unix, end_unix, 1).await
+        self.fetch_order_snapshots_in_window_parallel(start_unix, end_unix, 1)
+            .await
     }
 
     pub async fn fetch_order_snapshots_in_window_parallel(
@@ -128,6 +209,7 @@ impl HttpOrderSearchClient {
         let url = Arc::new(format!("{ORDER_SEARCH_URL}?token=&lang=zh_CN"));
         let next_page = Arc::new(AtomicI64::new(1));
         let should_stop = Arc::new(AtomicBool::new(false));
+        let rate_limit_gate = Arc::new(OrderRateLimitGate::default());
         let ui_by_id = Arc::new(Mutex::new(HashMap::<String, OrderCacheEntry>::new()));
         let cache_by_id = Arc::new(Mutex::new(HashMap::<String, CacheOrderRecord>::new()));
         let mut tasks = tokio::task::JoinSet::new();
@@ -138,6 +220,7 @@ impl HttpOrderSearchClient {
             let url = Arc::clone(&url);
             let next_page = Arc::clone(&next_page);
             let should_stop = Arc::clone(&should_stop);
+            let rate_limit_gate = Arc::clone(&rate_limit_gate);
             let ui_by_id = Arc::clone(&ui_by_id);
             let cache_by_id = Arc::clone(&cache_by_id);
             let now_rfc = Arc::clone(&now_rfc);
@@ -157,7 +240,14 @@ impl HttpOrderSearchClient {
                         "page": page,
                     });
 
-                    let payload = post_order_search_with_retry_inner(&client, headers.clone(), &url, &body).await?;
+                    let payload = post_order_search_with_retry_inner(
+                        &client,
+                        headers.clone(),
+                        &url,
+                        &body,
+                        Arc::clone(&rate_limit_gate),
+                    )
+                    .await?;
                     let Some(list) = order_list_or_stop(&payload)? else {
                         should_stop.store(true, Ordering::Relaxed);
                         break Ok(());
@@ -210,9 +300,11 @@ impl HttpOrderSearchClient {
             .into_values()
             .collect();
 
-        Ok(SyncedOrderSnapshot { ui_entries, cache_records })
+        Ok(SyncedOrderSnapshot {
+            ui_entries,
+            cache_records,
+        })
     }
-
 }
 
 async fn post_order_search_with_retry_inner(
@@ -220,28 +312,43 @@ async fn post_order_search_with_retry_inner(
     headers: HeaderMap,
     url: &str,
     body: &Value,
+    rate_limit_gate: Arc<OrderRateLimitGate>,
 ) -> anyhow::Result<Value> {
-    for attempt in 0u32..5 {
-        let response = client
-            .post(url)
-            .headers(headers.clone())
-            .json(body)
-            .send()
-            .await?;
+    let request_gate = Arc::clone(&rate_limit_gate);
+    let sleep_gate = Arc::clone(&rate_limit_gate);
+    retry_order_search_with_sleep(
+        || {
+            let headers = headers.clone();
+            let rate_limit_gate = Arc::clone(&request_gate);
+            async move {
+                rate_limit_gate.wait_if_needed().await;
 
-        if response.status().as_u16() == 429 {
-            tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await;
-            continue;
-        }
+                let response = client.post(url).headers(headers).json(body).send().await?;
 
-        let val: Value = response.json().await?;
-        if val.get("code").and_then(|c| c.as_i64()) == Some(429) {
-            tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await;
-            continue;
-        }
-        return Ok(val);
-    }
-    anyhow::bail!("订单搜索持续触发频率限制，请稍后再试")
+                if is_http_rate_limited(response.status().as_u16()) {
+                    return Ok(OrderSearchRequestOutcome::RetryRateLimited);
+                }
+
+                let val: Value = response.json().await?;
+                if is_api_rate_limited(&val) {
+                    return Ok(OrderSearchRequestOutcome::RetryRateLimited);
+                }
+                Ok(OrderSearchRequestOutcome::Ready(val))
+            }
+        },
+        move |wait_secs| {
+            let rate_limit_gate = Arc::clone(&sleep_gate);
+            async move {
+                tracing::warn!(
+                    target: "order.fetch.retry",
+                    "订单接口触发频率限制，等待 {wait_secs} 秒后重试"
+                );
+                rate_limit_gate.pause_for(wait_secs);
+                tokio::time::sleep(Duration::from_secs(wait_secs)).await;
+            }
+        },
+    )
+    .await
 }
 
 impl HttpOrderCacheFinder {
@@ -286,7 +393,11 @@ impl CacheOrderFinder for HttpOrderCacheFinder {
             self.biz_magic.clone(),
             self.grant_id.clone(),
         );
-        let snapshot = rt.block_on(client.fetch_order_snapshots_in_window_parallel(start, end, 3))?;
+        let snapshot = rt.block_on(client.fetch_order_snapshots_in_window_parallel(
+            start,
+            end,
+            cache_fetch_worker_count(),
+        ))?;
 
         Ok(CacheFetchResult {
             windows: vec![SyncWindowOrders {
@@ -601,6 +712,53 @@ pub fn parse_iso_window(start_at: &str, end_at: &str) -> anyhow::Result<(i64, i6
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    #[test]
+    fn recent_cache_fetch_uses_five_workers() {
+        assert_eq!(cache_fetch_worker_count(), 5);
+    }
+
+    #[tokio::test]
+    async fn order_search_retry_uses_2_4_8_backoff_then_succeeds() {
+        let call_count = Arc::new(AtomicU32::new(0));
+        let wait_log = Arc::new(Mutex::new(Vec::<u64>::new()));
+        let cc = call_count.clone();
+        let wait_log_inner = wait_log.clone();
+
+        let result = retry_order_search_with_sleep(
+            move || {
+                let cc = cc.clone();
+                async move {
+                    let n = cc.fetch_add(1, Ordering::SeqCst);
+                    if n < 3 {
+                        Ok(OrderSearchRequestOutcome::<serde_json::Value>::RetryRateLimited)
+                    } else {
+                        Ok(OrderSearchRequestOutcome::Ready(
+                            serde_json::json!({"code": 0}),
+                        ))
+                    }
+                }
+            },
+            move |wait_secs| {
+                let wait_log = wait_log_inner.clone();
+                async move {
+                    wait_log.lock().unwrap().push(wait_secs);
+                }
+            },
+        )
+        .await
+        .expect("should eventually succeed");
+
+        assert_eq!(
+            result.get("code").and_then(serde_json::Value::as_i64),
+            Some(0)
+        );
+        assert_eq!(call_count.load(Ordering::SeqCst), 4);
+        assert_eq!(*wait_log.lock().unwrap(), vec![2, 4, 8]);
+    }
 
     #[test]
     fn order_json_to_entry_maps_nested_receiver_and_string_amount() {
