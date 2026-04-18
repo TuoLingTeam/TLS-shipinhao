@@ -12,7 +12,25 @@ use security_core::get_device_id;
 use state::AppState;
 use tauri::Emitter;
 
+/// 初始化全局 tracing 订阅器：
+/// - 默认级别 `info`，尊重 `RUST_LOG` 环境变量（例如
+///   `RUST_LOG=review.match.diagnostic=warn,desktop_services=info`）。
+/// - 原来整个 app 没装订阅器，所有 `tracing::warn!/info!/error!` 都是哑巴
+///   ——包括 HttpLicenseClient 的网络层警告与评价匹配诊断。补齐后这些
+///   宝贵的运营日志才会出现在 `cargo tauri dev` 的终端输出里。
+fn init_tracing() {
+    use tracing_subscriber::{fmt, EnvFilter};
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .with_level(true)
+        .try_init();
+}
+
 fn main() {
+    init_tracing();
     tauri::Builder::default()
         .manage(AppState::new())
         .setup(|app| {

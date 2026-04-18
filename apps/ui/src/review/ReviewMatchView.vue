@@ -9,6 +9,7 @@ import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../layout/useLayout";
+import { localDaysAgoStartIso, localTodayEndIso } from "../shared/format";
 
 const router = useRouter();
 const { mode } = useLayout();
@@ -77,22 +78,12 @@ function switchMode(mode: "bad_review" | "quality_refund") {
   qualityReasonFilter.value = "";
 }
 
-function todayISO(): string {
-  return `${new Date().toISOString().split("T")[0]}T23:59:59Z`;
-}
-
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return `${d.toISOString().split("T")[0]}T00:00:00Z`;
-}
-
 async function handleSearch() {
   if (licenseBlocked.value) {
     store.setError("请先激活授权后再使用评价管理");
     return;
   }
-  await findReviews(days.value, daysAgoISO(days.value), todayISO());
+  await findReviews(days.value, localDaysAgoStartIso(days.value), localTodayEndIso());
 }
 
 async function handleQualityRefundSearch() {
@@ -100,7 +91,11 @@ async function handleQualityRefundSearch() {
     store.setError("请先激活授权后再使用品退订单");
     return;
   }
-  await findQualityRefundOrders(days.value, daysAgoISO(days.value), todayISO());
+  await findQualityRefundOrders(
+    days.value,
+    localDaysAgoStartIso(days.value),
+    localTodayEndIso(),
+  );
 }
 
 async function handleFetchCurrentMode() {
@@ -346,7 +341,12 @@ function formatReplyDeadline(value: string | null) {
                 >
                   {{ r.matched ? "已匹配" : "未匹配" }}
                 </span>
-                <ReviewMatchStrategyBadge :strategy="r.strategy" />
+                <ReviewMatchStrategyBadge
+                  :strategy="r.strategy"
+                  :reasons="r.match_reasons"
+                  :candidate-count="r.candidate_count"
+                  :top-score="r.top_score"
+                />
                 <span
                   v-if="!isQualityRefundMode && !r.replyable"
                   class="inline-flex rounded-full bg-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600"

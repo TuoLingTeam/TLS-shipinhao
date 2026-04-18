@@ -1,3 +1,4 @@
+use crate::review::nickname_index::{build_nickname_index, try_nickname_first_match};
 use crate::review_candidate_scoring::{CandidateOrder, EvaluationMatchContext};
 use crate::review_index::{build_product_sku_index, collect_candidate_orders};
 use crate::review_match_flow::{match_single_evaluation, MatchStrategy};
@@ -51,7 +52,11 @@ pub fn match_orders_with_evaluations(
     evaluations: &[EvaluationRecord],
     orders: &[CandidateOrder],
 ) -> Vec<MatchedEvaluationResult> {
+    // 主路径索引：按买家昵称直接定位订单（爆品场景下 O(1) 命中真匹配）。
+    let nickname_index = build_nickname_index(orders);
+    // 兜底路径索引：按 product_id+sku_id / 规范化 title+skuName 建立（Python 原版行为）。
     let product_index = build_product_sku_index(orders);
+
     evaluations
         .iter()
         .map(|evaluation| {
@@ -62,9 +67,18 @@ pub fn match_orders_with_evaluations(
                 product_name: evaluation.product_name.clone(),
                 eval_time: evaluation.eval_time,
             };
-            let candidates =
-                collect_candidate_orders(&product_index, &context, &evaluation.sku_name);
-            let single = match_single_evaluation(&context, &candidates);
+
+            // ① 主路径：昵称精确 → SKU 精确 → 时间对齐。命中即为 100 分 ExactMatch。
+            let single = if let Some(primary) = try_nickname_first_match(&nickname_index, &context)
+            {
+                primary
+            } else {
+                // ② 兜底：SKU 优先的模糊匹配（保留 Python 原版全部行为 + 时间辅助加分）。
+                let candidates =
+                    collect_candidate_orders(&product_index, &context, &evaluation.sku_name);
+                match_single_evaluation(&context, &candidates)
+            };
+
             build_match_result(
                 evaluation,
                 single.matched_order.as_ref(),

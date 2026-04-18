@@ -2,7 +2,15 @@
 import { computed, ref } from "vue";
 import type { MatchStrategy } from "./review.types";
 
-const props = defineProps<{ strategy: MatchStrategy }>();
+const props = defineProps<{
+  strategy: MatchStrategy;
+  /** 后端 build_nickname_reason / build_product_reason / build_time_reason 生成的评分明细。 */
+  reasons?: string[];
+  /** 候选订单数量，便于排查「候选很多但分数上不去」的情况。 */
+  candidateCount?: number;
+  /** 候选中的最高基分，辅助诊断「最高分 0」这类极端场景。 */
+  topScore?: number;
+}>();
 const tooltipOpen = ref(false);
 
 const meta = computed(() => {
@@ -34,6 +42,11 @@ const meta = computed(() => {
       };
   }
 });
+
+const hasReasons = computed(() => Array.isArray(props.reasons) && props.reasons.length > 0);
+const hasCandidateMeta = computed(
+  () => typeof props.candidateCount === "number" || typeof props.topScore === "number",
+);
 </script>
 
 <template>
@@ -50,9 +63,29 @@ const meta = computed(() => {
     </button>
     <div
       v-if="tooltipOpen"
-      class="absolute right-0 top-[calc(100%+8px)] z-10 w-64 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left text-xs leading-5 text-slate-600 shadow-xl"
+      class="absolute right-0 top-[calc(100%+8px)] z-20 w-80 space-y-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left text-xs leading-5 text-slate-600 shadow-xl"
     >
-      {{ meta.description }}
+      <p class="font-semibold text-slate-700">{{ meta.text }}</p>
+      <p class="text-slate-500">{{ meta.description }}</p>
+      <div v-if="hasReasons" class="border-t border-slate-100 pt-2">
+        <p class="mb-1 font-semibold text-slate-700">评分明细</p>
+        <ul class="space-y-1 text-slate-600">
+          <li v-for="(reason, idx) in props.reasons" :key="idx" class="break-words">
+            · {{ reason }}
+          </li>
+        </ul>
+      </div>
+      <div
+        v-if="hasCandidateMeta"
+        class="flex gap-3 border-t border-slate-100 pt-2 text-[11px] text-slate-500"
+      >
+        <span v-if="typeof props.candidateCount === 'number'">
+          候选 <span class="font-semibold text-slate-700">{{ props.candidateCount }}</span> 条
+        </span>
+        <span v-if="typeof props.topScore === 'number'">
+          最高基分 <span class="font-semibold text-slate-700">{{ props.topScore }}</span>
+        </span>
+      </div>
     </div>
   </div>
 </template>

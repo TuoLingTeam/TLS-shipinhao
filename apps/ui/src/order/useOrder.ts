@@ -2,22 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useOrderStore } from "./order.store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
+import { localDaysAgoStartIso, localTodayEndIso } from "../shared/format";
 import type {
   OrderCacheEntry,
   OrderCacheStatus,
   OrderSyncProgressEvent,
   OrderSyncResult,
 } from "./order.types";
-
-function todayISO(): string {
-  return `${new Date().toISOString().split("T")[0]}T23:59:59Z`;
-}
-
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return `${d.toISOString().split("T")[0]}T00:00:00Z`;
-}
 
 export function useOrder() {
   const store = useOrderStore();
@@ -41,7 +32,7 @@ export function useOrder() {
   }
 
   async function loadRecentCache() {
-    await loadCache(daysAgoISO(30), todayISO());
+    await loadCache(localDaysAgoStartIso(30), localTodayEndIso());
   }
 
   async function loadCacheStatus() {

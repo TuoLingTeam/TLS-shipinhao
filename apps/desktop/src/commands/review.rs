@@ -40,6 +40,21 @@ fn parse_iso_timestamp(value: &str) -> Option<i64> {
         .ok()
 }
 
+fn candidate_window_from_recent_cache(
+    review_start_unix: i64,
+    review_end_unix: i64,
+    cache_start_unix: i64,
+    cache_end_unix: i64,
+) -> (i64, i64) {
+    let candidate_start = if review_start_unix >= cache_start_unix {
+        cache_start_unix
+    } else {
+        review_start_unix
+    };
+    let candidate_end = review_end_unix.min(cache_end_unix);
+    (candidate_start, candidate_end)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct ReviewMatchResponse {
@@ -195,8 +210,14 @@ fn run_review_match_flow(
         );
         let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
             .map_err(AppError::Internal)?;
+        let (candidate_start, candidate_end) = candidate_window_from_recent_cache(
+            start_unix,
+            end_unix,
+            _coverage_start,
+            coverage_end,
+        );
         let orders = repository
-            .fetch_orders_in_range(start_unix, end_unix.min(coverage_end))
+            .fetch_orders_in_range(candidate_start, candidate_end)
             .map_err(AppError::Internal)?;
         (orders, Vec::new())
     } else {
@@ -222,8 +243,19 @@ fn run_review_match_flow(
                 .map_err(AppError::Internal)?;
             (orders, warnings)
         } else {
-            let (orders, ensure_warnings) = service
-                .ensure_orders(earliest, Some(now))
+            let (_, ensure_warnings, recent_start, recent_end) = service
+                .ensure_recent_cache(Some(now))
+                .map_err(AppError::Internal)?;
+            let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
+                .map_err(AppError::Internal)?;
+            let (candidate_start, candidate_end) = candidate_window_from_recent_cache(
+                start_unix,
+                end_unix,
+                recent_start,
+                recent_end,
+            );
+            let orders = repository
+                .fetch_orders_in_range(candidate_start, candidate_end)
                 .map_err(AppError::Internal)?;
             (orders, ensure_warnings)
         };
@@ -352,6 +384,34 @@ mod tests {
     use desktop_services::review_batch_match::EvaluationRecord;
 
     #[test]
+    fn recent_cache_candidate_window_expands_small_review_window_to_cache_start() {
+        let review_start = 1_776_259_200; // 2026-04-15 00:00:00 +08
+        let review_end = 1_776_614_399; // 2026-04-18 23:59:59 +08
+        let cache_start = 1_774_051_200; // 2026-03-20 10:40:00 UTC-ish; recent cache起点
+        let cache_end = 1_776_614_399;
+
+        let (candidate_start, candidate_end) =
+            candidate_window_from_recent_cache(review_start, review_end, cache_start, cache_end);
+
+        assert_eq!(candidate_start, cache_start);
+        assert_eq!(candidate_end, review_end);
+    }
+
+    #[test]
+    fn recent_cache_candidate_window_preserves_older_full_scan_start() {
+        let review_start = 1_773_792_000;
+        let review_end = 1_776_614_399;
+        let cache_start = 1_774_051_200;
+        let cache_end = 1_776_614_399;
+
+        let (candidate_start, candidate_end) =
+            candidate_window_from_recent_cache(review_start, review_end, cache_start, cache_end);
+
+        assert_eq!(candidate_start, review_start);
+        assert_eq!(candidate_end, review_end);
+    }
+
+    #[test]
     fn scored_matching_uses_cached_order_product_dimensions() {
         let evaluations = vec![EvaluationRecord {
             evaluation_id: "eval-1".into(),
@@ -426,7 +486,64 @@ mod tests {
         assert_eq!(results[0].strategy, domain_core::MatchStrategy::ExactMatch);
         assert!(results[0].replyable);
         assert!(results[0].reply_deadline.is_some());
-        assert_eq!(results[0].candidate_count, 2);
+        // 主路径（nickname_index）命中：candidate_count 仅表示同昵称+SKU 的候选，
+        // 不再是 Python 原版 SKU-first 下的"同商品全集"。此处只有买家"无锡农膜..."
+        // 对应的 1 条订单进入主路径候选桶；"别的买家"那条进不了该桶，
+        // 由兜底路径评分（本用例主路径直接命中所以兜底未触发）。
+        assert_eq!(results[0].candidate_count, 1);
+        assert_eq!(results[0].top_score, 100);
+    }
+
+    #[test]
+    fn older_order_inside_recent_cache_still_exact_matches_recent_review() {
+        let evaluations = vec![EvaluationRecord {
+            evaluation_id: "55947514874".into(),
+            buyer_nickname: "梦云".into(),
+            product_id: "10000496403296".into(),
+            sku_id: "7982968968".into(),
+            sku_name: "单瓶（体验装）400*1瓶".into(),
+            product_name: "仁和二硫化硒去屑洗发水止痒除螨控油清爽蓬松柔顺头屑清洁水润男女"
+                .into(),
+            eval_time: 1_776_410_556,
+            attitude_name: "不够好".into(),
+            evaluation_content: "越洗越痒".into(),
+            default_content: String::new(),
+            evaluation_star: 1,
+            can_reply_expire_time: chrono::Utc::now().timestamp() + 86_400,
+        }];
+        let orders = vec![CacheOrderRecord {
+            order_id: "3735167246652299776".into(),
+            buyer_nickname: "梦云".into(),
+            normalized_nickname: "梦云".into(),
+            receiver_name: String::new(),
+            amount_cent: 0,
+            create_time: 1_774_142_505,
+            confirm_receipt_time: 1_774_355_570,
+            is_waybill_received: false,
+            waybill_received_time: 0,
+            is_education_order: false,
+            order_status: 20,
+            openid: String::new(),
+            raw_source: "order_api".into(),
+            updated_at: 0,
+            products: vec![CacheOrderProduct {
+                product_id: "10000496403296".into(),
+                sku_id: "7982968968".into(),
+                sale_param: "单瓶（体验装）400*1瓶".into(),
+                product_name:
+                    "仁和二硫化硒去屑洗发水止痒除螨控油清爽蓬松柔顺头屑清洁水润男女"
+                        .into(),
+                thumb_img: String::new(),
+            }],
+        }];
+
+        let results = match_reviews_with_cache_records(&evaluations, &orders);
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].matched);
+        assert_eq!(results[0].order_id, "3735167246652299776");
+        assert_eq!(results[0].strategy, domain_core::MatchStrategy::ExactMatch);
+        assert_eq!(results[0].candidate_count, 1);
         assert_eq!(results[0].top_score, 100);
     }
 }
