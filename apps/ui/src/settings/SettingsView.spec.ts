@@ -42,7 +42,7 @@ describe("SettingsView", () => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it("shows only three dense horizontal settings panels", async () => {
+  it("keeps three top-level columns but stacks each panel vertically to avoid crowding", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [...routes],
@@ -60,6 +60,10 @@ describe("SettingsView", () => {
 
     expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("xl:grid-cols-3");
     expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("subsystem-panel-grid");
+    expect(wrapper.get('[data-testid="settings-license-summary"]').classes()).toContain("grid-cols-1");
+    expect(wrapper.get('[data-testid="settings-license-actions"]').classes()).toContain("grid-cols-1");
+    expect(wrapper.get('[data-testid="settings-cookie-actions"]').classes()).toContain("grid-cols-1");
+    expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("grid-cols-1");
     expect(wrapper.text()).toContain("授权与激活");
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("应用信息");

@@ -188,19 +188,22 @@ onMounted(() => {
       data-testid="settings-panels"
       class="subsystem-panel-grid grid grid-cols-1 gap-4 xl:grid-cols-3"
     >
-      <article class="surface-panel p-4 lg:p-5">
+      <article class="surface-panel p-4 lg:p-4">
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">License</div>
-            <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">授权与激活</h3>
-            <p class="mt-1 text-[13px] leading-5 text-slate-500">输入卡密、激活并刷新当前授权状态。</p>
+            <h3 class="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">授权与激活</h3>
+            <p class="mt-1 text-[12px] leading-5 text-slate-500">输入卡密、激活并刷新当前授权状态。</p>
           </div>
           <div class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="stateTone">
             {{ currentStateText }}
           </div>
         </div>
 
-        <div class="subsystem-summary-strip mt-4 sm:grid-cols-3 text-sm">
+        <div
+          data-testid="settings-license-summary"
+          class="subsystem-summary-strip mt-3 grid-cols-1 text-sm"
+        >
           <div class="subsystem-summary-card">
             <div class="subsystem-summary-label">当前状态</div>
             <div class="subsystem-summary-value">{{ currentStateText }}</div>
@@ -215,19 +218,20 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="mt-4 space-y-3">
+        <div
+          data-testid="settings-license-actions"
+          class="mt-3 grid grid-cols-1 gap-2.5"
+        >
           <div>
             <label class="field-label">卡密</label>
             <input v-model.trim="licenseKey" class="field-input" placeholder="输入卡密" />
           </div>
-          <div class="grid gap-2.5 sm:grid-cols-2">
-            <button :disabled="activateLoading" class="action-btn action-btn-primary w-full" @click="handleActivate">
-              {{ activateLoading ? "激活中..." : "立即激活" }}
-            </button>
-            <button :disabled="verifyLoading" class="action-btn action-btn-secondary w-full" @click="handleRefresh">
-              {{ verifyLoading ? "刷新中..." : "刷新状态" }}
-            </button>
-          </div>
+          <button :disabled="activateLoading" class="action-btn action-btn-primary w-full" @click="handleActivate">
+            {{ activateLoading ? "激活中..." : "立即激活" }}
+          </button>
+          <button :disabled="verifyLoading" class="action-btn action-btn-secondary w-full" @click="handleRefresh">
+            {{ verifyLoading ? "刷新中..." : "刷新状态" }}
+          </button>
           <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
             <div class="text-[11px] text-slate-400">已保存卡密</div>
             <div class="mt-1 break-all font-mono text-xs leading-5 text-slate-700">{{ appStore.licenseKey || "未保存" }}</div>
@@ -238,51 +242,51 @@ onMounted(() => {
         </div>
       </article>
 
-      <article class="surface-panel p-4 lg:p-5">
+      <article class="surface-panel p-4 lg:p-4">
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Cookie</div>
-            <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">Cookie 配置</h3>
-            <p class="mt-1 text-[13px] leading-5 text-slate-500">登录、提取、覆盖和保存路径都集中在这里。</p>
+            <h3 class="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">Cookie 配置</h3>
+            <p class="mt-1 text-[12px] leading-5 text-slate-500">登录、提取、覆盖和保存路径都集中在这里。</p>
           </div>
           <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="cookieStateTone">
             {{ cookieStateText }}
           </span>
         </div>
 
-        <div class="subsystem-chipbar mt-4 text-xs">
-          <span class="subsystem-chip">
+        <div class="mt-3 grid grid-cols-1 gap-1.5 text-xs">
+          <span class="subsystem-chip w-fit">
             {{ cookieConfigured ? "已配置" : "未配置" }}
           </span>
-          <span class="subsystem-chip">
+          <span class="subsystem-chip w-fit">
             {{ hasBizMagic ? "已识别 biz_magic" : "未识别 biz_magic" }}
           </span>
         </div>
 
-        <div class="mt-4 space-y-3">
+        <div
+          data-testid="settings-cookie-actions"
+          class="mt-3 grid grid-cols-1 gap-2.5"
+        >
           <div>
             <label class="field-label">手动覆盖 Cookie</label>
             <textarea
+              data-testid="settings-cookie-textarea"
               v-model.trim="cookieHeader"
-              rows="4"
+              rows="3"
               class="field-textarea font-mono text-sm"
               placeholder="粘贴完整的 Cookie 字符串..."
             />
           </div>
-
-          <div class="grid gap-2.5 sm:grid-cols-2">
-            <button class="action-btn action-btn-primary w-full" @click="handleSave">保存 Cookie</button>
-            <button class="action-btn action-btn-secondary w-full" :disabled="pickDirLoading" @click="handlePickSaveDir">
-              {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
-            </button>
-            <button class="action-btn action-btn-secondary w-full" :disabled="loginLoading" @click="handleOpenLogin">
-              {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
-            </button>
-            <button class="action-btn action-btn-primary w-full" :disabled="extractLoading" @click="handleExtractCookie">
-              {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
-            </button>
-          </div>
-
+          <button class="action-btn action-btn-primary w-full" @click="handleSave">保存 Cookie</button>
+          <button class="action-btn action-btn-secondary w-full" :disabled="pickDirLoading" @click="handlePickSaveDir">
+            {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
+          </button>
+          <button class="action-btn action-btn-secondary w-full" :disabled="loginLoading" @click="handleOpenLogin">
+            {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
+          </button>
+          <button class="action-btn action-btn-primary w-full" :disabled="extractLoading" @click="handleExtractCookie">
+            {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
+          </button>
           <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
             <div class="text-[11px] text-slate-400">当前保存位置</div>
             <div class="mt-1 break-all font-mono text-xs leading-5 text-slate-600">{{ cookiePath || "未设置" }}</div>
@@ -294,14 +298,17 @@ onMounted(() => {
         </div>
       </article>
 
-      <article class="surface-panel p-4 lg:p-5">
+      <article class="surface-panel p-4 lg:p-4">
         <div>
           <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">About</div>
-          <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">应用信息</h3>
-          <p class="mt-1 text-[13px] leading-5 text-slate-500">保留核心品牌与版本信息，避免重复说明。</p>
+          <h3 class="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">应用信息</h3>
+          <p class="mt-1 text-[12px] leading-5 text-slate-500">保留核心品牌与版本信息，避免重复说明。</p>
         </div>
 
-        <div class="mt-4 grid gap-2.5">
+        <div
+          data-testid="settings-about-meta"
+          class="mt-3 grid grid-cols-1 gap-2.5"
+        >
           <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
             <div class="text-[11px] text-slate-400">应用名称</div>
             <div class="mt-1 text-base font-semibold text-slate-900">{{ APP_NAME }}</div>
@@ -310,15 +317,13 @@ onMounted(() => {
             <div class="text-[11px] text-slate-400">英文代号</div>
             <div class="mt-1 text-base font-semibold text-slate-900">{{ APP_NAME_EN }}</div>
           </div>
-          <div class="grid gap-2.5 sm:grid-cols-2">
-            <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
-              <div class="text-[11px] text-slate-400">版本</div>
-              <div class="mt-1 text-base font-semibold text-slate-900">v{{ APP_VERSION || appStore.appVersion }}</div>
-            </div>
-            <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
-              <div class="text-[11px] text-slate-400">作者微信</div>
-              <div class="mt-1 font-mono text-sm text-slate-700">{{ AUTHOR_WECHAT }}</div>
-            </div>
+          <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
+            <div class="text-[11px] text-slate-400">版本</div>
+            <div class="mt-1 text-base font-semibold text-slate-900">v{{ APP_VERSION || appStore.appVersion }}</div>
+          </div>
+          <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
+            <div class="text-[11px] text-slate-400">作者微信</div>
+            <div class="mt-1 font-mono text-sm text-slate-700">{{ AUTHOR_WECHAT }}</div>
           </div>
           <div class="rounded-[16px] border border-brand-tint bg-brand-soft/50 px-3 py-2.5 text-[13px] leading-5 text-brand-deep">
             建议先完成授权与 Cookie，再去订单管理同步最近 30 天缓存。

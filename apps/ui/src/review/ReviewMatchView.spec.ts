@@ -46,4 +46,30 @@ describe("ReviewMatchView", () => {
     expect(summary.classes()).toContain("xl:grid-cols-3");
     expect(summary.classes()).toContain("subsystem-summary-strip");
   });
+
+  it("uses one unified control shell for both mode tabs and search actions", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [...routes],
+    });
+    router.push("/review");
+    await router.isReady();
+
+    const wrapper = mount(ReviewMatchView, {
+      global: {
+        plugins: [router, createPinia()],
+        stubs: {
+          LoadingState: true,
+          EmptyState: true,
+          ReviewMatchStrategyBadge: true,
+        },
+      },
+    });
+
+    expect(wrapper.get('[data-testid="review-control-shell"]').classes()).toContain("review-control-shell");
+    expect(wrapper.get('[data-testid="review-mode-switch"]').classes()).toContain("review-mode-switch");
+    expect(wrapper.get('[data-testid="review-filter-grid"]').classes()).toContain("review-filter-grid");
+    expect(wrapper.findAll(".review-mode-option")).toHaveLength(2);
+    expect(wrapper.get('[data-testid="review-primary-action"]').classes()).toContain("review-primary-action");
+  });
 });

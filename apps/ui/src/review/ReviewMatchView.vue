@@ -186,71 +186,75 @@ function formatReplyDeadline(value: string | null) {
       <div class="flex flex-col gap-4">
         <div class="min-w-0">
           <span class="card-eyebrow">REVIEW MATCH</span>
-          <div class="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div class="min-w-0">
-              <h2 class="text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
-              <p class="subsystem-lead mt-1">
-                差评与品退共用一个入口，命中订单后可直接带入发货。
-              </p>
-            </div>
-            <div class="inline-flex rounded-[16px] bg-white/80 p-1 shadow-sm">
-              <button
-                class="min-w-[92px] rounded-[12px] px-3 py-1.5 text-sm font-semibold transition"
-                :class="
-                  !isQualityRefundMode
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                "
-                @click="switchMode('bad_review')"
+          <div
+            data-testid="review-control-shell"
+            class="review-control-shell mt-3"
+          >
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div class="min-w-0">
+                <h2 class="text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
+                <p class="subsystem-lead mt-1">
+                  差评与品退共用一个入口，命中订单后可直接带入发货。
+                </p>
+              </div>
+              <div
+                data-testid="review-mode-switch"
+                class="review-mode-switch"
               >
-                差评
-              </button>
-              <button
-                class="min-w-[92px] rounded-[12px] px-3 py-1.5 text-sm font-semibold transition"
-                :class="
-                  isQualityRefundMode
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                "
-                @click="switchMode('quality_refund')"
-              >
-                品退
-              </button>
+                <button
+                  class="review-mode-option"
+                  :class="!isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
+                  @click="switchMode('bad_review')"
+                >
+                  差评
+                </button>
+                <button
+                  class="review-mode-option"
+                  :class="isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
+                  @click="switchMode('quality_refund')"
+                >
+                  品退
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div class="mt-4 grid gap-2.5" :class="isQualityRefundMode ? 'lg:grid-cols-[96px_minmax(0,1fr)_148px]' : 'lg:grid-cols-[96px_148px]'">
-            <div>
-              <label class="field-label">天数</label>
-              <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
-            </div>
-            <div v-if="isQualityRefundMode">
-              <label class="field-label">原因过滤</label>
-              <input
-                v-model.trim="qualityReasonFilter"
-                type="text"
-                placeholder="输入关键字"
-                class="field-input"
-              />
-            </div>
-            <button
-              :disabled="store.loading || licenseBlocked"
-              class="action-btn action-btn-primary min-h-[40px]"
-              @click="handleFetchCurrentMode"
+            <div
+              data-testid="review-filter-grid"
+              class="review-filter-grid"
             >
-              {{
-                store.loading
-                  ? "处理中..."
-                  : isQualityRefundMode
-                    ? "获取品退"
-                    : "获取差评"
-              }}
-            </button>
+              <div>
+                <label class="field-label">天数</label>
+                <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
+              </div>
+              <div class="review-filter-field">
+                <label class="field-label">{{ isQualityRefundMode ? '原因过滤' : '匹配说明' }}</label>
+                <input
+                  v-if="isQualityRefundMode"
+                  v-model.trim="qualityReasonFilter"
+                  type="text"
+                  placeholder="输入关键字"
+                  class="field-input"
+                />
+                <div v-else class="review-helper-card">
+                  差评模式会先补齐缓存，再按商品、SKU、昵称与时间评分匹配。
+                </div>
+              </div>
+              <button
+                data-testid="review-primary-action"
+                :disabled="store.loading || licenseBlocked"
+                class="review-primary-action action-btn action-btn-primary"
+                @click="handleFetchCurrentMode"
+              >
+                {{
+                  store.loading
+                    ? "处理中..."
+                    : isQualityRefundMode
+                      ? "获取品退"
+                      : "获取差评"
+                }}
+              </button>
+            </div>
           </div>
-
-          <p class="mt-2 text-[11px] leading-5 text-slate-500">
-            {{ isQualityRefundMode ? '品退接口返回订单号时可直接发货。' : '差评模式会先确保缓存覆盖。' }}
-          </p>
         </div>
 
         <div
