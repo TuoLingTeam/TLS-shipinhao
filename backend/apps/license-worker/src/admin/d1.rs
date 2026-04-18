@@ -1,4 +1,4 @@
-//! 管理员接口：D1 与 `backend/db/schema.sql` 中 `generated_keys` / `activations` 对齐。
+//! 管理员接口：D1 与 `backend/infra/db/schema.sql` 中 `generated_keys` / `activations` 对齐。
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsValue;

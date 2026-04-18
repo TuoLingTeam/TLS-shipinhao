@@ -1,9 +1,9 @@
 # TLS-shipinhao 卡密后端
 
-**正式部署入口为本目录**：在 `backend/` 执行 `npx wrangler deploy`（`wrangler.toml` 会编译 `backend/worker/license-worker` 并指向其 `worker/license-worker/build/worker/shim.mjs`）。
+**正式部署入口为本目录**：在 `backend/` 执行 `npx wrangler deploy`（`wrangler.toml` 会编译 `backend/apps/license-worker` 并指向其 `apps/license-worker/build/worker/shim.mjs`）。
 
-- **管理后台页面**唯一源文件：`backend/worker/license-worker/assets/admin.html`（由 Rust Worker 在编译期 `include_str!` 嵌入）。
-- **D1 schema / 迁移**：`backend/db/`。
+- **管理后台页面**唯一源文件：`backend/apps/license-worker/assets/admin.html`（由 Rust Worker 在编译期 `include_str!` 嵌入）。
+- **D1 schema / 迁移**：`backend/infra/db/`。
 - **遗留 JS 壳**：已从仓库移除，当前仅保留 Rust Worker 作为正式实现。
 
 当前线上路由：
@@ -29,7 +29,7 @@ https://sphapi.199908.top/admin
 - 管理员查看卡密列表与统计：`POST /api/admin/list`
 - 管理员吊销卡密：`POST /api/admin/revoke`
 
-**说明**：请使用本目录 `wrangler.toml` 部署 **Rust Worker**；管理员接口由 `backend/worker/license-worker` 内 D1 逻辑提供（需配置 `ADMIN_SECRET` 与 D1）。
+**说明**：请使用本目录 `wrangler.toml` 部署 **Rust Worker**；管理员接口由 `backend/apps/license-worker` 内 D1 逻辑提供（需配置 `ADMIN_SECRET` 与 D1）。
 - 管理员重置设备绑定：`POST /api/admin/device/rebind`
 - 管理员吊销短期会话：`POST /api/admin/device/revoke_sessions`
 - 管理员查看授权审计：`POST /api/admin/audit/list`
@@ -58,7 +58,7 @@ npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
 npx wrangler deploy
 ```
 
-（`wrangler` 会在部署前执行 `[build]`，在 `backend/worker/license-worker` 内运行 `worker-build`。）
+（`wrangler` 会在部署前执行 `[build]`，在 `backend/apps/license-worker` 内运行 `worker-build`。）
 
 ## 线上升级到授权协议 V2
 

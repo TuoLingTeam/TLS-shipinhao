@@ -45,12 +45,12 @@ case "$SCRIPT_PATH" in
   *) SCRIPT_PATH="$(pwd)/$SCRIPT_PATH" ;;
 esac
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
-BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$BACKEND_DIR/.." && pwd)
 TEMP_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/license-worker-workspace.XXXXXX")
-REAL_WORKER_DIR="$BACKEND_DIR/worker/license-worker"
+REAL_WORKER_DIR="$BACKEND_DIR/apps/license-worker"
 TEMP_BACKEND_DIR="$TEMP_WORKSPACE/backend"
-TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/worker/license-worker"
+TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/apps/license-worker"
 
 cleanup() {
   rm -rf "$TEMP_WORKSPACE"
@@ -64,10 +64,10 @@ log "Using cargo: $(command -v cargo)"
 log "Using rustc: $(command -v rustc)"
 log "Working backend dir: $BACKEND_DIR"
 
-mkdir -p "$TEMP_BACKEND_DIR/crates/core" "$TEMP_BACKEND_DIR/worker"
+mkdir -p "$TEMP_BACKEND_DIR/shared" "$TEMP_BACKEND_DIR/modules" "$TEMP_BACKEND_DIR/apps"
 cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"
-cp -R "$BACKEND_DIR/crates/core/api-contracts" "$TEMP_BACKEND_DIR/crates/core/api-contracts"
-cp -R "$BACKEND_DIR/crates/license-service" "$TEMP_BACKEND_DIR/crates/license-service"
+mkdir -p "$TEMP_BACKEND_DIR/shared" && cp -R "$BACKEND_DIR/shared/api-contracts" "$TEMP_BACKEND_DIR/shared/api-contracts"
+cp -R "$BACKEND_DIR/modules/license-service" "$TEMP_BACKEND_DIR/modules/license-service"
 
 if [ -f "$REPO_ROOT/Cargo.lock" ]; then
   cp "$REPO_ROOT/Cargo.lock" "$TEMP_WORKSPACE/Cargo.lock"
@@ -77,9 +77,9 @@ cat > "$TEMP_WORKSPACE/Cargo.toml" <<'EOF'
 [workspace]
 resolver = "2"
 members = [
-  "backend/worker/license-worker",
-  "backend/crates/core/api-contracts",
-  "backend/crates/license-service",
+  "backend/apps/license-worker",
+  "backend/shared/api-contracts",
+  "backend/modules/license-service",
 ]
 
 [workspace.package]
@@ -99,14 +99,14 @@ tokio = { version = "1", features = ["full"] }
 EOF
 
 cd "$TEMP_WORKER_DIR"
-WORKER_BUILD_ROOT="$BACKEND_DIR/tmp/worker-build-0.1"
+WORKER_BUILD_ROOT="$BACKEND_DIR/.cache/worker-build-0.1"
 WORKER_BUILD_BIN="$WORKER_BUILD_ROOT/bin/worker-build"
 if [ ! -x "$WORKER_BUILD_BIN" ]; then
   log "Installing worker-build into $WORKER_BUILD_ROOT ..."
   mkdir -p "$WORKER_BUILD_ROOT"
   cargo install worker-build --version "^0.1" --locked --root "$WORKER_BUILD_ROOT"
 fi
-WASM_BINDGEN_ROOT="$BACKEND_DIR/tmp/wasm-bindgen-0.2.118"
+WASM_BINDGEN_ROOT="$BACKEND_DIR/.cache/wasm-bindgen-0.2.118"
 WASM_BINDGEN_BIN="$WASM_BINDGEN_ROOT/bin/wasm-bindgen"
 if [ ! -x "$WASM_BINDGEN_BIN" ]; then
   log "Installing wasm-bindgen-cli 0.2.118 into $WASM_BINDGEN_ROOT ..."

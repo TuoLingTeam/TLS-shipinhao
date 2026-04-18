@@ -1,0 +1,16 @@
+{
+  "app": "TLS-shipinhao",
+  "version": "5.1.0",
+  "build": 50100,
+  "mandatory": false,
+  "platform": "mac,windows",
+  "download_url": "https://example.invalid/downloads/TLS-shipinhao-5.1.0",
+  "tutorial_url": "https://example.invalid/tutorial/update",
+  "notes": [
+    "灰度发布默认 10%，如需全量请将 rolling.percentage 调整为 100。",
+    "如需紧急回滚，可回退 version 并设置 mandatory=true。"
+  ],
+  "rolling": {
+    "percentage": 10
+  }
+}

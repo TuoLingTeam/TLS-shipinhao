@@ -89,13 +89,13 @@ backend/dist/
 # Local runtime secrets
 cookie.txt
 tests/artifacts/
-backend/tmp/
-backend/deploy/release/
 .worktrees/
 tests/integration/__pycache__/
 .env
 .env.*
 !.env.example
 
-backend/worker/license-worker/build/
 backend/.wrangler/
+
+backend/apps/license-worker/build/
+backend/.cache/
