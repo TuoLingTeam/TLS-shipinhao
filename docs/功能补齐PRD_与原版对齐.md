@@ -130,7 +130,7 @@
 ### 4.2 应用信息常量（Rust 实现）
 
 ```rust
-// crates/core/domain-core/src/brand.rs
+// shared/domain-core/src/brand.rs
 pub const APP_NAME: &str = "驼铃·视频小店差评处理";
 pub const APP_NAME_EN: &str = "TLS-shipinhao";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -537,7 +537,7 @@ pub struct RuntimeGrant {
 #### 5.7.1 三平台实现
 
 ```rust
-// crates/core/security-core/src/device_id.rs
+// shared/security-core/src/device_id.rs
 use std::process::Command;
 
 pub fn collect_raw_fingerprint() -> String {
@@ -2055,7 +2055,7 @@ app.emit("risk-control-cooldown", CooldownEvent { ... })?;      // 新增
 ### 13.1 OrderDoc（完整版）
 
 ```rust
-// crates/core/domain-core/src/order.rs
+// shared/domain-core/src/order.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderDoc {
     pub common_info: CommonInfo,
@@ -2168,7 +2168,7 @@ export interface OrderCacheStatus {
 ### 14.2 平台化 User-Agent ⭐
 
 ```rust
-// crates/core/security-core/src/http_headers.rs
+// shared/security-core/src/http_headers.rs
 const WINDOWS_UA: &str = 
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
      (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36";
@@ -2483,7 +2483,7 @@ M2 授权安全 → M3 数据兼容 → M6 回归测试
 | `authorize_task(task)` | `LicenseService::authorize_task` | 同上 |
 | `check_stored_license()` | `LicenseService::verify_with_refresh` | 同上 |
 | `check_stored_license_local()` | `LicenseService::verify_local` | 同上 |
-| `get_device_id()` | `security_core::device_id::get_device_id` | `crates/core/security-core/` |
+| `get_device_id()` | `security_core::device_id::get_device_id` | `shared/security-core/` |
 | `verify_signed_lease()` | `LeaseVerifier::verify` | 同上 |
 | `validate_runtime_continuity()` | `IntegrityValidator::validate` | 同上 |
 | `OrderCacheRepository` | `SqliteOrderCacheRepository` | `apps/desktop/src/adapters/` |

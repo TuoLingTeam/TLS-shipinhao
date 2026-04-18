@@ -191,7 +191,7 @@ graph LR
 把访问微信小店接口的 `User-Agent` 与 `sec-ch-ua-platform` 按宿主平台自动切换，与 Python 4.3.0 保持一致，降低被风控识别为异常客户端的概率。
 
 **范围 & 实现要点**
-- 新增 `crates/core/security-core/src/http_headers.rs`
+- 新增 `shared/security-core/src/http_headers.rs`
 - 常量：`WINDOWS_UA`、`MACOS_UA`、`get_user_agent()`、`get_sec_ch_ua_platform()`
 - 在 `apps/desktop/src/adapters/` 下所有 HTTP 客户端（`http_order_search.rs`、`http_review_source.rs`、`http_delivery_gateway.rs`、`http_quality_refund_source.rs`、`http_license_client.rs`）初始化请求头时统一调用
 - 保留覆盖能力：允许注入自定义 UA，方便单元测试
@@ -207,11 +207,11 @@ graph LR
 - 集成测试：Mock HTTP Server 捕获请求头做断言
 
 **涉及文件**
-- `crates/core/security-core/src/http_headers.rs` (新增)
+- `shared/security-core/src/http_headers.rs` (新增)
 - `apps/desktop/src/adapters/http_*.rs` (修改)
 
 **风险 / 澄清点**
-- Chrome 144 的 UA 串随时间需要维护；建议 `crates/core/security-core` 暴露一个常量文件，年度更新一次
+- Chrome 144 的 UA 串随时间需要维护；建议 `shared/security-core` 暴露一个常量文件，年度更新一次
 
 ---
 
@@ -474,7 +474,7 @@ graph LR
 - `crates/license-service/src/lease.rs`
 - `crates/license-service/src/runtime.rs`
 - `crates/license-service/src/tasks.rs`
-- `crates/core/api-contracts/src/lib.rs`（新增前端契约）
+- `shared/api-contracts/src/lib.rs`（新增前端契约）
 - `ui/src/types/license.ts`（前端类型 + `LICENSE_STATE_LABELS`）
 
 ---
@@ -571,7 +571,7 @@ graph LR
 在 macOS / Windows / Linux 上稳定采集硬件指纹，归一为 `SHA256(raw)[..8]` 的 16 位 hex 字符串。
 
 **范围 & 实现要点**
-- `crates/core/security-core/src/device_id.rs`
+- `shared/security-core/src/device_id.rs`
   - macOS：`ioreg -rd1 -c IOPlatformExpertDevice` 解析 `IOPlatformSerialNumber`
   - Windows：`wmic csproduct get UUID` → 失败回退 `powershell -Command "(Get-CimInstance Win32_ComputerSystemProduct).UUID"`
   - Linux：`/etc/machine-id` / `/var/lib/dbus/machine-id`
@@ -590,8 +590,8 @@ graph LR
 - 手工：在真机记录 `raw → hashed` 样本
 
 **涉及文件**
-- `crates/core/security-core/src/device_id.rs`
-- `crates/core/security-core/Cargo.toml`（`sysinfo` / `sha2` / `hex`）
+- `shared/security-core/src/device_id.rs`
+- `shared/security-core/Cargo.toml`（`sysinfo` / `sha2` / `hex`）
 
 **风险 / 澄清点**
 - 企业 MDM 环境下 `ioreg` 可能返回空值；需设计可展示"兜底指纹"标识用于排查
@@ -722,7 +722,7 @@ graph LR
 启动时 + 关键业务前，依据签名 Manifest 校验关键文件的 SHA256，发现篡改立即进入 `compromised` 状态并禁用业务功能。
 
 **范围 & 实现要点**
-- `crates/core/security-core/src/integrity.rs`
+- `shared/security-core/src/integrity.rs`
   - `SignedManifest { payload, signature }`
   - `validate_runtime_continuity() -> Result<(), IntegrityError>`
 - 常量：`INTEGRITY_MANIFEST_FILE_NAME = "integrity_manifest.json"`、单独公钥 `INTEGRITY_MANIFEST_PUBLIC_KEY`
@@ -741,8 +741,8 @@ graph LR
 - [ ] 触发 `integrity-compromised` 事件后，前端进入警告态并禁用所有业务按钮
 
 **涉及文件**
-- `crates/core/security-core/src/integrity.rs`
-- `crates/tooling/xtask/` 新增 `generate-manifest` 子命令（打包时生成并签名 manifest）
+- `shared/security-core/src/integrity.rs`
+- `infra/tooling/xtask/` 新增 `generate-manifest` 子命令（打包时生成并签名 manifest）
 - `ui/src/components/layout/IntegrityWarning.vue`（新）
 
 **风险 / 澄清点**
@@ -796,7 +796,7 @@ graph LR
 | 标签 | `epic:M2` `area:worker` `layer:worker` `risk:critical` |
 
 **技术目标**  
-在 `backend/worker/license-worker/`（Cloudflare Worker + D1）实现 5 个端点，与 Python 版签名协议对齐。
+在 `backend/apps/license-worker/`（Cloudflare Worker + D1）实现 5 个端点，与 Python 版签名协议对齐。
 
 **范围 & 实现要点**
 - 端点：
@@ -817,9 +817,9 @@ graph LR
 - [ ] 审计表记录每次 activate/refresh/revoke
 
 **涉及文件**
-- `backend/worker/license-worker/src/*`
-- `backend/worker/license-worker/wrangler.toml`
-- `backend/worker/license-worker/migrations/*.sql`
+- `backend/apps/license-worker/src/*`
+- `backend/apps/license-worker/wrangler.toml`
+- `backend/apps/license-worker/migrations/*.sql`
 - `docs/license-protocol-v3.md`（Spike 输出）
 
 **风险 / 澄清点**
@@ -1259,7 +1259,7 @@ graph LR
 - [ ] 前端列表可按 reason 过滤
 
 **涉及文件**
-- `crates/core/domain-core/src/lib.rs`
+- `shared/domain-core/src/lib.rs`
 - `apps/desktop/src/adapters/http_quality_refund_source.rs`
 - `ui/src/views/ReviewMatchView.vue`
 
@@ -1386,7 +1386,7 @@ graph LR
 还原 Python 版品牌："驼铃·视频小店差评处理 {version}"、作者微信 `TLS-801`、翠绿驼铃图标。
 
 **范围 & 实现要点**
-- `crates/core/domain-core/src/brand.rs`
+- `shared/domain-core/src/brand.rs`
   - `APP_NAME = "驼铃·视频小店差评处理"`、`APP_NAME_EN = "TLS-shipinhao"`、`AUTHOR_WECHAT = "TLS-801"`、`get_window_title()`
 - `apps/desktop/tauri.conf.json`：`productName`、`windows[0].title`
 - `ui/src/constants/brand.ts` 同名常量
@@ -1401,7 +1401,7 @@ graph LR
 - [ ] SettingsView 展示作者微信
 
 **涉及文件**
-- `crates/core/domain-core/src/brand.rs`
+- `shared/domain-core/src/brand.rs`
 - `apps/desktop/tauri.conf.json`
 - `apps/desktop/icons/*`
 - `ui/src/constants/brand.ts`
@@ -1686,7 +1686,7 @@ graph LR
 - [ ] 差异原因可归因（昵称算法差异、可回复期差异、其他）
 
 **涉及文件**
-- `crates/tooling/xtask/src/bench_match.rs`
+- `infra/tooling/xtask/src/bench_match.rs`
 - `tests/fixtures/real_user_snapshot/**`
 
 **风险 / 澄清点**
@@ -1727,13 +1727,13 @@ graph LR
 - [ ] 报告写入 `docs/perf-report-{date}.md`
 
 **涉及文件**
-- `crates/tooling/xtask/src/perf.rs`
+- `infra/tooling/xtask/src/perf.rs`
 - `docs/perf-report-2026-xx.md`
 ========
 - [ ] 报告写入 `docs/reports/perf-report-{date}.md`
 
 **涉及文件**
-- `crates/tooling/xtask/src/perf.rs`
+- `infra/tooling/xtask/src/perf.rs`
 - `docs/reports/perf-report-2026-xx.md`
 >>>>>>>> Stashed changes:docs/product/任务卡片_PRD补齐.md
 
@@ -1774,10 +1774,10 @@ graph LR
 **涉及文件**
 - `.github/workflows/release.yml`
 <<<<<<<< Updated upstream:docs/任务卡片_PRD补齐.md
-- `crates/tooling/xtask/src/release.rs`
+- `infra/tooling/xtask/src/release.rs`
 - `docs/release-runbook.md`
 ========
-- `crates/tooling/xtask/src/release.rs`
+- `infra/tooling/xtask/src/release.rs`
 - `docs/operations/release-runbook.md`
 >>>>>>>> Stashed changes:docs/product/任务卡片_PRD补齐.md
 
