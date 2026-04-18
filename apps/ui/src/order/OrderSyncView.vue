@@ -85,18 +85,18 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <section class="hero-panel subsystem-hero p-4 lg:p-5">
-      <div class="flex flex-col gap-4">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+  <div class="space-y-3">
+    <section class="hero-panel subsystem-hero p-3.5 lg:p-4">
+      <div data-testid="order-hero-shell" class="order-hero-shell">
+        <div class="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
             <span class="card-eyebrow">ORDER CACHE</span>
             <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">订单管理</h2>
             <p class="subsystem-lead mt-1">
               保留缓存维护、本地检索与订单列表三项核心能力，减少无效占位。
             </p>
           </div>
-          <div class="rounded-2xl border border-brand-tint bg-white/80 px-3.5 py-3 text-sm text-brand-deep lg:max-w-[320px]">
+          <div class="order-hero-note lg:max-w-[300px]">
             <div class="font-semibold">缓存状态</div>
             <div class="mt-1 leading-5">{{ activeCoverageLabel }}</div>
           </div>
@@ -125,32 +125,36 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section class="surface-panel p-4 lg:p-5">
+    <section data-testid="order-sync-shell" class="order-sync-shell surface-panel p-3.5 lg:p-4">
       <div class="subsystem-section-header">
         <div class="min-w-0">
           <div class="text-base font-semibold text-slate-900">同步最近 30 天缓存</div>
-          <p class="mt-1 text-sm leading-6 text-slate-500">
+          <p class="mt-0.5 text-[13px] leading-5 text-slate-500">
             仅维护缓存，不额外展示冗余面板。同步后评价匹配会直接复用这份缓存。
           </p>
         </div>
         <button
           :disabled="store.loading || licenseBlocked"
-          class="action-btn action-btn-primary min-w-[148px]"
+          class="action-btn action-btn-primary min-w-[136px]"
           @click="handleSync"
         >
           {{ store.loading ? "同步中..." : "立即同步缓存" }}
         </button>
       </div>
-      <div class="mt-4 grid grid-cols-1 gap-2.5" :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'">
-        <div class="rounded-[16px] border border-slate-200/80 bg-slate-50 px-3.5 py-3">
+      <div
+        data-testid="order-stats-grid"
+        class="order-stats-grid mt-3 grid grid-cols-1"
+        :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'"
+      >
+        <div class="order-stat-card">
           <div class="text-[11px] text-slate-400">当前列表</div>
           <div class="mt-1 text-lg font-semibold tracking-tight text-slate-900">{{ visibleOrders.length }}</div>
         </div>
-        <div class="rounded-[16px] border border-slate-200/80 bg-slate-50 px-3.5 py-3">
+        <div class="order-stat-card">
           <div class="text-[11px] text-slate-400">买家数</div>
           <div class="mt-1 text-lg font-semibold tracking-tight text-slate-900">{{ uniqueBuyerCount || "--" }}</div>
         </div>
-        <div class="rounded-[16px] border border-slate-200/80 bg-slate-50 px-3.5 py-3">
+        <div class="order-stat-card">
           <div class="text-[11px] text-slate-400">总金额</div>
           <div class="mt-1 text-lg font-semibold tracking-tight text-slate-900">{{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}</div>
         </div>
@@ -171,11 +175,11 @@ onMounted(async () => {
       :description="store.syncMessage || '后端会先维护最近 30 天富缓存，再刷新当前订单列表。'"
     />
 
-    <section v-if="store.loading" class="surface-panel space-y-4 p-4 lg:p-5">
-      <div class="flex items-center justify-between">
+    <section v-if="store.loading" class="order-progress-shell surface-panel space-y-3 p-3.5 lg:p-4">
+      <div class="flex items-start justify-between gap-3">
         <div>
           <div class="text-base font-semibold text-slate-900">实时同步进度</div>
-          <div class="mt-1 text-sm text-slate-500">{{ store.syncMessage || "正在准备同步任务…" }}</div>
+          <div class="mt-0.5 text-[13px] leading-5 text-slate-500">{{ store.syncMessage || "正在准备同步任务…" }}</div>
         </div>
         <div class="text-2xl font-semibold tracking-tight text-slate-900">{{ store.syncProgress }}%</div>
       </div>
@@ -185,11 +189,11 @@ onMounted(async () => {
           :style="{ width: `${store.syncProgress}%` }"
         ></div>
       </div>
-      <div class="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+      <div class="order-step-grid grid grid-cols-1 lg:grid-cols-3">
         <div
           v-for="step in syncSteps"
           :key="step.key"
-          class="rounded-[16px] border px-3.5 py-3"
+          class="order-step-card rounded-[14px] border px-3 py-2.5"
           :class="
             step.status === '已完成'
               ? 'border-brand-tint bg-brand-soft/70'
@@ -204,34 +208,34 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-else-if="visibleOrders.length > 0" class="surface-panel overflow-hidden">
-      <div class="flex flex-col gap-3 border-b border-slate-200/70 px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between">
+    <section v-else-if="visibleOrders.length > 0" data-testid="order-table-shell" class="order-table-shell surface-panel overflow-hidden">
+      <div class="order-list-header flex flex-col gap-2.5 border-b border-slate-200/70 px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div class="text-base font-semibold text-slate-900">本地订单列表</div>
-          <div class="mt-1 text-sm text-slate-500">
+          <div class="mt-0.5 text-[13px] leading-5 text-slate-500">
             当前展示 {{ visibleOrders.length }} 条{{ searchKeyword ? "筛选结果" : "缓存订单" }}。
           </div>
         </div>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <span class="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+        <div class="flex flex-wrap gap-1.5 text-[11px]">
+          <span class="order-list-chip rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
             订单 {{ visibleOrders.length }}
           </span>
-          <span class="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+          <span class="order-list-chip rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
             买家 {{ uniqueBuyerCount }}
           </span>
-          <span class="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+          <span class="order-list-chip rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
             金额 {{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}
           </span>
         </div>
       </div>
       <div class="data-table-shell overflow-x-auto border-0 shadow-none">
-        <table class="w-full min-w-[860px] text-sm">
+        <table class="order-table w-full min-w-[860px] text-sm">
           <thead class="table-head text-slate-600">
             <tr>
-              <th class="table-head-sticky px-4 py-3.5 text-left font-semibold">订单号</th>
-              <th class="table-head-sticky px-4 py-3.5 text-left font-semibold">买家</th>
-              <th class="table-head-sticky px-4 py-3.5 text-left font-semibold">收件人</th>
-              <th class="table-head-sticky px-4 py-3.5 text-right font-semibold">金额</th>
+              <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">订单号</th>
+              <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">买家</th>
+              <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">收件人</th>
+              <th class="table-head-sticky px-4 py-2.5 text-right font-semibold">金额</th>
             </tr>
           </thead>
           <tbody>
@@ -240,10 +244,10 @@ onMounted(async () => {
               :key="o.order_id"
               class="table-row border-t border-slate-100/80 transition-colors"
             >
-              <td class="px-4 py-3.5 font-mono text-xs text-slate-700">{{ o.order_id }}</td>
-              <td class="px-4 py-3.5 font-medium text-slate-800">{{ o.buyer_name }}</td>
-              <td class="px-4 py-3.5 text-slate-700">{{ o.receiver_name }}</td>
-              <td class="px-4 py-3.5 text-right font-semibold text-slate-900">{{ formatCent(o.amount_cent) }}</td>
+              <td class="order-id-cell px-4 py-2.5 font-mono text-xs text-slate-700">{{ o.order_id }}</td>
+              <td class="px-4 py-2.5 font-medium text-slate-800">{{ o.buyer_name }}</td>
+              <td class="px-4 py-2.5 text-slate-700">{{ o.receiver_name }}</td>
+              <td class="px-4 py-2.5 text-right font-semibold text-slate-900">{{ formatCent(o.amount_cent) }}</td>
             </tr>
           </tbody>
         </table>

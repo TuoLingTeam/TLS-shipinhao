@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrderSyncView from "./OrderSyncView.vue";
 import { useAppStore } from "../app.store";
@@ -16,8 +16,11 @@ vi.mock("../order/useOrder", () => ({
 }));
 
 describe("OrderSyncView", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
 
     const appStore = useAppStore();
     appStore.setLicenseState("active");
@@ -46,7 +49,7 @@ describe("OrderSyncView", () => {
   it("keeps only the core order components and removes redundant side panels", () => {
     const wrapper = mount(OrderSyncView, {
       global: {
-        plugins: [createPinia()],
+        plugins: [pinia],
         stubs: {
           LoadingState: true,
           EmptyState: true,
@@ -59,5 +62,24 @@ describe("OrderSyncView", () => {
     expect(wrapper.text()).not.toContain("缓存统计");
     expect(wrapper.text()).not.toContain("本地检索状态");
     expect(wrapper.get('[data-testid="order-chipbar"]').classes()).toContain("subsystem-chipbar");
+  });
+
+
+  it("uses compact shells for order controls, stats, and table density", () => {
+    const wrapper = mount(OrderSyncView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          LoadingState: true,
+          EmptyState: true,
+        },
+      },
+    });
+
+    expect(wrapper.get('[data-testid="order-hero-shell"]').classes()).toContain("order-hero-shell");
+    expect(wrapper.get('[data-testid="order-sync-shell"]').classes()).toContain("order-sync-shell");
+    expect(wrapper.get('[data-testid="order-stats-grid"]').classes()).toContain("order-stats-grid");
+    expect(wrapper.findAll('.order-stat-card')).toHaveLength(3);
+    expect(wrapper.get('[data-testid="order-table-shell"]').classes()).toContain("order-table-shell");
   });
 });
