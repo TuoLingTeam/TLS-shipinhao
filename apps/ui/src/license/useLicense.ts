@@ -10,6 +10,8 @@ type LicensePayload = {
   license_key?: string | null;
   license_expires_at?: string | null;
   last_verified_at?: string | null;
+  /** 后端探测到本地 profile 有卡密但 Lease 容器丢失时为 true，前端据此自动远端恢复。 */
+  needs_restore?: boolean;
 };
 
 export function useLicense() {
@@ -55,11 +57,24 @@ export function useLicense() {
     return result;
   }
 
+  /**
+   * 启动时调用一次：仅在后端判定为"半孤立 profile"时自动远端 verify 恢复 Lease。
+   * - 正常已授权用户不会打扰（只读 get_license_status）
+   * - 卡密还在有效期但 Lease 丢失的场景会在有网时无感恢复
+   */
+  async function restoreStoredLicenseIfNeeded() {
+    const snapshot = await loadStoredLicenseStatus();
+    if (!snapshot?.needs_restore || !snapshot.license_key) return snapshot;
+    const verified = await verifyLicense(snapshot.license_key);
+    return verified ?? snapshot;
+  }
+
   return {
     activateLicense,
     verifyLicense,
     loadStoredLicenseStatus,
     refreshStoredLicenseStatus,
+    restoreStoredLicenseIfNeeded,
     activateLoading: activate.loading,
     verifyLoading: verify.loading,
     loadStoredLoading: loadStored.loading,

@@ -490,11 +490,25 @@ fn build_license_status_payload(
     } else {
         runtime.license_key.clone()
     };
+    // 半孤立场景：本地 license.json 还有卡密，但 Keychain/加密文件里的 Lease 丢失
+    // （用户换机、清理系统密钥环、或凭据存储回退路径变更等）。此时若仍返回
+    // `invalid` / `not_found`，UI 只能展示"未激活 / 未发现租约"，既无法引导用户
+    // 重新激活，也无法复用已有的卡密自愈。统一降级成 `reactivation_required`，
+    // 前端据此触发一次远端 verify 恢复 Lease，或引导用户"刷新状态"。
+    let needs_restore = runtime.license_key.trim().is_empty()
+        && !profile.license_key.trim().is_empty()
+        && matches!(
+            runtime.reason,
+            LicenseState::NotFound | LicenseState::Invalid
+        );
+
     let license_state = if matches!(runtime.reason, LicenseState::NotFound)
         && runtime.license_key.trim().is_empty()
         && profile.license_key.trim().is_empty()
     {
         "invalid".to_string()
+    } else if needs_restore {
+        "reactivation_required".to_string()
     } else {
         state::runtime_state_to_license_state(runtime)
     };
@@ -517,6 +531,7 @@ fn build_license_status_payload(
         "license_state": license_state,
         "license_expires_at": license_expires_at,
         "last_verified_at": last_verified_at,
+        "needs_restore": needs_restore,
     })
 }
 
@@ -529,6 +544,7 @@ mod tests {
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
     use std::path::PathBuf;
+    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -569,6 +585,8 @@ mod tests {
             task_grant_cache: license_service::TaskGrantCache::new(),
             runtime_license_state: Mutex::new(RuntimeState::reason_only(LicenseState::Invalid)),
             license_profile: Mutex::new(StoredLicenseProfile::default()),
+            batch_delivery_cancel: Arc::new(AtomicBool::new(false)),
+            cookie_health: Mutex::new(crate::state::CookieHealthSnapshot::default()),
         }
     }
 
@@ -745,5 +763,40 @@ mod tests {
         assert_eq!(payload["license_state"], "renewal_due");
         assert_eq!(payload["license_expires_at"], "2030-01-01T00:00:00Z");
         assert_eq!(payload["last_verified_at"], "2026-04-16T10:00:00Z");
+        assert_eq!(payload["needs_restore"], false);
+    }
+
+    #[test]
+    fn build_license_status_flags_half_isolated_profile_for_restore() {
+        // 真实 bug 场景：license.json 里有卡密 + 到期信息，但 Lease 容器
+        // （Keychain / 加密文件）缺失 → runtime.reason 被降级为 NotFound。
+        // 期望：暴露 needs_restore=true 并把 license_state 统一为 reactivation_required，
+        // 让前端能自动触发一次远端 verify 恢复 Lease。
+        let profile = StoredLicenseProfile {
+            license_key: "TLS-Q2PR-YFUB-SCBU-3ISK".into(),
+            license_state: "active".into(),
+            license_expires_at: Some("2120-08-24T03:19:29+00:00".into()),
+            last_verified_at: Some("2026-04-17T15:37:05Z".into()),
+        };
+        let runtime = RuntimeState::reason_only(LicenseState::NotFound);
+
+        let payload = build_license_status_payload(&profile, &runtime);
+        assert_eq!(payload["configured"], true);
+        assert_eq!(payload["license_key"], "TLS-Q2PR-YFUB-SCBU-3ISK");
+        assert_eq!(payload["license_state"], "reactivation_required");
+        assert_eq!(payload["license_expires_at"], "2120-08-24T03:19:29+00:00");
+        assert_eq!(payload["last_verified_at"], "2026-04-17T15:37:05Z");
+        assert_eq!(payload["needs_restore"], true);
+    }
+
+    #[test]
+    fn build_license_status_returns_invalid_when_everything_is_empty() {
+        let profile = StoredLicenseProfile::default();
+        let runtime = RuntimeState::reason_only(LicenseState::NotFound);
+
+        let payload = build_license_status_payload(&profile, &runtime);
+        assert_eq!(payload["configured"], false);
+        assert_eq!(payload["license_state"], "invalid");
+        assert_eq!(payload["needs_restore"], false);
     }
 }

@@ -69,6 +69,26 @@ where
     G: BatchDeliveryGateway,
     R: BatchDeliveryRuntimeGuard,
 {
+    run_batch_delivery_with_hooks(items, gateway, runtime_guard, |_, _| {}, || false)
+}
+
+/// 与 `run_batch_delivery` 行为完全一致，但允许调用方观察每条发货的结果并主动请求取消。
+///
+/// - `on_step`：每条发货完成后被调用一次，参数为最新步骤结果和截至当前的 `BatchDeliveryReport`；
+/// - `should_cancel`：每次循环前被调用，返回 `true` 则提前中止剩余条目，`report.stopped = true`。
+pub fn run_batch_delivery_with_hooks<G, R, O, C>(
+    items: &[BatchDeliveryItem],
+    gateway: &mut G,
+    runtime_guard: &mut R,
+    mut on_step: O,
+    should_cancel: C,
+) -> BatchDeliveryReport
+where
+    G: BatchDeliveryGateway,
+    R: BatchDeliveryRuntimeGuard,
+    O: FnMut(&BatchDeliveryStepResult, &BatchDeliveryReport),
+    C: Fn() -> bool,
+{
     let total_count = items.len();
     let mut report = BatchDeliveryReport {
         total_count,
@@ -83,6 +103,10 @@ where
 
     for (offset, item) in items.iter().enumerate() {
         let index = offset + 1;
+        if should_cancel() {
+            report.stopped = true;
+            break;
+        }
         if index == 1 || offset % BATCH_DELIVERY_CONTINUITY_STEP == 0 {
             if let Err(error) = runtime_guard.validate_continuity(BATCH_DELIVERY_TASK_TYPE, index) {
                 report.failure_count = total_count.saturating_sub(report.success_count);
@@ -91,30 +115,33 @@ where
             }
         }
 
-        match gateway.update_single_order(&item.order_id, &item.tracking_number) {
+        let step = match gateway.update_single_order(&item.order_id, &item.tracking_number) {
             Ok(old_waybill) => {
                 report.success_count += 1;
-                report.steps.push(BatchDeliveryStepResult {
+                BatchDeliveryStepResult {
                     index,
                     order_id: item.order_id.clone(),
                     tracking_number: item.tracking_number.clone(),
                     status: BatchDeliveryStepStatus::Success,
                     old_waybill,
                     error_message: None,
-                });
+                }
             }
             Err(error) => {
                 report.failure_count += 1;
-                report.steps.push(BatchDeliveryStepResult {
+                BatchDeliveryStepResult {
                     index,
                     order_id: item.order_id.clone(),
                     tracking_number: item.tracking_number.clone(),
                     status: BatchDeliveryStepStatus::Failed,
                     old_waybill: None,
                     error_message: Some(error.to_string()),
-                });
+                }
             }
-        }
+        };
+
+        report.steps.push(step.clone());
+        on_step(&step, &report);
     }
 
     report

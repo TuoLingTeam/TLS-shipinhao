@@ -1,11 +1,16 @@
-use tauri::State;
+use std::sync::atomic::Ordering;
+
+use tauri::{AppHandle, Emitter, State};
 
 use crate::adapters::http_delivery_gateway::HttpDeliveryGateway;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_BATCH_DELIVERY;
-use desktop_services::delivery_batch_runner::{BatchDeliveryItem, BatchDeliveryRuntimeGuard};
+use desktop_services::delivery_batch_runner::{
+    run_batch_delivery_with_hooks, BatchDeliveryItem, BatchDeliveryReport,
+    BatchDeliveryRuntimeGuard, BatchDeliveryStepResult,
+};
 use domain_core::DeliveryUpdateResult;
 
 #[tauri::command(rename_all = "snake_case")]
@@ -42,6 +47,7 @@ pub async fn update_delivery(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn batch_delivery(
+    app: AppHandle,
     state: State<'_, AppState>,
     items: Vec<BatchDeliveryInput>,
 ) -> Result<BatchDeliveryOutput, AppError> {
@@ -63,21 +69,86 @@ pub async fn batch_delivery(
         })
         .collect();
 
+    // 每次开始批量前重置取消标志，避免上一次残留。
+    state.batch_delivery_cancel.store(false, Ordering::Relaxed);
+    let cancel_flag = state.batch_delivery_cancel.clone();
+    let total = batch_items.len();
+
+    // 启动事件：让前端立即切换到进度视图。
+    emit_batch_progress(
+        &app,
+        &BatchDeliveryProgressEvent {
+            phase: BatchDeliveryPhase::Started,
+            total_count: total,
+            success_count: 0,
+            failure_count: 0,
+            processed_count: 0,
+            step: None,
+            fatal_error: None,
+            stopped: false,
+        },
+    );
+
+    let app_clone = app.clone();
+    let cancel_for_task = cancel_flag.clone();
     let report = tokio::task::spawn_blocking(move || {
         let mut gateway = HttpDeliveryGateway::new_with_grant(cookie, magic, Some(grant.grant_id));
-        let mut guard = StaticGrantGuard { task_type: LICENSE_TASK_BATCH_DELIVERY.to_string() };
-        desktop_services::run_batch_delivery_flow(&batch_items, &mut gateway, &mut guard)
+        let mut guard = StaticGrantGuard {
+            task_type: LICENSE_TASK_BATCH_DELIVERY.to_string(),
+        };
+
+        run_batch_delivery_with_hooks(
+            &batch_items,
+            &mut gateway,
+            &mut guard,
+            |step, progress| {
+                let processed = progress.success_count + progress.failure_count;
+                emit_batch_progress(
+                    &app_clone,
+                    &BatchDeliveryProgressEvent {
+                        phase: BatchDeliveryPhase::Step,
+                        total_count: progress.total_count,
+                        success_count: progress.success_count,
+                        failure_count: progress.failure_count,
+                        processed_count: processed,
+                        step: Some(step.clone()),
+                        fatal_error: None,
+                        stopped: false,
+                    },
+                );
+            },
+            || cancel_for_task.load(Ordering::Relaxed),
+        )
     })
     .await
-    .map_err(|e| AppError::Message(e.to_string()))?
-    .map_err(AppError::Internal)?;
+    .map_err(|e| AppError::Message(e.to_string()))?;
 
-    Ok(BatchDeliveryOutput {
-        total_count: report.total_count,
-        success_count: report.success_count,
-        failure_count: report.failure_count,
-        fatal_error: report.fatal_error,
-    })
+    emit_batch_progress(
+        &app,
+        &BatchDeliveryProgressEvent {
+            phase: BatchDeliveryPhase::Completed,
+            total_count: report.total_count,
+            success_count: report.success_count,
+            failure_count: report.failure_count,
+            processed_count: report.success_count + report.failure_count,
+            step: None,
+            fatal_error: report.fatal_error.clone(),
+            stopped: report.stopped,
+        },
+    );
+
+    Ok(BatchDeliveryOutput::from_report(report))
+}
+
+/// 请求取消当前正在进行的批量发货。已派发的条目会跑完，但剩余条目会被跳过。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn cancel_batch_delivery(state: State<'_, AppState>) -> Result<bool, AppError> {
+    state.batch_delivery_cancel.store(true, Ordering::Relaxed);
+    Ok(true)
+}
+
+fn emit_batch_progress(app: &AppHandle, event: &BatchDeliveryProgressEvent) {
+    let _ = app.emit("batch-delivery-progress", event);
 }
 
 struct StaticGrantGuard {
@@ -102,9 +173,47 @@ pub struct BatchDeliveryInput {
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct BatchDeliveryOutput {
     pub total_count: usize,
     pub success_count: usize,
     pub failure_count: usize,
+    pub stopped: bool,
     pub fatal_error: Option<String>,
+    /// 逐条发货结果，按提交顺序排列。前端据此渲染失败明细、导出 CSV 与"仅重试失败项"。
+    pub steps: Vec<BatchDeliveryStepResult>,
+}
+
+impl BatchDeliveryOutput {
+    fn from_report(report: BatchDeliveryReport) -> Self {
+        Self {
+            total_count: report.total_count,
+            success_count: report.success_count,
+            failure_count: report.failure_count,
+            stopped: report.stopped,
+            fatal_error: report.fatal_error,
+            steps: report.steps,
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum BatchDeliveryPhase {
+    Started,
+    Step,
+    Completed,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+struct BatchDeliveryProgressEvent {
+    phase: BatchDeliveryPhase,
+    total_count: usize,
+    success_count: usize,
+    failure_count: usize,
+    processed_count: usize,
+    step: Option<BatchDeliveryStepResult>,
+    fatal_error: Option<String>,
+    stopped: bool,
 }

@@ -5,9 +5,10 @@ use reqwest::Url;
 use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::adapters::http_order_search::HttpOrderSearchClient;
 use crate::error::AppError;
 use crate::migration::{LegacyPythonMigrator, MigrationPaths, MigrationReport};
-use crate::state::{self, AppState};
+use crate::state::{self, AppState, CookieHealthSnapshot};
 
 const STORE_LOGIN_URL: &str = "https://store.weixin.qq.com/";
 const COOKIE_LOGIN_WINDOW_LABEL: &str = "cookie-login";
@@ -78,11 +79,147 @@ pub async fn set_cookie(
 pub async fn get_cookie_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
     let profile = state.cookie_profile.lock().await;
     let cookie_path = state.cookie_path.lock().await.clone();
+    let health = state.cookie_health.lock().await.clone();
     Ok(serde_json::json!({
         "configured": !profile.cookie_header.is_empty(),
         "has_biz_magic": profile.biz_magic.is_some(),
         "cookie_path": cookie_path.display().to_string(),
+        "health": health,
     }))
+}
+
+/// 对 Cookie 做一次轻量有效性探测：窗口极小的订单搜索请求。
+///
+/// 探测失败会把结果落在 `AppState.cookie_health`，供其它命令和前端指示器共享。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn check_cookie_health(
+    state: State<'_, AppState>,
+) -> Result<CookieHealthSnapshot, AppError> {
+    let (cookie, magic, configured, has_biz_magic) = {
+        let profile = state.cookie_profile.lock().await;
+        (
+            profile.cookie_header.clone(),
+            profile.biz_magic.clone().unwrap_or_default(),
+            !profile.cookie_header.is_empty(),
+            profile.biz_magic.is_some(),
+        )
+    };
+    let now_rfc = chrono::Utc::now().to_rfc3339();
+
+    if !configured {
+        let snapshot = CookieHealthSnapshot {
+            healthy: false,
+            configured: false,
+            has_biz_magic: false,
+            last_checked_at: Some(now_rfc),
+            hint: Some("尚未配置 Cookie，请先在设置中完成登录并保存".to_string()),
+        };
+        let mut current = state.cookie_health.lock().await;
+        *current = snapshot.clone();
+        return Ok(snapshot);
+    }
+
+    let end_unix = chrono::Utc::now().timestamp();
+    let start_unix = end_unix - 600; // 探测最近 10 分钟，保证体量极小。
+    let client = HttpOrderSearchClient::new(cookie, magic);
+    let probe = client
+        .fetch_order_snapshots_in_window(start_unix, end_unix)
+        .await;
+
+    let snapshot = match probe {
+        Ok(_) => CookieHealthSnapshot {
+            healthy: true,
+            configured,
+            has_biz_magic,
+            last_checked_at: Some(now_rfc),
+            hint: Some("Cookie 可用".to_string()),
+        },
+        Err(err) => {
+            let raw = err.to_string();
+            let looks_auth = raw.contains("ret")
+                || raw.contains("登录")
+                || raw.contains("login")
+                || raw.contains("401")
+                || raw.contains("403")
+                || raw.contains("session")
+                || raw.contains("expired");
+            let hint = if looks_auth {
+                "Cookie 已失效或权限不足，请重新登录小店后保存新的 Cookie".to_string()
+            } else {
+                format!("探测失败：{raw}")
+            };
+            CookieHealthSnapshot {
+                healthy: false,
+                configured,
+                has_biz_magic,
+                last_checked_at: Some(now_rfc),
+                hint: Some(hint),
+            }
+        }
+    };
+
+    let mut current = state.cookie_health.lock().await;
+    *current = snapshot.clone();
+    Ok(snapshot)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_cookie_health(
+    state: State<'_, AppState>,
+) -> Result<CookieHealthSnapshot, AppError> {
+    Ok(state.cookie_health.lock().await.clone())
+}
+
+/// 调用系统默认浏览器打开 http(s) 链接。
+///
+/// Tauri 2 webview 默认拦截 `<a target="_blank">` 导航，而外链（下载更新、
+/// 查看教程、购买卡密等）必须通过系统浏览器打开；这里直接用各平台的内置命令
+/// 完成，避免再引入 `tauri-plugin-opener` / `plugin-shell` 依赖和额外权限。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_external_url(url: String) -> Result<(), AppError> {
+    let parsed =
+        Url::parse(url.trim()).map_err(|err| AppError::Message(format!("URL 解析失败：{err}")))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => {
+            return Err(AppError::Message(format!(
+                "仅允许打开 http/https 链接，当前协议：{other}"
+            )));
+        }
+    }
+    let normalized = parsed.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            std::process::Command::new("open")
+                .arg(&normalized)
+                .spawn()
+                .map(|_| ())
+                .map_err(|err| format!("macOS open 调用失败：{err}"))
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", &normalized])
+                .spawn()
+                .map(|_| ())
+                .map_err(|err| format!("Windows start 调用失败：{err}"))
+        }
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+        {
+            std::process::Command::new("xdg-open")
+                .arg(&normalized)
+                .spawn()
+                .map(|_| ())
+                .map_err(|err| format!("xdg-open 调用失败：{err}"))
+        }
+    })
+    .await
+    .map_err(|err| AppError::Message(format!("打开外链任务失败：{err}")))?
+    .map_err(AppError::Message)
 }
 
 #[tauri::command(rename_all = "snake_case")]

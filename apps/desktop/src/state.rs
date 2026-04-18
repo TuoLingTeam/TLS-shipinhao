@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::adapters::secure_storage::{init_default_store, SecretStore, StorageError};
@@ -35,6 +36,21 @@ pub struct AppState {
     pub task_grant_cache: TaskGrantCache,
     pub runtime_license_state: Mutex<RuntimeState>,
     pub license_profile: Mutex<StoredLicenseProfile>,
+    /// 批量发货取消标志：由 `cancel_batch_delivery` 置 true，
+    /// `batch_delivery` 进入循环前重置为 false。
+    pub batch_delivery_cancel: Arc<AtomicBool>,
+    /// Cookie 健康状态快照（启动 / 定时探测后刷新）。
+    pub cookie_health: Mutex<CookieHealthSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct CookieHealthSnapshot {
+    pub healthy: bool,
+    pub configured: bool,
+    pub has_biz_magic: bool,
+    pub last_checked_at: Option<String>,
+    pub hint: Option<String>,
 }
 
 impl AppState {
@@ -67,6 +83,17 @@ impl AppState {
         let cookie_path = resolve_cookie_path(&app_home_dir);
         let profile = load_cookie_from_file(&cookie_path);
         let license_profile = load_license_profile(&app_home_dir).unwrap_or_default();
+        let cookie_health = CookieHealthSnapshot {
+            healthy: false,
+            configured: !profile.cookie_header.is_empty(),
+            has_biz_magic: profile.biz_magic.is_some(),
+            last_checked_at: None,
+            hint: if profile.cookie_header.is_empty() {
+                Some("尚未配置 Cookie".to_string())
+            } else {
+                Some("尚未探测".to_string())
+            },
+        };
         Self {
             cookie_profile: Mutex::new(profile),
             cookie_path: Mutex::new(cookie_path),
@@ -78,6 +105,8 @@ impl AppState {
             task_grant_cache: TaskGrantCache::new(),
             runtime_license_state: Mutex::new(runtime_license_state),
             license_profile: Mutex::new(license_profile),
+            batch_delivery_cancel: Arc::new(AtomicBool::new(false)),
+            cookie_health: Mutex::new(cookie_health),
         }
     }
 }

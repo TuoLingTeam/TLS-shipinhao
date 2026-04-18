@@ -1,11 +1,31 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
+import type { BatchDeliveryStep } from "./delivery.types";
 
 export interface BatchProgress {
   totalCount: number;
   successCount: number;
   failureCount: number;
+  processedCount: number;
   fatalError: string | null;
+  stopped: boolean;
+  running: boolean;
+  cancelRequested: boolean;
+  steps: BatchDeliveryStep[];
+}
+
+function emptyProgress(totalCount = 0): BatchProgress {
+  return {
+    totalCount,
+    successCount: 0,
+    failureCount: 0,
+    processedCount: 0,
+    fatalError: null,
+    stopped: false,
+    running: totalCount > 0,
+    cancelRequested: false,
+    steps: [],
+  };
 }
 
 export const useDeliveryStore = defineStore("delivery", () => {
@@ -26,6 +46,55 @@ export const useDeliveryStore = defineStore("delivery", () => {
     draftSource.value = null;
   }
 
+  function startBatch(totalCount: number) {
+    batchProgress.value = emptyProgress(totalCount);
+  }
+
+  function applyBatchStep(step: BatchDeliveryStep, successCount: number, failureCount: number, processedCount: number) {
+    if (!batchProgress.value) {
+      batchProgress.value = emptyProgress(processedCount);
+    }
+    const current = batchProgress.value;
+    current.successCount = successCount;
+    current.failureCount = failureCount;
+    current.processedCount = processedCount;
+    current.steps = [...current.steps, step];
+    current.running = true;
+  }
+
+  function finalizeBatch(payload: {
+    totalCount: number;
+    successCount: number;
+    failureCount: number;
+    processedCount: number;
+    fatalError: string | null;
+    stopped: boolean;
+    steps?: BatchDeliveryStep[];
+  }) {
+    const previous = batchProgress.value ?? emptyProgress(payload.totalCount);
+    batchProgress.value = {
+      ...previous,
+      totalCount: payload.totalCount,
+      successCount: payload.successCount,
+      failureCount: payload.failureCount,
+      processedCount: payload.processedCount,
+      fatalError: payload.fatalError,
+      stopped: payload.stopped,
+      running: false,
+      cancelRequested: false,
+      steps: payload.steps && payload.steps.length > 0 ? payload.steps : previous.steps,
+    };
+  }
+
+  function markCancelRequested() {
+    if (!batchProgress.value) return;
+    batchProgress.value.cancelRequested = true;
+  }
+
+  function resetBatch() {
+    batchProgress.value = null;
+  }
+
   return {
     loading,
     error,
@@ -34,5 +103,10 @@ export const useDeliveryStore = defineStore("delivery", () => {
     draftSource,
     prefillOrder,
     clearPrefillOrder,
+    startBatch,
+    applyBatchStep,
+    finalizeBatch,
+    markCancelRequested,
+    resetBatch,
   };
 });

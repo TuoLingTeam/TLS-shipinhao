@@ -57,6 +57,27 @@ async function refreshUpdateInfo() {
   }
 }
 
+type ExternalSlot = "download" | "tutorial";
+
+const opening = ref<ExternalSlot | null>(null);
+const openError = ref<string | null>(null);
+
+async function openExternal(url: string, slot: ExternalSlot) {
+  if (!url) {
+    openError.value = "链接为空，请稍后重试";
+    return;
+  }
+  opening.value = slot;
+  openError.value = null;
+  try {
+    await invoke("open_external_url", { url });
+  } catch (err) {
+    openError.value = typeof err === "string" ? err : String(err);
+  } finally {
+    opening.value = null;
+  }
+}
+
 onMounted(async () => {
   try {
     unlisten = await listen<UpdateInfo>("update-available", (event) => {
@@ -96,22 +117,30 @@ onUnmounted(() => {
       </div>
 
       <div class="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-        <a :href="updateInfo.download_url" target="_blank" rel="noreferrer" class="action-btn action-btn-primary">
-          下载更新
-        </a>
-        <a
-          v-if="updateInfo.tutorial_url"
-          :href="updateInfo.tutorial_url"
-          target="_blank"
-          rel="noreferrer"
-          class="action-btn action-btn-secondary"
+        <button
+          type="button"
+          class="action-btn action-btn-primary"
+          :disabled="opening === 'download'"
+          @click="openExternal(updateInfo.download_url, 'download')"
         >
-          查看教程
-        </a>
+          {{ opening === 'download' ? '打开中...' : '下载更新' }}
+        </button>
+        <button
+          v-if="updateInfo.tutorial_url"
+          type="button"
+          class="action-btn action-btn-secondary"
+          :disabled="opening === 'tutorial'"
+          @click="openExternal(updateInfo.tutorial_url, 'tutorial')"
+        >
+          {{ opening === 'tutorial' ? '打开中...' : '查看教程' }}
+        </button>
         <button v-if="!updateInfo.mandatory" type="button" class="action-btn action-btn-secondary" @click="dismiss">
           稍后提醒
         </button>
       </div>
+      <p v-if="openError" class="mt-2 w-full text-xs text-red-600">
+        {{ openError }}
+      </p>
     </div>
   </section>
 </template>

@@ -109,9 +109,13 @@ async fn response_to_attempt<R: serde::de::DeserializeOwned>(
     }
 }
 
+/// 激活请求体：字段名必须与 Worker `license_service::ActivationInput`
+/// 完全对齐（`license_key` 而非 `key`），否则 Worker 的 `serde_json::from_value`
+/// 会在 Activate 分支静默失败，被顶层 `or_else` 收敛为 `worker_runtime_error`
+/// 兜底响应，客户端看到"激活失败"却拿不到任何业务原因。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateRequest {
-    pub key: String,
+    pub license_key: String,
     pub device_id: String,
     pub device_fingerprint: String,
     pub client_version: String,
@@ -121,7 +125,7 @@ pub struct ActivateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyRequest {
-    pub key: String,
+    pub license_key: String,
     pub device_id: String,
     pub license_version: u32,
     pub client_version: String,
@@ -262,7 +266,7 @@ impl HttpLicenseClient {
         client_version: &str,
     ) -> Result<LicenseApiResponse, LicenseHttpError> {
         let req = ActivateRequest {
-            key: key.trim().to_uppercase(),
+            license_key: key.trim().to_uppercase(),
             device_id: device_id.to_string(),
             device_fingerprint: device_fingerprint.to_string(),
             client_version: client_version.to_string(),
@@ -287,7 +291,7 @@ impl HttpLicenseClient {
         client_version: &str,
     ) -> Result<LicenseApiResponse, LicenseHttpError> {
         let req = VerifyRequest {
-            key: key.to_string(),
+            license_key: key.trim().to_uppercase(),
             device_id: device_id.to_string(),
             license_version,
             client_version: client_version.to_string(),
@@ -368,6 +372,46 @@ impl HttpLicenseClient {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn activate_request_serializes_with_license_key_field() {
+        // 回归测试：防止再次把 `license_key` 错写回 `key`。
+        // Worker 端 `license_service::ActivationInput` 只识别 `license_key`，
+        // 字段名偏移会导致 serde_json::from_value 失败并被 Worker 顶层兜底为
+        // `worker_runtime_error`，客户端看到的"激活失败"无任何业务原因。
+        let req = ActivateRequest {
+            license_key: "TLS-ABC".into(),
+            device_id: "dev".into(),
+            device_fingerprint: "fp".into(),
+            client_version: "5.1.0".into(),
+            platform: "macos".into(),
+            build_channel: "desktop".into(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"license_key\""),
+            "Activate 请求体必须包含 license_key 字段：{json}"
+        );
+        assert!(
+            !json.contains("\"key\":\"TLS"),
+            "Activate 请求体不得出现已废弃的 `key` 字段：{json}"
+        );
+    }
+
+    #[test]
+    fn verify_request_serializes_with_license_key_field() {
+        let req = VerifyRequest {
+            license_key: "TLS-ABC".into(),
+            device_id: "dev".into(),
+            license_version: 3,
+            client_version: "5.1.0".into(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"license_key\""),
+            "Verify 请求体必须包含 license_key 字段：{json}"
+        );
+    }
 
     #[test]
     fn normalize_license_state_maps_ok_to_active() {
