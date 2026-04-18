@@ -25,8 +25,7 @@ use std::sync::OnceLock;
 ///
 /// 注意：`[⁰¹²³⁴⁵⁶⁷⁸⁹]` 中 `²` (U+00B2) 与 `³` (U+00B3) 位于 Latin-1 Supplement 区，
 /// 其余为上标数字区，必须列出而不能用范围表达。
-const TRAILING_DIGIT_TAIL_PATTERN: &str =
-    r"[0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s]+$";
+const TRAILING_DIGIT_TAIL_PATTERN: &str = r"[0-9０-９⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s]+$";
 pub const GENERIC_NICKNAME_PREFIXES: &[&str] = &["匿名", "微信用户", "默认昵称"];
 
 /// 将浮点相似度裁剪到 0~100 闭区间；非有限值（NaN / inf）一律视作 0。
@@ -128,11 +127,7 @@ pub fn nickname_similarity_by_rename_patterns(left: &str, right: &str) -> Option
     let left_core = strip_trailing_digit_tail(left);
     let right_core = strip_trailing_digit_tail(right);
 
-    if !left_core.is_empty()
-        && !right_core.is_empty()
-        && left_core == right_core
-        && left != right
-    {
+    if !left_core.is_empty() && !right_core.is_empty() && left_core == right_core && left != right {
         if left_core.chars().count() >= 2 {
             return Some(95);
         }
@@ -252,8 +247,14 @@ mod tests {
 
     #[test]
     fn generic_nickname_prefixes_return_zero() {
-        assert_eq!(similarity_percent(Some("匿名用户123"), Some("匿名用户456")), 0);
-        assert_eq!(similarity_percent(Some("微信用户abc"), Some("微信用户xyz")), 0);
+        assert_eq!(
+            similarity_percent(Some("匿名用户123"), Some("匿名用户456")),
+            0
+        );
+        assert_eq!(
+            similarity_percent(Some("微信用户abc"), Some("微信用户xyz")),
+            0
+        );
         assert_eq!(similarity_percent(Some("默认昵称"), Some("默认昵称1")), 0);
         assert_eq!(similarity_percent(Some(""), Some("张三")), 0);
         assert!(similarity_percent(Some("匿了"), Some("匿了123")) > 0);
@@ -300,10 +301,7 @@ mod tests {
 
     #[test]
     fn subsequence_len3_returns_80() {
-        assert_eq!(
-            similarity_percent(Some("张李王"), Some("张三李四王五")),
-            80
-        );
+        assert_eq!(similarity_percent(Some("张李王"), Some("张三李四王五")), 80);
     }
 
     #[test]

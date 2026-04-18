@@ -36,16 +36,16 @@ pub enum UpdateError {
     MissingVersion,
 }
 
-pub async fn fetch_latest_version_info(current_version: Option<&str>, device_key: Option<&str>) -> Result<UpdateInfo, UpdateError> {
+pub async fn fetch_latest_version_info(
+    current_version: Option<&str>,
+    device_key: Option<&str>,
+) -> Result<UpdateInfo, UpdateError> {
     // 走统一 builder，带产品 UA：若更新源未来切到 Cloudflare，默认 reqwest UA 会被拦
     // （与 /api/activate 同样的故障模式）。统一 helper 还方便后续插 proxy 与重试策略。
     let client = crate::shared::http_client::build_desktop_http_client(Duration::from_secs(
         UPDATE_REQUEST_TIMEOUT_SECS,
     ));
-    let response = client
-        .get(UPDATE_VERSION_URL)
-        .send()
-        .await?;
+    let response = client.get(UPDATE_VERSION_URL).send().await?;
 
     if !response.status().is_success() {
         return Err(UpdateError::HttpStatus(response.status()));
@@ -97,10 +97,16 @@ pub fn is_device_eligible(rolling_percentage: u8, rollout_bucket: Option<u8>) ->
     if rolling_percentage >= 100 {
         return true;
     }
-    rollout_bucket.map(|bucket| bucket < rolling_percentage).unwrap_or(false)
+    rollout_bucket
+        .map(|bucket| bucket < rolling_percentage)
+        .unwrap_or(false)
 }
 
-fn build_update_info(payload: Value, current_version: Option<&str>, device_key: Option<&str>) -> Result<UpdateInfo, UpdateError> {
+fn build_update_info(
+    payload: Value,
+    current_version: Option<&str>,
+    device_key: Option<&str>,
+) -> Result<UpdateInfo, UpdateError> {
     let latest_version = payload
         .get("version")
         .and_then(Value::as_str)
@@ -111,7 +117,9 @@ fn build_update_info(payload: Value, current_version: Option<&str>, device_key: 
 
     let current = current_version.unwrap_or(env!("CARGO_PKG_VERSION"));
     let rolling_percentage = normalize_rolling_percentage(&payload);
-    let rollout_bucket = device_key.filter(|value| !value.trim().is_empty()).map(rollout_bucket);
+    let rollout_bucket = device_key
+        .filter(|value| !value.trim().is_empty())
+        .map(rollout_bucket);
     let eligible_by_rollout = is_device_eligible(rolling_percentage, rollout_bucket);
 
     Ok(UpdateInfo {
@@ -203,7 +211,8 @@ mod tests {
             "notes": ["修复登录窗口", "优化差评匹配"]
         });
 
-        let info = build_update_info(payload.clone(), Some("5.1.0"), Some("device-A")).expect("update info");
+        let info = build_update_info(payload.clone(), Some("5.1.0"), Some("device-A"))
+            .expect("update info");
         assert!(info.has_update);
         assert_eq!(info.version, "5.1.1");
         assert_eq!(info.download_url, "https://example.com/app.dmg");
@@ -222,8 +231,8 @@ mod tests {
         });
         let inside = build_update_info(payload.clone(), Some("5.1.0"), Some("device-eligible"))
             .expect("inside");
-        let outside = build_update_info(payload, Some("5.1.0"), Some("device-other"))
-            .expect("outside");
+        let outside =
+            build_update_info(payload, Some("5.1.0"), Some("device-other")).expect("outside");
         assert_eq!(inside.rolling_percentage, 10);
         assert_eq!(outside.rolling_percentage, 10);
         assert_ne!(inside.rollout_bucket, outside.rollout_bucket);

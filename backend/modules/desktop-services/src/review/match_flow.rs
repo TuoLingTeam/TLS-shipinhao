@@ -182,7 +182,11 @@ fn log_short_nickname_diagnostics(
     if eval_name.chars().count() > DIAGNOSTIC_SHORT_NICKNAME_MAX_CHARS {
         return;
     }
-    let top_score = best_matches.iter().map(|item| item.score).max().unwrap_or(0);
+    let top_score = best_matches
+        .iter()
+        .map(|item| item.score)
+        .max()
+        .unwrap_or(0);
     // 只在"有缺口"的场景打印：要么没拿到精确匹配，要么最高基分未达 100。
     if top_score >= 100 {
         return;

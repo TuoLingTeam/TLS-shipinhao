@@ -445,8 +445,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
 
     fn delete_older_than(&self, scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize> {
         self.with_connection(|conn| {
-            let mut stmt =
-                conn.prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
+            let mut stmt = conn.prepare("SELECT order_id FROM orders WHERE create_time < ?1")?;
             let expired_rows =
                 stmt.query_map(params![cutoff_timestamp], |row| row.get::<_, String>(0))?;
             let order_ids = expired_rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -457,10 +456,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                         "DELETE FROM order_products WHERE order_id = ?1",
                         params![order_id],
                     )?;
-                    tx.execute(
-                        "DELETE FROM orders WHERE order_id = ?1",
-                        params![order_id],
-                    )?;
+                    tx.execute("DELETE FROM orders WHERE order_id = ?1", params![order_id])?;
                 }
                 tx.execute(
                     "DELETE FROM cache_segments WHERE scope = ?1 AND end_ts < ?2",
@@ -555,7 +551,9 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
 
     fn count_orders(&self) -> anyhow::Result<usize> {
         self.with_connection(|conn| {
-            let count = conn.query_row("SELECT COUNT(*) FROM orders", [], |row| row.get::<_, i64>(0))?;
+            let count = conn.query_row("SELECT COUNT(*) FROM orders", [], |row| {
+                row.get::<_, i64>(0)
+            })?;
             Ok(count.max(0) as usize)
         })
     }
@@ -857,7 +855,10 @@ mod tests {
                 [],
                 |row| row.get(0),
             )?;
-            assert_eq!(remaining, 0, "ON DELETE CASCADE 必须级联删除 order_products");
+            assert_eq!(
+                remaining, 0,
+                "ON DELETE CASCADE 必须级联删除 order_products"
+            );
             Ok(())
         })
         .unwrap();
@@ -894,5 +895,4 @@ mod tests {
         repo.upsert_orders(&[dirty]).unwrap();
         assert!(repo.has_dirty_sale_param().unwrap());
     }
-
 }

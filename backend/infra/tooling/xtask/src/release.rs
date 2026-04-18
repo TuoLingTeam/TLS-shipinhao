@@ -64,10 +64,9 @@ pub fn run_release_command(args: &[std::ffi::OsString]) -> Result<()> {
 }
 
 fn parse_build_number(version: &str) -> u32 {
-    version
-        .split('.')
-        .take(3)
-        .fold(0u32, |acc, part| acc * 100 + part.parse::<u32>().unwrap_or(0))
+    version.split('.').take(3).fold(0u32, |acc, part| {
+        acc * 100 + part.parse::<u32>().unwrap_or(0)
+    })
 }
 
 pub fn validate_percentage(percentage: u8) -> Result<u8> {
@@ -76,7 +75,6 @@ pub fn validate_percentage(percentage: u8) -> Result<u8> {
     }
     Ok(percentage)
 }
-
 
 #[cfg(test)]
 mod tests {

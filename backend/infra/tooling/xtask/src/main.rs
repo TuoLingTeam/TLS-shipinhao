@@ -60,9 +60,7 @@ fn run_desktop_build_command(args: &[OsString]) -> Result<()> {
     let mut command = Command::new("cargo");
     command.args(["build", "-p", "desktop"]);
     command.args(args);
-    let status = command
-        .status()
-        .context("spawn cargo build -p desktop")?;
+    let status = command.status().context("spawn cargo build -p desktop")?;
     if !status.success() {
         return Err(anyhow!("desktop-build failed with status {status}"));
     }

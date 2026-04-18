@@ -1,7 +1,7 @@
-pub mod shared;
-pub mod review;
-pub mod order;
 pub mod delivery;
+pub mod order;
+pub mod review;
+pub mod shared;
 
 pub use delivery::batch_runner as delivery_batch_runner;
 pub use delivery::update as delivery_update;

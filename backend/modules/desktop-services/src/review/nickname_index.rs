@@ -48,7 +48,10 @@ pub fn build_nickname_index(orders: &[CandidateOrder]) -> NicknameIndex {
         if key.is_empty() || is_generic_nickname(key) {
             continue;
         }
-        index.entry(key.to_string()).or_default().push(order.clone());
+        index
+            .entry(key.to_string())
+            .or_default()
+            .push(order.clone());
     }
     index
 }
@@ -128,10 +131,7 @@ pub fn try_nickname_first_match(
     ];
     if context.eval_time > 0 && best.create_time > 0 {
         let hours = (context.eval_time - best.create_time) as f64 / 3600.0;
-        reasons.push(format!(
-            "主路径命中：评价在下单后 {:.1} 小时发出",
-            hours
-        ));
+        reasons.push(format!("主路径命中：评价在下单后 {:.1} 小时发出", hours));
     } else {
         reasons.push("主路径命中：昵称+SKU 精确".to_string());
     }
@@ -230,12 +230,21 @@ mod tests {
         assert_eq!(result.match_strategy, MatchStrategy::ExactMatch);
         assert_eq!(result.matched_order.as_ref().unwrap().order_id, "o-mengyun");
         assert_eq!(result.candidate_count, 1);
-        assert!(result.match_reasons.iter().any(|r| r.contains("主路径命中")));
+        assert!(result
+            .match_reasons
+            .iter()
+            .any(|r| r.contains("主路径命中")));
     }
 
     #[test]
     fn primary_misses_when_nickname_not_in_index() {
-        let orders = vec![order("o1", "路人甲", PRODUCT_ID, SKU_ID, EVAL_TIME - 86_400)];
+        let orders = vec![order(
+            "o1",
+            "路人甲",
+            PRODUCT_ID,
+            SKU_ID,
+            EVAL_TIME - 86_400,
+        )];
         let index = build_nickname_index(&orders);
         let result = try_nickname_first_match(&index, &eval_context("梦云", PRODUCT_ID, SKU_ID));
         assert!(result.is_none(), "昵称不在索引应让位给兜底");
@@ -253,7 +262,10 @@ mod tests {
         )];
         let index = build_nickname_index(&orders);
         let result = try_nickname_first_match(&index, &eval_context("梦云", PRODUCT_ID, SKU_ID));
-        assert!(result.is_none(), "SKU 不等应让位给兜底（兜底能匹配到相似 SKU）");
+        assert!(
+            result.is_none(),
+            "SKU 不等应让位给兜底（兜底能匹配到相似 SKU）"
+        );
     }
 
     #[test]

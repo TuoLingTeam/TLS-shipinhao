@@ -28,11 +28,7 @@ const LATE_EVAL_THRESHOLD_DAYS: i64 = 90;
 ///
 /// 注意：本函数不做"评价早于下单"过滤（那是 [`score_candidate_order`] 的
 /// 一票否决职责，与原版 Python `_score_candidate_order` 行为保持一致）。
-pub fn compute_time_auxiliary_bonus(
-    eval_time: i64,
-    create_time: i64,
-    reference_time: i64,
-) -> i32 {
+pub fn compute_time_auxiliary_bonus(eval_time: i64, create_time: i64, reference_time: i64) -> i32 {
     if eval_time <= 0 || create_time <= 0 {
         return 0;
     }
@@ -312,11 +308,7 @@ mod tests {
     #[test]
     fn time_bonus_penalizes_eval_far_beyond_create_without_confirm() {
         // 无签收时间 + 距下单 100 天评价 → -3。
-        let bonus = compute_time_auxiliary_bonus(
-            1_712_910_000,
-            1_712_910_000 - 100 * 86_400,
-            0,
-        );
+        let bonus = compute_time_auxiliary_bonus(1_712_910_000, 1_712_910_000 - 100 * 86_400, 0);
         assert_eq!(bonus, TIME_PENALTY_TOO_LATE);
     }
 
@@ -354,7 +346,10 @@ mod tests {
         order.confirm_receipt_time = context().eval_time - 3600;
         let scored = score_candidate_order(&order, &context()).expect("scored");
         assert_eq!(scored.score, 99);
-        assert!(scored.reasons.iter().any(|r| r.contains("评价时间晚于签收")));
+        assert!(scored
+            .reasons
+            .iter()
+            .any(|r| r.contains("评价时间晚于签收")));
     }
 
     #[test]

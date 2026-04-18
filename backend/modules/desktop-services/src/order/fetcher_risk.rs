@@ -54,7 +54,9 @@ const FATAL_PERSISTENT_RISK: &str = "平台风控持续触发，请稍后重试"
 pub enum NormalOutcome<T> {
     Ok(Vec<T>),
     /// 命中风控，已抓到 `partial` 份数据，请降级后再补抓。
-    RiskControl { partial: Vec<T> },
+    RiskControl {
+        partial: Vec<T>,
+    },
     /// 遇到非风控类致命错误，不会进入降级路径。
     Fatal(String),
 }
@@ -64,7 +66,9 @@ pub enum NormalOutcome<T> {
 pub enum RiskOutcome<T> {
     Ok(Vec<T>),
     /// 极速模式仍命中风控或其他限制，携带本次已获取的 `partial`。
-    Failed { partial: Vec<T> },
+    Failed {
+        partial: Vec<T>,
+    },
     /// 致命错误，立即上抛。
     Fatal(String),
 }
@@ -196,10 +200,10 @@ where
             let warning = WARNING_DEGRADED.to_string();
             match risk_fn().await {
                 RiskOutcome::Ok(risk_orders) => {
-                    let merged = deduplicate_by(
-                        partial.into_iter().chain(risk_orders).collect(),
-                        |item| key_of(item),
-                    );
+                    let merged =
+                        deduplicate_by(partial.into_iter().chain(risk_orders).collect(), |item| {
+                            key_of(item)
+                        });
                     Ok(FallbackOutcome {
                         orders: merged,
                         warnings: vec![warning],
@@ -208,10 +212,10 @@ where
                 RiskOutcome::Failed {
                     partial: risk_partial,
                 } => {
-                    let merged = deduplicate_by(
-                        partial.into_iter().chain(risk_partial).collect(),
-                        |item| key_of(item),
-                    );
+                    let merged =
+                        deduplicate_by(partial.into_iter().chain(risk_partial).collect(), |item| {
+                            key_of(item)
+                        });
                     if merged.is_empty() {
                         Err(FetchError::Other(FATAL_PERSISTENT_RISK.to_string()))
                     } else {

@@ -82,41 +82,27 @@ mod tests {
     #[test]
     fn three_segments_covering_entire_range_returns_empty() {
         let segments = vec![(0, 3_000), (3_001, 6_000), (6_001, 10_000)];
-        assert!(compute_missing_segments(
-            1_000,
-            10_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(1_000, 10_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments)
+                .is_empty()
+        );
     }
 
     #[test]
     fn two_segments_with_60s_interval_are_merged_below_tolerance() {
         // 中间 60s 间隔 < 120s → 合并成一段，覆盖 [1000, 6060] → 无缺口
         let segments = vec![(1_000, 3_000), (3_060, 6_060)];
-        assert!(compute_missing_segments(
-            1_000,
-            6_060,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(1_000, 6_060, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments)
+                .is_empty()
+        );
     }
 
     #[test]
     fn middle_500s_gap_is_reported_above_min_gap_width() {
         // 中间 500s 缺口 > 300s → 保留
         let segments = vec![(1_000, 3_000), (3_501, 6_000)];
-        let gaps = compute_missing_segments(
-            1_000,
-            6_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments,
-        );
+        let gaps = compute_missing_segments(1_000, 6_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments);
         assert_eq!(gaps, vec![(3_001, 3_500)]);
     }
 
@@ -124,27 +110,18 @@ mod tests {
     fn middle_200s_gap_is_ignored_below_min_gap_width() {
         // 中间 200s 缺口 < 300s → 过滤
         let segments = vec![(1_000, 3_000), (3_201, 6_000)];
-        assert!(compute_missing_segments(
-            1_000,
-            6_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(1_000, 6_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments)
+                .is_empty()
+        );
     }
 
     #[test]
     fn single_segment_leaves_head_and_tail_gaps_when_both_wide_enough() {
         // 单段在中间 → 头尾均为缺口
         let segments = vec![(5_000, 7_000)];
-        let gaps = compute_missing_segments(
-            1_000,
-            10_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments,
-        );
+        let gaps =
+            compute_missing_segments(1_000, 10_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments);
         assert_eq!(gaps, vec![(1_000, 4_999), (7_001, 10_000)]);
     }
 
@@ -152,64 +129,45 @@ mod tests {
     fn segments_overlapping_range_boundaries_are_trimmed() {
         // 段超出 [start, end] 边界，应被裁剪
         let segments = vec![(-10_000, 2_000), (8_000, 100_000)];
-        let gaps = compute_missing_segments(
-            1_000,
-            10_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments,
-        );
+        let gaps =
+            compute_missing_segments(1_000, 10_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments);
         // 裁剪后：[1000, 2000]、[8000, 10000]；中间缺口 2001..7999 → 宽度 5999 > 300
         assert_eq!(gaps, vec![(2_001, 7_999)]);
     }
 
     #[test]
     fn negative_start_returns_empty_vec() {
-        assert!(compute_missing_segments(
-            -1,
-            10_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            vec![]
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(-1, 10_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, vec![]).is_empty()
+        );
     }
 
     #[test]
     fn start_greater_than_end_returns_empty_vec() {
-        assert!(compute_missing_segments(
-            10_000,
-            1_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            vec![]
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(10_000, 1_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, vec![])
+                .is_empty()
+        );
     }
 
     #[test]
     fn zero_end_returns_empty_vec() {
-        assert!(compute_missing_segments(
-            1_000,
-            0,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            vec![]
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(1_000, 0, MERGE_TOLERANCE, MIN_GAP_WIDTH, vec![]).is_empty()
+        );
     }
 
     #[test]
     fn duplicate_and_out_of_order_segments_are_normalized() {
         // 乱序 + 重复覆盖段 → 正确排序合并
-        let segments = vec![(5_000, 7_000), (1_000, 3_000), (5_500, 7_500), (1_000, 2_000)];
-        let gaps = compute_missing_segments(
-            1_000,
-            10_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments,
-        );
+        let segments = vec![
+            (5_000, 7_000),
+            (1_000, 3_000),
+            (5_500, 7_500),
+            (1_000, 2_000),
+        ];
+        let gaps =
+            compute_missing_segments(1_000, 10_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments);
         // 合并后：[1000,3000]、[5000,7500]；
         // 缺口：3001..4999（宽 1999 保留）、7501..10000（宽 2500 保留）
         assert_eq!(gaps, vec![(3_001, 4_999), (7_501, 10_000)]);
@@ -219,13 +177,8 @@ mod tests {
     fn segments_entirely_outside_range_are_filtered_completely() {
         // 两段都在目标范围外 → 等同于空段
         let segments = vec![(0, 500), (20_000, 30_000)];
-        let gaps = compute_missing_segments(
-            1_000,
-            10_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments,
-        );
+        let gaps =
+            compute_missing_segments(1_000, 10_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments);
         assert_eq!(gaps, vec![(1_000, 10_000)]);
     }
 
@@ -256,14 +209,10 @@ mod tests {
     fn contiguous_segments_at_tolerance_boundary_are_merged() {
         // 两段间隔 120s（seg_start = last_end + tolerance）→ 合并条件 `<=` 满足
         let segments = vec![(1_000, 3_000), (3_120, 6_000)];
-        assert!(compute_missing_segments(
-            1_000,
-            6_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(1_000, 6_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -271,13 +220,9 @@ mod tests {
         // 两段间隔 121s（超出 tolerance=120 一点）→ 不合并
         // 缺口宽度 120 < min_gap_width=300 → 被过滤
         let segments = vec![(1_000, 3_000), (3_121, 6_000)];
-        assert!(compute_missing_segments(
-            1_000,
-            6_000,
-            MERGE_TOLERANCE,
-            MIN_GAP_WIDTH,
-            segments
-        )
-        .is_empty());
+        assert!(
+            compute_missing_segments(1_000, 6_000, MERGE_TOLERANCE, MIN_GAP_WIDTH, segments)
+                .is_empty()
+        );
     }
 }

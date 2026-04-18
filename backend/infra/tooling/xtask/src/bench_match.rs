@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
-use desktop_services::review_candidate_scoring::{score_candidate_order, CandidateOrder, EvaluationMatchContext};
+use desktop_services::review_candidate_scoring::{
+    score_candidate_order, CandidateOrder, EvaluationMatchContext,
+};
 use desktop_services::review_index::{build_product_sku_index, collect_candidate_orders};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -108,7 +110,10 @@ pub fn run_bench_match_command(args: &[std::ffi::OsString]) -> Result<()> {
         artifacts.summary.mismatch_rate * 100.0,
         artifacts.summary.passed,
     );
-    println!("report markdown: {}", output_dir.join("summary.md").display());
+    println!(
+        "report markdown: {}",
+        output_dir.join("summary.md").display()
+    );
     println!("report csv: {}", output_dir.join("diff.csv").display());
 
     if !artifacts.summary.passed {
@@ -132,7 +137,10 @@ fn load_fixture(dir: &Path) -> Result<MatchBenchmarkFixture> {
     })?;
     let fixture: MatchBenchmarkFixture =
         serde_json::from_str(&raw).context("解析 snapshot.json 失败，请检查字段格式")?;
-    if fixture.evaluations.is_empty() || fixture.orders.is_empty() || fixture.python_results.is_empty() {
+    if fixture.evaluations.is_empty()
+        || fixture.orders.is_empty()
+        || fixture.python_results.is_empty()
+    {
         return Err(anyhow!(
             "snapshot.json 数据不完整：orders/evaluations/python_results 不能为空"
         ));
@@ -152,7 +160,10 @@ fn benchmark_fixture(fixture: &MatchBenchmarkFixture) -> BenchmarkArtifacts {
     let mut mismatch_reasons = Vec::new();
 
     for python in &fixture.python_results {
-        let Some(rust) = rust_results.iter().find(|item| item.evaluation_id == python.evaluation_id) else {
+        let Some(rust) = rust_results
+            .iter()
+            .find(|item| item.evaluation_id == python.evaluation_id)
+        else {
             diffs.push(BenchmarkDiffRow {
                 evaluation_id: python.evaluation_id.clone(),
                 python_order_id: python.order_id.clone(),
@@ -275,7 +286,10 @@ fn build_diff_row(
         mismatch_reason.push(format!("昵称算法差异：评分差异超阈值（{}）", score_diff));
     }
     if strategy_gap > MAX_STRATEGY_GAP {
-        mismatch_reason.push(format!("昵称算法差异：strategy 分档差异超阈值（{}）", strategy_gap));
+        mismatch_reason.push(format!(
+            "昵称算法差异：strategy 分档差异超阈值（{}）",
+            strategy_gap
+        ));
     }
     if let Some(replyable) = python.replyable {
         if replyable != rust.matched && python.order_id == rust_order_id {
@@ -330,11 +344,17 @@ fn strategy_rank(value: &str) -> i32 {
     }
 }
 
-fn match_strategy_to_string(strategy: desktop_services::review_match_flow::MatchStrategy) -> String {
+fn match_strategy_to_string(
+    strategy: desktop_services::review_match_flow::MatchStrategy,
+) -> String {
     match strategy {
         desktop_services::review_match_flow::MatchStrategy::ExactMatch => "exact_match".into(),
-        desktop_services::review_match_flow::MatchStrategy::HighConfidence => "high_confidence".into(),
-        desktop_services::review_match_flow::MatchStrategy::ProbableMatch => "probable_match".into(),
+        desktop_services::review_match_flow::MatchStrategy::HighConfidence => {
+            "high_confidence".into()
+        }
+        desktop_services::review_match_flow::MatchStrategy::ProbableMatch => {
+            "probable_match".into()
+        }
         desktop_services::review_match_flow::MatchStrategy::Fallback => "fallback".into(),
         desktop_services::review_match_flow::MatchStrategy::None => "none".into(),
     }
@@ -347,8 +367,13 @@ fn dedup_strings(values: Vec<String>) -> Vec<String> {
     set
 }
 
-fn write_artifacts(output_dir: &Path, fixture: &MatchBenchmarkFixture, artifacts: &BenchmarkArtifacts) -> Result<()> {
-    fs::create_dir_all(output_dir).with_context(|| format!("创建输出目录失败：{}", output_dir.display()))?;
+fn write_artifacts(
+    output_dir: &Path,
+    fixture: &MatchBenchmarkFixture,
+    artifacts: &BenchmarkArtifacts,
+) -> Result<()> {
+    fs::create_dir_all(output_dir)
+        .with_context(|| format!("创建输出目录失败：{}", output_dir.display()))?;
 
     fs::write(
         output_dir.join("summary.json"),
@@ -361,9 +386,15 @@ fn write_artifacts(output_dir: &Path, fixture: &MatchBenchmarkFixture, artifacts
     fs::write(output_dir.join("diff.csv"), build_csv(&artifacts.diffs))?;
     fs::write(
         output_dir.join("rust_results.json"),
-        serde_json::to_vec_pretty(&match_orders_with_evaluations(&fixture.evaluations, &fixture.orders))?,
+        serde_json::to_vec_pretty(&match_orders_with_evaluations(
+            &fixture.evaluations,
+            &fixture.orders,
+        ))?,
     )?;
-    fs::write(output_dir.join("summary.md"), build_markdown_summary(fixture, artifacts))?;
+    fs::write(
+        output_dir.join("summary.md"),
+        build_markdown_summary(fixture, artifacts),
+    )?;
     Ok(())
 }
 
@@ -391,9 +422,15 @@ fn build_csv(rows: &[BenchmarkDiffRow]) -> String {
     csv
 }
 
-fn build_markdown_summary(fixture: &MatchBenchmarkFixture, artifacts: &BenchmarkArtifacts) -> String {
+fn build_markdown_summary(
+    fixture: &MatchBenchmarkFixture,
+    artifacts: &BenchmarkArtifacts,
+) -> String {
     let mut md = String::new();
-    md.push_str(&format!("# 真实数据比对摘要：{}\n\n", fixture.snapshot_name));
+    md.push_str(&format!(
+        "# 真实数据比对摘要：{}\n\n",
+        fixture.snapshot_name
+    ));
     if !fixture.notes.is_empty() {
         md.push_str("## 快照备注\n\n");
         for note in &fixture.notes {
@@ -403,12 +440,34 @@ fn build_markdown_summary(fixture: &MatchBenchmarkFixture, artifacts: &Benchmark
     }
     md.push_str("## 结果概览\n\n");
     md.push_str("| 指标 | 值 |\n|---|---:|\n");
-    md.push_str(&format!("| 总评价数 | {} |\n", artifacts.summary.total_evaluations));
-    md.push_str(&format!("| 最低样本门槛 | {} |\n", MIN_REQUIRED_EVALUATIONS));
-    md.push_str(&format!("| 不一致条数 | {} |\n", artifacts.summary.mismatched_rows));
-    md.push_str(&format!("| 不一致率 | {:.2}% |\n", artifacts.summary.mismatch_rate * 100.0));
-    md.push_str(&format!("| 允许上限 | {:.2}% |\n", artifacts.summary.allowed_mismatch_rate * 100.0));
-    md.push_str(&format!("| 结论 | {} |\n\n", if artifacts.summary.passed { "通过" } else { "未通过" }));
+    md.push_str(&format!(
+        "| 总评价数 | {} |\n",
+        artifacts.summary.total_evaluations
+    ));
+    md.push_str(&format!(
+        "| 最低样本门槛 | {} |\n",
+        MIN_REQUIRED_EVALUATIONS
+    ));
+    md.push_str(&format!(
+        "| 不一致条数 | {} |\n",
+        artifacts.summary.mismatched_rows
+    ));
+    md.push_str(&format!(
+        "| 不一致率 | {:.2}% |\n",
+        artifacts.summary.mismatch_rate * 100.0
+    ));
+    md.push_str(&format!(
+        "| 允许上限 | {:.2}% |\n",
+        artifacts.summary.allowed_mismatch_rate * 100.0
+    ));
+    md.push_str(&format!(
+        "| 结论 | {} |\n\n",
+        if artifacts.summary.passed {
+            "通过"
+        } else {
+            "未通过"
+        }
+    ));
 
     if !artifacts.summary.mismatch_reasons.is_empty() {
         md.push_str("## 差异归因\n\n");
@@ -424,7 +483,9 @@ fn build_markdown_summary(fixture: &MatchBenchmarkFixture, artifacts: &Benchmark
         return md;
     }
 
-    md.push_str("| evaluation_id | Python 订单 | Rust 订单 | 分数差 | strategy 差 | Top5 均分差 | 原因 |\n");
+    md.push_str(
+        "| evaluation_id | Python 订单 | Rust 订单 | 分数差 | strategy 差 | Top5 均分差 | 原因 |\n",
+    );
     md.push_str("|---|---|---|---:|---:|---:|---|\n");
     for row in &artifacts.diffs {
         md.push_str(&format!(

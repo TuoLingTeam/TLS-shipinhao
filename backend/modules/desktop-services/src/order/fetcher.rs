@@ -193,10 +193,7 @@ pub fn is_risk_control_result(payload: &Value) -> bool {
 ///         LimitOutcome::RateLimited { api_level } => LimitOutcome::RateLimited { api_level },
 ///     })
 /// ```
-pub fn classify_rate_limit(
-    status_code: u16,
-    payload: Option<&Value>,
-) -> LimitOutcome<()> {
+pub fn classify_rate_limit(status_code: u16, payload: Option<&Value>) -> LimitOutcome<()> {
     if is_http_rate_limited(status_code) {
         return LimitOutcome::RateLimited { api_level: false };
     }
@@ -209,10 +206,7 @@ pub fn classify_rate_limit(
 }
 
 /// 可中断的 sleep。每 100ms 检查一次 `stop_flag`。
-async fn interruptible_sleep(
-    total: Duration,
-    stop_flag: &AtomicBool,
-) -> Result<(), FetchError> {
+async fn interruptible_sleep(total: Duration, stop_flag: &AtomicBool) -> Result<(), FetchError> {
     if total.is_zero() {
         return Ok(());
     }
@@ -237,9 +231,7 @@ mod tests {
     use serde_json::json;
     use std::sync::Mutex;
 
-    fn make_progress(
-        sink: Arc<Mutex<Vec<String>>>,
-    ) -> ProgressCallback {
+    fn make_progress(sink: Arc<Mutex<Vec<String>>>) -> ProgressCallback {
         Arc::new(move |msg| {
             sink.lock().unwrap().push(msg);
         })
@@ -471,7 +463,11 @@ mod tests {
 
         let msgs = messages.lock().unwrap();
         assert_eq!(msgs.len(), 1);
-        assert!(msgs[0].contains("(API)"), "API 级限流必须带 (API) 标记: {}", msgs[0]);
+        assert!(
+            msgs[0].contains("(API)"),
+            "API 级限流必须带 (API) 标记: {}",
+            msgs[0]
+        );
     }
 
     #[tokio::test(start_paused = true)]

@@ -102,11 +102,7 @@ pub trait OrderCacheRepository: Send + Sync {
     fn has_dirty_sale_param(&self) -> anyhow::Result<bool>;
 
     /// 删除早于 cutoff 的订单，同时裁剪 cache_segments 里超出保留窗口的段。
-    fn delete_older_than(
-        &self,
-        scope: &str,
-        cutoff_timestamp: i64,
-    ) -> anyhow::Result<usize>;
+    fn delete_older_than(&self, scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize>;
 
     /// 按时间窗口读取订单（含商品行），按 create_time 降序。
     fn fetch_orders_in_range(

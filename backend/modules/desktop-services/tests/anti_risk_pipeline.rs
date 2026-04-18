@@ -67,7 +67,9 @@ fn response_to_pair(r: Response) -> (u16, Option<Value>, Vec<u32>) {
         Response::RiskByMessage(msg) => (200, Some(json!({"code": 0, "msg": msg})), vec![]),
         Response::OrdersPage(ids) => (
             200,
-            Some(json!({"code": 0, "orderList": ids.iter().map(|id| json!({"id": id})).collect::<Vec<_>>()})),
+            Some(
+                json!({"code": 0, "orderList": ids.iter().map(|id| json!({"id": id})).collect::<Vec<_>>()}),
+            ),
             ids,
         ),
         Response::Empty => (200, Some(json!({"code": 0, "orderList": []})), vec![]),
@@ -108,9 +110,7 @@ async fn fetch_page_with_retry(
                 }
                 Ok(LimitOutcome::Ok(PageOutcome::Orders(orders)))
             }
-            LimitOutcome::RateLimited { api_level } => {
-                Ok(LimitOutcome::RateLimited { api_level })
-            }
+            LimitOutcome::RateLimited { api_level } => Ok(LimitOutcome::RateLimited { api_level }),
         }
     })
     .await
@@ -187,8 +187,18 @@ async fn pipeline_returns_all_orders_when_no_risk_or_limit() {
     let msgs = Arc::new(Mutex::new(Vec::new()));
 
     let out: FallbackOutcome<u32> = run_with_risk_fallback(
-        || async move { run_pages_as_normal(&normal_api, 10, stop.clone(), make_progress(msgs.clone())).await },
-        || async move { run_pages_as_risk(&risk, 10, Arc::new(AtomicBool::new(false)), make_progress(Arc::new(Mutex::new(vec![])))).await },
+        || async move {
+            run_pages_as_normal(&normal_api, 10, stop.clone(), make_progress(msgs.clone())).await
+        },
+        || async move {
+            run_pages_as_risk(
+                &risk,
+                10,
+                Arc::new(AtomicBool::new(false)),
+                make_progress(Arc::new(Mutex::new(vec![]))),
+            )
+            .await
+        },
         default_key,
         Arc::new(AtomicBool::new(false)),
         make_progress(Arc::new(Mutex::new(vec![]))),
@@ -450,7 +460,9 @@ async fn pipeline_handles_mixed_http_api_and_risk_signals() {
 
     let msgs = normal_msgs_read.lock().unwrap();
     let api_msg = msgs.iter().find(|m| m.contains("(API)"));
-    let http_msg = msgs.iter().find(|m| m.contains("等待") && !m.contains("(API)"));
+    let http_msg = msgs
+        .iter()
+        .find(|m| m.contains("等待") && !m.contains("(API)"));
     assert!(api_msg.is_some(), "必须有一条 (API) 级限流提示");
     assert!(http_msg.is_some(), "必须有一条 HTTP 级限流提示");
 }
@@ -559,7 +571,9 @@ async fn pipeline_invokes_fns_exactly_once() {
     let _ = run_with_risk_fallback(
         || async move {
             normal_calls_inner.fetch_add(1, Ordering::SeqCst);
-            NormalOutcome::RiskControl { partial: vec![1u32] }
+            NormalOutcome::RiskControl {
+                partial: vec![1u32],
+            }
         },
         || async move {
             risk_calls_inner.fetch_add(1, Ordering::SeqCst);

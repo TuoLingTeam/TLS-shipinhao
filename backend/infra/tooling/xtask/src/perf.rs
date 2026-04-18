@@ -80,7 +80,12 @@ fn collect_perf_report(overrides: &PerfOverrides) -> PerfReport {
             name: "评价匹配 100 条".into(),
             target: format!("< {MATCH_TARGET_SECS:.0} 秒"),
             actual: format!("{measured_match_secs:.4} 秒"),
-            status: if measured_match_secs < MATCH_TARGET_SECS { "pass" } else { "fail" }.into(),
+            status: if measured_match_secs < MATCH_TARGET_SECS {
+                "pass"
+            } else {
+                "fail"
+            }
+            .into(),
             evidence: if overrides.match_secs.is_some() {
                 "人工录入实测值".into()
             } else {
@@ -115,7 +120,13 @@ fn collect_perf_report(overrides: &PerfOverrides) -> PerfReport {
                 .map(|size| format!("{size:.2} MB"))
                 .unwrap_or_else(|| "待生成 release 产物后复测".into()),
             status: release_binary_size_mb
-                .map(|size| if size < PACKAGE_TARGET_MB { "pass" } else { "fail" })
+                .map(|size| {
+                    if size < PACKAGE_TARGET_MB {
+                        "pass"
+                    } else {
+                        "fail"
+                    }
+                })
                 .unwrap_or("manual")
                 .into(),
             evidence: if overrides.package_mb.is_some() {
@@ -137,7 +148,13 @@ fn collect_perf_report(overrides: &PerfOverrides) -> PerfReport {
     }
 }
 
-fn build_metric(name: &str, target: f64, actual: Option<f64>, unit: &str, evidence: &str) -> PerfMetric {
+fn build_metric(
+    name: &str,
+    target: f64,
+    actual: Option<f64>,
+    unit: &str,
+    evidence: &str,
+) -> PerfMetric {
     PerfMetric {
         name: name.into(),
         target: format!("< {:.0} {}", target, unit),
@@ -161,7 +178,9 @@ fn parse_overrides(args: &[OsString]) -> Result<PerfOverrides> {
         let Some((key, value)) = raw.split_once('=') else {
             continue;
         };
-        let parsed = value.parse::<f64>().with_context(|| format!("无法解析性能参数：{raw}"))?;
+        let parsed = value
+            .parse::<f64>()
+            .with_context(|| format!("无法解析性能参数：{raw}"))?;
         match key {
             "--startup" => overrides.startup_secs = Some(parsed),
             "--sync" => overrides.sync_secs = Some(parsed),
@@ -212,12 +231,10 @@ fn benchmark_match_100() -> f64 {
 }
 
 fn find_release_binary_size_mb() -> Option<f64> {
-    [
-        PathBuf::from("target/release/desktop"),
-    ]
-    .into_iter()
-    .find_map(|path| fs::metadata(path).ok())
-    .map(|meta| meta.len() as f64 / 1024.0 / 1024.0)
+    [PathBuf::from("target/release/desktop")]
+        .into_iter()
+        .find_map(|path| fs::metadata(path).ok())
+        .map(|meta| meta.len() as f64 / 1024.0 / 1024.0)
 }
 
 fn write_report(path: &Path, report: &PerfReport) -> Result<()> {
