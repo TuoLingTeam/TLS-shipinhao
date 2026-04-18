@@ -1,22 +1,27 @@
-pub mod day_window;
-pub mod delivery_batch_runner;
-pub mod delivery_update;
-pub mod matching;
-pub mod order_cache_repository;
-pub mod order_cache_storage;
-pub mod order_fetcher;
-pub mod order_gap_planner;
-pub mod order_fetcher_risk;
-pub mod order_match_scoring;
-pub mod order_sync_planner;
-pub mod order_sync_service;
-pub mod order_utils;
-pub mod review_batch_match;
-pub mod review_candidate_scoring;
-pub mod review_index;
-pub mod review_match_flow;
-pub mod review_matcher_helpers;
-pub mod update_service;
+pub mod shared;
+pub mod review;
+pub mod order;
+pub mod delivery;
+
+pub use delivery::batch_runner as delivery_batch_runner;
+pub use delivery::update as delivery_update;
+pub use order::cache_repository as order_cache_repository;
+pub use order::cache_storage as order_cache_storage;
+pub use order::fetcher as order_fetcher;
+pub use order::fetcher_risk as order_fetcher_risk;
+pub use order::gap_planner as order_gap_planner;
+pub use order::match_scoring as order_match_scoring;
+pub use order::sync_planner as order_sync_planner;
+pub use order::sync_service as order_sync_service;
+pub use order::utils as order_utils;
+pub use review::batch_match as review_batch_match;
+pub use review::candidate_scoring as review_candidate_scoring;
+pub use review::index as review_index;
+pub use review::match_flow as review_match_flow;
+pub use review::matcher_helpers as review_matcher_helpers;
+pub use shared::day_window;
+pub use shared::matching;
+pub use shared::update_service;
 
 use crate::delivery_batch_runner::{
     run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem,
