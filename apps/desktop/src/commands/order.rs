@@ -1,4 +1,6 @@
-use crate::adapters::http_order_search::{parse_iso_window, HttpOrderCacheFinder, HttpOrderSearchClient};
+use crate::adapters::http_order_search::{
+    parse_iso_window, HttpOrderCacheFinder, HttpOrderSearchClient,
+};
 use crate::adapters::sqlite_order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::error::AppError;
@@ -7,7 +9,7 @@ use api_contracts::LICENSE_TASK_CACHE_MANAGE;
 use desktop_services::order_cache_repository::OrderCacheRepository;
 use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_service::{
-    OrderSyncService, ORDER_CACHE_SCOPE, MERGE_TOLERANCE_SECONDS, MIN_GAP_WIDTH_SECONDS,
+    OrderSyncService, MERGE_TOLERANCE_SECONDS, MIN_GAP_WIDTH_SECONDS, ORDER_CACHE_SCOPE,
 };
 use domain_core::{OrderCacheEntry, TimeWindow};
 use serde::{Deserialize, Serialize};
@@ -270,7 +272,10 @@ pub async fn sync_recent_order_cache(
             "manual",
             "completed",
             100,
-            format!("缓存维护完成，当前最近 30 天可见 {} 条订单。", light_entries.len()),
+            format!(
+                "缓存维护完成，当前最近 30 天可见 {} 条订单。",
+                light_entries.len()
+            ),
         );
 
         Ok(OrderSyncResult {

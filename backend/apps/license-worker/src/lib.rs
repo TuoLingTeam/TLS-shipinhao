@@ -1245,7 +1245,10 @@ mod tests {
         assert_eq!(revoke_error_contract("empty_key"), (400, "empty_key"));
         assert_eq!(revoke_error_contract("not_found"), (404, "not_found"));
         assert_eq!(revoke_error_contract("unauthorized"), (401, "unauthorized"));
-        assert_eq!(revoke_error_contract("secret_missing"), (503, "secret_missing"));
+        assert_eq!(
+            revoke_error_contract("secret_missing"),
+            (503, "secret_missing")
+        );
         assert_eq!(
             revoke_error_contract("missing field `key`"),
             (400, "invalid_json")
@@ -1629,7 +1632,10 @@ mod tests {
             .with_timezone(&Utc);
 
         let err = handle_admin_revoke_json(&repo, "{", now).await.unwrap_err();
-        assert_eq!(revoke_error_contract(&err.to_string()), (400, "invalid_json"));
+        assert_eq!(
+            revoke_error_contract(&err.to_string()),
+            (400, "invalid_json")
+        );
     }
 
     #[tokio::test]

@@ -1,6 +1,4 @@
-use crate::model::{
-    AuditEvent, DeviceRegistration, GeneratedKeyRecord, LicenseRecord,
-};
+use crate::model::{AuditEvent, DeviceRegistration, GeneratedKeyRecord, LicenseRecord};
 
 pub trait LicenseRepository {
     fn load_generated_key(&self, license_key: &str) -> anyhow::Result<Option<GeneratedKeyRecord>>;

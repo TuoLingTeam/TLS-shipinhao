@@ -181,11 +181,7 @@ mod tests {
 
     #[test]
     fn rejects_when_policy_missing_task() {
-        let payload = sample_payload(
-            vec![LICENSE_TASK_REVIEW_FIND.into()],
-            i64::MAX,
-            "low",
-        );
+        let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], i64::MAX, "low");
         let err = authorize_task_local(&payload, LICENSE_TASK_BATCH_DELIVERY, 100, || "g".into())
             .unwrap_err();
         assert!(matches!(err, GrantError::PolicyDenied(_)));
@@ -193,11 +189,7 @@ mod tests {
 
     #[test]
     fn rejects_expired_lease() {
-        let payload = sample_payload(
-            vec![LICENSE_TASK_REVIEW_FIND.into()],
-            500,
-            "low",
-        );
+        let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], 500, "low");
         let err = authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_000, || "g".into())
             .unwrap_err();
         assert!(matches!(err, GrantError::InvalidLease(_)));
@@ -205,17 +197,10 @@ mod tests {
 
     #[test]
     fn grants_local_with_expected_validity_and_fields() {
-        let payload = sample_payload(
-            vec![LICENSE_TASK_REVIEW_FIND.into()],
-            i64::MAX,
-            "low",
-        );
-        let grant = authorize_task_local(
-            &payload,
-            LICENSE_TASK_REVIEW_FIND,
-            1_700_000_000,
-            || "grant-xyz".into(),
-        )
+        let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], i64::MAX, "low");
+        let grant = authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_700_000_000, || {
+            "grant-xyz".into()
+        })
         .unwrap();
         assert_eq!(grant.task_type, LICENSE_TASK_REVIEW_FIND);
         assert!(grant.granted);
@@ -241,26 +226,15 @@ mod tests {
     #[test]
     fn cache_get_valid_returns_none_when_empty() {
         let cache = TaskGrantCache::new();
-        assert!(cache
-            .get_valid(LICENSE_TASK_REVIEW_FIND, 1_000)
-            .is_none());
+        assert!(cache.get_valid(LICENSE_TASK_REVIEW_FIND, 1_000).is_none());
     }
 
     #[test]
     fn cache_roundtrip_hits_within_validity_window() {
         let cache = TaskGrantCache::new();
-        let payload = sample_payload(
-            vec![LICENSE_TASK_REVIEW_FIND.into()],
-            i64::MAX,
-            "low",
-        );
-        let grant = authorize_task_local(
-            &payload,
-            LICENSE_TASK_REVIEW_FIND,
-            1_000,
-            || "g".into(),
-        )
-        .unwrap();
+        let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], i64::MAX, "low");
+        let grant =
+            authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_000, || "g".into()).unwrap();
         cache.put(grant.clone());
 
         // 29 分钟 59 秒内命中缓存
@@ -273,48 +247,27 @@ mod tests {
     #[test]
     fn cache_miss_when_beyond_validity_window() {
         let cache = TaskGrantCache::new();
-        let payload = sample_payload(
-            vec![LICENSE_TASK_REVIEW_FIND.into()],
-            i64::MAX,
-            "low",
-        );
-        let grant = authorize_task_local(
-            &payload,
-            LICENSE_TASK_REVIEW_FIND,
-            1_000,
-            || "g".into(),
-        )
-        .unwrap();
+        let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], i64::MAX, "low");
+        let grant =
+            authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_000, || "g".into()).unwrap();
         cache.put(grant);
 
         // 30 分钟后过期
-        let missed = cache
-            .get_valid(LICENSE_TASK_REVIEW_FIND, 1_000 + LICENSE_RUNTIME_GRANT_MINUTES * 60 + 1);
+        let missed = cache.get_valid(
+            LICENSE_TASK_REVIEW_FIND,
+            1_000 + LICENSE_RUNTIME_GRANT_MINUTES * 60 + 1,
+        );
         assert!(missed.is_none());
     }
 
     #[test]
     fn cache_put_overwrites_previous_grant_for_same_task() {
         let cache = TaskGrantCache::new();
-        let payload = sample_payload(
-            vec![LICENSE_TASK_REVIEW_FIND.into()],
-            i64::MAX,
-            "low",
-        );
-        let g1 = authorize_task_local(
-            &payload,
-            LICENSE_TASK_REVIEW_FIND,
-            1_000,
-            || "old".into(),
-        )
-        .unwrap();
-        let g2 = authorize_task_local(
-            &payload,
-            LICENSE_TASK_REVIEW_FIND,
-            1_500,
-            || "new".into(),
-        )
-        .unwrap();
+        let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], i64::MAX, "low");
+        let g1 = authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_000, || "old".into())
+            .unwrap();
+        let g2 = authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_500, || "new".into())
+            .unwrap();
         cache.put(g1);
         cache.put(g2);
 
@@ -334,28 +287,20 @@ mod tests {
             "low",
         );
         cache.put(
-            authorize_task_local(
-                &payload_full,
-                LICENSE_TASK_REVIEW_FIND,
-                1_000,
-                || "rf".into(),
-            )
+            authorize_task_local(&payload_full, LICENSE_TASK_REVIEW_FIND, 1_000, || {
+                "rf".into()
+            })
             .unwrap(),
         );
         cache.put(
-            authorize_task_local(
-                &payload_full,
-                LICENSE_TASK_BATCH_DELIVERY,
-                1_000,
-                || "bd".into(),
-            )
+            authorize_task_local(&payload_full, LICENSE_TASK_BATCH_DELIVERY, 1_000, || {
+                "bd".into()
+            })
             .unwrap(),
         );
 
         cache.invalidate(LICENSE_TASK_REVIEW_FIND);
-        assert!(cache
-            .get_valid(LICENSE_TASK_REVIEW_FIND, 1_500)
-            .is_none());
+        assert!(cache.get_valid(LICENSE_TASK_REVIEW_FIND, 1_500).is_none());
         assert!(cache
             .get_valid(LICENSE_TASK_BATCH_DELIVERY, 1_500)
             .is_some());
@@ -373,27 +318,15 @@ mod tests {
             "low",
         );
         cache.put(
-            authorize_task_local(
-                &payload,
-                LICENSE_TASK_REVIEW_FIND,
-                1_000,
-                || "rf".into(),
-            )
-            .unwrap(),
+            authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_000, || "rf".into())
+                .unwrap(),
         );
         cache.put(
-            authorize_task_local(
-                &payload,
-                LICENSE_TASK_BATCH_DELIVERY,
-                1_000,
-                || "bd".into(),
-            )
-            .unwrap(),
+            authorize_task_local(&payload, LICENSE_TASK_BATCH_DELIVERY, 1_000, || "bd".into())
+                .unwrap(),
         );
         cache.clear();
-        assert!(cache
-            .get_valid(LICENSE_TASK_REVIEW_FIND, 1_500)
-            .is_none());
+        assert!(cache.get_valid(LICENSE_TASK_REVIEW_FIND, 1_500).is_none());
         assert!(cache
             .get_valid(LICENSE_TASK_BATCH_DELIVERY, 1_500)
             .is_none());
@@ -419,8 +352,7 @@ mod tests {
             LICENSE_TASK_BATCH_DELIVERY,
             LICENSE_TASK_CACHE_MANAGE,
         ] {
-            let grant =
-                authorize_task_local(&payload, task, 1_000, || "g".into()).unwrap();
+            let grant = authorize_task_local(&payload, task, 1_000, || "g".into()).unwrap();
             assert_eq!(grant.task_type, task);
         }
     }

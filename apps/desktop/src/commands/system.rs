@@ -21,7 +21,6 @@ fn clamp_ui_scale(scale: f64) -> f64 {
     scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
 }
 
-
 #[tauri::command]
 pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
     fetch_latest_version_info(None, Some(&get_device_id()))
@@ -411,7 +410,6 @@ fn looks_like_logged_in_store_session(cookies: &[tauri::webview::Cookie<'static>
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,7 +420,10 @@ mod tests {
         assert_eq!(payload["name"], APP_NAME);
         assert_eq!(payload["name_en"], APP_NAME_EN);
         assert_eq!(payload["author_wechat"], AUTHOR_WECHAT);
-        assert!(payload["window_title"].as_str().unwrap_or("").contains(APP_NAME));
+        assert!(payload["window_title"]
+            .as_str()
+            .unwrap_or("")
+            .contains(APP_NAME));
     }
 
     #[tokio::test]

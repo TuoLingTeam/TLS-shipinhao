@@ -40,8 +40,7 @@ impl Default for LicenseState {
 /// 允许在离线模式下继续使用的状态集合（与 Python 版 `_ALLOWED_LOCAL_REASONS` 对齐）。
 ///
 /// 命中这些状态时，客户端无需强制联网校验即可让用户继续使用功能。
-pub const ALLOWED_LOCAL_STATES: &[LicenseState] =
-    &[LicenseState::Active, LicenseState::RenewalDue];
+pub const ALLOWED_LOCAL_STATES: &[LicenseState] = &[LicenseState::Active, LicenseState::RenewalDue];
 
 impl LicenseState {
     /// 判断当前状态是否允许离线继续使用。
@@ -249,9 +248,15 @@ mod tests {
             (LicenseState::Invalid, "\"invalid\""),
             (LicenseState::Expired, "\"expired\""),
             (LicenseState::DeviceMismatch, "\"device_mismatch\""),
-            (LicenseState::ReactivationRequired, "\"reactivation_required\""),
+            (
+                LicenseState::ReactivationRequired,
+                "\"reactivation_required\"",
+            ),
             (LicenseState::Revoked, "\"revoked\""),
-            (LicenseState::OnlineRefreshRequired, "\"online_refresh_required\""),
+            (
+                LicenseState::OnlineRefreshRequired,
+                "\"online_refresh_required\"",
+            ),
             (LicenseState::RenewalDue, "\"renewal_due\""),
             (LicenseState::Compromised, "\"compromised\""),
         ] {

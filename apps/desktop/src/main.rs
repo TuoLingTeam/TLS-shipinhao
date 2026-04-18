@@ -20,8 +20,7 @@ use tauri::Emitter;
 ///   宝贵的运营日志才会出现在 `cargo tauri dev` 的终端输出里。
 fn init_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = fmt()
         .with_env_filter(filter)
         .with_target(true)

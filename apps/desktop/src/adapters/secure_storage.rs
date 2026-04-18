@@ -275,10 +275,7 @@ impl SecretStore for EncryptedFileSecretStore {
 /// 默认后备链：Keychain 可用优先用 Keychain，否则回退加密文件。
 ///
 /// 返回 `Arc<dyn SecretStore>` 方便业务层把它塞到 `AppState` 里共享。
-pub fn init_default_store(
-    runtime_dir: &Path,
-    device_id: &str,
-) -> Arc<dyn SecretStore> {
+pub fn init_default_store(runtime_dir: &Path, device_id: &str) -> Arc<dyn SecretStore> {
     match KeychainSecretStore::new() {
         Ok(store) => {
             tracing::info!(
@@ -373,11 +370,9 @@ mod tests {
     #[test]
     #[ignore = "依赖真实系统密钥环，需要交互授权"]
     fn keychain_store_real_backend_roundtrip() {
-        let store = KeychainSecretStore::new_with(
-            "com.tuoling.tls-shipinhao.test-runtime",
-            "ci-test-slot",
-        )
-        .expect("构造条目应成功");
+        let store =
+            KeychainSecretStore::new_with("com.tuoling.tls-shipinhao.test-runtime", "ci-test-slot")
+                .expect("构造条目应成功");
 
         store.set("ci-secret-value").expect("写入 Keychain 失败");
         assert_eq!(
@@ -421,10 +416,7 @@ mod tests {
             .unwrap();
 
         let new_store = EncryptedFileSecretStore::new(&path, "dev-A");
-        assert_eq!(
-            new_store.get().unwrap().as_deref(),
-            Some("persisted-lease")
-        );
+        assert_eq!(new_store.get().unwrap().as_deref(), Some("persisted-lease"));
     }
 
     #[test]

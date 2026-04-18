@@ -265,19 +265,20 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
     let profile = state.license_profile.lock().await.clone();
     let client = make_client();
 
-    let outcome = license_service::lease::refresh_lease_if_due(&payload, now_epoch, |req| async move {
-        let response = client
-            .refresh_lease(&req.license_key, &req.device_id, req.current_issued_at)
-            .await
-            .map_err(|err| err.to_string())?;
-        if !response.success {
-            return Err(response.message);
-        }
-        Ok(license_service::lease::RefreshResponse {
-            new_token: response.new_token,
+    let outcome =
+        license_service::lease::refresh_lease_if_due(&payload, now_epoch, |req| async move {
+            let response = client
+                .refresh_lease(&req.license_key, &req.device_id, req.current_issued_at)
+                .await
+                .map_err(|err| err.to_string())?;
+            if !response.success {
+                return Err(response.message);
+            }
+            Ok(license_service::lease::RefreshResponse {
+                new_token: response.new_token,
+            })
         })
-    })
-    .await;
+        .await;
 
     match outcome {
         Ok(RefreshOutcome::NotDue) => Ok(()),
@@ -310,10 +311,7 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
     }
 }
 
-async fn mark_runtime_compromised(
-    state: &AppState,
-    detail: String,
-) -> Result<(), AppError> {
+async fn mark_runtime_compromised(state: &AppState, detail: String) -> Result<(), AppError> {
     let profile = state.license_profile.lock().await.clone();
     persist_runtime_profile(
         state,
@@ -332,7 +330,8 @@ async fn mark_runtime_compromised(
 }
 
 pub async fn ensure_runtime_integrity(state: &AppState) -> Result<(), AppError> {
-    if let Err(err) = state::validate_integrity_if_present(state.integrity_manifest_path.as_deref()) {
+    if let Err(err) = state::validate_integrity_if_present(state.integrity_manifest_path.as_deref())
+    {
         return mark_runtime_compromised(state, err).await;
     }
     Ok(())
@@ -568,11 +567,7 @@ mod tests {
         (format!("{payload_b64}.{signature_b64}"), verifying_key_b64)
     }
 
-    fn test_state(
-        device_id: &str,
-        store: Arc<dyn SecretStore>,
-        public_key_b64: &str,
-    ) -> AppState {
+    fn test_state(device_id: &str, store: Arc<dyn SecretStore>, public_key_b64: &str) -> AppState {
         AppState {
             cookie_profile: Mutex::new(Default::default()),
             cookie_path: Mutex::new(PathBuf::from(".")),

@@ -386,7 +386,12 @@ mod tests {
             &self,
             license_key: &str,
         ) -> anyhow::Result<Option<GeneratedKeyRecord>> {
-            Ok(self.generated_keys.lock().unwrap().get(license_key).cloned())
+            Ok(self
+                .generated_keys
+                .lock()
+                .unwrap()
+                .get(license_key)
+                .cloned())
         }
 
         fn save_generated_key(&self, record: &GeneratedKeyRecord) -> anyhow::Result<()> {

@@ -61,11 +61,20 @@ mod tests {
     #[test]
     fn user_agent_is_chrome_144_with_current_platform_marker() {
         let ua = get_user_agent();
-        assert!(ua.contains("Chrome/144.0.0.0"), "UA 未锁定 Chrome 版本: {ua}");
-        assert!(ua.starts_with("Mozilla/5.0 "), "UA 必须以 Mozilla 起头: {ua}");
+        assert!(
+            ua.contains("Chrome/144.0.0.0"),
+            "UA 未锁定 Chrome 版本: {ua}"
+        );
+        assert!(
+            ua.starts_with("Mozilla/5.0 "),
+            "UA 必须以 Mozilla 起头: {ua}"
+        );
 
         #[cfg(target_os = "macos")]
-        assert!(ua.contains("Macintosh"), "macOS 平台 UA 必须含 Macintosh: {ua}");
+        assert!(
+            ua.contains("Macintosh"),
+            "macOS 平台 UA 必须含 Macintosh: {ua}"
+        );
         #[cfg(target_os = "windows")]
         assert!(
             ua.contains("Windows NT 10.0"),

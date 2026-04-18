@@ -118,7 +118,9 @@ fn split_token(token: &str) -> Result<(&str, &str), LeaseError> {
         .split_once('.')
         .ok_or_else(|| LeaseError::InvalidFormat("缺少 `.` 分隔符".into()))?;
     if payload_b64.is_empty() || sig_b64.is_empty() {
-        return Err(LeaseError::InvalidFormat("payload 或 signature 为空".into()));
+        return Err(LeaseError::InvalidFormat(
+            "payload 或 signature 为空".into(),
+        ));
     }
     Ok((payload_b64, sig_b64))
 }
@@ -358,9 +360,7 @@ mod tests {
         assert_eq!(payload.device_id, "dev-A");
 
         // None 也跳过
-        let payload2 = verifier
-            .verify(&token, None, 1_730_000_100, false)
-            .unwrap();
+        let payload2 = verifier.verify(&token, None, 1_730_000_100, false).unwrap();
         assert_eq!(payload2, payload);
     }
 
@@ -406,10 +406,8 @@ mod tests {
 
     #[test]
     fn token_without_dot_returns_invalid_format() {
-        let verifier = LeaseVerifier::from_public_key_b64(
-            &URL_SAFE_NO_PAD.encode(&[1u8; 32]),
-        )
-        .unwrap();
+        let verifier =
+            LeaseVerifier::from_public_key_b64(&URL_SAFE_NO_PAD.encode(&[1u8; 32])).unwrap();
         let err = verifier.verify("nodot", None, 0, false).unwrap_err();
         match err {
             LeaseError::InvalidFormat(msg) => assert!(msg.contains("分隔符")),
@@ -419,10 +417,8 @@ mod tests {
 
     #[test]
     fn empty_token_segments_return_invalid_format() {
-        let verifier = LeaseVerifier::from_public_key_b64(
-            &URL_SAFE_NO_PAD.encode(&[1u8; 32]),
-        )
-        .unwrap();
+        let verifier =
+            LeaseVerifier::from_public_key_b64(&URL_SAFE_NO_PAD.encode(&[1u8; 32])).unwrap();
         let err = verifier.verify(".sig", None, 0, false).unwrap_err();
         assert!(matches!(err, LeaseError::InvalidFormat(_)));
 
@@ -477,7 +473,11 @@ mod tests {
 
         let outcome = refresh_lease_if_due(&payload, 1_500, |_req| {
             *called.borrow_mut() = true;
-            async move { Ok(RefreshResponse { new_token: "X".into() }) }
+            async move {
+                Ok(RefreshResponse {
+                    new_token: "X".into(),
+                })
+            }
         })
         .await
         .unwrap();
@@ -490,7 +490,9 @@ mod tests {
     async fn refresh_returns_hard_expired_when_past_exp() {
         let payload = sample_payload(2_000, 3_000);
         let err = refresh_lease_if_due(&payload, 3_500, |_req| async move {
-            Ok(RefreshResponse { new_token: "X".into() })
+            Ok(RefreshResponse {
+                new_token: "X".into(),
+            })
         })
         .await
         .unwrap_err();

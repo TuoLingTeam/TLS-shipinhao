@@ -117,9 +117,9 @@ fn load_public_key(b64url: &str) -> Result<VerifyingKey, IntegrityError> {
 fn read_manifest_file(path: &Path) -> Result<String, IntegrityError> {
     match std::fs::read_to_string(path) {
         Ok(raw) => Ok(raw),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(
-            IntegrityError::MissingManifest(path.display().to_string()),
-        ),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(IntegrityError::MissingManifest(path.display().to_string()))
+        }
         Err(e) => Err(IntegrityError::Io(e.to_string())),
     }
 }
@@ -144,10 +144,7 @@ fn verify_manifest_signature(
     Ok(())
 }
 
-fn verify_manifest_files(
-    base_dir: &Path,
-    payload: &ManifestPayload,
-) -> Result<(), IntegrityError> {
+fn verify_manifest_files(base_dir: &Path, payload: &ManifestPayload) -> Result<(), IntegrityError> {
     for file in &payload.files {
         if file.path.is_empty() {
             return Err(IntegrityError::InvalidManifest("path 为空".into()));
@@ -158,8 +155,9 @@ fn verify_manifest_files(
         let absolute = base_dir.join(&file.path);
         let actual = match sha256_hex_of_file(&absolute) {
             Ok(hex) => hex,
-            Err(IntegrityError::Io(msg)) if msg.contains("No such file") || msg.contains("不到")
-            => {
+            Err(IntegrityError::Io(msg))
+                if msg.contains("No such file") || msg.contains("不到") =>
+            {
                 return Err(IntegrityError::FileMissing(file.path.clone()));
             }
             Err(e) => return Err(e),
@@ -260,11 +258,8 @@ mod tests {
     fn missing_manifest_file_reports_missing_manifest() {
         let dir = tempfile::tempdir().unwrap();
         let (_, vk) = keypair();
-        let err = validate_runtime_continuity(
-            &dir.path().join(INTEGRITY_MANIFEST_FILE_NAME),
-            &vk,
-        )
-        .unwrap_err();
+        let err = validate_runtime_continuity(&dir.path().join(INTEGRITY_MANIFEST_FILE_NAME), &vk)
+            .unwrap_err();
         assert!(matches!(err, IntegrityError::MissingManifest(_)));
     }
 
@@ -282,7 +277,11 @@ mod tests {
     fn tampered_file_byte_reports_file_modified() {
         let (dir, manifest_path, _, _sk, vk) = fresh_setup();
         // 改 apps/ui/dist/index.html 一个字节
-        std::fs::write(dir.path().join("apps/ui/dist/index.html"), b"<html>X</html>").unwrap();
+        std::fs::write(
+            dir.path().join("apps/ui/dist/index.html"),
+            b"<html>X</html>",
+        )
+        .unwrap();
         let err = validate_runtime_continuity(&manifest_path, &vk).unwrap_err();
         match err {
             IntegrityError::FileModified(path) => assert_eq!(path, "apps/ui/dist/index.html"),
@@ -309,11 +308,7 @@ mod tests {
             // 替换没产生变化时，直接尾追一个字符也行
             signed.signature.push('X');
         }
-        std::fs::write(
-            &manifest_path,
-            serde_json::to_vec_pretty(&signed).unwrap(),
-        )
-        .unwrap();
+        std::fs::write(&manifest_path, serde_json::to_vec_pretty(&signed).unwrap()).unwrap();
 
         let err = validate_runtime_continuity(&manifest_path, &vk).unwrap_err();
         assert!(matches!(
@@ -343,11 +338,7 @@ mod tests {
         let raw = std::fs::read_to_string(&manifest_path).unwrap();
         let mut signed: SignedManifest = serde_json::from_str(&raw).unwrap();
         signed.signature = "".into();
-        std::fs::write(
-            &manifest_path,
-            serde_json::to_vec_pretty(&signed).unwrap(),
-        )
-        .unwrap();
+        std::fs::write(&manifest_path, serde_json::to_vec_pretty(&signed).unwrap()).unwrap();
 
         let err = validate_runtime_continuity(&manifest_path, &vk).unwrap_err();
         assert!(matches!(err, IntegrityError::InvalidManifest(_)));

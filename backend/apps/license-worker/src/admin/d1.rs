@@ -61,7 +61,10 @@ pub(crate) fn check_admin(headers: &worker::Headers, env: &Env) -> Result<Option
     let got = headers.get("X-Admin-Secret")?.unwrap_or_default();
     let auth_error = crate::admin_auth_error_contract(
         expected.is_some(),
-        expected.as_deref().map(|value| value == got).unwrap_or(false),
+        expected
+            .as_deref()
+            .map(|value| value == got)
+            .unwrap_or(false),
     );
     if let Some((status, message)) = auth_error {
         return Ok(Some(json_err(status, message)?));

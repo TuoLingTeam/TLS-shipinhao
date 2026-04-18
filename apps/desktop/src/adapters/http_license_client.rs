@@ -43,10 +43,7 @@ pub enum DomainAttempt<R> {
 /// - `Network` 累积 `last_network_err` 并尝试下一个。
 /// - 所有域名都是 `Network` → 返回 `AllDomainsFailed(last_error)`。
 /// - `urls` 为空 → 返回 `AllDomainsFailed("")`。
-pub async fn try_each_domain<R, F, Fut>(
-    urls: &[String],
-    mut op: F,
-) -> Result<R, LicenseHttpError>
+pub async fn try_each_domain<R, F, Fut>(urls: &[String], mut op: F) -> Result<R, LicenseHttpError>
 where
     F: FnMut(&str) -> Fut,
     Fut: Future<Output = DomainAttempt<R>>,
@@ -86,16 +83,19 @@ async fn response_to_attempt<R: serde::de::DeserializeOwned>(
             let body = match resp.text().await {
                 Ok(body) => body,
                 Err(e) => {
-                    return DomainAttempt::Final(Err(LicenseHttpError::InvalidResponse(
-                        format!("读取响应失败：{e}"),
-                    )))
+                    return DomainAttempt::Final(Err(LicenseHttpError::InvalidResponse(format!(
+                        "读取响应失败：{e}"
+                    ))))
                 }
             };
             match serde_json::from_str::<R>(&body) {
                 Ok(value) => DomainAttempt::Final(Ok(value)),
                 Err(e) => {
-                    let snippet: String =
-                        body.chars().take(160).collect::<String>().replace('\n', " ");
+                    let snippet: String = body
+                        .chars()
+                        .take(160)
+                        .collect::<String>()
+                        .replace('\n', " ");
                     DomainAttempt::Final(Err(LicenseHttpError::InvalidResponse(format!(
                         "JSON 解析失败：{e}；片段：{snippet}"
                     ))))

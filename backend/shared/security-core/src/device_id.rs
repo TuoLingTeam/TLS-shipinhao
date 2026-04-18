@@ -166,7 +166,9 @@ mod tests {
     fn derive_produces_sixteen_lowercase_hex_chars() {
         let id = derive_device_id("test-serial-12345");
         assert_eq!(id.len(), DEVICE_ID_HEX_LEN);
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(id
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
     }
 
     #[test]
@@ -178,10 +180,7 @@ mod tests {
 
     #[test]
     fn derive_differs_for_different_inputs() {
-        assert_ne!(
-            derive_device_id("serial-A"),
-            derive_device_id("serial-B"),
-        );
+        assert_ne!(derive_device_id("serial-A"), derive_device_id("serial-B"),);
     }
 
     #[test]

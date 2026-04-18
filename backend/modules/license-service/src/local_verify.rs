@@ -46,9 +46,7 @@ pub fn verify_stored_lease_local(
             };
             runtime_state_from_payload(payload, LicenseState::Active, status_hint)
         }
-        Err(LeaseError::DeviceMismatch) => {
-            RuntimeState::reason_only(LicenseState::DeviceMismatch)
-        }
+        Err(LeaseError::DeviceMismatch) => RuntimeState::reason_only(LicenseState::DeviceMismatch),
         Err(LeaseError::Expired) => {
             // 过期的 Lease 也应该尽量带出 license_key / renew_after 等字段给 UI 展示
             match verifier.verify(token, Some(device_id), now_epoch, true) {
@@ -63,9 +61,7 @@ pub fn verify_stored_lease_local(
         Err(LeaseError::InvalidSignature)
         | Err(LeaseError::InvalidFormat(_))
         | Err(LeaseError::InvalidKind)
-        | Err(LeaseError::InvalidPublicKey(_)) => {
-            RuntimeState::reason_only(LicenseState::Invalid)
-        }
+        | Err(LeaseError::InvalidPublicKey(_)) => RuntimeState::reason_only(LicenseState::Invalid),
     }
 }
 
@@ -117,10 +113,7 @@ mod tests {
         let payload_bytes = serde_json::to_vec(payload).unwrap();
         let payload_b64 = URL_SAFE_NO_PAD.encode(&payload_bytes);
         let sig = sk.sign(payload_b64.as_bytes());
-        format!(
-            "{payload_b64}.{}",
-            URL_SAFE_NO_PAD.encode(sig.to_bytes())
-        )
+        format!("{payload_b64}.{}", URL_SAFE_NO_PAD.encode(sig.to_bytes()))
     }
 
     fn payload_for(device_id: &str, renew_after: i64, exp: i64) -> serde_json::Value {

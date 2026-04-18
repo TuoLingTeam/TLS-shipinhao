@@ -130,9 +130,9 @@ impl HttpDeliveryGateway {
                 Ok((info, old_waybill))
             }
             Err(init_err) if is_missing_snapshot_error(&init_err) => {
-                let detail_result = self
-                    .fetch_order_detail(order_id)
-                    .and_then(|payload| extract_raw_delivery_product_info_from_order_detail(&payload));
+                let detail_result = self.fetch_order_detail(order_id).and_then(|payload| {
+                    extract_raw_delivery_product_info_from_order_detail(&payload)
+                });
                 match detail_result {
                     Ok(info) => {
                         let old_waybill = old_waybill_from_raw_delivery_info(&info);
@@ -326,7 +326,6 @@ impl BatchDeliveryGateway for HttpDeliveryGateway {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,8 +351,10 @@ mod tests {
 
     #[test]
     fn missing_snapshot_errors_are_detected_and_merged() {
-        let init_err = extract_raw_delivery_product_info_from_init_ship_data(&json!({})).unwrap_err();
-        let detail_err = extract_raw_delivery_product_info_from_order_detail(&json!({})).unwrap_err();
+        let init_err =
+            extract_raw_delivery_product_info_from_init_ship_data(&json!({})).unwrap_err();
+        let detail_err =
+            extract_raw_delivery_product_info_from_order_detail(&json!({})).unwrap_err();
         assert!(is_missing_snapshot_error(&init_err));
         assert!(is_missing_snapshot_error(&detail_err));
         assert!(init_err.to_string().contains("initShipData"));

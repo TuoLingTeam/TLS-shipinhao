@@ -61,12 +61,16 @@ impl AppState {
         let lease_verifier =
             LeaseVerifier::new().unwrap_or_else(|err| panic!("授权公钥加载失败：{err}"));
         let integrity_manifest_path = find_integrity_manifest_path(&app_home_dir);
-        let runtime_license_state =
-            load_runtime_state_from_store(lease_store.as_ref(), &device_id, now_epoch(), &lease_verifier)
-                .unwrap_or_else(|err| {
-                    tracing::warn!("启动时恢复本地 Lease 失败，降级为 invalid：{err}");
-                    RuntimeState::reason_only(LicenseState::Invalid)
-                });
+        let runtime_license_state = load_runtime_state_from_store(
+            lease_store.as_ref(),
+            &device_id,
+            now_epoch(),
+            &lease_verifier,
+        )
+        .unwrap_or_else(|err| {
+            tracing::warn!("启动时恢复本地 Lease 失败，降级为 invalid：{err}");
+            RuntimeState::reason_only(LicenseState::Invalid)
+        });
         let runtime_license_state =
             if let Err(err) = validate_integrity_if_present(integrity_manifest_path.as_deref()) {
                 tracing::error!("启动时完整性校验失败：{err}");
@@ -283,7 +287,9 @@ pub fn load_runtime_state_from_store(
     let token = match store.get() {
         Ok(token) => token,
         Err(StorageError::DeviceChanged) => {
-            return Ok(RuntimeState::reason_only(LicenseState::ReactivationRequired));
+            return Ok(RuntimeState::reason_only(
+                LicenseState::ReactivationRequired,
+            ));
         }
         Err(err) => return Err(err.to_string()),
     };
@@ -351,13 +357,13 @@ impl ExpandHome for Path {
 mod tests {
     use super::*;
     use crate::adapters::secure_storage::{InMemorySecretStore, SecretStore};
-    use license_service::LeaseVerifier;
-    use std::sync::Arc;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
+    use license_service::LeaseVerifier;
     use rand::rngs::OsRng;
     use serde_json::json;
+    use std::sync::Arc;
 
     fn unique_temp_dir(name: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
@@ -464,15 +470,25 @@ mod tests {
     fn storage_device_change_maps_to_reactivation_required() {
         let old_store_root = unique_temp_dir("lease_store_old");
         let new_store_root = old_store_root.clone();
-        let old_store = crate::adapters::secure_storage::EncryptedFileSecretStore::new(&old_store_root, "dev-old");
+        let old_store = crate::adapters::secure_storage::EncryptedFileSecretStore::new(
+            &old_store_root,
+            "dev-old",
+        );
         old_store.set("sensitive-lease").unwrap();
-        let new_store = crate::adapters::secure_storage::EncryptedFileSecretStore::new(&new_store_root, "dev-new");
+        let new_store = crate::adapters::secure_storage::EncryptedFileSecretStore::new(
+            &new_store_root,
+            "dev-new",
+        );
         let verifier = LeaseVerifier::new().unwrap();
 
-        let runtime = load_runtime_state_from_store(&new_store, "dev-new", 1_800_000_000, &verifier)
-            .expect("device drift should map to runtime state");
+        let runtime =
+            load_runtime_state_from_store(&new_store, "dev-new", 1_800_000_000, &verifier)
+                .expect("device drift should map to runtime state");
 
-        assert_eq!(runtime_state_to_license_state(&runtime), "reactivation_required");
+        assert_eq!(
+            runtime_state_to_license_state(&runtime),
+            "reactivation_required"
+        );
     }
 
     #[test]

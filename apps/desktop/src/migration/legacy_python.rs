@@ -129,18 +129,10 @@ impl LegacyPythonMigrator {
         }
 
         report.cache_migrated = self.migrate_order_cache(&backup_dir, &mut report);
-        report.cookie_migrated = self.migrate_single_file(
-            "cookie.txt",
-            &backup_dir,
-            &mut report,
-            "migrate_cookie",
-        );
-        report.license_migrated = self.migrate_single_file(
-            "license.json",
-            &backup_dir,
-            &mut report,
-            "migrate_license",
-        );
+        report.cookie_migrated =
+            self.migrate_single_file("cookie.txt", &backup_dir, &mut report, "migrate_cookie");
+        report.license_migrated =
+            self.migrate_single_file("license.json", &backup_dir, &mut report, "migrate_license");
         report.config_pointer_migrated = self.migrate_single_file(
             "selected_config_dir.txt",
             &backup_dir,
@@ -199,10 +191,7 @@ impl LegacyPythonMigrator {
         ) {
             FileOutcome::Migrated => true,
             FileOutcome::DestinationExists => {
-                report.push_error(
-                    step_prefix,
-                    format!("目标文件已存在，跳过：{file_name}"),
-                );
+                report.push_error(step_prefix, format!("目标文件已存在，跳过：{file_name}"));
                 false
             }
             FileOutcome::SourceMissing => false,
@@ -301,10 +290,16 @@ mod tests {
     fn migrates_all_files_when_new_root_empty() {
         let tmp = tempdir().unwrap();
         let paths = setup_paths(tmp.path());
-        write(&paths.legacy_root.join("order_cache.sqlite3"), "sqlite-main");
+        write(
+            &paths.legacy_root.join("order_cache.sqlite3"),
+            "sqlite-main",
+        );
         write(&paths.legacy_root.join("order_cache.sqlite3-wal"), "wal");
         write(&paths.legacy_root.join("cookie.txt"), "cookie");
-        write(&paths.legacy_root.join("license.json"), "{\"plan\":\"basic\"}");
+        write(
+            &paths.legacy_root.join("license.json"),
+            "{\"plan\":\"basic\"}",
+        );
         write(
             &paths.legacy_root.join("selected_config_dir.txt"),
             "/old/path",
@@ -341,7 +336,10 @@ mod tests {
     fn skips_when_destination_already_exists() {
         let tmp = tempdir().unwrap();
         let paths = setup_paths(tmp.path());
-        write(&paths.legacy_root.join("order_cache.sqlite3"), "legacy-data");
+        write(
+            &paths.legacy_root.join("order_cache.sqlite3"),
+            "legacy-data",
+        );
         write(&paths.new_root.join("order_cache.sqlite3"), "existing-data");
 
         let report = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-17").run();
