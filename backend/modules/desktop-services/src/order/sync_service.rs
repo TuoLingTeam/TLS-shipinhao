@@ -142,6 +142,47 @@ where
         Ok((total_written, all_warnings))
     }
 
+    pub fn refresh_recent_incremental_cache(
+        &mut self,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<(usize, Vec<String>, i64, i64)> {
+        self.repository.initialize()?;
+        let end_timestamp = sync_now(now);
+        let retention = retention_start(end_timestamp);
+        if self.stopped {
+            return Ok((0, Vec::new(), retention, end_timestamp));
+        }
+
+        let state = self.repository.get_state(ORDER_CACHE_SCOPE)?;
+        let planner_state = state.as_ref().map(|state| SyncPlannerState {
+            last_incremental_end: state.last_incremental_end,
+        });
+        let start_timestamp = incremental_refresh_start(end_timestamp, planner_state.as_ref());
+        let gaps = self.repository.get_missing_segments(
+            ORDER_CACHE_SCOPE,
+            start_timestamp,
+            end_timestamp,
+            MERGE_TOLERANCE_SECONDS,
+            MIN_GAP_WIDTH_SECONDS,
+        )?;
+
+        let mut total_written = 0;
+        let mut warnings = Vec::new();
+        for (segment_start, segment_end) in gaps {
+            if self.stopped {
+                break;
+            }
+            let (written_count, gap_warnings) =
+                self.sync_range(segment_start, segment_end, "incremental")?;
+            total_written += written_count;
+            warnings.extend(gap_warnings);
+        }
+        let _ = self
+            .repository
+            .delete_older_than(ORDER_CACHE_SCOPE, retention)?;
+        Ok((total_written, warnings, retention, end_timestamp))
+    }
+
     pub fn ensure_recent_cache(
         &mut self,
         now: Option<chrono::DateTime<chrono::Utc>>,
@@ -455,6 +496,56 @@ mod tests {
     }
 
     #[test]
+    fn review_incremental_cache_bootstrap_only_fetches_recent_incremental_window() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let finder = FakeFinder::with_responses(vec![CacheFetchResult {
+            windows: vec![sample_window(
+                "recent-incremental",
+                518_400,
+                863_999,
+                vec![sample_order("o-incremental", 700_000)],
+            )],
+            warnings: vec![],
+        }]);
+        let repo = open_shared_repo(&path);
+        let mut service = OrderSyncService::new(finder, repo);
+        let now = DateTime::parse_from_rfc3339("1970-01-10T08:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let end_timestamp = service.sync_now_timestamp(Some(now));
+        let expected_start = incremental_refresh_start(end_timestamp, None);
+        let retention_start = service.retention_start_timestamp(end_timestamp);
+
+        let (written, warnings, actual_retention_start, actual_end) =
+            service.refresh_recent_incremental_cache(Some(now)).unwrap();
+
+        assert_eq!(written, 1);
+        assert!(warnings.is_empty());
+        assert_eq!(actual_retention_start, retention_start);
+        assert_eq!(actual_end, end_timestamp);
+        assert_eq!(service.finder.calls.len(), 1);
+        assert_eq!(
+            service.finder.calls[0],
+            (expected_start, expected_start, end_timestamp)
+        );
+
+        let state = service
+            .repository
+            .get_state(ORDER_CACHE_SCOPE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.last_mode, "incremental");
+        assert_eq!(state.last_incremental_start, expected_start);
+        assert_eq!(state.last_incremental_end, end_timestamp);
+        assert!(service
+            .repository
+            .fetch_order("o-incremental")
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
     fn ensure_orders_reads_recent_cache_after_bootstrap() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
@@ -597,11 +688,7 @@ mod tests {
             }))
         }
 
-        fn delete_older_than(
-            &self,
-            _scope: &str,
-            cutoff_timestamp: i64,
-        ) -> anyhow::Result<usize> {
+        fn delete_older_than(&self, _scope: &str, cutoff_timestamp: i64) -> anyhow::Result<usize> {
             let mut data = self.inner.lock().unwrap();
             let ids = data
                 .orders

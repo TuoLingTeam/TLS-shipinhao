@@ -1,9 +1,14 @@
+use desktop_services::order_fetcher::{
+    backoff_seconds, is_api_rate_limited, is_http_rate_limited, RATE_LIMIT_RETRY_COUNT,
+};
 use desktop_services::review_batch_match::EvaluationRecord;
 use desktop_services::review_match_flow::{is_evaluation_replyable, reply_deadline};
 use desktop_services::ReviewQuery;
 use desktop_services::ReviewSource;
 use domain_core::{MatchSource, MatchStrategy, OrderMatchResult};
 use serde_json::Value;
+use std::future::Future;
+use std::time::Duration;
 
 const EVALUATION_SEARCH_URL: &str =
     "https://store.weixin.qq.com/shop-faas/mmchannelstradeevaluation/cgi/search";
@@ -17,6 +22,85 @@ pub struct HttpReviewSource {
     biz_magic: String,
     grant_id: Option<String>,
     client: reqwest::Client,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReviewRetryReason {
+    RateLimited { api_level: bool },
+    TemporaryFailure,
+}
+
+#[derive(Debug, PartialEq)]
+enum ReviewRequestOutcome<T> {
+    Ready(T),
+    Retry(ReviewRetryReason),
+}
+
+fn is_temporary_review_status(status_code: u16) -> bool {
+    matches!(status_code, 408 | 425 | 500 | 502 | 503 | 504)
+}
+
+fn is_temporary_review_error(error: &reqwest::Error) -> bool {
+    error.is_timeout() || error.is_connect() || error.is_request() || error.is_body()
+}
+
+fn review_retry_error_message(reason: ReviewRetryReason) -> &'static str {
+    match reason {
+        ReviewRetryReason::RateLimited { .. } => "评价接口持续触发频率限制，请稍后再试",
+        ReviewRetryReason::TemporaryFailure => "评价接口临时失败，多次重试后仍未恢复，请稍后再试",
+    }
+}
+
+async fn retry_review_request_with_sleep<T, F, Fut, S, SleepFut>(
+    mut operation: F,
+    mut sleep_fn: S,
+) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = anyhow::Result<ReviewRequestOutcome<T>>>,
+    S: FnMut(u64, ReviewRetryReason) -> SleepFut,
+    SleepFut: Future<Output = ()>,
+{
+    let mut attempt = 0u32;
+    loop {
+        match operation().await? {
+            ReviewRequestOutcome::Ready(value) => return Ok(value),
+            ReviewRequestOutcome::Retry(reason) => {
+                if attempt >= RATE_LIMIT_RETRY_COUNT {
+                    anyhow::bail!(review_retry_error_message(reason));
+                }
+                let wait_secs = backoff_seconds(attempt);
+                sleep_fn(wait_secs, reason).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+async fn retry_review_request<T, F, Fut>(mut operation: F) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = anyhow::Result<ReviewRequestOutcome<T>>>,
+{
+    retry_review_request_with_sleep(&mut operation, |wait_secs, reason| async move {
+        match reason {
+            ReviewRetryReason::RateLimited { api_level } => {
+                let suffix = if api_level { "(API)" } else { "" };
+                tracing::warn!(
+                    target: "review.fetch.retry",
+                    "评价接口触发频率限制{suffix}，等待 {wait_secs} 秒后重试"
+                );
+            }
+            ReviewRetryReason::TemporaryFailure => {
+                tracing::warn!(
+                    target: "review.fetch.retry",
+                    "评价接口临时失败，等待 {wait_secs} 秒后重试"
+                );
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(wait_secs)).await;
+    })
+    .await
 }
 
 impl HttpReviewSource {
@@ -86,14 +170,46 @@ impl HttpReviewSource {
 
         let resp = std::thread::spawn(move || {
             rt.block_on(async {
-                client
-                    .post(&url)
-                    .headers(headers)
-                    .json(&body)
-                    .send()
-                    .await?
-                    .json::<Value>()
-                    .await
+                retry_review_request(|| {
+                    let client = client.clone();
+                    let headers = headers.clone();
+                    let url = url.clone();
+                    let body = body.clone();
+                    async move {
+                        let response =
+                            match client.post(&url).headers(headers).json(&body).send().await {
+                                Ok(response) => response,
+                                Err(error) if is_temporary_review_error(&error) => {
+                                    return Ok(ReviewRequestOutcome::Retry(
+                                        ReviewRetryReason::TemporaryFailure,
+                                    ));
+                                }
+                                Err(error) => return Err(error.into()),
+                            };
+
+                        let status_code = response.status().as_u16();
+                        if is_http_rate_limited(status_code) {
+                            return Ok(ReviewRequestOutcome::Retry(
+                                ReviewRetryReason::RateLimited { api_level: false },
+                            ));
+                        }
+                        if is_temporary_review_status(status_code) {
+                            return Ok(ReviewRequestOutcome::Retry(
+                                ReviewRetryReason::TemporaryFailure,
+                            ));
+                        }
+
+                        let payload = response.json::<Value>().await?;
+                        if is_api_rate_limited(&payload) {
+                            return Ok(ReviewRequestOutcome::Retry(
+                                ReviewRetryReason::RateLimited { api_level: true },
+                            ));
+                        }
+
+                        Ok(ReviewRequestOutcome::Ready(payload))
+                    }
+                })
+                .await
             })
         })
         .join()
@@ -312,10 +428,6 @@ impl ReviewSource for HttpReviewSource {
             }
 
             page += 1;
-
-            if page <= max_pages {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
         }
 
         Ok(all_results)
@@ -375,9 +487,6 @@ impl HttpReviewSource {
             }
 
             page += 1;
-            if page <= max_pages {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
         }
 
         Ok(all_results)
@@ -388,6 +497,101 @@ impl HttpReviewSource {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn temporary_review_statuses_are_retryable() {
+        assert!(is_temporary_review_status(408));
+        assert!(is_temporary_review_status(500));
+        assert!(is_temporary_review_status(502));
+        assert!(is_temporary_review_status(503));
+        assert!(is_temporary_review_status(504));
+        assert!(!is_temporary_review_status(200));
+        assert!(!is_temporary_review_status(429));
+        assert!(!is_temporary_review_status(430));
+    }
+
+    #[tokio::test]
+    async fn review_retry_request_succeeds_after_rate_limit_and_temporary_failure() {
+        let call_count = Arc::new(AtomicU32::new(0));
+        let wait_log = Arc::new(Mutex::new(Vec::<(u64, ReviewRetryReason)>::new()));
+        let cc = call_count.clone();
+        let wait_log_inner = wait_log.clone();
+
+        let result = retry_review_request_with_sleep(
+            move || {
+                let cc = cc.clone();
+                async move {
+                    let n = cc.fetch_add(1, Ordering::SeqCst);
+                    match n {
+                        0 => Ok(ReviewRequestOutcome::Retry(
+                            ReviewRetryReason::RateLimited { api_level: true },
+                        )),
+                        1 => Ok(ReviewRequestOutcome::Retry(
+                            ReviewRetryReason::TemporaryFailure,
+                        )),
+                        _ => Ok(ReviewRequestOutcome::Ready(serde_json::json!({"code": 0}))),
+                    }
+                }
+            },
+            move |wait_secs, reason| {
+                let wait_log = wait_log_inner.clone();
+                async move {
+                    wait_log.lock().unwrap().push((wait_secs, reason));
+                }
+            },
+        )
+        .await
+        .expect("should eventually succeed");
+
+        assert_eq!(
+            result.get("code").and_then(serde_json::Value::as_i64),
+            Some(0)
+        );
+        assert_eq!(call_count.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            *wait_log.lock().unwrap(),
+            vec![
+                (2, ReviewRetryReason::RateLimited { api_level: true }),
+                (4, ReviewRetryReason::TemporaryFailure),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn review_retry_request_exhausts_after_repeated_rate_limits() {
+        let wait_log = Arc::new(Mutex::new(Vec::<(u64, ReviewRetryReason)>::new()));
+        let wait_log_inner = wait_log.clone();
+        let result = retry_review_request_with_sleep(
+            || async {
+                Ok::<_, anyhow::Error>(ReviewRequestOutcome::<serde_json::Value>::Retry(
+                    ReviewRetryReason::RateLimited { api_level: false },
+                ))
+            },
+            move |wait_secs, reason| {
+                let wait_log = wait_log_inner.clone();
+                async move {
+                    wait_log.lock().unwrap().push((wait_secs, reason));
+                }
+            },
+        )
+        .await;
+
+        let err = result.expect_err("should exhaust retry budget");
+        assert!(
+            err.to_string().contains("频率限制"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(
+            *wait_log.lock().unwrap(),
+            vec![
+                (2, ReviewRetryReason::RateLimited { api_level: false }),
+                (4, ReviewRetryReason::RateLimited { api_level: false }),
+                (8, ReviewRetryReason::RateLimited { api_level: false }),
+            ]
+        );
+    }
 
     #[test]
     fn parses_review_details_from_api_payload() {

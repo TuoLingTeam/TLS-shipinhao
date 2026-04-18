@@ -172,7 +172,10 @@ fn run_review_match_flow(
     let source = HttpReviewSource::new_with_grant(
         cookie.clone(),
         magic.clone(),
-        query.runtime_grant.as_ref().map(|grant| grant.grant_id.clone()),
+        query
+            .runtime_grant
+            .as_ref()
+            .map(|grant| grant.grant_id.clone()),
     );
     let evaluations = source
         .fetch_evaluation_records(&query)
@@ -210,12 +213,8 @@ fn run_review_match_flow(
         );
         let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
             .map_err(AppError::Internal)?;
-        let (candidate_start, candidate_end) = candidate_window_from_recent_cache(
-            start_unix,
-            end_unix,
-            _coverage_start,
-            coverage_end,
-        );
+        let (candidate_start, candidate_end) =
+            candidate_window_from_recent_cache(start_unix, end_unix, _coverage_start, coverage_end);
         let orders = repository
             .fetch_orders_in_range(candidate_start, candidate_end)
             .map_err(AppError::Internal)?;
@@ -226,7 +225,7 @@ fn run_review_match_flow(
             "review_query",
             "ensure_recent_cache",
             18,
-            "正在确保最近 30 天订单缓存可用…",
+            "正在补拉近 3 天订单缓存…",
         );
 
         let finder = HttpOrderCacheFinder::new(cookie, magic);
@@ -244,16 +243,12 @@ fn run_review_match_flow(
             (orders, warnings)
         } else {
             let (_, ensure_warnings, recent_start, recent_end) = service
-                .ensure_recent_cache(Some(now))
+                .refresh_recent_incremental_cache(Some(now))
                 .map_err(AppError::Internal)?;
             let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
                 .map_err(AppError::Internal)?;
-            let (candidate_start, candidate_end) = candidate_window_from_recent_cache(
-                start_unix,
-                end_unix,
-                recent_start,
-                recent_end,
-            );
+            let (candidate_start, candidate_end) =
+                candidate_window_from_recent_cache(start_unix, end_unix, recent_start, recent_end);
             let orders = repository
                 .fetch_orders_in_range(candidate_start, candidate_end)
                 .map_err(AppError::Internal)?;
@@ -502,8 +497,7 @@ mod tests {
             product_id: "10000496403296".into(),
             sku_id: "7982968968".into(),
             sku_name: "单瓶（体验装）400*1瓶".into(),
-            product_name: "仁和二硫化硒去屑洗发水止痒除螨控油清爽蓬松柔顺头屑清洁水润男女"
-                .into(),
+            product_name: "仁和二硫化硒去屑洗发水止痒除螨控油清爽蓬松柔顺头屑清洁水润男女".into(),
             eval_time: 1_776_410_556,
             attitude_name: "不够好".into(),
             evaluation_content: "越洗越痒".into(),
@@ -530,9 +524,8 @@ mod tests {
                 product_id: "10000496403296".into(),
                 sku_id: "7982968968".into(),
                 sale_param: "单瓶（体验装）400*1瓶".into(),
-                product_name:
-                    "仁和二硫化硒去屑洗发水止痒除螨控油清爽蓬松柔顺头屑清洁水润男女"
-                        .into(),
+                product_name: "仁和二硫化硒去屑洗发水止痒除螨控油清爽蓬松柔顺头屑清洁水润男女"
+                    .into(),
                 thumb_img: String::new(),
             }],
         }];
