@@ -30,4 +30,23 @@ describe("AppSidebar", () => {
     expect(wrapper.text()).not.toContain("版本");
     expect(wrapper.text()).not.toContain("代号");
   });
+
+  it("pins the sidebar to the viewport instead of letting page content push it", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [...routes],
+    });
+    router.push("/settings");
+    await router.isReady();
+
+    const wrapper = mount(AppSidebar, {
+      global: {
+        plugins: [router, createPinia()],
+      },
+    });
+
+    expect(wrapper.classes()).toContain("lg:sticky");
+    expect(wrapper.classes()).toContain("lg:top-5");
+    expect(wrapper.classes()).toContain("lg:h-[calc(100dvh-2.5rem)]");
+  });
 });

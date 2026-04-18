@@ -12,7 +12,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-frame flex min-h-dvh overflow-hidden bg-transparent p-4 text-slate-900 lg:p-5">
+  <div class="app-frame flex h-dvh min-h-0 overflow-hidden bg-transparent p-4 text-slate-900 lg:p-5">
     <AppSidebar />
     <div class="app-content-shell ml-0 flex min-w-0 flex-1 flex-col gap-4 overflow-hidden lg:ml-4">
       <slot />

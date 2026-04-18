@@ -13,7 +13,7 @@ function isActive(path: string): boolean {
 </script>
 
 <template>
-  <aside class="hidden h-full w-[288px] shrink-0 overflow-hidden rounded-[28px] border border-[var(--color-sidebar-line)] bg-[image:var(--color-sidebar)] p-4 shadow-[0_28px_72px_-38px_rgba(15,23,42,0.82)] lg:flex lg:flex-col">
+  <aside class="hidden h-[calc(100dvh-2rem)] w-[288px] shrink-0 self-start overflow-hidden rounded-[28px] border border-[var(--color-sidebar-line)] bg-[image:var(--color-sidebar)] p-4 shadow-[0_28px_72px_-38px_rgba(15,23,42,0.82)] lg:sticky lg:top-5 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:flex-col">
     <div class="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4 backdrop-blur-xl">
       <div class="flex items-center gap-3">
         <div class="flex h-12 w-12 items-center justify-center rounded-[18px] bg-white/10 text-amber-300 ring-1 ring-white/10">
