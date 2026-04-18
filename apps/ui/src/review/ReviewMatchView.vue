@@ -182,14 +182,14 @@ function formatReplyDeadline(value: string | null) {
 
 <template>
   <div class="space-y-4">
-    <section class="hero-panel overflow-hidden p-4 lg:p-5">
+    <section class="hero-panel subsystem-hero overflow-hidden p-4 lg:p-5">
       <div class="flex flex-col gap-4">
         <div class="min-w-0">
           <span class="card-eyebrow">REVIEW MATCH</span>
           <div class="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div class="min-w-0">
               <h2 class="text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
-              <p class="mt-1 text-sm leading-6 text-slate-500">
+              <p class="subsystem-lead mt-1">
                 差评与品退共用一个入口，命中订单后可直接带入发货。
               </p>
             </div>
@@ -255,16 +255,16 @@ function formatReplyDeadline(value: string | null) {
 
         <div
           data-testid="review-summary-strip"
-          class="grid gap-2 sm:grid-cols-3 xl:grid-cols-3"
+          class="subsystem-summary-strip grid gap-2 sm:grid-cols-3 xl:grid-cols-3"
         >
           <article
             v-for="card in summaryCards"
             :key="card.label"
-            class="rounded-[16px] border border-white/65 bg-white/85 px-3.5 py-3 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.22)] backdrop-blur"
+            class="subsystem-summary-card"
           >
-            <div class="text-xs uppercase tracking-[0.18em] text-slate-400">{{ card.label }}</div>
-            <div class="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
-            <div class="mt-1 text-xs leading-5 text-slate-500">{{ card.hint }}</div>
+            <div class="subsystem-summary-label">{{ card.label }}</div>
+            <div class="subsystem-summary-value">{{ card.value }}</div>
+            <div class="subsystem-summary-hint">{{ card.hint }}</div>
           </article>
         </div>
       </div>
@@ -285,7 +285,7 @@ function formatReplyDeadline(value: string | null) {
     />
     <div
       v-if="store.loading && orderStore.syncSource === 'review_query'"
-      class="surface-panel space-y-4 px-5 py-5"
+      class="surface-panel space-y-4 px-4 py-4"
     >
       <div class="flex items-center justify-between text-sm">
         <span class="font-semibold text-slate-800">自动同步进度</span>
@@ -298,17 +298,17 @@ function formatReplyDeadline(value: string | null) {
         ></div>
       </div>
       <div class="grid grid-cols-1 gap-3 text-xs text-slate-500" :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'">
-        <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
+        <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
           <div class="font-semibold text-slate-700">1. 缓存保障</div>
           <div class="mt-1">{{ ['ensure_recent_cache', 'match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}</div>
         </div>
-        <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
+        <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
           <div class="font-semibold text-slate-700">2. 评分匹配</div>
           <div class="mt-1">
             {{ ['match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}
           </div>
         </div>
-        <div class="rounded-2xl border border-slate-200/80 px-4 py-3">
+        <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
           <div class="font-semibold text-slate-700">3. 完成结果</div>
           <div class="mt-1">
             {{ orderStore.syncPhase === 'completed' ? '已完成' : '等待中' }}

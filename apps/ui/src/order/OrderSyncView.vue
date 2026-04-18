@@ -86,13 +86,13 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <section class="hero-panel p-4 lg:p-5">
+    <section class="hero-panel subsystem-hero p-4 lg:p-5">
       <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <span class="card-eyebrow">ORDER CACHE</span>
             <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">订单管理</h2>
-            <p class="mt-1 text-sm leading-6 text-slate-500">
+            <p class="subsystem-lead mt-1">
               保留缓存维护、本地检索与订单列表三项核心能力，减少无效占位。
             </p>
           </div>
@@ -102,14 +102,17 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-2 text-xs">
-          <span class="rounded-full bg-white/80 px-3 py-1.5 font-medium text-slate-600">
+        <div
+          data-testid="order-chipbar"
+          class="subsystem-chipbar text-xs"
+        >
+          <span class="subsystem-chip">
             缓存 {{ cacheCount }}
           </span>
-          <span class="rounded-full bg-white/80 px-3 py-1.5 font-medium text-slate-600">
+          <span class="subsystem-chip">
             同步 {{ syncLabel }}
           </span>
-          <span class="rounded-full bg-white/80 px-3 py-1.5 font-medium text-slate-600">
+          <span class="subsystem-chip">
             金额 {{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}
           </span>
         </div>
@@ -123,7 +126,7 @@ onMounted(async () => {
     </section>
 
     <section class="surface-panel p-4 lg:p-5">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div class="subsystem-section-header">
         <div class="min-w-0">
           <div class="text-base font-semibold text-slate-900">同步最近 30 天缓存</div>
           <p class="mt-1 text-sm leading-6 text-slate-500">

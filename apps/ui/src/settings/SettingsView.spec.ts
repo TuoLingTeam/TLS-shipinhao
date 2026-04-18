@@ -59,6 +59,7 @@ describe("SettingsView", () => {
     await Promise.resolve();
 
     expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("xl:grid-cols-3");
+    expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("subsystem-panel-grid");
     expect(wrapper.text()).toContain("授权与激活");
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("应用信息");

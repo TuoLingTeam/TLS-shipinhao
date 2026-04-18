@@ -44,5 +44,6 @@ describe("ReviewMatchView", () => {
     const summary = wrapper.get('[data-testid="review-summary-strip"]');
 
     expect(summary.classes()).toContain("xl:grid-cols-3");
+    expect(summary.classes()).toContain("subsystem-summary-strip");
   });
 });

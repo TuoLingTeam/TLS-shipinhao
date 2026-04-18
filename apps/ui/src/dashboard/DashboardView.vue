@@ -226,14 +226,22 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <section class="hero-panel flex flex-col gap-2.5 p-4 lg:flex-row lg:items-end lg:justify-between lg:p-5">
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">TLS 工作台</p>
-        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{{ greeting }}</h2>
-        <div class="mt-1 text-sm text-slate-500">{{ todayText }} · {{ info?.name ?? "驼铃·视频小店差评处理" }}</div>
+    <section class="hero-panel subsystem-hero p-4 lg:p-5">
+      <div class="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">TLS 工作台</p>
+          <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{{ greeting }}</h2>
+          <div class="mt-1 text-sm text-slate-500">{{ todayText }} · {{ info?.name ?? "驼铃·视频小店差评处理" }}</div>
+        </div>
+        <div class="text-xs text-slate-400">
+          {{ info?.runtime ?? 'tauri' }} · v{{ info?.version ?? appStore.appVersion }} · 作者微信 {{ info?.author_wechat ?? AUTHOR_WECHAT }}
+        </div>
       </div>
-      <div class="text-xs text-slate-400">
-        {{ info?.runtime ?? 'tauri' }} · v{{ info?.version ?? appStore.appVersion }} · 作者微信 {{ info?.author_wechat ?? AUTHOR_WECHAT }}
+
+      <div class="subsystem-chipbar">
+        <span class="subsystem-chip">今日 {{ todayText }}</span>
+        <span class="subsystem-chip">运行时 {{ info?.runtime ?? 'tauri' }}</span>
+        <span class="subsystem-chip">版本 v{{ info?.version ?? appStore.appVersion }}</span>
       </div>
     </section>
 
@@ -242,7 +250,7 @@ onMounted(async () => {
         v-for="alert in alerts"
         :key="alert.key"
         :to="alert.to"
-        class="flex items-center justify-between gap-3 rounded-[18px] border px-5 py-3 text-sm font-medium transition hover:opacity-90"
+        class="flex items-center justify-between gap-3 rounded-[16px] border px-4 py-2.5 text-sm font-medium transition hover:opacity-90"
         :class="alertToneClass[alert.tone]"
       >
         <span class="min-w-0 truncate">{{ alert.text }}</span>
@@ -273,29 +281,31 @@ onMounted(async () => {
       </article>
     </section>
 
-    <section class="hero-panel p-5 lg:p-6">
-      <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-xl font-semibold tracking-tight text-slate-900">高频入口</h3>
-        <div class="text-xs text-slate-400">点击卡片跳转对应模块</div>
+    <section class="surface-panel p-4 lg:p-5">
+      <div class="subsystem-section-header mb-3">
+        <h3 class="text-base font-semibold tracking-tight text-slate-900">快捷入口</h3>
+        <div class="text-xs text-slate-400">常用模块一跳直达</div>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div
+        data-testid="dashboard-shortcuts"
+        class="subsystem-summary-strip grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+      >
         <RouterLink
           v-for="item in quickLinks"
           :key="item.title"
           :to="item.to"
-          class="quick-link surface-panel-strong flex min-h-[144px] flex-col justify-between p-5"
+          class="quick-link quick-link-compact surface-panel-strong flex items-center gap-3"
         >
-          <div>
-            <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/20">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/20">
               <AppNavIcon :name="item.icon" icon-class="h-5 w-5" />
-            </div>
-            <h4 class="mt-4 text-lg font-semibold text-slate-900">{{ item.title }}</h4>
+          </div>
+          <div class="min-w-0 flex-1">
+            <h4 class="text-sm font-semibold text-slate-900">{{ item.title }}</h4>
             <p class="mt-1 text-xs leading-5 text-slate-500">{{ item.description }}</p>
           </div>
-          <div class="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-brand">
-            进入
-            <span aria-hidden="true">→</span>
+          <div class="shrink-0 text-sm font-semibold text-brand">
+            →
           </div>
         </RouterLink>
       </div>

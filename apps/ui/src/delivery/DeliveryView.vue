@@ -61,12 +61,12 @@ const overviewCards = computed(() => [
   {
     label: "批量条数",
     value: parsedBatchItems.value.length ? `${parsedBatchItems.value.length} 条` : "0 条",
-    hint: parsedBatchItems.value.length ? "支持确认后统一提交" : "粘贴订单号和单号后自动识别",
+    hint: parsedBatchItems.value.length ? "确认后统一提交" : "粘贴订单号和单号后自动识别",
   },
   {
     label: "执行进度",
     value: progress.value ? `${progressPercent.value}%` : "待开始",
-    hint: progress.value ? `成功 ${progress.value.successCount} · 失败 ${progress.value.failureCount}` : "尚未启动批量发货任务",
+    hint: progress.value ? `成功 ${progress.value.successCount} · 失败 ${progress.value.failureCount}` : "尚未启动批量发货",
   },
 ]);
 const confirmMessage = computed(() => {
@@ -109,44 +109,58 @@ async function handleCancelBatch() {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <section class="hero-panel p-5 lg:p-6">
-      <div class="flex flex-col gap-5">
-        <div>
-          <span class="card-eyebrow">DELIVERY DESK</span>
-          <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">发货操作台</h2>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            单个发货与批量提交共用同一工作台：左侧适合快速改单，右侧适合批量录入与统一确认。
-          </p>
+  <div class="space-y-4">
+    <section class="hero-panel subsystem-hero p-4 lg:p-5">
+      <div>
+        <span class="card-eyebrow">DELIVERY DESK</span>
+        <div class="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 class="text-2xl font-semibold tracking-tight text-slate-900">发货操作台</h2>
+            <p class="subsystem-lead mt-1">
+              单个发货与批量提交共用同一工作台，统一收口到更紧凑的双栏布局。
+            </p>
+          </div>
+          <div class="subsystem-chipbar">
+            <span class="subsystem-chip">单条修正</span>
+            <span class="subsystem-chip">批量提交</span>
+            <span class="subsystem-chip">失败可重试</span>
+          </div>
         </div>
-        <div class="grid gap-3 md:grid-cols-3">
-          <article
-            v-for="card in overviewCards"
-            :key="card.label"
-            class="rounded-[22px] border border-white/60 bg-white/80 px-4 py-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.22)] backdrop-blur"
-          >
-            <div class="text-xs uppercase tracking-[0.18em] text-slate-400">{{ card.label }}</div>
-            <div class="mt-2 break-all text-lg font-semibold tracking-tight text-slate-900">{{ card.value }}</div>
-            <div class="mt-2 text-sm leading-6 text-slate-500">{{ card.hint }}</div>
-          </article>
-        </div>
+      </div>
+
+      <div
+        data-testid="delivery-summary-strip"
+        class="subsystem-summary-strip grid grid-cols-1 sm:grid-cols-3"
+      >
+        <article
+          v-for="card in overviewCards"
+          :key="card.label"
+          class="subsystem-summary-card"
+        >
+          <div class="subsystem-summary-label">{{ card.label }}</div>
+          <div class="subsystem-summary-value break-all">{{ card.value }}</div>
+          <div class="subsystem-summary-hint">{{ card.hint }}</div>
+        </article>
       </div>
     </section>
 
-    <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
-      <div class="hero-panel p-5 lg:p-6">
-        <div class="flex items-center justify-between gap-4">
+    <section
+      data-testid="delivery-workspace"
+      class="grid grid-cols-1 gap-4 xl:grid-cols-[0.92fr_1.08fr]"
+    >
+      <div class="surface-panel p-4 lg:p-5">
+        <div class="subsystem-section-header">
           <div>
-            <h2 class="text-xl font-semibold tracking-tight text-slate-900">单个发货</h2>
-            <p class="mt-1 text-sm text-slate-500">适合处理临时补发、复核后手动修正的订单。</p>
+            <h3 class="text-base font-semibold tracking-tight text-slate-900">单个发货</h3>
+            <p class="mt-1 text-sm text-slate-500">适合补发、改单和人工复核后的即时处理。</p>
           </div>
-          <div v-if="store.draftOrderId" class="text-xs text-brand">
-            已自动带入：{{ store.draftSource || '匹配订单' }}
-          </div>
+          <span v-if="store.draftOrderId" class="subsystem-chip">
+            已带入：{{ store.draftSource || '匹配订单' }}
+          </span>
         </div>
 
-        <div class="mt-5 space-y-4">
-          <div>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div class="sm:col-span-2">
             <label class="field-label">订单号</label>
             <input v-model.trim="orderId" class="field-input" placeholder="输入订单号" />
           </div>
@@ -165,57 +179,71 @@ async function handleCancelBatch() {
               <option value="SF">顺丰速运</option>
             </select>
           </div>
-          <button
-            :disabled="store.loading || licenseBlocked"
-            class="action-btn action-btn-primary w-full"
-            @click="handleSingleDelivery"
-          >
-            {{ store.loading ? "发货中..." : "确认发货" }}
-          </button>
         </div>
+
+        <button
+          :disabled="store.loading || licenseBlocked"
+          class="action-btn action-btn-primary mt-4 w-full"
+          @click="handleSingleDelivery"
+        >
+          {{ store.loading ? "发货中..." : "确认发货" }}
+        </button>
       </div>
 
-      <div class="surface-panel p-5 lg:p-6">
-        <div class="flex items-center justify-between gap-4">
+      <div class="surface-panel p-4 lg:p-5">
+        <div class="subsystem-section-header">
           <div>
-            <h2 class="text-xl font-semibold tracking-tight text-slate-900">批量发货</h2>
-            <p class="mt-1 text-sm text-slate-500">一行一单，确认后统一执行，并自动记录失败明细。</p>
+            <h3 class="text-base font-semibold tracking-tight text-slate-900">批量发货</h3>
+            <p class="mt-1 text-sm text-slate-500">一行一单，统一确认后执行，并保留失败明细。</p>
           </div>
-          <div class="text-xs text-slate-400">{{ parsedBatchItems.length }} 条可提交</div>
+          <div class="subsystem-chipbar">
+            <span class="subsystem-chip">可提交 {{ parsedBatchItems.length }} 条</span>
+            <span v-if="failedSteps.length > 0" class="subsystem-chip">失败 {{ failedSteps.length }} 条</span>
+          </div>
         </div>
 
-        <div class="mt-5 space-y-4">
-          <div>
-            <label class="field-label">批量数据</label>
-            <textarea
-              v-model.trim="batchText"
-              rows="7"
-              class="field-textarea font-mono text-sm"
-              placeholder="3735560095122745088,JT00000001&#10;3735560095122745089,JT00000002"
-            />
-          </div>
-          <button
-            :disabled="store.loading || licenseBlocked || parsedBatchItems.length === 0"
-            class="action-btn action-btn-success w-full"
-            @click="requestBatchDelivery"
-          >
-            {{ store.loading ? "批量发货中..." : "开始批量发货" }}
-          </button>
+        <div class="mt-4">
+          <label class="field-label">批量数据</label>
+          <textarea
+            v-model.trim="batchText"
+            rows="8"
+            class="field-textarea font-mono text-sm"
+            placeholder="3735560095122745088,JT00000001&#10;3735560095122745089,JT00000002"
+          />
+          <p class="mt-2 text-[11px] leading-5 text-slate-500">
+            支持逗号或 Tab 分隔，粘贴后自动识别有效条目。
+          </p>
         </div>
+
+        <button
+          :disabled="store.loading || licenseBlocked || parsedBatchItems.length === 0"
+          class="action-btn action-btn-success mt-4 w-full"
+          @click="requestBatchDelivery"
+        >
+          {{ store.loading ? "批量发货中..." : "开始批量发货" }}
+        </button>
       </div>
     </section>
 
-    <section v-if="progress" class="surface-panel p-5 lg:p-6">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div v-if="licenseBlocked" class="soft-alert warn">
+      当前未激活授权，发货功能不可用。请先前往设置中心完成激活。
+    </div>
+
+    <div v-if="store.error" class="soft-alert error">
+      {{ store.error }}
+    </div>
+
+    <section v-if="progress" class="surface-panel p-4 lg:p-5">
+      <div class="subsystem-section-header">
         <div class="min-w-0">
-          <h3 class="text-lg font-semibold text-slate-900">批量发货进度</h3>
+          <h3 class="text-base font-semibold text-slate-900">批量发货进度</h3>
           <div class="mt-1 text-sm text-slate-500">
             <template v-if="progress.running">正在处理 {{ progress.processedCount }} / {{ progress.totalCount }} 条</template>
             <template v-else-if="progress.stopped">已停止于第 {{ progress.processedCount }} 条（{{ progress.cancelRequested ? '用户取消' : '服务端中止' }}）</template>
             <template v-else>已完成全部 {{ progress.totalCount }} 条</template>
           </div>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class="subsystem-chipbar">
           <button
             v-if="progress.running"
             class="action-btn action-btn-secondary"
@@ -229,14 +257,14 @@ async function handleCancelBatch() {
             class="action-btn action-btn-secondary"
             @click="exportFailedCsv"
           >
-            导出失败明细（CSV）
+            导出失败 CSV
           </button>
           <button
             v-if="canRetryFailed"
             class="action-btn action-btn-primary"
             @click="retryConfirmOpen = true"
           >
-            仅重试 {{ failedSteps.length }} 条失败
+            重试 {{ failedSteps.length }} 条失败
           </button>
           <button
             v-if="!progress.running"
@@ -256,22 +284,22 @@ async function handleCancelBatch() {
         ></div>
       </div>
 
-      <div class="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs uppercase tracking-[0.16em] text-slate-400">总计</div>
-          <div class="mt-1 text-lg font-semibold text-slate-800">{{ progress.totalCount }}</div>
+      <div class="subsystem-summary-strip mt-4 grid grid-cols-2 sm:grid-cols-4">
+        <div class="subsystem-summary-card">
+          <div class="subsystem-summary-label">总计</div>
+          <div class="subsystem-summary-value">{{ progress.totalCount }}</div>
         </div>
-        <div class="rounded-2xl border border-brand-tint bg-brand-soft/60 px-4 py-3">
-          <div class="text-xs uppercase tracking-[0.16em] text-brand-deep/70">成功</div>
-          <div class="mt-1 text-lg font-semibold text-brand-deep">{{ progress.successCount }}</div>
+        <div class="subsystem-summary-card">
+          <div class="subsystem-summary-label">成功</div>
+          <div class="subsystem-summary-value text-brand-deep">{{ progress.successCount }}</div>
         </div>
-        <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-          <div class="text-xs uppercase tracking-[0.16em] text-red-500">失败</div>
-          <div class="mt-1 text-lg font-semibold text-red-700">{{ progress.failureCount }}</div>
+        <div class="subsystem-summary-card">
+          <div class="subsystem-summary-label">失败</div>
+          <div class="subsystem-summary-value text-red-700">{{ progress.failureCount }}</div>
         </div>
-        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs uppercase tracking-[0.16em] text-slate-400">已处理</div>
-          <div class="mt-1 text-lg font-semibold text-slate-800">{{ progress.processedCount }} / {{ progress.totalCount }}</div>
+        <div class="subsystem-summary-card">
+          <div class="subsystem-summary-label">已处理</div>
+          <div class="subsystem-summary-value">{{ progress.processedCount }} / {{ progress.totalCount }}</div>
         </div>
       </div>
 
@@ -279,77 +307,74 @@ async function handleCancelBatch() {
         致命错误：{{ progress.fatalError }}
       </div>
 
-      <div v-if="failedSteps.length > 0" class="mt-5">
-        <div class="flex items-center justify-between">
-          <h4 class="text-sm font-semibold text-slate-900">失败条目明细（{{ failedSteps.length }}）</h4>
-          <div class="text-xs text-slate-500">支持导出 CSV 与仅重试失败</div>
+      <div v-if="failedSteps.length > 0 || recentSteps.length > 0" class="mt-4 grid gap-4 xl:grid-cols-[1.02fr_0.98fr]">
+        <div v-if="failedSteps.length > 0" class="rounded-[16px] border border-slate-200/80 bg-slate-50/70 p-3">
+          <div class="subsystem-section-header">
+            <h4 class="text-sm font-semibold text-slate-900">失败条目（{{ failedSteps.length }}）</h4>
+            <div class="text-xs text-slate-500">支持导出与重试</div>
+          </div>
+          <div class="mt-3 max-h-[260px] overflow-auto rounded-[14px] border border-slate-200/80 bg-white">
+            <table class="w-full min-w-[560px] text-left text-xs">
+              <thead class="bg-slate-50 text-slate-500">
+                <tr>
+                  <th class="px-3 py-2 font-semibold">#</th>
+                  <th class="px-3 py-2 font-semibold">订单号</th>
+                  <th class="px-3 py-2 font-semibold">快递单号</th>
+                  <th class="px-3 py-2 font-semibold">错误信息</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in failedSteps" :key="item.index" class="border-t border-slate-100/80">
+                  <td class="px-3 py-2 font-mono text-slate-500">{{ item.index }}</td>
+                  <td class="px-3 py-2 font-mono text-slate-700">{{ item.orderId }}</td>
+                  <td class="px-3 py-2 font-mono text-slate-700">{{ item.trackingNumber }}</td>
+                  <td class="px-3 py-2 text-red-700">{{ item.errorMessage || "未知错误" }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="mt-3 max-h-[260px] overflow-auto rounded-2xl border border-slate-200/80">
-          <table class="w-full min-w-[600px] text-left text-xs">
-            <thead class="bg-slate-50 text-slate-500">
-              <tr>
-                <th class="px-3 py-2 font-semibold">#</th>
-                <th class="px-3 py-2 font-semibold">订单号</th>
-                <th class="px-3 py-2 font-semibold">快递单号</th>
-                <th class="px-3 py-2 font-semibold">错误信息</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in failedSteps" :key="item.index" class="border-t border-slate-100/80">
-                <td class="px-3 py-2 font-mono text-slate-500">{{ item.index }}</td>
-                <td class="px-3 py-2 font-mono text-slate-700">{{ item.orderId }}</td>
-                <td class="px-3 py-2 font-mono text-slate-700">{{ item.trackingNumber }}</td>
-                <td class="px-3 py-2 text-red-700">{{ item.errorMessage || "未知错误" }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      <div v-if="recentSteps.length > 0" class="mt-5">
-        <h4 class="text-sm font-semibold text-slate-900">最近处理（{{ recentSteps.length }} 条）</h4>
-        <div class="mt-3 max-h-[200px] overflow-auto rounded-2xl border border-slate-200/80">
-          <table class="w-full min-w-[540px] text-left text-xs">
-            <thead class="bg-slate-50 text-slate-500">
-              <tr>
-                <th class="px-3 py-2 font-semibold">#</th>
-                <th class="px-3 py-2 font-semibold">订单号</th>
-                <th class="px-3 py-2 font-semibold">结果</th>
-                <th class="px-3 py-2 font-semibold">备注</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in recentSteps" :key="`recent-${item.index}`" class="border-t border-slate-100/80">
-                <td class="px-3 py-2 font-mono text-slate-500">{{ item.index }}</td>
-                <td class="px-3 py-2 font-mono text-slate-700">{{ item.orderId }}</td>
-                <td class="px-3 py-2">
-                  <span
-                    class="inline-flex rounded-full px-2.5 py-0.5 font-semibold"
-                    :class="item.status === 'success' ? 'bg-brand-soft text-brand-deep' : 'bg-red-100 text-red-700'"
-                  >
-                    {{ item.status === "success" ? "成功" : "失败" }}
-                  </span>
-                </td>
-                <td class="px-3 py-2 text-slate-500">
-                  <template v-if="item.status === 'success'">
-                    {{ item.oldWaybill ? `旧单号：${item.oldWaybill}` : "已更新物流" }}
-                  </template>
-                  <template v-else>{{ item.errorMessage || "未知错误" }}</template>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-if="recentSteps.length > 0" class="rounded-[16px] border border-slate-200/80 bg-slate-50/70 p-3">
+          <div class="subsystem-section-header">
+            <h4 class="text-sm font-semibold text-slate-900">最近处理（{{ recentSteps.length }} 条）</h4>
+            <div class="text-xs text-slate-500">保留最近 20 条</div>
+          </div>
+          <div class="mt-3 max-h-[260px] overflow-auto rounded-[14px] border border-slate-200/80 bg-white">
+            <table class="w-full min-w-[520px] text-left text-xs">
+              <thead class="bg-slate-50 text-slate-500">
+                <tr>
+                  <th class="px-3 py-2 font-semibold">#</th>
+                  <th class="px-3 py-2 font-semibold">订单号</th>
+                  <th class="px-3 py-2 font-semibold">结果</th>
+                  <th class="px-3 py-2 font-semibold">备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in recentSteps" :key="`recent-${item.index}`" class="border-t border-slate-100/80">
+                  <td class="px-3 py-2 font-mono text-slate-500">{{ item.index }}</td>
+                  <td class="px-3 py-2 font-mono text-slate-700">{{ item.orderId }}</td>
+                  <td class="px-3 py-2">
+                    <span
+                      class="inline-flex rounded-full px-2.5 py-0.5 font-semibold"
+                      :class="item.status === 'success' ? 'bg-brand-soft text-brand-deep' : 'bg-red-100 text-red-700'"
+                    >
+                      {{ item.status === "success" ? "成功" : "失败" }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-slate-500">
+                    <template v-if="item.status === 'success'">
+                      {{ item.oldWaybill ? `旧单号：${item.oldWaybill}` : "已更新物流" }}
+                    </template>
+                    <template v-else>{{ item.errorMessage || "未知错误" }}</template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
-
-    <div v-if="licenseBlocked" class="soft-alert warn">
-      当前未激活授权，发货功能不可用。请先前往设置中心完成激活。
-    </div>
-
-    <div v-if="store.error" class="soft-alert error">
-      {{ store.error }}
-    </div>
 
     <EmptyState
       v-if="!batchLines.length && !orderId && !trackingNumber && !store.batchProgress && !store.error"

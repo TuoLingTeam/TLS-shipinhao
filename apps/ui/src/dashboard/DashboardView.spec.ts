@@ -125,5 +125,7 @@ describe("DashboardView", () => {
 
     expect(metrics.classes()).toContain("xl:grid-cols-5");
     expect(wrapper.findAll(".metric-card-compact")).toHaveLength(5);
+    expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
+    expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
   });
 });

@@ -186,7 +186,7 @@ onMounted(() => {
   <div class="space-y-4">
     <section
       data-testid="settings-panels"
-      class="grid grid-cols-1 gap-4 xl:grid-cols-3"
+      class="subsystem-panel-grid grid grid-cols-1 gap-4 xl:grid-cols-3"
     >
       <article class="surface-panel p-4 lg:p-5">
         <div class="flex items-start justify-between gap-3">
@@ -200,18 +200,18 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="mt-4 grid gap-2.5 sm:grid-cols-3 text-sm">
-          <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
-            <div class="text-[11px] text-slate-400">当前状态</div>
-            <div class="mt-1 font-semibold text-slate-900">{{ currentStateText }}</div>
+        <div class="subsystem-summary-strip mt-4 sm:grid-cols-3 text-sm">
+          <div class="subsystem-summary-card">
+            <div class="subsystem-summary-label">当前状态</div>
+            <div class="subsystem-summary-value">{{ currentStateText }}</div>
           </div>
-          <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
-            <div class="text-[11px] text-slate-400">到期时间</div>
-            <div class="mt-1 font-medium text-slate-700">{{ formatDateTime(appStore.licenseExpiresAt) }}</div>
+          <div class="subsystem-summary-card">
+            <div class="subsystem-summary-label">到期时间</div>
+            <div class="subsystem-summary-value text-sm font-medium text-slate-700">{{ formatDateTime(appStore.licenseExpiresAt) }}</div>
           </div>
-          <div class="rounded-[16px] bg-slate-50 px-3 py-2.5">
-            <div class="text-[11px] text-slate-400">最近校验</div>
-            <div class="mt-1 font-medium text-slate-700">{{ formatDateTime(appStore.lastVerifiedAt) }}</div>
+          <div class="subsystem-summary-card">
+            <div class="subsystem-summary-label">最近校验</div>
+            <div class="subsystem-summary-value text-sm font-medium text-slate-700">{{ formatDateTime(appStore.lastVerifiedAt) }}</div>
           </div>
         </div>
 
@@ -250,11 +250,11 @@ onMounted(() => {
           </span>
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-2 text-xs">
-          <span class="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+        <div class="subsystem-chipbar mt-4 text-xs">
+          <span class="subsystem-chip">
             {{ cookieConfigured ? "已配置" : "未配置" }}
           </span>
-          <span class="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+          <span class="subsystem-chip">
             {{ hasBizMagic ? "已识别 biz_magic" : "未识别 biz_magic" }}
           </span>
         </div>

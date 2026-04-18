@@ -342,6 +342,86 @@ textarea {
   color: var(--color-success);
 }
 
+.subsystem-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.subsystem-lead {
+  max-width: 46rem;
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.subsystem-summary-strip {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.subsystem-summary-card {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.86);
+  padding: 0.85rem 0.9rem;
+  box-shadow: 0 18px 40px -30px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.subsystem-summary-label {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.subsystem-summary-value {
+  margin-top: 0.4rem;
+  color: var(--color-heading);
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subsystem-summary-hint {
+  margin-top: 0.28rem;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.subsystem-chipbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.subsystem-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.42rem 0.72rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.2);
+}
+
+.subsystem-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.subsystem-panel-grid {
+  align-items: start;
+}
+
 .metric-card {
   position: relative;
   overflow: hidden;
@@ -464,6 +544,11 @@ textarea {
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
+.quick-link-compact {
+  min-height: 108px;
+  padding: 0.95rem 1rem;
+}
+
 .quick-link:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
@@ -535,6 +620,16 @@ textarea {
   gap: 1rem;
   max-width: 100%;
   padding-bottom: 1rem;
+}
+
+.app-shell[data-layout="compact"] .subsystem-hero,
+.app-shell[data-layout="high_dpi_compact"] .subsystem-hero {
+  gap: 0.85rem;
+}
+
+.app-shell[data-layout="compact"] .subsystem-summary-card,
+.app-shell[data-layout="high_dpi_compact"] .subsystem-summary-card {
+  padding: 0.72rem 0.8rem;
 }
 
 .app-shell[data-layout="compact"] .surface-panel,
