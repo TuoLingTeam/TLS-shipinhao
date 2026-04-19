@@ -12,6 +12,10 @@ const appStore = useAppStore();
 const { syncRecentCache, loadRecentCache, loadCacheStatus } = useOrder();
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const searchKeyword = ref("");
+// 切换到订单管理时默认不加载完整列表（可能上万条），避免渲染卡顿；
+// 用户点击「加载订单列表」或触发搜索时再懒加载
+// 基于 store 判断，跨路由切换回来时若已加载过，不再重复拉取
+const cacheListLoaded = computed(() => store.cachedOrders.length > 0);
 const totalAmount = computed(() =>
   store.cachedOrders.reduce((sum, item) => sum + (item.amount_cent ?? 0), 0),
 );
@@ -25,6 +29,8 @@ const visibleOrders = computed(() => {
     ),
   );
 });
+const cachedOrderCount = computed(() => store.cacheStatus?.cached_order_count ?? 0);
+const hasLocalCache = computed(() => cachedOrderCount.value > 0);
 const activeCoverageLabel = computed(() => {
   if (!store.cacheStatus) return "等待建立缓存";
   return store.cacheStatus.coverage_complete
@@ -85,12 +91,59 @@ async function handleSync() {
   await syncRecentCache();
 }
 
-function handleSearch(keyword: string) {
-  searchKeyword.value = keyword;
+async function ensureCacheListLoaded() {
+  if (cacheListLoaded.value || store.loading) return;
+  await loadRecentCache();
 }
 
+async function handleSearch(keyword: string) {
+  searchKeyword.value = keyword;
+  // 首次触发搜索时懒加载本地缓存列表
+  if (hasLocalCache.value) {
+    await ensureCacheListLoaded();
+  }
+}
+
+async function handleLoadCacheList() {
+  if (licenseBlocked.value) return;
+  await ensureCacheListLoaded();
+}
+
+const emptyStateTitle = computed(() => {
+  if (searchKeyword.value) return "未找到匹配订单";
+  if (hasLocalCache.value && !cacheListLoaded.value) return `本地缓存 ${cachedOrderCount.value} 条订单`;
+  return "暂无缓存数据";
+});
+
+const emptyStateDescription = computed(() => {
+  if (searchKeyword.value) return "当前关键词没有命中任何本地订单，可更换关键词或清空筛选。";
+  if (hasLocalCache.value && !cacheListLoaded.value)
+    return "列表较大，默认按需加载以保障切换流畅。点击下方按钮加载完整订单列表。";
+  return "点击下方按钮，将最近订单拉入本地缓存后再进行搜索或评价匹配。";
+});
+
+const emptyStateButtonLabel = computed(() => {
+  if (searchKeyword.value) return "同步缓存";
+  if (hasLocalCache.value && !cacheListLoaded.value) return "加载订单列表";
+  return "立即同步缓存";
+});
+
+function handleEmptyAction() {
+  if (searchKeyword.value) {
+    void handleSync();
+    return;
+  }
+  if (hasLocalCache.value && !cacheListLoaded.value) {
+    void handleLoadCacheList();
+    return;
+  }
+  void handleSync();
+}
+
+// 切换侧边栏时仅拉取轻量的缓存状态（判断是否有缺口、显示订单计数），
+// 完整订单列表按需加载，避免渲染大量数据导致页面卡顿
 onMounted(async () => {
-  await Promise.all([loadRecentCache(), loadCacheStatus()]);
+  await loadCacheStatus();
 });
 </script>
 
@@ -232,15 +285,11 @@ onMounted(async () => {
 
     <EmptyState
       v-else
-      title="暂无缓存数据"
-      :description="
-        searchKeyword
-          ? '当前关键词没有命中任何本地订单，可更换关键词或清空筛选。'
-          : '点击上方「同步缓存」，将最近订单拉入本地缓存后再进行搜索或评价匹配。'
-      "
-      @action="handleSync"
+      :title="emptyStateTitle"
+      :description="emptyStateDescription"
+      @action="handleEmptyAction"
     >
-      {{ searchKeyword ? "同步缓存" : "立即同步缓存" }}
+      {{ emptyStateButtonLabel }}
     </EmptyState>
   </div>
 </template>
