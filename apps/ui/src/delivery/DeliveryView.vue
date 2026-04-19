@@ -24,12 +24,15 @@ function splitLines(raw: string): string[] {
 watch(
   () => store.draftOrderId,
   (value) => {
-    const v = value?.trim();
-    if (!v) return;
-    // draft 带入时：若订单号文本框为空直接填入，否则在第一行前插入（避免重复）
+    // draftOrderId 可能是单条订单号，也可能是多行字符串（来自评价匹配的批量预填）
+    const incoming = splitLines(value ?? "");
+    if (incoming.length === 0) return;
     const existing = splitLines(orderIdsText.value);
-    if (existing.includes(v)) return;
-    orderIdsText.value = existing.length === 0 ? v : [v, ...existing].join("\n");
+    // 合并：incoming 订单号放在前面，已有订单号追加在后，重复的丢弃（避免一条订单出现两次）
+    const existingSet = new Set(existing);
+    const incomingNew = incoming.filter((id) => !existingSet.has(id));
+    const merged = [...incomingNew, ...existing];
+    orderIdsText.value = merged.join("\n");
   },
   { immediate: true },
 );
@@ -160,17 +163,35 @@ function handleClearInputs() {
           <button
             type="button"
             class="action-btn action-btn-secondary"
-            :disabled="store.loading || (!orderIdsText && !trackingNumbersText)"
+            :disabled="store.loading || (!orderIdsText && !trackingNumbersText) || progress?.running"
             @click="handleClearInputs"
           >
             清空输入
           </button>
           <button
+            v-if="!progress?.running"
             :disabled="store.loading || licenseBlocked || parsedBatchItems.length === 0"
             class="action-btn action-btn-success flex-1"
             @click="requestBatchDelivery"
           >
             {{ store.loading ? "批量发货中..." : `开始批量发货（${parsedBatchItems.length} 条）` }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="delivery-cancel-btn flex-1"
+            :disabled="progress.cancelRequested"
+            :class="{ 'is-pending': progress.cancelRequested }"
+            @click="handleCancelBatch"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            {{
+              progress.cancelRequested
+                ? "停止中，将在当前条目完成后终止…"
+                : `停止批量发货（${progress.processedCount}/${progress.totalCount}）`
+            }}
           </button>
         </div>
 
@@ -191,14 +212,6 @@ function handleClearInputs() {
               </div>
             </div>
             <div class="subsystem-chipbar">
-              <button
-                v-if="progress.running"
-                class="action-btn action-btn-secondary action-btn-compact"
-                :disabled="progress.cancelRequested"
-                @click="handleCancelBatch"
-              >
-                {{ progress.cancelRequested ? "停止中..." : "停止" }}
-              </button>
               <button
                 v-if="!progress.running && failedSteps.length > 0"
                 class="action-btn action-btn-secondary action-btn-compact"
@@ -221,6 +234,28 @@ function handleClearInputs() {
                 清空结果
               </button>
             </div>
+          </div>
+
+          <div v-if="progress.running" class="delivery-cancel-banner">
+            <div class="delivery-cancel-status">
+              <span class="delivery-cancel-pulse" aria-hidden="true"></span>
+              <span class="delivery-cancel-text">
+                <strong class="text-slate-900">批量发货进行中</strong>
+                <span class="text-slate-500">已处理 {{ progress.processedCount }} / {{ progress.totalCount }} 条</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              class="delivery-cancel-btn"
+              :disabled="progress.cancelRequested"
+              :class="{ 'is-pending': progress.cancelRequested }"
+              @click="handleCancelBatch"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              {{ progress.cancelRequested ? "停止中，将在当前条目完成后终止…" : "停止批量发货" }}
+            </button>
           </div>
 
           <div class="mt-app h-1.5 overflow-hidden rounded-full bg-slate-100">

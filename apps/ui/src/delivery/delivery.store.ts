@@ -41,6 +41,18 @@ export const useDeliveryStore = defineStore("delivery", () => {
     draftSource.value = source;
   }
 
+  // 批量预填订单号，用换行拼接后存入 draftOrderId
+  // DeliveryView 的 watch 会按行拆分并合并到左侧订单号输入框
+  function prefillOrders(orderIds: string[], source: string) {
+    const joined = orderIds
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .join("\n");
+    if (!joined) return;
+    draftOrderId.value = joined;
+    draftSource.value = source;
+  }
+
   function clearPrefillOrder() {
     draftOrderId.value = "";
     draftSource.value = null;
@@ -102,6 +114,7 @@ export const useDeliveryStore = defineStore("delivery", () => {
     draftOrderId,
     draftSource,
     prefillOrder,
+    prefillOrders,
     clearPrefillOrder,
     startBatch,
     applyBatchStep,

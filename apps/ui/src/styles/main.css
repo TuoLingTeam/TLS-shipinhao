@@ -2668,6 +2668,96 @@ textarea {
   color: #64748b;
 }
 
+/* 发货 · 进行中的显眼停止按钮 */
+.delivery-cancel-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(220, 38, 38, 0.24);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(254, 226, 226, 0.62) 100%);
+  box-shadow: 0 14px 32px -28px rgba(220, 38, 38, 0.32);
+}
+
+.delivery-cancel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.delivery-cancel-pulse {
+  position: relative;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  animation: delivery-pulse 1.6s infinite;
+}
+
+@keyframes delivery-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.delivery-cancel-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+  letter-spacing: -0.005em;
+}
+
+.delivery-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.48rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  box-shadow: 0 14px 28px -16px rgba(220, 38, 38, 0.55);
+  transition: transform 180ms ease, box-shadow 200ms ease, background 200ms ease;
+  white-space: nowrap;
+}
+
+.delivery-cancel-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px -18px rgba(220, 38, 38, 0.65);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+.delivery-cancel-btn:disabled,
+.delivery-cancel-btn.is-pending {
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delivery-cancel-pulse {
+    animation: none;
+  }
+}
+
 /* 发货 · 右栏空状态三步引导 */
 .delivery-progress-placeholder {
   padding: 0.9rem 1rem;

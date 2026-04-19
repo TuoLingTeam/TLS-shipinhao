@@ -26,18 +26,27 @@ export function useReview() {
     store.cacheSyncPerformed = payload.cache_sync_performed;
     store.cacheSyncWrittenCount = payload.cache_sync_written_count;
 
-    const autofillCandidate =
+    // 差评模式：仅选 "exact_match"（满分 100）自动带入，避免低置信度误发
+    // 品退模式：接口直返订单号，全量带入
+    const autofillOrderIds =
       source === "评价匹配"
-        ? payload.results.find(
-            (item) =>
-              item.matched &&
-              item.order_id?.trim() &&
-              ["exact_match", "high_confidence"].includes(item.strategy),
-          )
-        : payload.results.find((item) => item.matched && item.order_id?.trim());
+        ? payload.results
+            .filter(
+              (item) =>
+                item.matched &&
+                item.order_id?.trim() &&
+                item.strategy === "exact_match",
+            )
+            .map((item) => item.order_id.trim())
+        : payload.results
+            .filter((item) => item.matched && item.order_id?.trim())
+            .map((item) => item.order_id.trim());
 
-    if (autofillCandidate) {
-      deliveryStore.prefillOrder(autofillCandidate.order_id, source);
+    // 去重：同一订单号只保留第一次
+    const uniqueOrderIds = Array.from(new Set(autofillOrderIds));
+
+    if (uniqueOrderIds.length > 0) {
+      deliveryStore.prefillOrders(uniqueOrderIds, source);
     } else if (source === "评价匹配") {
       deliveryStore.clearPrefillOrder();
     }
