@@ -44,6 +44,10 @@ pub struct OrderSyncService<F> {
     stopped: bool,
 }
 
+fn sync_completed_at(now: Option<chrono::DateTime<chrono::Utc>>) -> i64 {
+    now.unwrap_or_else(chrono::Utc::now).timestamp()
+}
+
 impl<F> OrderSyncService<F>
 where
     F: CacheOrderFinder,
@@ -85,7 +89,7 @@ where
         self.repository.initialize()?;
         self.repository.clear_all()?;
         let (written_count, warnings) =
-            self.sync_range(start_timestamp, end_timestamp, "rebuild")?;
+            self.sync_range(start_timestamp, end_timestamp, "rebuild", now)?;
         let _ = self
             .repository
             .delete_older_than(ORDER_CACHE_SCOPE, start_timestamp)?;
@@ -131,7 +135,8 @@ where
             if self.stopped {
                 break;
             }
-            let (written_count, warnings) = self.sync_range(gap_start, gap_end, "incremental")?;
+            let (written_count, warnings) =
+                self.sync_range(gap_start, gap_end, "incremental", now)?;
             total_written += written_count;
             all_warnings.extend(warnings);
         }
@@ -173,7 +178,7 @@ where
                 break;
             }
             let (written_count, gap_warnings) =
-                self.sync_range(segment_start, segment_end, "incremental")?;
+                self.sync_range(segment_start, segment_end, "incremental", now)?;
             total_written += written_count;
             warnings.extend(gap_warnings);
         }
@@ -211,7 +216,7 @@ where
                 break;
             }
             let (written_count, gap_warnings) =
-                self.sync_range(segment_start, segment_end, "gap_fill")?;
+                self.sync_range(segment_start, segment_end, "gap_fill", now)?;
             total_written += written_count;
             warnings.extend(gap_warnings);
         }
@@ -266,6 +271,7 @@ where
         start_timestamp: i64,
         end_timestamp: i64,
         mode: &str,
+        now: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<(usize, Vec<String>)> {
         if self.stopped
             || start_timestamp <= 0
@@ -291,7 +297,8 @@ where
         self.repository
             .mark_segment_complete(ORDER_CACHE_SCOPE, start_timestamp, end_timestamp)?;
         let unique_written = count_unique_order_ids(&persisted_orders);
-        let now_ts = sync_now(None);
+        let now_ts = sync_now(now);
+        let completed_at = sync_completed_at(now);
         let retention = retention_start(now_ts);
         self.repository.save_state(&SyncStateRecord {
             scope: ORDER_CACHE_SCOPE.to_string(),
@@ -307,7 +314,7 @@ where
             } else {
                 0
             },
-            last_success_at: now_ts,
+            last_success_at: completed_at,
             last_mode: mode.to_string(),
             last_error: String::new(),
         })?;
@@ -457,6 +464,38 @@ mod tests {
     }
 
     #[test]
+    fn rebuild_cache_records_actual_completion_time_as_last_success_at() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let finder = FakeFinder::with_responses(vec![CacheFetchResult {
+            windows: vec![sample_window(
+                "w1",
+                1_776_403_200,
+                1_776_489_599,
+                vec![sample_order("o-actual-sync", 1_776_410_070)],
+            )],
+            warnings: vec![],
+        }]);
+        let repo = open_shared_repo(&path);
+        let mut service = OrderSyncService::new(finder, repo);
+        let now = DateTime::parse_from_rfc3339("2026-04-19T03:34:30Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let (written, warnings) = service.rebuild_cache(Some(now)).unwrap();
+
+        assert_eq!(written, 1);
+        assert!(warnings.is_empty());
+        let state = service
+            .repository
+            .get_state(ORDER_CACHE_SCOPE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.last_mode, "rebuild");
+        assert_eq!(state.last_success_at, now.timestamp());
+    }
+
+    #[test]
     fn refresh_cache_uses_gap_windows_and_trims_retention() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("order_cache.sqlite3");
@@ -488,11 +527,15 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
             .unwrap()
             .with_timezone(&Utc);
+        let end_timestamp = service.sync_now_timestamp(Some(now));
         let (written, warnings) = service.refresh_cache(Some(now)).unwrap();
         assert_eq!(written, 1);
         assert!(warnings.is_empty());
         assert_eq!(service.finder.calls.len(), 1);
-        assert_eq!(service.finder.calls[0], (3_196_920, 3_196_920, 3_542_399));
+        assert_eq!(
+            service.finder.calls[0],
+            (3_196_920, 3_196_920, end_timestamp)
+        );
     }
 
     #[test]

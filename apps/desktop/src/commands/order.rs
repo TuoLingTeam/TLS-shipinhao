@@ -6,6 +6,7 @@ use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_CACHE_MANAGE;
+use desktop_services::day_window::recent_day_range_timestamps;
 use desktop_services::order_cache_repository::OrderCacheRepository;
 use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_service::{
@@ -27,16 +28,46 @@ fn rich_order_cache_path() -> std::path::PathBuf {
 }
 
 fn recent_window() -> TimeWindow {
-    let end = chrono::Utc::now();
-    let start = end - chrono::Duration::days(30);
+    let (start, end) = recent_day_range_timestamps(30, Some(chrono::Utc::now()));
     TimeWindow {
-        start_at: start.to_rfc3339(),
-        end_at: end.to_rfc3339(),
+        start_at: timestamp_to_iso(start).unwrap_or_default(),
+        end_at: timestamp_to_iso(end).unwrap_or_default(),
     }
 }
 
 fn timestamp_to_iso(timestamp: i64) -> Option<String> {
     chrono::DateTime::from_timestamp(timestamp, 0).map(|dt| dt.to_rfc3339())
+}
+
+pub(crate) fn mask_order_cache_error(
+    operation: &str,
+    window: Option<(&str, &str)>,
+    user_message: &str,
+    error: anyhow::Error,
+) -> AppError {
+    match window {
+        Some((start_at, end_at)) => {
+            tracing::error!(
+                target: "desktop::order_cache",
+                operation,
+                start_at,
+                end_at,
+                error = %error,
+                error_dbg = ?error,
+                "{user_message}"
+            );
+        }
+        None => {
+            tracing::error!(
+                target: "desktop::order_cache",
+                operation,
+                error = %error,
+                error_dbg = ?error,
+                "{user_message}"
+            );
+        }
+    }
+    AppError::Message(user_message.to_string())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -153,6 +184,8 @@ pub async fn load_order_cache(
     start_at: String,
     end_at: String,
 ) -> Result<Vec<OrderCacheEntry>, AppError> {
+    let log_start_at = start_at.clone();
+    let log_end_at = end_at.clone();
     let window = TimeWindow { start_at, end_at };
     tokio::task::spawn_blocking(move || {
         use desktop_services::OrderCacheStore;
@@ -161,7 +194,14 @@ pub async fn load_order_cache(
     })
     .await
     .map_err(|e| AppError::Message(e.to_string()))?
-    .map_err(AppError::Internal)
+    .map_err(|error| {
+        mask_order_cache_error(
+            "load_order_cache",
+            Some((&log_start_at, &log_end_at)),
+            "订单缓存读取失败，请稍后重试",
+            error,
+        )
+    })
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -244,36 +284,57 @@ pub async fn sync_recent_order_cache(
         "manual",
         "ensure_recent_cache",
         15,
-        "正在维护最近 30 天订单缓存…",
+        "正在维护近 30 天（不含今天）订单缓存…",
     );
 
     let app_clone = app.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<OrderSyncResult, AppError> {
         let finder = HttpOrderCacheFinder::new_with_grant(cookie, magic, Some(grant.grant_id));
-        let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
-            .map_err(AppError::Internal)?;
+        let repository =
+            SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+                mask_order_cache_error(
+                    "sync_recent_order_cache.open_repository",
+                    None,
+                    "订单缓存同步失败，请稍后重试",
+                    error,
+                )
+            })?;
         let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
         let (written, warnings, coverage_start, coverage_end) = service
             .ensure_recent_cache(Some(chrono::Utc::now()))
-            .map_err(AppError::Internal)?;
+            .map_err(|error| {
+                mask_order_cache_error(
+                    "sync_recent_order_cache.ensure_recent_cache",
+                    None,
+                    "订单缓存同步失败，请稍后重试",
+                    error,
+                )
+            })?;
 
         emit_order_sync_progress(
             &app_clone,
             "manual",
             "refresh_light_cache",
             78,
-            "最近 30 天富缓存已更新，正在刷新订单列表视图…",
+            "近 30 天（不含今天）富缓存已更新，正在刷新订单列表视图…",
         );
 
-        let light_entries = write_lightweight_recent_cache().map_err(AppError::Internal)?;
+        let light_entries = write_lightweight_recent_cache().map_err(|error| {
+            mask_order_cache_error(
+                "sync_recent_order_cache.write_lightweight_recent_cache",
+                None,
+                "订单缓存同步失败，请稍后重试",
+                error,
+            )
+        })?;
         emit_order_sync_progress(
             &app_clone,
             "manual",
             "completed",
             100,
             format!(
-                "缓存维护完成，当前最近 30 天可见 {} 条订单。",
+                "缓存维护完成，当前近 30 天（不含今天）可见 {} 条订单。",
                 light_entries.len()
             ),
         );
@@ -290,4 +351,37 @@ pub async fn sync_recent_order_cache(
     .map_err(|e| AppError::Message(e.to_string()))??;
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn order_cache_load_error_masks_internal_window_details() {
+        let masked = mask_order_cache_error(
+            "load_order_cache",
+            Some(("2026-03-19T16:00:00+00:00", "2026-03-19T23:59:59+00:00")),
+            "订单缓存读取失败，请稍后重试",
+            anyhow::anyhow!("fetch cache orders for 1773936000..1773964799"),
+        );
+
+        assert_eq!(masked.to_string(), "订单缓存读取失败，请稍后重试");
+        assert!(!masked.to_string().contains("1773936000"));
+        assert!(!masked.to_string().contains("fetch cache orders for"));
+    }
+
+    #[test]
+    fn order_cache_sync_error_masks_internal_window_details() {
+        let masked = mask_order_cache_error(
+            "sync_recent_order_cache",
+            None,
+            "订单缓存同步失败，请稍后重试",
+            anyhow::anyhow!("fetch cache orders for 1773936000..1773964799"),
+        );
+
+        assert_eq!(masked.to_string(), "订单缓存同步失败，请稍后重试");
+        assert!(!masked.to_string().contains("1773964799"));
+        assert!(!masked.to_string().contains("fetch cache orders for"));
+    }
 }

@@ -5,13 +5,14 @@ use crate::adapters::http_order_search::HttpOrderCacheFinder;
 use crate::adapters::http_quality_refund_source::HttpQualityRefundSource;
 use crate::adapters::http_review_source::HttpReviewSource;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
-use crate::commands::order::{emit_order_sync_progress, recent_order_cache_status};
+use crate::commands::order::{
+    emit_order_sync_progress, mask_order_cache_error, recent_order_cache_status,
+};
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::{LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND};
 use desktop_services::order_cache_repository::{CacheOrderRecord, OrderCacheRepository};
 use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
-use desktop_services::order_sync_planner::ORDER_CACHE_COVERAGE_DAYS;
 use desktop_services::order_sync_service::OrderSyncService;
 use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
 use desktop_services::review_candidate_scoring::CandidateOrder;
@@ -211,13 +212,27 @@ fn run_review_match_flow(
             22,
             "最近 30 天缓存完整，直接读取本地订单并进入评分匹配…",
         );
-        let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
-            .map_err(AppError::Internal)?;
+        let repository =
+            SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+                mask_order_cache_error(
+                    "review_query.open_repository_cached_window",
+                    None,
+                    "订单缓存读取失败，请稍后重试",
+                    error,
+                )
+            })?;
         let (candidate_start, candidate_end) =
             candidate_window_from_recent_cache(start_unix, end_unix, _coverage_start, coverage_end);
         let orders = repository
             .fetch_orders_in_range(candidate_start, candidate_end)
-            .map_err(AppError::Internal)?;
+            .map_err(|error| {
+                mask_order_cache_error(
+                    "review_query.fetch_orders_in_range_cached_window",
+                    None,
+                    "订单缓存读取失败，请稍后重试",
+                    error,
+                )
+            })?;
         (orders, Vec::new())
     } else {
         emit_order_sync_progress(
@@ -229,33 +244,76 @@ fn run_review_match_flow(
         );
 
         let finder = HttpOrderCacheFinder::new(cookie, magic);
-        let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
-            .map_err(AppError::Internal)?;
+        let repository =
+            SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+                mask_order_cache_error(
+                    "review_query.open_repository_refresh_recent_cache",
+                    None,
+                    "订单缓存读取失败，请稍后重试",
+                    error,
+                )
+            })?;
         let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
         let now = chrono::Utc::now();
-        let retention_start = now - chrono::Duration::days(ORDER_CACHE_COVERAGE_DAYS);
+        let retention_start =
+            service.retention_start_timestamp(service.sync_now_timestamp(Some(now)));
         let earliest = start_unix;
-        let (orders, warnings) = if earliest < retention_start.timestamp() {
+        let (orders, warnings) = if earliest < retention_start {
             let (orders, warnings) = service
                 .fetch_full_scan_orders(earliest, Some(now))
-                .map_err(AppError::Internal)?;
+                .map_err(|error| {
+                    mask_order_cache_error(
+                        "review_query.fetch_full_scan_orders",
+                        None,
+                        "订单缓存同步失败，请稍后重试",
+                        error,
+                    )
+                })?;
             (orders, warnings)
         } else {
             let (_, ensure_warnings, recent_start, recent_end) = service
                 .refresh_recent_incremental_cache(Some(now))
-                .map_err(AppError::Internal)?;
-            let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())
-                .map_err(AppError::Internal)?;
+                .map_err(|error| {
+                    mask_order_cache_error(
+                        "review_query.refresh_recent_incremental_cache",
+                        None,
+                        "订单缓存同步失败，请稍后重试",
+                        error,
+                    )
+                })?;
+            let repository =
+                SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+                    mask_order_cache_error(
+                        "review_query.open_repository_recent_incremental",
+                        None,
+                        "订单缓存读取失败，请稍后重试",
+                        error,
+                    )
+                })?;
             let (candidate_start, candidate_end) =
                 candidate_window_from_recent_cache(start_unix, end_unix, recent_start, recent_end);
             let orders = repository
                 .fetch_orders_in_range(candidate_start, candidate_end)
-                .map_err(AppError::Internal)?;
+                .map_err(|error| {
+                    mask_order_cache_error(
+                        "review_query.fetch_orders_in_range_recent_incremental",
+                        None,
+                        "订单缓存读取失败，请稍后重试",
+                        error,
+                    )
+                })?;
             (orders, ensure_warnings)
         };
 
-        let status = recent_order_cache_status().map_err(AppError::Internal)?;
+        let status = recent_order_cache_status().map_err(|error| {
+            mask_order_cache_error(
+                "review_query.recent_order_cache_status_after_refresh",
+                None,
+                "订单缓存读取失败，请稍后重试",
+                error,
+            )
+        })?;
         let before_count = status_before
             .as_ref()
             .map(|item| item.cached_order_count)
@@ -282,7 +340,14 @@ fn run_review_match_flow(
     );
 
     let results = match_reviews_with_cache_records(&evaluations, &orders);
-    let status = recent_order_cache_status().map_err(AppError::Internal)?;
+    let status = recent_order_cache_status().map_err(|error| {
+        mask_order_cache_error(
+            "review_query.recent_order_cache_status_before_response",
+            None,
+            "订单缓存读取失败，请稍后重试",
+            error,
+        )
+    })?;
 
     emit_order_sync_progress(
         &app,
