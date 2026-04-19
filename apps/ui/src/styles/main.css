@@ -827,8 +827,11 @@ textarea {
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 304px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 0.9rem;
   min-height: 0;
+  /* 覆盖 .subsystem-panel-grid 的 align-items: start，让两栏撑满 section 高度 */
+  align-items: stretch;
 }
 
 .settings-sidebar,
@@ -841,9 +844,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  align-self: start;
-  position: sticky;
-  top: 0;
+  min-height: 0;
   border-left: 4px solid var(--color-brand);
   box-shadow:
     0 18px 44px -32px rgba(5, 150, 105, 0.22),
@@ -881,6 +882,13 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 左栏底部撑满：让应用信息卡自动推到底部，中间自然留白 */
+.settings-sidebar-stack > .settings-sidebar-card:last-child {
+  margin-top: auto;
 }
 
 .settings-nav-item {
@@ -1139,16 +1147,41 @@ textarea {
   flex-direction: column;
   gap: 0.9rem;
   min-width: 0;
+  min-height: 0;
 }
 
 .settings-section-card {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
   border-left: 4px solid var(--color-brand);
   box-shadow:
     0 18px 44px -32px rgba(5, 150, 105, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.settings-cookie-grid {
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-cookie-main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-cookie-textarea {
+  flex: 1 1 auto;
+  min-height: 180px;
+}
+
+.settings-side-stack {
+  min-height: 0;
+  flex: 1;
 }
 
 .settings-section-head {
@@ -1291,6 +1324,7 @@ textarea {
 @media (min-width: 960px) {
   .settings-cookie-grid {
     grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+    grid-template-rows: 1fr;
     align-items: stretch;
   }
 }
@@ -2154,18 +2188,18 @@ textarea {
   border-color: rgba(253, 186, 116, 0.65);
 }
 
-/* 授权信息卡：2×2 网格替代原 4 行 list */
+/* 授权信息卡：单列每行一项，保证与 Cookie 按钮列一致的纵向节奏 */
 .settings-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .settings-info-item {
   display: flex;
-  flex-direction: column;
-  gap: 0.22rem;
-  padding: 0.6rem 0.7rem;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
   border-radius: 12px;
   border: 1px solid rgba(226, 232, 240, 0.88);
   background: rgba(248, 250, 252, 0.74);
@@ -2173,10 +2207,12 @@ textarea {
 }
 
 .settings-info-item--wide {
-  grid-column: 1 / -1;
+  /* 兼容老 class，单列布局下每项已是整行，不需要额外撑宽 */
 }
 
 .settings-info-label {
+  flex-shrink: 0;
+  min-width: 5rem;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -2185,6 +2221,9 @@ textarea {
 }
 
 .settings-info-value {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
   font-size: 0.84rem;
   font-weight: 700;
   line-height: 1.35;
@@ -2245,17 +2284,11 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-/* Cookie 快捷操作：2×2 按钮栅格 */
+/* Cookie 快捷操作：单列按钮竖排，便于与左侧 textarea 一起撑满高度 */
 .settings-action-buttons-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-@media (max-width: 480px) {
-  .settings-action-buttons-grid {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 /* Cookie 编辑卡：内嵌"当前保存位置"信息块，代替原右侧底部位置 */

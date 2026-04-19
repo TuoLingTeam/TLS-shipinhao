@@ -235,7 +235,7 @@ onMounted(() => {
   <div class="settings-view-shell flex h-full min-h-0 flex-col gap-app">
     <section
       data-testid="settings-panels"
-      class="subsystem-panel-grid settings-layout"
+      class="settings-layout flex-1 min-h-0"
     >
       <aside
         data-testid="settings-sidebar"
