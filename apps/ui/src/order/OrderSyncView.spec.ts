@@ -57,11 +57,11 @@ describe("OrderSyncView", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("同步最近 30 天缓存");
     expect(wrapper.text()).toContain("本地订单检索");
     expect(wrapper.text()).not.toContain("缓存统计");
     expect(wrapper.text()).not.toContain("本地检索状态");
-    expect(wrapper.get('[data-testid="order-chipbar"]').classes()).toContain("subsystem-chipbar");
+    expect(wrapper.text()).not.toContain("ORDER CACHE");
+    expect(wrapper.text()).not.toContain("同步最近 30 天缓存");
   });
 
 
@@ -77,9 +77,31 @@ describe("OrderSyncView", () => {
     });
 
     expect(wrapper.get('[data-testid="order-hero-shell"]').classes()).toContain("order-hero-shell");
-    expect(wrapper.get('[data-testid="order-sync-shell"]').classes()).toContain("order-sync-shell");
-    expect(wrapper.get('[data-testid="order-stats-grid"]').classes()).toContain("order-stats-grid");
-    expect(wrapper.findAll('.order-stat-card')).toHaveLength(3);
     expect(wrapper.get('[data-testid="order-table-shell"]').classes()).toContain("order-table-shell");
+    expect(wrapper.text()).not.toContain("仅维护缓存，不额外展示冗余面板");
+    expect(wrapper.findComponent({ name: "OrderSearchBar" }).exists()).toBe(true);
+    expect(wrapper.text()).toContain("同步缓存");
+  });
+
+  it("renders a single compact progress card while syncing cache", () => {
+    const orderStore = useOrderStore();
+    orderStore.loading = true;
+    orderStore.syncProgress = 78;
+    orderStore.syncPhase = "refresh_light_cache";
+    orderStore.syncMessage = "近 30 天（不含今天）富缓存已更新，正在刷新订单列表视图…";
+
+    const wrapper = mount(OrderSyncView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          EmptyState: true,
+        },
+      },
+    });
+
+    expect(wrapper.get('[data-testid="order-sync-progress"]').classes()).toContain("order-progress-shell");
+    expect(wrapper.text()).toContain("同步订单缓存");
+    expect(wrapper.text()).toContain("78%");
+    expect(wrapper.text()).not.toContain("正在加载");
   });
 });

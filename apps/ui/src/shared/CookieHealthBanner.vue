@@ -25,10 +25,10 @@ const description = computed(
 <template>
   <section
     v-if="visible"
-    class="rounded-[20px] border px-5 py-4 text-sm shadow-sm"
+    class="rounded-[20px] border px-3 py-3 text-sm shadow-sm sm:px-5 sm:py-4"
     :class="tone"
   >
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex flex-col gap-app lg:flex-row lg:items-center lg:justify-between">
       <div class="min-w-0">
         <div class="text-base font-semibold">
           {{ title }}
@@ -38,7 +38,7 @@ const description = computed(
           最近探测：{{ formatDateTime(store.snapshot.last_checked_at) }}
         </div>
       </div>
-      <div class="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+      <div class="flex shrink-0 flex-wrap gap-app lg:justify-end">
         <button
           type="button"
           class="action-btn action-btn-secondary"

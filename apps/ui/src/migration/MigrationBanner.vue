@@ -64,10 +64,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section v-if="!loading && visible && report" class="surface-panel border border-brand-tint/90 px-5 py-4">
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+  <section v-if="!loading && visible && report" class="surface-panel border border-brand-tint/90 px-3 py-3 sm:px-5 sm:py-4">
+    <div class="flex flex-col gap-app lg:flex-row lg:items-start lg:justify-between">
       <div class="min-w-0">
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-app">
           <span class="status-badge status-badge-active">检测到 Python 4.3.0 本地数据</span>
           <span v-if="report.errors.length" class="status-badge status-badge-warning">迁移中有 {{ report.errors.length }} 条提示</span>
           <span v-else class="status-badge status-badge-active">迁移检查完成</span>
@@ -92,7 +92,7 @@ onMounted(async () => {
 
         <div v-if="expanded && report.errors.length" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
           <div class="font-semibold">迁移提示</div>
-          <ul class="mt-2 space-y-2">
+          <ul class="mt-2 space-y-app">
             <li v-for="item in report.errors" :key="`${item.step}-${item.message}`">
               <div class="font-mono text-xs text-amber-800">{{ item.step }}</div>
               <div class="mt-1 leading-6">{{ item.message }}</div>
@@ -101,7 +101,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+      <div class="flex shrink-0 flex-wrap gap-app lg:justify-end">
         <button
           v-if="report.errors.length"
           type="button"

@@ -98,25 +98,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section v-if="visible && updateInfo" class="hero-panel border border-brand-tint/90 px-5 py-4">
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <div class="min-w-0">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="status-badge status-badge-active">发现新版本 {{ updateInfo.version }}</span>
-          <span v-if="updateInfo.mandatory" class="status-badge status-badge-danger">强制更新</span>
-        </div>
-        <div class="mt-2 text-sm leading-6 text-brand-deep">
-          已检测到可用更新，建议尽快升级以获取最新修复与兼容能力。
-        </div>
-        <ul v-if="updateInfo.notes.length" class="mt-3 space-y-1 text-sm leading-6 text-slate-700">
-          <li v-for="(note, index) in updateInfo.notes" :key="`${updateInfo.version}-${index}`" class="flex gap-2">
-            <span class="mt-[2px] text-brand">•</span>
-            <span>{{ note }}</span>
-          </li>
-        </ul>
+  <section v-if="visible && updateInfo" class="hero-panel border border-brand-tint/90 px-3 py-3 sm:px-4">
+    <div class="flex flex-col gap-app sm:flex-row sm:flex-wrap sm:items-center">
+      <div class="flex min-w-0 flex-wrap items-center gap-app">
+        <span class="status-badge status-badge-active">发现新版本 {{ updateInfo.version }}</span>
+        <span v-if="updateInfo.mandatory" class="status-badge status-badge-danger">强制更新</span>
       </div>
-
-      <div class="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+      <div class="flex w-full shrink-0 flex-wrap gap-app sm:ml-auto sm:w-auto sm:justify-end">
         <button
           type="button"
           class="action-btn action-btn-primary"
@@ -138,9 +126,9 @@ onUnmounted(() => {
           稍后提醒
         </button>
       </div>
-      <p v-if="openError" class="mt-2 w-full text-xs text-red-600">
-        {{ openError }}
-      </p>
     </div>
+    <p v-if="openError" class="mt-2 text-xs text-red-600">
+      {{ openError }}
+    </p>
   </section>
 </template>

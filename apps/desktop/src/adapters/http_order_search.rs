@@ -1,9 +1,7 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
 use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
-use desktop_services::order_fetcher::{
-    backoff_seconds, is_api_rate_limited, is_http_rate_limited, RATE_LIMIT_RETRY_COUNT,
-};
+use desktop_services::order_fetcher::{backoff_seconds, is_api_rate_limited, is_http_rate_limited};
 use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
 use domain_core::OrderCacheEntry;
 use reqwest::header::{
@@ -12,7 +10,7 @@ use reqwest::header::{
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -21,7 +19,18 @@ const ORDER_SEARCH_URL: &str =
 const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
 const ORDER_PAGE_SIZE: i64 = 100;
 const REQUEST_TIMEOUT_SECS: u64 = 30;
-const ORDER_CACHE_FETCH_WORKERS: usize = 5;
+/// 订单缓存拉取并发数：过高会加速触发平台频率限制，2 是经验上较稳的折中值。
+const ORDER_CACHE_FETCH_WORKERS: usize = 2;
+/// 订单搜索的限流退避次数（全窗口共享）。
+///
+/// 与评价接口不同：订单接口采用多 worker 并行抓取，一旦触发限流需要更长的
+/// 恢复时间。因此在此处覆盖全局 `RATE_LIMIT_RETRY_COUNT`，扩展到 5 次：
+/// 2/4/8/16/32 秒，最多累计 62 秒退避。任一 worker 请求成功后立即归零。
+const ORDER_RATE_LIMIT_RETRY_COUNT: u32 = 5;
+/// 单次拉取窗口允许的累计退避秒数上限（兵底）。
+///
+/// 达到该阈值仍未恢复时，终止拉取并向上层汇报，避免长时间死等。
+const ORDER_RATE_LIMIT_MAX_TOTAL_WAIT_SECS: u64 = 120;
 /// 与 `FETCH_PAGE_INTERVAL_SECONDS` 对齐（秒）。
 const FETCH_PAGE_INTERVAL: Duration = Duration::from_millis(300);
 
@@ -35,27 +44,52 @@ fn cache_fetch_worker_count() -> usize {
     ORDER_CACHE_FETCH_WORKERS
 }
 
-async fn retry_order_search_with_sleep<T, F, Fut, S, SleepFut>(
+/// 限流退避调度的结果。
+#[derive(Debug, PartialEq, Eq)]
+enum BackoffSchedule {
+    /// 安排了新一轮退避，调用方应 sleep 这么多秒后重试。
+    Scheduled(u64),
+    /// 当前仍处于其他 worker 已安排的退避窗口内，调用方应 sleep 剩余秒数后重试，
+    /// 但**不**消耗本次重试配额。
+    Waiting(u64),
+    /// 已耗尽退避预算（次数或累计时长到顶），调用方应放弃。
+    Exhausted,
+}
+
+async fn retry_order_search_with_gate<T, F, Fut>(
     mut operation: F,
-    mut sleep_fn: S,
+    rate_limit_gate: Arc<OrderRateLimitGate>,
 ) -> anyhow::Result<T>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = anyhow::Result<OrderSearchRequestOutcome<T>>>,
-    S: FnMut(u64) -> SleepFut,
-    SleepFut: Future<Output = ()>,
 {
-    let mut attempt = 0u32;
     loop {
         match operation().await? {
-            OrderSearchRequestOutcome::Ready(value) => return Ok(value),
+            OrderSearchRequestOutcome::Ready(value) => {
+                rate_limit_gate.record_success();
+                return Ok(value);
+            }
             OrderSearchRequestOutcome::RetryRateLimited => {
-                if attempt >= RATE_LIMIT_RETRY_COUNT {
-                    anyhow::bail!("订单搜索持续触发频率限制，请稍后再试");
+                match rate_limit_gate.try_schedule_backoff() {
+                    BackoffSchedule::Scheduled(wait_secs) => {
+                        tracing::warn!(
+                            target: "order.fetch.retry",
+                            "订单接口触发频率限制，等待 {wait_secs} 秒后重试"
+                        );
+                        tokio::time::sleep(Duration::from_secs(wait_secs)).await;
+                    }
+                    BackoffSchedule::Waiting(wait_secs) => {
+                        tracing::debug!(
+                            target: "order.fetch.retry",
+                            "订单接口仍在已安排的退避窗口内，继续等待 {wait_secs} 秒"
+                        );
+                        tokio::time::sleep(Duration::from_secs(wait_secs)).await;
+                    }
+                    BackoffSchedule::Exhausted => {
+                        anyhow::bail!("订单搜索持续触发频率限制，请稍后再试");
+                    }
                 }
-                let wait_secs = backoff_seconds(attempt);
-                sleep_fn(wait_secs).await;
-                attempt += 1;
             }
         }
     }
@@ -63,24 +97,63 @@ where
 
 #[derive(Debug)]
 struct OrderRateLimitGate {
+    /// 当前退避窗口的结束时刻（全局共享）。
     pause_until: Mutex<std::time::Instant>,
+    /// 已消耗的退避次数，成功时归零。
+    attempt: AtomicU32,
+    /// 本窗口累计退避秒数，成功时归零。
+    total_wait_secs: AtomicU64,
 }
 
 impl Default for OrderRateLimitGate {
     fn default() -> Self {
         Self {
             pause_until: Mutex::new(std::time::Instant::now()),
+            attempt: AtomicU32::new(0),
+            total_wait_secs: AtomicU64::new(0),
         }
     }
 }
 
 impl OrderRateLimitGate {
-    fn pause_for(&self, wait_secs: u64) {
-        let until = std::time::Instant::now() + Duration::from_secs(wait_secs);
+    /// 尝试安排一次限流退避：
+    ///
+    /// - 如果当前仍在其他 worker 已经安排的 pause 窗口里，返回 `Waiting(remaining)`
+    ///   并**不**消耗次数配额——避免并发请求同时把 `attempt` 一次性耗尽。
+    /// - 否则检查次数和累计时长：
+    ///   - 若已达 `ORDER_RATE_LIMIT_RETRY_COUNT` 或超出 `ORDER_RATE_LIMIT_MAX_TOTAL_WAIT_SECS`
+    ///     返回 `Exhausted`。
+    ///   - 否则按 `backoff_seconds(attempt)` 计算 wait 秒数，更新 pause 与累计，
+    ///     返回 `Scheduled(wait_secs)`。
+    fn try_schedule_backoff(&self) -> BackoffSchedule {
         let mut guard = self.pause_until.lock().expect("rate limit gate lock");
-        if until > *guard {
-            *guard = until;
+        let now = std::time::Instant::now();
+
+        if *guard > now {
+            let remaining = guard.saturating_duration_since(now).as_secs();
+            return BackoffSchedule::Waiting(remaining.max(1));
         }
+
+        let current_attempt = self.attempt.load(Ordering::Relaxed);
+        if current_attempt >= ORDER_RATE_LIMIT_RETRY_COUNT {
+            return BackoffSchedule::Exhausted;
+        }
+        let wait_secs = backoff_seconds(current_attempt);
+        let total = self.total_wait_secs.load(Ordering::Relaxed);
+        if total.saturating_add(wait_secs) > ORDER_RATE_LIMIT_MAX_TOTAL_WAIT_SECS {
+            return BackoffSchedule::Exhausted;
+        }
+
+        *guard = now + Duration::from_secs(wait_secs);
+        self.attempt.store(current_attempt + 1, Ordering::Relaxed);
+        self.total_wait_secs.store(total + wait_secs, Ordering::Relaxed);
+        BackoffSchedule::Scheduled(wait_secs)
+    }
+
+    /// 任一 worker 请求成功后调用，归零全局退避状态。
+    fn record_success(&self) {
+        self.attempt.store(0, Ordering::Relaxed);
+        self.total_wait_secs.store(0, Ordering::Relaxed);
     }
 
     async fn wait_if_needed(&self) {
@@ -315,8 +388,7 @@ async fn post_order_search_with_retry_inner(
     rate_limit_gate: Arc<OrderRateLimitGate>,
 ) -> anyhow::Result<Value> {
     let request_gate = Arc::clone(&rate_limit_gate);
-    let sleep_gate = Arc::clone(&rate_limit_gate);
-    retry_order_search_with_sleep(
+    retry_order_search_with_gate(
         || {
             let headers = headers.clone();
             let rate_limit_gate = Arc::clone(&request_gate);
@@ -336,17 +408,7 @@ async fn post_order_search_with_retry_inner(
                 Ok(OrderSearchRequestOutcome::Ready(val))
             }
         },
-        move |wait_secs| {
-            let rate_limit_gate = Arc::clone(&sleep_gate);
-            async move {
-                tracing::warn!(
-                    target: "order.fetch.retry",
-                    "订单接口触发频率限制，等待 {wait_secs} 秒后重试"
-                );
-                rate_limit_gate.pause_for(wait_secs);
-                tokio::time::sleep(Duration::from_secs(wait_secs)).await;
-            }
-        },
+        rate_limit_gate,
     )
     .await
 }
@@ -709,26 +771,92 @@ pub fn parse_iso_window(start_at: &str, end_at: &str) -> anyhow::Result<(i64, i6
 }
 
 #[cfg(test)]
+impl OrderRateLimitGate {
+    /// 测试辅助：立即把 pause 窗口过期，以便模拟时间推进。
+    fn force_expire_pause(&self) {
+        *self.pause_until.lock().expect("rate limit gate lock") = std::time::Instant::now();
+    }
+
+    fn attempt_count(&self) -> u32 {
+        self.attempt.load(Ordering::Relaxed)
+    }
+
+    fn total_wait_secs_snapshot(&self) -> u64 {
+        self.total_wait_secs.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
-    use std::sync::Mutex;
 
     #[test]
-    fn recent_cache_fetch_uses_five_workers() {
-        assert_eq!(cache_fetch_worker_count(), 5);
+    fn recent_cache_fetch_uses_two_workers() {
+        assert_eq!(cache_fetch_worker_count(), 2);
     }
 
-    #[tokio::test]
-    async fn order_search_retry_uses_2_4_8_backoff_then_succeeds() {
-        let call_count = Arc::new(AtomicU32::new(0));
-        let wait_log = Arc::new(Mutex::new(Vec::<u64>::new()));
-        let cc = call_count.clone();
-        let wait_log_inner = wait_log.clone();
+    #[test]
+    fn gate_schedules_expanded_2_4_8_16_32_sequence_then_exhausts() {
+        let gate = OrderRateLimitGate::default();
+        let mut scheduled = Vec::<u64>::new();
+        for _ in 0..ORDER_RATE_LIMIT_RETRY_COUNT {
+            match gate.try_schedule_backoff() {
+                BackoffSchedule::Scheduled(secs) => scheduled.push(secs),
+                other => panic!("期望 Scheduled，实际 {other:?}"),
+            }
+            gate.force_expire_pause();
+        }
+        assert_eq!(scheduled, vec![2, 4, 8, 16, 32]);
+        assert_eq!(gate.attempt_count(), ORDER_RATE_LIMIT_RETRY_COUNT);
 
-        let result = retry_order_search_with_sleep(
+        match gate.try_schedule_backoff() {
+            BackoffSchedule::Exhausted => (),
+            other => panic!("超过上限应 Exhausted，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn concurrent_gate_calls_share_backoff_budget() {
+        let gate = OrderRateLimitGate::default();
+        match gate.try_schedule_backoff() {
+            BackoffSchedule::Scheduled(secs) => assert_eq!(secs, 2),
+            other => panic!("首次期望 Scheduled(2)，实际 {other:?}"),
+        }
+        match gate.try_schedule_backoff() {
+            BackoffSchedule::Waiting(_) => (),
+            other => panic!("同窗口内第二次应 Waiting，实际 {other:?}"),
+        }
+        assert_eq!(
+            gate.attempt_count(),
+            1,
+            "并发调用不应重复消耗 attempt 配额"
+        );
+    }
+
+    #[test]
+    fn gate_record_success_resets_state() {
+        let gate = OrderRateLimitGate::default();
+        let _ = gate.try_schedule_backoff();
+        gate.force_expire_pause();
+        let _ = gate.try_schedule_backoff();
+        assert_eq!(gate.attempt_count(), 2);
+        assert!(gate.total_wait_secs_snapshot() > 0);
+
+        gate.record_success();
+        assert_eq!(gate.attempt_count(), 0);
+        assert_eq!(gate.total_wait_secs_snapshot(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn order_search_retry_succeeds_after_three_rate_limits() {
+        let call_count = Arc::new(AtomicU32::new(0));
+        let cc = call_count.clone();
+        let gate = Arc::new(OrderRateLimitGate::default());
+
+        let result = retry_order_search_with_gate(
             move || {
                 let cc = cc.clone();
                 async move {
@@ -742,12 +870,7 @@ mod tests {
                     }
                 }
             },
-            move |wait_secs| {
-                let wait_log = wait_log_inner.clone();
-                async move {
-                    wait_log.lock().unwrap().push(wait_secs);
-                }
-            },
+            Arc::clone(&gate),
         )
         .await
         .expect("should eventually succeed");
@@ -757,7 +880,8 @@ mod tests {
             Some(0)
         );
         assert_eq!(call_count.load(Ordering::SeqCst), 4);
-        assert_eq!(*wait_log.lock().unwrap(), vec![2, 4, 8]);
+        assert_eq!(gate.attempt_count(), 0, "成功后应归零 attempt");
+        assert_eq!(gate.total_wait_secs_snapshot(), 0, "成功后应归零累计等待");
     }
 
     #[test]

@@ -40,21 +40,21 @@ const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-bran
 </script>
 
 <template>
-  <div class="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.95fr]">
+  <div class="grid grid-cols-1 gap-app xl:grid-cols-[1.1fr_0.95fr]">
     <section class="surface-panel p-5 lg:p-6">
-      <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center justify-between gap-app">
         <h2 class="text-xl font-semibold tracking-tight text-slate-900">激活卡密</h2>
         <div class="rounded-2xl px-3 py-2 text-sm font-semibold" :class="stateTone">
           {{ currentStateText }}
         </div>
       </div>
 
-      <div class="mt-5 space-y-4">
+      <div class="mt-5 space-y-app">
         <div>
           <label class="field-label">卡密</label>
           <input v-model.trim="licenseKey" class="field-input" placeholder="输入卡密" />
         </div>
-        <div class="flex flex-col gap-3 sm:flex-row">
+        <div class="flex flex-col gap-app sm:flex-row">
           <button :disabled="activateLoading" class="action-btn action-btn-primary flex-1" @click="handleActivate">
             {{ activateLoading ? "激活中..." : "激活" }}
           </button>
@@ -71,7 +71,7 @@ const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-bran
 
     <section class="surface-panel p-5 lg:p-6">
       <h2 class="text-xl font-semibold tracking-tight text-slate-900">授权快照</h2>
-      <div class="mt-5 space-y-3 text-sm">
+      <div class="mt-5 space-y-app text-sm">
         <div class="flex justify-between rounded-2xl bg-slate-50 px-4 py-3">
           <span class="text-slate-500">状态</span>
           <span class="font-semibold text-slate-900">{{ currentStateText }}</span>
@@ -80,15 +80,15 @@ const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-bran
           <span class="text-slate-500">版本</span>
           <span class="font-semibold text-slate-900">{{ appStore.appVersion }}</span>
         </div>
-        <div class="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+        <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3">
           <span class="text-slate-500">卡密</span>
           <span class="break-all text-right font-mono text-xs text-slate-700">{{ appStore.licenseKey || "未保存" }}</span>
         </div>
-        <div class="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+        <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3">
           <span class="text-slate-500">到期</span>
           <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.licenseExpiresAt) }}</span>
         </div>
-        <div class="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+        <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3">
           <span class="text-slate-500">校验时间</span>
           <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.lastVerifiedAt) }}</span>
         </div>

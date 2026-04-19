@@ -16,9 +16,9 @@ const percent = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-app">
     <ProgressBar :percent="percent" label="批量发货进度" />
-    <div class="grid grid-cols-3 gap-2 text-center text-sm">
+    <div class="grid grid-cols-3 gap-app text-center text-sm">
       <div class="bg-slate-50 p-2 rounded">
         <div class="text-slate-500">总计</div>
         <div class="font-bold text-slate-800">{{ progress.totalCount }}</div>

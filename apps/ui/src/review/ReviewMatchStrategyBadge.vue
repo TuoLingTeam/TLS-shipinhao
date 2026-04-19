@@ -63,13 +63,13 @@ const hasCandidateMeta = computed(
     </button>
     <div
       v-if="tooltipOpen"
-      class="absolute right-0 top-[calc(100%+8px)] z-20 w-80 space-y-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left text-xs leading-5 text-slate-600 shadow-xl"
+      class="absolute right-0 top-[calc(100%+8px)] z-20 w-80 space-y-app rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left text-xs leading-5 text-slate-600 shadow-xl"
     >
       <p class="font-semibold text-slate-700">{{ meta.text }}</p>
       <p class="text-slate-500">{{ meta.description }}</p>
       <div v-if="hasReasons" class="border-t border-slate-100 pt-2">
         <p class="mb-1 font-semibold text-slate-700">评分明细</p>
-        <ul class="space-y-1 text-slate-600">
+        <ul class="space-y-app text-slate-600">
           <li v-for="(reason, idx) in props.reasons" :key="idx" class="break-words">
             · {{ reason }}
           </li>
@@ -77,7 +77,7 @@ const hasCandidateMeta = computed(
       </div>
       <div
         v-if="hasCandidateMeta"
-        class="flex gap-3 border-t border-slate-100 pt-2 text-[11px] text-slate-500"
+        class="flex gap-app border-t border-slate-100 pt-2 text-[11px] text-slate-500"
       >
         <span v-if="typeof props.candidateCount === 'number'">
           候选 <span class="font-semibold text-slate-700">{{ props.candidateCount }}</span> 条

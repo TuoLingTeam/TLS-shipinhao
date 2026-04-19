@@ -25,7 +25,7 @@ const carriers = [
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-app">
     <div>
       <label class="block text-sm text-slate-600 mb-1">订单号</label>
       <input

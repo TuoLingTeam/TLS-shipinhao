@@ -7,7 +7,7 @@ const days = ref(30);
 
 <template>
   <div class="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-    <div class="flex items-end gap-4">
+    <div class="flex items-end gap-app">
       <div>
         <label class="block text-sm text-slate-600 mb-1">查询天数</label>
         <input

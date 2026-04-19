@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
-import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/order.store";
 import { useReviewStore } from "../review/review.store";
@@ -9,7 +8,6 @@ import { useDeliveryStore } from "../delivery/delivery.store";
 import { useOrder } from "../order/useOrder";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import AppNavIcon from "../layout/AppNavIcon.vue";
-import { AUTHOR_WECHAT } from "../shared/brand";
 import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
 import { buildSettingsLocation } from "../layout/navigation";
@@ -21,8 +19,8 @@ const deliveryStore = useDeliveryStore();
 const cookieHealth = useCookieHealthStore();
 const { loadCacheStatus } = useOrder();
 
-const appInfo = useTauriInvoke<{ name: string; name_en: string; version: string; author_wechat: string; window_title: string; runtime: string }>("get_app_info");
-const info = ref<{ name: string; name_en: string; version: string; author_wechat: string; window_title: string; runtime: string } | null>(null);
+type Tone = "success" | "warn" | "error" | "idle";
+type ShortcutTone = "brand" | "sky" | "amber" | "slate";
 
 const daysUntilLicenseExpires = computed<number | null>(() => {
   const iso = appStore.licenseExpiresAt;
@@ -33,7 +31,7 @@ const daysUntilLicenseExpires = computed<number | null>(() => {
   return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
 });
 
-const licenseTone = computed<"success" | "warn" | "error">(() => {
+const licenseTone = computed<Tone>(() => {
   if (!appStore.isLicensed) return "error";
   if ((daysUntilLicenseExpires.value ?? Infinity) <= 7) return "warn";
   return "success";
@@ -54,14 +52,12 @@ const metrics = computed(() => [
     label: "授权状态",
     value: licenseText.value,
     hint:
-      daysUntilLicenseExpires.value === null
-        ? (appStore.isLicensed ? "已激活" : "请前往设置中心激活")
-        : daysUntilLicenseExpires.value < 0
+      appStore.isLicensed
+        ? "已激活"
+        : daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value < 0
           ? `已过期 ${Math.abs(daysUntilLicenseExpires.value)} 天`
-          : daysUntilLicenseExpires.value <= 7
-            ? `剩余 ${daysUntilLicenseExpires.value} 天到期，建议续费`
-            : `约 ${daysUntilLicenseExpires.value} 天后到期`,
-    tone: licenseTone.value,
+          : "请前往设置中心激活",
+    tone: licenseTone.value as Tone,
   },
   {
     key: "cookie",
@@ -78,14 +74,13 @@ const metrics = computed(() => [
       cookieHealth.snapshot.last_checked_at
         ? `最近探测：${formatDateTime(cookieHealth.snapshot.last_checked_at)}`
         : "启动后自动探测",
-    tone:
-      cookieHealth.status === "healthy"
-        ? "success"
-        : cookieHealth.status === "unhealthy"
-          ? "error"
-          : cookieHealth.status === "unconfigured"
-            ? "warn"
-            : "idle",
+    tone: (cookieHealth.status === "healthy"
+      ? "success"
+      : cookieHealth.status === "unhealthy"
+        ? "error"
+        : cookieHealth.status === "unconfigured"
+          ? "warn"
+          : "idle") as Tone,
   },
   {
     key: "cache",
@@ -99,12 +94,11 @@ const metrics = computed(() => [
           : lastSyncAt.value
             ? `最近同步：${formatDateTime(lastSyncAt.value)}`
             : "已建立，建议定期刷新",
-    tone:
-      cacheCount.value === 0
+    tone: (cacheCount.value === 0
+      ? "warn"
+      : missingSegments.value > 0
         ? "warn"
-        : missingSegments.value > 0
-          ? "warn"
-          : "success",
+        : "success") as Tone,
   },
   {
     key: "review",
@@ -116,7 +110,7 @@ const metrics = computed(() => [
         : unmatchedReviewCount.value > 0
           ? `${unmatchedReviewCount.value} 条待人工核实`
           : "全部匹配成功",
-    tone: reviewStore.results.length === 0 ? "idle" : unmatchedReviewCount.value > 0 ? "warn" : "success",
+    tone: (reviewStore.results.length === 0 ? "idle" : unmatchedReviewCount.value > 0 ? "warn" : "success") as Tone,
   },
   {
     key: "delivery",
@@ -125,11 +119,11 @@ const metrics = computed(() => [
     hint: deliveryStore.batchProgress
       ? `成功 ${deliveryStore.batchProgress.successCount} · 失败 ${deliveryStore.batchProgress.failureCount}`
       : "本次启动尚未执行批量",
-    tone: deliveryStore.batchProgress
+    tone: (deliveryStore.batchProgress
       ? deliveryStore.batchProgress.failureCount > 0
         ? "warn"
         : "success"
-      : "idle",
+      : "idle") as Tone,
   },
 ]);
 
@@ -180,23 +174,45 @@ const alerts = computed(() => {
   return items;
 });
 
-const quickLinks: readonly { to: RouteLocationRaw; title: string; icon: "review" | "order" | "delivery" | "settings"; description: string }[] = [
-  { to: "/review", title: "中差评/品退", icon: "review", description: "一键匹配订单并带入发货" },
-  { to: "/order", title: "订单缓存同步", icon: "order", description: "维护 30 天订单缓存与本地检索" },
-  { to: "/delivery", title: "批量发货", icon: "delivery", description: "逐条进度·失败明细·支持取消" },
-  { to: buildSettingsLocation("license"), title: "设置中心", icon: "settings", description: "统一管理授权、Cookie 与应用信息" },
+const quickLinks: readonly {
+  to: RouteLocationRaw;
+  title: string;
+  icon: "review" | "order" | "delivery" | "settings";
+  description: string;
+  tone: ShortcutTone;
+}[] = [
+  { to: "/review", title: "中差评/品退", icon: "review", description: "一键匹配订单并带入发货", tone: "brand" },
+  { to: "/order", title: "订单缓存同步", icon: "order", description: "维护 30 天订单缓存与本地检索", tone: "sky" },
+  { to: "/delivery", title: "批量发货", icon: "delivery", description: "逐条进度·失败明细·支持取消", tone: "amber" },
+  { to: buildSettingsLocation("license"), title: "设置中心", icon: "settings", description: "授权、Cookie 与版本信息", tone: "slate" },
 ] as const;
 
-const toneClass: Record<string, string> = {
+const toneBadgeClass: Record<Tone, string> = {
   success: "bg-brand-soft text-brand-deep",
   warn: "bg-amber-50 text-amber-700",
   error: "bg-red-50 text-red-700",
   idle: "bg-slate-100 text-slate-500",
 };
 
-const alertToneClass: Record<"warn" | "error", string> = {
-  warn: "border-amber-200 bg-amber-50 text-amber-800",
-  error: "border-red-200 bg-red-50 text-red-700",
+const toneBadgeLabel: Record<Tone, string> = {
+  success: "正常",
+  warn: "注意",
+  error: "需处理",
+  idle: "待更新",
+};
+
+const metricAccentClass: Record<Tone, string> = {
+  success: "dashboard-metric-card--success",
+  warn: "dashboard-metric-card--warn",
+  error: "dashboard-metric-card--error",
+  idle: "dashboard-metric-card--idle",
+};
+
+const shortcutClass: Record<ShortcutTone, string> = {
+  brand: "dashboard-shortcut--brand",
+  sky: "dashboard-shortcut--sky",
+  amber: "dashboard-shortcut--amber",
+  slate: "dashboard-shortcut--slate",
 };
 
 const greeting = computed(() => {
@@ -217,95 +233,313 @@ const todayText = computed(() =>
   }),
 );
 
+const heroSummaryText = computed(() => {
+  const pendingCount = alerts.value.length;
+  if (pendingCount === 0) return "运营状态整体健康，可直接进入业务流程";
+  if (pendingCount === 1) return "有 1 项需要处理，建议先清理再开始业务";
+  return `有 ${pendingCount} 项需要处理，建议先清理再开始业务`;
+});
+
+const heroHintPills = computed<{ key: string; label: string; tone: Tone }[]>(() => {
+  const pills: { key: string; label: string; tone: Tone }[] = [];
+
+  if (!appStore.isLicensed) {
+    pills.push({ key: "license", label: "授权未激活", tone: "error" });
+  } else if (daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value <= 7) {
+    const days = daysUntilLicenseExpires.value;
+    pills.push({
+      key: "license",
+      label: days < 0 ? `授权过期 ${Math.abs(days)} 天` : `授权 ${days} 天到期`,
+      tone: "warn",
+    });
+  } else {
+    pills.push({ key: "license", label: "授权正常", tone: "success" });
+  }
+
+  if (cookieHealth.status === "healthy") {
+    pills.push({ key: "cookie", label: "Cookie 正常", tone: "success" });
+  } else if (cookieHealth.status === "unhealthy") {
+    pills.push({ key: "cookie", label: "Cookie 失效", tone: "error" });
+  } else if (cookieHealth.status === "unconfigured") {
+    pills.push({ key: "cookie", label: "Cookie 未配置", tone: "warn" });
+  } else {
+    pills.push({ key: "cookie", label: "Cookie 待探测", tone: "idle" });
+  }
+
+  if (cacheCount.value > 0) {
+    pills.push({
+      key: "cache",
+      label: missingSegments.value > 0 ? `缓存 ${cacheCount.value}·缺口 ${missingSegments.value}` : `缓存 ${cacheCount.value}`,
+      tone: missingSegments.value > 0 ? "warn" : "success",
+    });
+  }
+
+  return pills.slice(0, 3);
+});
+
+const heroPillClass: Record<Tone, string> = {
+  success: "dashboard-hint-pill--success",
+  warn: "dashboard-hint-pill--warn",
+  error: "dashboard-hint-pill--error",
+  idle: "dashboard-hint-pill--idle",
+};
+
+const alertToneClass: Record<"warn" | "error", string> = {
+  warn: "dashboard-alert--warn",
+  error: "dashboard-alert--error",
+};
+
+type WorkflowStatus = "done" | "warning" | "todo";
+type WorkflowIcon = "license" | "settings" | "order" | "review" | "delivery";
+
+interface WorkflowStep {
+  key: string;
+  label: string;
+  description: string;
+  status: WorkflowStatus;
+  to: RouteLocationRaw;
+  icon: WorkflowIcon;
+}
+
+const workflowSteps = computed<WorkflowStep[]>(() => [
+  {
+    key: "license",
+    label: "激活授权",
+    description: appStore.isLicensed
+      ? daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value <= 7
+        ? `授权 ${daysUntilLicenseExpires.value} 天后到期`
+        : "授权正常"
+      : "卡密尚未激活",
+    status: appStore.isLicensed
+      ? daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value <= 7
+        ? "warning"
+        : "done"
+      : "todo",
+    to: buildSettingsLocation("license"),
+    icon: "license",
+  },
+  {
+    key: "cookie",
+    label: "配置 Cookie",
+    description:
+      cookieHealth.status === "healthy"
+        ? "Cookie 可用"
+        : cookieHealth.status === "unhealthy"
+          ? "Cookie 已失效"
+          : cookieHealth.status === "unconfigured"
+            ? "Cookie 待配置"
+            : "Cookie 待探测",
+    status:
+      cookieHealth.status === "healthy"
+        ? "done"
+        : cookieHealth.status === "unhealthy"
+          ? "warning"
+          : "todo",
+    to: buildSettingsLocation("cookie"),
+    icon: "settings",
+  },
+  {
+    key: "cache",
+    label: "同步订单",
+    description:
+      cacheCount.value > 0
+        ? missingSegments.value > 0
+          ? `${cacheCount.value} 条 · ${missingSegments.value} 缺口`
+          : `${cacheCount.value} 条订单缓存`
+        : "尚未同步",
+    status: cacheCount.value > 0 ? (missingSegments.value > 0 ? "warning" : "done") : "todo",
+    to: "/order",
+    icon: "order",
+  },
+  {
+    key: "review",
+    label: "评价匹配",
+    description:
+      reviewStore.results.length > 0
+        ? `${matchedReviewCount.value}/${reviewStore.results.length} 已匹配`
+        : "未执行匹配",
+    status: reviewStore.results.length > 0 ? (unmatchedReviewCount.value > 0 ? "warning" : "done") : "todo",
+    to: "/review",
+    icon: "review",
+  },
+  {
+    key: "delivery",
+    label: "批量发货",
+    description: deliveryStore.batchProgress
+      ? `${deliveryStore.batchProgress.totalCount} 单任务 · 成功 ${deliveryStore.batchProgress.successCount}`
+      : "本次启动尚未执行",
+    status: deliveryStore.batchProgress
+      ? deliveryStore.batchProgress.failureCount > 0
+        ? "warning"
+        : "done"
+      : "todo",
+    to: "/delivery",
+    icon: "delivery",
+  },
+]);
+
+const workflowStatusLabel: Record<WorkflowStatus, string> = {
+  done: "已就绪",
+  warning: "需注意",
+  todo: "待执行",
+};
+
 onMounted(async () => {
-  info.value = await appInfo.execute();
   void loadCacheStatus();
   void cookieHealth.refreshSilently();
 });
 </script>
 
 <template>
-  <div class="space-y-4">
-    <section class="hero-panel subsystem-hero p-4 lg:p-5">
-      <div class="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">TLS 工作台</p>
-          <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{{ greeting }}</h2>
-          <div class="mt-1 text-sm text-slate-500">{{ todayText }} · {{ info?.name ?? "驼铃·视频小店差评处理" }}</div>
-        </div>
-        <div class="text-xs text-slate-400">
-          {{ info?.runtime ?? 'tauri' }} · v{{ info?.version ?? appStore.appVersion }} · 作者微信 {{ info?.author_wechat ?? AUTHOR_WECHAT }}
-        </div>
-      </div>
+  <div class="dashboard-view flex h-full min-h-0 flex-col gap-app">
+    <section class="hero-panel subsystem-hero dashboard-hero relative overflow-hidden p-4 lg:p-5">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
+      <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
-      <div class="subsystem-chipbar">
-        <span class="subsystem-chip">今日 {{ todayText }}</span>
-        <span class="subsystem-chip">运行时 {{ info?.runtime ?? 'tauri' }}</span>
-        <span class="subsystem-chip">版本 v{{ info?.version ?? appStore.appVersion }}</span>
+      <div class="relative flex flex-wrap items-end justify-between gap-3">
+        <div class="min-w-0 flex-1 space-y-1.5">
+          <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
+          <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
+            {{ greeting }}
+          </h2>
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
+            <span>{{ todayText }}</span>
+            <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
+            <span>{{ heroSummaryText }}</span>
+          </div>
+        </div>
+
+        <div v-if="heroHintPills.length > 0" class="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 sm:gap-2">
+          <span
+            v-for="hint in heroHintPills"
+            :key="hint.key"
+            class="dashboard-hint-pill"
+            :class="heroPillClass[hint.tone]"
+          >
+            <span class="status-dot" :class="hint.tone !== 'idle' ? hint.tone : ''"></span>
+            <span class="truncate">{{ hint.label }}</span>
+          </span>
+        </div>
       </div>
     </section>
 
-    <section v-if="alerts.length > 0" class="space-y-2">
+    <section v-if="alerts.length > 0" class="dashboard-alerts flex flex-col gap-2">
       <RouterLink
         v-for="alert in alerts"
         :key="alert.key"
         :to="alert.to"
-        class="flex items-center justify-between gap-3 rounded-[16px] border px-4 py-2.5 text-sm font-medium transition hover:opacity-90"
+        class="dashboard-alert group flex items-center gap-3 rounded-[14px] border px-3 py-2 transition-all hover:-translate-y-px hover:shadow-sm"
         :class="alertToneClass[alert.tone]"
       >
-        <span class="min-w-0 truncate">{{ alert.text }}</span>
-        <span class="shrink-0 text-xs opacity-70">前往处理 →</span>
+        <span class="dashboard-alert-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[14px] w-[14px]">
+            <path d="M12 9v4" />
+            <path d="M12 17.02.01" />
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+          </svg>
+        </span>
+        <span class="min-w-0 flex-1 truncate text-[13px] font-semibold">{{ alert.text }}</span>
+        <span class="dashboard-alert-cta shrink-0 text-[11px] font-bold tracking-wide">
+          前往处理
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="ml-0.5 inline h-3 w-3 transition-transform group-hover:translate-x-0.5">
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </span>
       </RouterLink>
     </section>
 
-    <section
+    <div
       data-testid="dashboard-metrics"
-      class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
+      class="dashboard-metrics grid grid-cols-1 gap-app min-[420px]:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 items-stretch"
     >
       <article
         v-for="metric in metrics"
         :key="metric.key"
-        class="surface-panel metric-card metric-card-compact p-4"
+        class="surface-panel metric-card metric-card-compact dashboard-metric-card relative overflow-hidden p-3 transition-all"
+        :class="metricAccentClass[metric.tone]"
       >
-        <div class="flex items-center justify-between">
-          <div class="metric-label">{{ metric.label }}</div>
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-1.5">
+            <span class="status-dot shrink-0" :class="metric.tone !== 'idle' ? metric.tone : ''"></span>
+            <div class="metric-label truncate">{{ metric.label }}</div>
+          </div>
           <span
-            class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-            :class="toneClass[metric.tone]"
+            class="shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+            :class="toneBadgeClass[metric.tone]"
           >
-            {{ metric.tone === 'success' ? '正常' : metric.tone === 'warn' ? '注意' : metric.tone === 'error' ? '需处理' : '待更新' }}
+            {{ toneBadgeLabel[metric.tone] }}
           </span>
         </div>
         <div class="metric-value">{{ metric.value }}</div>
-        <div class="metric-hint">{{ metric.hint }}</div>
+        <div class="metric-hint line-clamp-2">{{ metric.hint }}</div>
       </article>
-    </section>
+    </div>
 
-    <section class="surface-panel p-4 lg:p-5">
-      <div class="subsystem-section-header mb-3">
-        <h3 class="text-base font-semibold tracking-tight text-slate-900">快捷入口</h3>
-        <div class="text-xs text-slate-400">常用模块一跳直达</div>
+    <section class="surface-panel dashboard-shortcuts-panel p-3 lg:p-4">
+      <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
+        <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
+        <span class="text-[11px] text-slate-400">一键直达核心业务</span>
       </div>
 
       <div
         data-testid="dashboard-shortcuts"
-        class="subsystem-summary-strip grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+        class="subsystem-summary-strip grid grid-cols-2 gap-app"
       >
         <RouterLink
           v-for="item in quickLinks"
           :key="item.title"
           :to="item.to"
-          class="quick-link quick-link-compact surface-panel-strong flex items-center gap-3"
+          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex items-center gap-3 overflow-hidden"
+          :class="shortcutClass[item.tone]"
         >
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/20">
-              <AppNavIcon :name="item.icon" icon-class="h-5 w-5" />
+          <div class="dashboard-shortcut-icon" aria-hidden="true">
+            <AppNavIcon :name="item.icon" icon-class="h-[18px] w-[18px]" />
           </div>
           <div class="min-w-0 flex-1">
-            <h4 class="text-sm font-semibold text-slate-900">{{ item.title }}</h4>
-            <p class="mt-1 text-xs leading-5 text-slate-500">{{ item.description }}</p>
+            <h4 class="text-[13px] font-semibold text-slate-900">{{ item.title }}</h4>
+            <p class="mt-0.5 truncate text-[11px] leading-4 text-slate-500">{{ item.description }}</p>
           </div>
-          <div class="shrink-0 text-sm font-semibold text-brand">
-            →
+          <div class="dashboard-shortcut-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5">
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </div>
+        </RouterLink>
+      </div>
+    </section>
+
+    <section class="surface-panel dashboard-workflow-panel p-3 lg:p-4">
+      <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
+        <h3 class="text-sm font-semibold tracking-tight text-slate-900">业务流程</h3>
+        <span class="text-[11px] text-slate-400">从授权到发货，按顺序完成</span>
+      </div>
+
+      <div class="dashboard-workflow-grid grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+        <RouterLink
+          v-for="(step, idx) in workflowSteps"
+          :key="step.key"
+          :to="step.to"
+          class="dashboard-workflow-step group"
+          :class="`dashboard-workflow-step--${step.status}`"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="dashboard-workflow-index">{{ idx + 1 }}</span>
+            <span class="dashboard-workflow-icon" aria-hidden="true">
+              <AppNavIcon :name="step.icon" icon-class="h-[14px] w-[14px]" />
+            </span>
+          </div>
+          <div class="mt-2 min-w-0">
+            <div class="text-[13px] font-semibold text-slate-900">{{ step.label }}</div>
+            <div class="mt-0.5 truncate text-[11px] leading-4 text-slate-500">{{ step.description }}</div>
+          </div>
+          <div class="dashboard-workflow-status" :class="`dashboard-workflow-status--${step.status}`">
+            <span
+              class="status-dot shrink-0"
+              :class="step.status === 'done' ? 'success' : step.status === 'warning' ? 'warn' : ''"
+            ></span>
+            <span>{{ workflowStatusLabel[step.status] }}</span>
           </div>
         </RouterLink>
       </div>

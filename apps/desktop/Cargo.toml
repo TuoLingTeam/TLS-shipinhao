@@ -35,3 +35,4 @@ rand = "0.8"
 base64 = "0.22"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }

@@ -49,18 +49,21 @@ describe("DeliveryView", () => {
     };
   });
 
-  it("uses the same compact subsystem shell as the other modules", () => {
+  it("renders the two-column batch delivery workspace without the hero summary", () => {
     const wrapper = mount(DeliveryView, {
       global: {
         plugins: [createPinia()],
         stubs: {
-          EmptyState: true,
           ConfirmDialog: true,
         },
       },
     });
 
-    expect(wrapper.get('[data-testid="delivery-summary-strip"]').classes()).toContain("subsystem-summary-strip");
     expect(wrapper.get('[data-testid="delivery-workspace"]').classes()).toContain("xl:grid-cols-[0.92fr_1.08fr]");
+    expect(wrapper.find('[data-testid="delivery-summary-strip"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("DELIVERY DESK");
+    expect(wrapper.text()).not.toContain("单条修正");
+    expect(wrapper.text()).not.toContain("发货操作台");
+    expect(wrapper.text()).toContain("批量发货");
   });
 });

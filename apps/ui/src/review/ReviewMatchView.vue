@@ -9,7 +9,7 @@ import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../layout/useLayout";
-import { localDaysAgoStartIso, localTodayEndIso } from "../shared/format";
+import { localDaysAgoStartIso, localYesterdayEndIso } from "../shared/format";
 
 const router = useRouter();
 const { mode } = useLayout();
@@ -33,23 +33,49 @@ const filteredResults = computed(() => {
 const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
 const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
 const unmatchedCount = computed(() => store.results.length - matchedCount.value);
+
+const heroEyebrow = computed(() =>
+  isQualityRefundMode.value ? "TLS · QUALITY REFUND" : "TLS · BAD REVIEW",
+);
+
+const heroTitle = computed(() =>
+  isQualityRefundMode.value ? "品退订单直连" : "差评评分匹配",
+);
+
+const heroLead = computed(() =>
+  isQualityRefundMode.value
+    ? "品退接口直接返回订单号，匹配成功即可一键带入发货。"
+    : "先补齐缓存，再按商品 / SKU / 昵称 / 时间多维度评分匹配。",
+);
+
 const summaryCards = computed(() => [
   {
     label: "当前模式",
     value: isQualityRefundMode.value ? "品退直连" : "差评评分匹配",
     hint: isQualityRefundMode.value ? "优先使用接口直返订单号" : "依赖缓存评分寻找最优订单",
+    tone: "brand",
   },
   {
     label: "最近结果",
     value: store.results.length ? `${store.results.length} 条` : "等待查询",
     hint: store.lastQuery ? `${store.lastQuery.days} 天范围内的数据` : "尚未发起检索",
+    tone: "slate",
   },
   {
     label: "已匹配",
     value: store.results.length ? `${matchedCount.value} / ${store.results.length}` : "--",
     hint: unmatchedCount.value > 0 ? `${unmatchedCount.value} 条待人工核实` : "命中后可直接带入发货",
+    tone: unmatchedCount.value > 0 && store.results.length ? "amber" : "success",
   },
 ]);
+
+const summaryCardAccent: Record<string, string> = {
+  brand: "review-summary-card--brand",
+  slate: "review-summary-card--slate",
+  amber: "review-summary-card--amber",
+  success: "review-summary-card--success",
+};
+
 const loadingTitle = computed(() =>
   orderStore.syncSource === "review_query"
     ? "正在准备订单缓存并执行评分匹配"
@@ -59,7 +85,7 @@ const loadingTitle = computed(() =>
 );
 const loadingDescription = computed(() =>
   orderStore.syncSource === "review_query"
-    ? orderStore.syncMessage || "后端会先保障最近 30 天订单缓存可用，再执行评分匹配。"
+    ? orderStore.syncMessage || "后端会先保障近 30 天（不含今天）订单缓存可用，再执行评分匹配。"
     : isQualityRefundMode.value
       ? "品退接口会直接返回订单号，成功后可直接带入发货页。"
       : "差评会先确保缓存覆盖，再按商品、SKU、昵称与时间执行评分匹配。",
@@ -85,7 +111,7 @@ const resultSummary = computed(() => {
   const cacheNote = store.cacheSyncPerformed
     ? `本次已自动补齐 ${store.cacheSyncWrittenCount} 条缓存订单，`
     : "本次已完成缓存保障，";
-  return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条已完成匹配，${unmatchedCount.value} 条未达到匹配阈值。${cacheNote}当前缓存覆盖 ${store.cacheCoverageStart || "-"} 至 ${store.cacheCoverageEnd || "-" }。`;
+  return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条已完成匹配，${unmatchedCount.value} 条未达到匹配阈值。${cacheNote}当前缓存覆盖 ${store.cacheCoverageStart || "-"} 至 ${store.cacheCoverageEnd || "-"}。`;
 });
 const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : "评价ID"));
 
@@ -100,7 +126,7 @@ async function handleSearch() {
     store.setError("请先激活授权后再使用评价管理");
     return;
   }
-  await findReviews(days.value, localDaysAgoStartIso(days.value), localTodayEndIso());
+  await findReviews(days.value, localDaysAgoStartIso(days.value), localYesterdayEndIso());
 }
 
 async function handleQualityRefundSearch() {
@@ -111,7 +137,7 @@ async function handleQualityRefundSearch() {
   await findQualityRefundOrders(
     days.value,
     localDaysAgoStartIso(days.value),
-    localTodayEndIso(),
+    localYesterdayEndIso(),
   );
 }
 
@@ -181,80 +207,86 @@ function formatReplyDeadline(value: string | null) {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <section class="hero-panel subsystem-hero overflow-hidden p-4 lg:p-5">
-      <div class="flex flex-col gap-4">
-        <div class="min-w-0">
-          <span class="card-eyebrow">REVIEW MATCH</span>
-          <div
-            data-testid="review-control-shell"
-            class="review-control-shell mt-3"
-          >
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div class="min-w-0">
-                <h2 class="text-2xl font-semibold tracking-tight text-slate-900">评价检索与订单匹配</h2>
-                <p class="subsystem-lead mt-1">
-                  差评与品退共用一个入口，命中订单后可直接带入发货。
-                </p>
-              </div>
-              <div
-                data-testid="review-mode-switch"
-                class="review-mode-switch"
-              >
-                <button
-                  class="review-mode-option"
-                  :class="!isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
-                  @click="switchMode('bad_review')"
-                >
-                  差评
-                </button>
-                <button
-                  class="review-mode-option"
-                  :class="isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
-                  @click="switchMode('quality_refund')"
-                >
-                  品退
-                </button>
-              </div>
-            </div>
+  <div class="space-y-app">
+    <section class="hero-panel subsystem-hero relative overflow-hidden p-3 lg:p-3.5">
+      <div class="pointer-events-none absolute -right-20 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.4),transparent_72%)]"></div>
 
-            <div
-              data-testid="review-filter-grid"
-              class="review-filter-grid"
+      <div
+        data-testid="review-control-shell"
+        class="review-control-shell relative flex flex-col gap-2.5 p-0 border-0 bg-transparent shadow-none backdrop-blur-none"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <h2 class="text-[1.05rem] font-bold tracking-tight text-slate-900 sm:text-[1.15rem] lg:text-[1.22rem]">
+                {{ heroTitle }}
+              </h2>
+              <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                {{ heroEyebrow }}
+              </span>
+            </div>
+            <p class="mt-0.5 max-w-[44rem] text-[12px] leading-5 text-slate-500">{{ heroLead }}</p>
+          </div>
+
+          <div
+            data-testid="review-mode-switch"
+            class="review-mode-switch shrink-0"
+          >
+            <button
+              type="button"
+              class="review-mode-option cursor-pointer"
+              :class="!isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
+              @click="switchMode('bad_review')"
             >
-              <div>
-                <label class="field-label">天数</label>
-                <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
-              </div>
-              <div class="review-filter-field">
-                <label class="field-label">{{ isQualityRefundMode ? '原因过滤' : '匹配说明' }}</label>
-                <input
-                  v-if="isQualityRefundMode"
-                  v-model.trim="qualityReasonFilter"
-                  type="text"
-                  placeholder="输入关键字"
-                  class="field-input"
-                />
-                <div v-else class="review-helper-card">
-                  差评模式会先补齐缓存，再按商品、SKU、昵称与时间评分匹配。
-                </div>
-              </div>
-              <button
-                data-testid="review-primary-action"
-                :disabled="store.loading || licenseBlocked"
-                class="review-primary-action action-btn action-btn-primary"
-                @click="handleFetchCurrentMode"
-              >
-                {{
-                  store.loading
-                    ? "处理中..."
-                    : isQualityRefundMode
-                      ? "获取品退"
-                      : "获取差评"
-                }}
-              </button>
+              差评
+            </button>
+            <button
+              type="button"
+              class="review-mode-option cursor-pointer"
+              :class="isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
+              @click="switchMode('quality_refund')"
+            >
+              品退
+            </button>
+          </div>
+        </div>
+
+        <div
+          data-testid="review-filter-grid"
+          class="review-filter-grid"
+        >
+          <div>
+            <label class="field-label">天数</label>
+            <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
+          </div>
+          <div class="review-filter-field">
+            <label class="field-label">{{ isQualityRefundMode ? '原因过滤' : '匹配说明' }}</label>
+            <input
+              v-if="isQualityRefundMode"
+              v-model.trim="qualityReasonFilter"
+              type="text"
+              placeholder="输入关键字"
+              class="field-input"
+            />
+            <div v-else class="review-helper-card">
+              先补齐缓存，再按商品、SKU、昵称与时间评分匹配。
             </div>
           </div>
+          <button
+            data-testid="review-primary-action"
+            type="button"
+            :disabled="store.loading || licenseBlocked"
+            class="review-primary-action action-btn action-btn-primary cursor-pointer"
+            @click="handleFetchCurrentMode"
+          >
+            {{
+              store.loading
+                ? "处理中..."
+                : isQualityRefundMode
+                  ? "获取品退"
+                  : "获取差评"
+            }}
+          </button>
         </div>
 
         <div
@@ -264,7 +296,8 @@ function formatReplyDeadline(value: string | null) {
           <article
             v-for="card in summaryCards"
             :key="card.label"
-            class="subsystem-summary-card"
+            class="subsystem-summary-card review-summary-card"
+            :class="summaryCardAccent[card.tone]"
           >
             <div class="subsystem-summary-label">{{ card.label }}</div>
             <div class="subsystem-summary-value">{{ card.value }}</div>
@@ -289,7 +322,7 @@ function formatReplyDeadline(value: string | null) {
     />
     <div
       v-if="store.loading && orderStore.syncSource === 'review_query'"
-      class="surface-panel space-y-4 px-4 py-4"
+      class="surface-panel space-y-app px-4 py-4"
     >
       <div class="flex items-center justify-between text-sm">
         <span class="font-semibold text-slate-800">自动同步进度</span>
@@ -301,7 +334,10 @@ function formatReplyDeadline(value: string | null) {
           :style="{ width: `${orderStore.syncProgress}%` }"
         ></div>
       </div>
-      <div class="grid grid-cols-1 gap-3 text-xs text-slate-500" :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'">
+      <div
+        class="grid grid-cols-1 gap-app text-xs text-slate-500"
+        :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'"
+      >
         <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
           <div class="font-semibold text-slate-700">1. 缓存保障</div>
           <div class="mt-1">{{ ['ensure_recent_cache', 'match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}</div>
@@ -321,7 +357,7 @@ function formatReplyDeadline(value: string | null) {
       </div>
     </div>
 
-    <div v-else-if="store.results.length > 0" class="space-y-4">
+    <div v-else-if="store.results.length > 0" class="space-y-app">
       <div
         class="soft-alert"
         :class="unmatchedCount > 0 ? 'warn' : 'success'"
@@ -333,89 +369,89 @@ function formatReplyDeadline(value: string | null) {
       </div>
 
       <section class="data-table-shell overflow-x-auto">
-      <table class="w-full text-sm" :class="isCompactLayout ? 'min-w-[820px]' : 'min-w-[980px]'">
-        <thead class="table-head text-slate-600">
-          <tr>
-            <th
-              v-if="!isQualityRefundMode"
-              class="table-head-sticky px-5 py-4 text-left font-semibold"
+        <table class="w-full text-sm" :class="isCompactLayout ? 'min-w-[820px]' : 'min-w-[980px]'">
+          <thead class="table-head text-slate-600">
+            <tr>
+              <th
+                v-if="!isQualityRefundMode"
+                class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm"
+              >
+                买家昵称
+              </th>
+              <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">评价内容</th>
+              <th v-if="isQualityRefundMode" class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">品退原因</th>
+              <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">订单详情</th>
+              <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">{{ idColumnLabel }}</th>
+              <th class="table-head-sticky px-3 py-2.5 text-center text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">匹配</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="r in filteredResults"
+              :key="r.evaluation_id"
+              class="table-row border-t border-slate-100/80 align-top transition-colors"
+              :class="[
+                r.matched && r.order_id ? 'cursor-pointer' : '',
+                !isQualityRefundMode && !r.replyable ? 'bg-slate-50/80 text-slate-400' : '',
+              ]"
+              @click="r.matched && r.order_id ? handleUseMatchedOrder(r.order_id) : undefined"
             >
-              买家昵称
-            </th>
-            <th class="table-head-sticky px-5 py-4 text-left font-semibold">评价内容</th>
-            <th v-if="isQualityRefundMode" class="table-head-sticky px-5 py-4 text-left font-semibold">品退原因</th>
-            <th class="table-head-sticky px-5 py-4 text-left font-semibold">订单详情</th>
-            <th class="table-head-sticky px-5 py-4 text-left font-semibold">{{ idColumnLabel }}</th>
-            <th class="table-head-sticky px-5 py-4 text-center font-semibold">匹配</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="r in filteredResults"
-            :key="r.evaluation_id"
-            class="table-row border-t border-slate-100/80 align-top transition-colors"
-            :class="[
-              r.matched && r.order_id ? 'cursor-pointer' : '',
-              !isQualityRefundMode && !r.replyable ? 'bg-slate-50/80 text-slate-400' : '',
-            ]"
-            @click="r.matched && r.order_id ? handleUseMatchedOrder(r.order_id) : undefined"
-          >
-            <td v-if="!isQualityRefundMode" class="px-5 py-4">
-              <div class="font-semibold text-slate-800">{{ r.buyer_nickname || "-" }}</div>
-            </td>
-            <td class="max-w-md px-5 py-4">
-              <div class="whitespace-pre-wrap break-all text-[15px] leading-7 text-slate-700">
-                {{ r.evaluation_content || "（无评价内容）" }}
-              </div>
-            </td>
-            <td v-if="isQualityRefundMode" class="px-5 py-4">
-              <div class="text-sm leading-6 text-slate-700">
-                {{ r.quality_refund_info?.reason || "—" }}
-              </div>
-            </td>
-            <td class="px-5 py-4">
-              <div class="space-y-1.5 text-xs leading-6 text-slate-600">
-                <div><span class="font-semibold text-slate-700">SKU：</span>{{ r.sku_name || r.sku_id || "-" }}</div>
-                <div>
-                  <span class="font-semibold text-slate-700">商品ID：</span>
-                  <span class="font-mono">{{ r.product_id || "-" }}</span>
+              <td v-if="!isQualityRefundMode" class="px-3 py-2.5 sm:px-5 sm:py-3">
+                <div class="font-semibold text-slate-800">{{ r.buyer_nickname || "-" }}</div>
+              </td>
+              <td class="max-w-md px-3 py-2.5 sm:px-5 sm:py-3">
+                <div class="whitespace-pre-wrap break-all text-sm leading-6 text-slate-700 sm:text-[14.5px] sm:leading-[1.6]">
+                  {{ r.evaluation_content || "（无评价内容）" }}
                 </div>
-                <div v-if="r.product_name" class="text-slate-500">{{ r.product_name }}</div>
-              </div>
-            </td>
-            <td class="px-5 py-4 font-mono text-xs text-slate-700">{{ displayId(r) }}</td>
-            <td class="px-5 py-4 text-center">
-              <div class="flex flex-col items-center gap-2">
-                <span
-                  class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
-                  :class="r.matched ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-500'"
-                >
-                  {{ r.matched ? "已匹配" : "未匹配" }}
-                </span>
-                <ReviewMatchStrategyBadge
-                  :strategy="r.strategy"
-                  :reasons="r.match_reasons"
-                  :candidate-count="r.candidate_count"
-                  :top-score="r.top_score"
-                />
-                <span
-                  v-if="!isQualityRefundMode && !r.replyable"
-                  class="inline-flex rounded-full bg-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600"
-                  :title="`回复截止：${formatReplyDeadline(r.reply_deadline)}`"
-                >
-                  已超期
-                </span>
-                <div
-                  class="max-w-[180px] text-center text-[11px] leading-5"
-                  :class="r.matched ? 'text-slate-500' : 'text-amber-700'"
-                >
-                  {{ r.matched ? matchedHint(r) : unmatchedReason(r) }}
+              </td>
+              <td v-if="isQualityRefundMode" class="px-3 py-2.5 sm:px-5 sm:py-3">
+                <div class="text-sm leading-6 text-slate-700">
+                  {{ r.quality_refund_info?.reason || "—" }}
                 </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              </td>
+              <td class="px-3 py-2.5 sm:px-5 sm:py-3">
+                <div class="space-y-1 text-xs leading-5 text-slate-600">
+                  <div><span class="font-semibold text-slate-700">SKU：</span>{{ r.sku_name || r.sku_id || "-" }}</div>
+                  <div>
+                    <span class="font-semibold text-slate-700">商品ID：</span>
+                    <span class="font-mono">{{ r.product_id || "-" }}</span>
+                  </div>
+                  <div v-if="r.product_name" class="text-slate-500">{{ r.product_name }}</div>
+                </div>
+              </td>
+              <td class="px-3 py-2.5 font-mono text-xs text-slate-700 sm:px-5 sm:py-3">{{ displayId(r) }}</td>
+              <td class="px-3 py-2.5 text-center sm:px-5 sm:py-3">
+                <div class="flex flex-col items-center gap-1.5">
+                  <span
+                    class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+                    :class="r.matched ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-500'"
+                  >
+                    {{ r.matched ? "已匹配" : "未匹配" }}
+                  </span>
+                  <ReviewMatchStrategyBadge
+                    :strategy="r.strategy"
+                    :reasons="r.match_reasons"
+                    :candidate-count="r.candidate_count"
+                    :top-score="r.top_score"
+                  />
+                  <span
+                    v-if="!isQualityRefundMode && !r.replyable"
+                    class="inline-flex rounded-full bg-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600"
+                    :title="`回复截止：${formatReplyDeadline(r.reply_deadline)}`"
+                  >
+                    已超期
+                  </span>
+                  <div
+                    class="max-w-[180px] text-center text-[11px] leading-5"
+                    :class="r.matched ? 'text-slate-500' : 'text-amber-700'"
+                  >
+                    {{ r.matched ? matchedHint(r) : unmatchedReason(r) }}
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </section>
     </div>
 

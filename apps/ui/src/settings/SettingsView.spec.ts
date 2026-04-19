@@ -39,15 +39,14 @@ describe("SettingsView", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     invokeMock.mockClear();
-    Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it("keeps three top-level columns but stacks each panel vertically to avoid crowding", async () => {
+  it("renders a compact sidebar with row-based license and app information", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [...routes],
     });
-    router.push("/settings?section=cookie");
+    router.push("/settings?section=license");
     await router.isReady();
 
     const wrapper = mount(SettingsView, {
@@ -57,18 +56,30 @@ describe("SettingsView", () => {
     });
 
     await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("xl:grid-cols-3");
-    expect(wrapper.get('[data-testid="settings-panels"]').classes()).toContain("subsystem-panel-grid");
-    expect(wrapper.get('[data-testid="settings-license-summary"]').classes()).toContain("grid-cols-1");
-    expect(wrapper.get('[data-testid="settings-license-actions"]').classes()).toContain("grid-cols-1");
-    expect(wrapper.get('[data-testid="settings-cookie-actions"]').classes()).toContain("grid-cols-1");
-    expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("grid-cols-1");
-    expect(wrapper.text()).toContain("授权与激活");
+    const panels = wrapper.get('[data-testid="settings-panels"]');
+    expect(panels.classes()).toContain("settings-layout");
+    expect(wrapper.get('[data-testid="settings-sidebar"]').classes()).toContain("settings-sidebar");
+    expect(wrapper.get('[data-testid="settings-sidebar-license"]').classes()).toContain("settings-sidebar-card");
+    expect(wrapper.get('[data-testid="settings-sidebar-about"]').classes()).toContain("settings-sidebar-card");
+    expect(wrapper.get('[data-testid="settings-license-actions"]').classes()).toContain("settings-action-card");
+    expect(wrapper.get('[data-testid="settings-cookie-actions"]').classes()).toContain("settings-action-card");
+    expect(wrapper.get('[data-testid="settings-cookie-side"]').classes()).toContain("settings-side-stack");
+    expect(wrapper.get('[data-testid="settings-cookie-path"]').text()).toContain("/tmp/cookie.txt");
+    expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-sidebar-row-list");
+    expect(wrapper.text()).toContain("授权信息");
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("应用信息");
-    expect(wrapper.text()).not.toContain("当前授权快照");
-    expect(wrapper.text()).not.toContain("推荐顺序");
-    expect(wrapper.text()).not.toContain("环境检查");
+    expect(wrapper.text()).toContain("推荐顺序");
+    expect(wrapper.text()).toContain("当前状态");
+    expect(wrapper.text()).toContain("作者微信");
+    expect(wrapper.text()).not.toContain("License");
+    expect(wrapper.text()).not.toContain("About");
+    expect(wrapper.text()).not.toContain("设置导览");
+    // 禁止出现独立的 step 编号样式（如 "01 授权 / 02 Cookie / 03 应用"），
+    // 但允许数字嵌在其他字串（例如 AUTHOR_WECHAT = "TLS-801"）。
+    expect(wrapper.text()).not.toMatch(/\b0[123]\b/);
   });
 });

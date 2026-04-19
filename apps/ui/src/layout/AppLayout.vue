@@ -12,16 +12,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-frame flex h-dvh min-h-0 overflow-hidden bg-transparent p-4 text-slate-900 lg:p-5">
+  <div
+    class="app-frame flex h-dvh min-h-0 overflow-hidden bg-transparent p-2 text-slate-900 sm:p-3 md:p-4 lg:p-5"
+    style="padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right))"
+  >
     <AppSidebar />
-    <div class="app-content-shell ml-0 flex min-w-0 flex-1 flex-col gap-4 overflow-hidden lg:ml-4">
+    <div class="app-content-shell ml-2 flex min-w-0 flex-1 flex-col gap-app overflow-hidden sm:ml-3 lg:ml-4">
       <slot />
       <AppHeader />
-      <main class="min-h-0 flex-1 overflow-y-auto pr-1">
-        <div class="app-page-shell mx-auto flex w-full max-w-[1480px] flex-col gap-5 pb-8">
-          <RouterView />
-        </div>
-      </main>
+    <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pr-0.5 sm:pr-1">
+      <div class="app-page-shell mx-auto flex w-full min-w-0 max-w-[1480px] flex-1 min-h-0 flex-col gap-app pb-4 sm:pb-6 lg:pb-8">
+        <RouterView />
+      </div>
+    </main>
     </div>
   </div>
 </template>

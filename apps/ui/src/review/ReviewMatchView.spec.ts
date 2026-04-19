@@ -45,6 +45,7 @@ describe("ReviewMatchView", () => {
 
     expect(summary.classes()).toContain("xl:grid-cols-3");
     expect(summary.classes()).toContain("subsystem-summary-strip");
+    expect(wrapper.text()).not.toContain("REVIEW MATCH");
   });
 
   it("uses one unified control shell for both mode tabs and search actions", async () => {

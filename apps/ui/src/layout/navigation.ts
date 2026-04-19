@@ -71,7 +71,7 @@ export const pageMetaMap: Record<PageName, PageMeta> = {
   settings: {
     eyebrow: "TLS · SETTINGS CENTER",
     title: "设置中心",
-    description: "授权、Cookie 与应用信息集中管理。",
+    description: "授权、Cookie 与版本信息集中管理。",
   },
   license: {
     eyebrow: "TLS · SETTINGS CENTER",

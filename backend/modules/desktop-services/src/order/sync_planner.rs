@@ -1,4 +1,4 @@
-use crate::day_window::{end_of_day_timestamp, recent_day_range_timestamps};
+use crate::day_window::{end_of_previous_day_timestamp, recent_day_range_timestamps};
 use serde::{Deserialize, Serialize};
 
 pub const ORDER_CACHE_COVERAGE_DAYS: i64 = 30;
@@ -14,12 +14,13 @@ pub struct SyncPlannerState {
 pub fn retention_start(now_end_of_day: i64) -> i64 {
     let fake_now = chrono::DateTime::from_timestamp(now_end_of_day, 0)
         .expect("valid timestamp")
-        .with_timezone(&chrono::Utc);
+        .with_timezone(&chrono::Utc)
+        + chrono::Duration::seconds(1);
     recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS, Some(fake_now)).0
 }
 
 pub fn sync_now(now: Option<chrono::DateTime<chrono::Utc>>) -> i64 {
-    end_of_day_timestamp(now)
+    end_of_previous_day_timestamp(now)
 }
 
 pub fn incremental_refresh_start(end_timestamp: i64, state: Option<&SyncPlannerState>) -> i64 {
@@ -38,29 +39,38 @@ pub fn incremental_refresh_start(end_timestamp: i64, state: Option<&SyncPlannerS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, TimeZone, Utc};
+    use chrono::{DateTime, FixedOffset, TimeZone, Utc};
+    use crate::day_window::recent_day_range_timestamps;
 
     #[test]
     fn retention_start_uses_end_of_day_coverage_window() {
-        let now = DateTime::parse_from_rfc3339("2026-04-14T23:59:59Z")
+        let now = DateTime::parse_from_rfc3339("2026-04-19T06:30:45Z")
             .unwrap()
             .with_timezone(&Utc);
-        let start = retention_start(now.timestamp());
+        let china = FixedOffset::east_opt(8 * 3600).unwrap();
+        let local_end = china
+            .with_ymd_and_hms(2026, 4, 18, 23, 59, 59)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let start = retention_start(local_end.timestamp());
         assert_eq!(
             Utc.timestamp_opt(start, 0).unwrap().to_rfc3339(),
-            "2026-03-15T00:00:00+00:00"
+            "2026-03-19T16:00:00+00:00"
         );
+        let (range_start, _) = recent_day_range_timestamps(ORDER_CACHE_COVERAGE_DAYS, Some(now));
+        assert_eq!(start, range_start);
     }
 
     #[test]
-    fn sync_now_uses_end_of_day_timestamp() {
-        let now = DateTime::parse_from_rfc3339("2026-04-14T16:30:45Z")
+    fn sync_now_uses_previous_day_end_timestamp() {
+        let now = DateTime::parse_from_rfc3339("2026-04-19T06:30:45Z")
             .unwrap()
             .with_timezone(&Utc);
         let end = sync_now(Some(now));
         assert_eq!(
             Utc.timestamp_opt(end, 0).unwrap().to_rfc3339(),
-            "2026-04-14T23:59:59+00:00"
+            "2026-04-18T15:59:59+00:00"
         );
     }
 

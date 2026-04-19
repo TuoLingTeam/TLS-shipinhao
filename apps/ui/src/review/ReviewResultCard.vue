@@ -8,7 +8,7 @@ defineProps<{ result: OrderMatchResult }>();
 <template>
   <div class="bg-white rounded-lg p-4 border border-slate-200 hover:shadow-sm transition-shadow">
     <div class="flex items-center justify-between">
-      <div class="space-y-1">
+      <div class="space-y-app">
         <div class="text-xs text-slate-500">
           买家：{{ result.buyer_nickname || "-" }}
         </div>
@@ -22,7 +22,7 @@ defineProps<{ result: OrderMatchResult }>();
           评价ID：{{ result.evaluation_id }}
         </div>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-app">
         <StatusBadge
           :label="result.matched ? '已匹配' : '未匹配'"
           :variant="result.matched ? 'success' : 'neutral'"

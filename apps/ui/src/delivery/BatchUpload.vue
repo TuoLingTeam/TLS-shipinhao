@@ -26,7 +26,7 @@ function handleSubmit() {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-app">
     <div>
       <label class="block text-sm text-slate-600 mb-1">
         粘贴数据（每行：订单号,快递单号）

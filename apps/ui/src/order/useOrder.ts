@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useOrderStore } from "./order.store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
-import { localDaysAgoStartIso, localTodayEndIso } from "../shared/format";
+import { localDaysAgoStartIso, localYesterdayEndIso } from "../shared/format";
 import type {
   OrderCacheEntry,
   OrderCacheStatus,
@@ -32,7 +32,7 @@ export function useOrder() {
   }
 
   async function loadRecentCache() {
-    await loadCache(localDaysAgoStartIso(30), localTodayEndIso());
+    await loadCache(localDaysAgoStartIso(30), localYesterdayEndIso());
   }
 
   async function loadCacheStatus() {
@@ -88,4 +88,3 @@ export function useOrder() {
 
   return { loadCache, loadRecentCache, loadCacheStatus, syncRecentCache, withSyncEvents, loading };
 }
-

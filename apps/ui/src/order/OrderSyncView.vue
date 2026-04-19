@@ -4,13 +4,10 @@ import { useOrder } from "../order/useOrder";
 import { useOrderStore } from "../order/order.store";
 import { useAppStore } from "../app.store";
 import OrderSearchBar from "../order/OrderSearchBar.vue";
-import { formatCent, formatDateTime } from "../shared/format";
+import { formatCent } from "../shared/format";
 import EmptyState from "../shared/EmptyState.vue";
-import LoadingState from "../shared/LoadingState.vue";
-import { useLayout } from "../layout/useLayout";
 
 const store = useOrderStore();
-const { mode } = useLayout();
 const appStore = useAppStore();
 const { syncRecentCache, loadRecentCache, loadCacheStatus } = useOrder();
 const licenseBlocked = computed(() => !appStore.isLicensed);
@@ -19,10 +16,6 @@ const totalAmount = computed(() =>
   store.cachedOrders.reduce((sum, item) => sum + (item.amount_cent ?? 0), 0),
 );
 const uniqueBuyerCount = computed(() => new Set(store.cachedOrders.map((item) => item.buyer_name)).size);
-const cacheCount = computed(() => store.cacheStatus?.cached_order_count ?? store.cachedOrders.length);
-const syncLabel = computed(() =>
-  store.cacheStatus?.last_sync_at ? formatDateTime(store.cacheStatus.last_sync_at) : "未同步",
-);
 const visibleOrders = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
   if (!keyword) return store.cachedOrders;
@@ -35,10 +28,22 @@ const visibleOrders = computed(() => {
 const activeCoverageLabel = computed(() => {
   if (!store.cacheStatus) return "等待建立缓存";
   return store.cacheStatus.coverage_complete
-    ? "最近 30 天缓存完整，可直接支撑评价匹配。"
-    : `存在 ${store.cacheStatus.missing_segment_count} 个覆盖缺口，建议立即同步。`;
+    ? "近 30 天（不含今天）缓存完整，可直接支撑评价匹配。"
+    : `近 30 天（不含今天）存在 ${store.cacheStatus.missing_segment_count} 个覆盖缺口，建议立即同步。`;
 });
-const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
+const cacheStatusTone = computed<"success" | "warn" | "idle">(() => {
+  if (!store.cacheStatus) return "idle";
+  return store.cacheStatus.coverage_complete ? "success" : "warn";
+});
+const cacheStatusBadgeLabel = computed(() => {
+  if (!store.cacheStatus) return "缓存待建立";
+  return store.cacheStatus.coverage_complete ? "缓存完整" : `缓存缺口 ${store.cacheStatus.missing_segment_count}`;
+});
+const cacheStatusBadgeClass = computed(() => {
+  if (cacheStatusTone.value === "success") return "order-cache-chip--success";
+  if (cacheStatusTone.value === "warn") return "order-cache-chip--warn";
+  return "order-cache-chip--idle";
+});
 const syncSteps = computed(() => [
   {
     key: "ensure_recent_cache",
@@ -66,6 +71,11 @@ const syncSteps = computed(() => [
     status: store.syncPhase === "completed" ? "已完成" : "等待中",
   },
 ]);
+const syncStepTone = (status: string) => {
+  if (status === "已完成") return "border-brand-tint bg-brand-soft/70 text-brand-deep";
+  if (status === "进行中") return "border-brand-tint bg-brand-soft/60 text-slate-800";
+  return "border-slate-200 bg-white text-slate-500";
+};
 
 async function handleSync() {
   if (licenseBlocked.value) {
@@ -85,79 +95,37 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-3">
-    <section class="hero-panel subsystem-hero p-3.5 lg:p-4">
-      <div data-testid="order-hero-shell" class="order-hero-shell">
-        <div class="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
-          <div class="min-w-0">
-            <span class="card-eyebrow">ORDER CACHE</span>
-            <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">订单管理</h2>
-            <p class="subsystem-lead mt-1">
-              保留缓存维护、本地检索与订单列表三项核心能力，减少无效占位。
+  <div class="space-y-app">
+    <section class="hero-panel subsystem-hero relative overflow-hidden p-3 lg:p-3.5">
+      <div class="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.4),transparent_72%)]"></div>
+
+      <div data-testid="order-hero-shell" class="order-hero-shell relative">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-[1.05rem] font-bold tracking-tight text-slate-900 sm:text-[1.15rem] lg:text-[1.22rem]">
+              订单缓存与本地检索
+            </h2>
+            <p class="mt-0.5 max-w-[44rem] text-[12px] leading-5 text-slate-500">
+              {{ activeCoverageLabel }}
             </p>
           </div>
-          <div class="order-hero-note lg:max-w-[300px]">
-            <div class="font-semibold">缓存状态</div>
-            <div class="mt-1 leading-5">{{ activeCoverageLabel }}</div>
-          </div>
-        </div>
 
-        <div
-          data-testid="order-chipbar"
-          class="subsystem-chipbar text-xs"
-        >
-          <span class="subsystem-chip">
-            缓存 {{ cacheCount }}
-          </span>
-          <span class="subsystem-chip">
-            同步 {{ syncLabel }}
-          </span>
-          <span class="subsystem-chip">
-            金额 {{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}
-          </span>
+          <div class="order-cache-chip shrink-0" :class="cacheStatusBadgeClass">
+            <span class="status-dot" :class="cacheStatusTone"></span>
+            <span class="order-cache-chip-label">{{ cacheStatusBadgeLabel }}</span>
+          </div>
         </div>
 
         <div v-if="store.cacheStatus?.last_error" class="soft-alert warn">
           最近一次缓存维护提示：{{ store.cacheStatus.last_error }}
         </div>
 
-        <OrderSearchBar @search="handleSearch" />
-      </div>
-    </section>
-
-    <section data-testid="order-sync-shell" class="order-sync-shell surface-panel p-3.5 lg:p-4">
-      <div class="subsystem-section-header">
-        <div class="min-w-0">
-          <div class="text-base font-semibold text-slate-900">同步最近 30 天缓存</div>
-          <p class="mt-0.5 text-[13px] leading-5 text-slate-500">
-            仅维护缓存，不额外展示冗余面板。同步后评价匹配会直接复用这份缓存。
-          </p>
-        </div>
-        <button
-          :disabled="store.loading || licenseBlocked"
-          class="action-btn action-btn-primary min-w-[136px]"
-          @click="handleSync"
-        >
-          {{ store.loading ? "同步中..." : "立即同步缓存" }}
-        </button>
-      </div>
-      <div
-        data-testid="order-stats-grid"
-        class="order-stats-grid mt-3 grid grid-cols-1"
-        :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'"
-      >
-        <div class="order-stat-card">
-          <div class="text-[11px] text-slate-400">当前列表</div>
-          <div class="mt-1 text-lg font-semibold tracking-tight text-slate-900">{{ visibleOrders.length }}</div>
-        </div>
-        <div class="order-stat-card">
-          <div class="text-[11px] text-slate-400">买家数</div>
-          <div class="mt-1 text-lg font-semibold tracking-tight text-slate-900">{{ uniqueBuyerCount || "--" }}</div>
-        </div>
-        <div class="order-stat-card">
-          <div class="text-[11px] text-slate-400">总金额</div>
-          <div class="mt-1 text-lg font-semibold tracking-tight text-slate-900">{{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}</div>
-        </div>
+        <OrderSearchBar
+          :sync-disabled="store.loading || licenseBlocked"
+          :sync-label="store.loading ? '同步中...' : '同步缓存'"
+          @search="handleSearch"
+          @sync="handleSync"
+        />
       </div>
     </section>
 
@@ -169,62 +137,70 @@ onMounted(async () => {
       {{ store.error }}
     </div>
 
-    <LoadingState
+    <section
       v-if="store.loading"
-      title="正在同步订单并刷新缓存"
-      :description="store.syncMessage || '后端会先维护最近 30 天富缓存，再刷新当前订单列表。'"
-    />
-
-    <section v-if="store.loading" class="order-progress-shell surface-panel space-y-3 p-3.5 lg:p-4">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="text-base font-semibold text-slate-900">实时同步进度</div>
-          <div class="mt-0.5 text-[13px] leading-5 text-slate-500">{{ store.syncMessage || "正在准备同步任务…" }}</div>
+      data-testid="order-sync-progress"
+      class="order-progress-shell surface-panel p-3 lg:p-3.5"
+    >
+      <div class="order-progress-head">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-slate-900">同步订单缓存</div>
+          <div class="mt-0.5 text-[12px] leading-5 text-slate-500">
+            {{ store.syncMessage || "正在准备同步任务…" }}
+          </div>
         </div>
-        <div class="text-2xl font-semibold tracking-tight text-slate-900">{{ store.syncProgress }}%</div>
+        <div class="order-progress-percent">{{ store.syncProgress }}%</div>
       </div>
-      <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+
+      <div class="order-progress-bar">
         <div
           class="h-full rounded-full bg-brand transition-all duration-300"
           :style="{ width: `${store.syncProgress}%` }"
         ></div>
       </div>
-      <div class="order-step-grid grid grid-cols-1 lg:grid-cols-3">
+
+      <div class="order-step-grid grid grid-cols-1 gap-app sm:grid-cols-3">
         <div
           v-for="step in syncSteps"
           :key="step.key"
-          class="order-step-card rounded-[14px] border px-3 py-2.5"
-          :class="
-            step.status === '已完成'
-              ? 'border-brand-tint bg-brand-soft/70'
-              : step.status === '进行中'
-                ? 'border-brand-tint bg-brand-soft/70'
-                : 'border-slate-200 bg-white'
-          "
+          class="order-step-card rounded-[12px] border px-2.5 py-2"
+          :class="syncStepTone(step.status)"
         >
-          <div class="text-sm font-semibold text-slate-800">{{ step.title }}</div>
-          <div class="mt-1 text-xs text-slate-500">{{ step.status }}</div>
+          <div class="text-[12px] font-semibold">{{ step.title }}</div>
+          <div class="mt-0.5 text-[11px]">{{ step.status }}</div>
         </div>
       </div>
     </section>
 
-    <section v-else-if="visibleOrders.length > 0" data-testid="order-table-shell" class="order-table-shell surface-panel overflow-hidden">
-      <div class="order-list-header flex flex-col gap-2.5 border-b border-slate-200/70 px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div class="text-base font-semibold text-slate-900">本地订单列表</div>
-          <div class="mt-0.5 text-[13px] leading-5 text-slate-500">
-            当前展示 {{ visibleOrders.length }} 条{{ searchKeyword ? "筛选结果" : "缓存订单" }}。
-          </div>
+    <section
+      v-else-if="visibleOrders.length > 0"
+      data-testid="order-table-shell"
+      class="order-table-shell surface-panel overflow-hidden"
+    >
+      <div class="order-list-header flex flex-col gap-2 border-b border-slate-200/70 px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex items-center gap-2">
+          <span class="order-list-indicator" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+              <path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z" />
+              <path d="M12 12 3 7.5" />
+              <path d="M12 12l9-4.5" />
+              <path d="M12 21v-9" />
+            </svg>
+          </span>
+          <div class="text-sm font-semibold tracking-tight text-slate-900 sm:text-[0.95rem]">本地订单列表</div>
         </div>
-        <div class="flex flex-wrap gap-1.5 text-[11px]">
-          <span class="order-list-chip rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-            订单 {{ visibleOrders.length }}
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="order-stat-chip order-stat-chip--count">
+            <span class="order-stat-chip-label">订单</span>
+            <span class="order-stat-chip-value">{{ visibleOrders.length }}</span>
           </span>
-          <span class="order-list-chip rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-            买家 {{ uniqueBuyerCount }}
+          <span class="order-stat-chip order-stat-chip--buyer">
+            <span class="order-stat-chip-label">买家</span>
+            <span class="order-stat-chip-value">{{ uniqueBuyerCount }}</span>
           </span>
-          <span class="order-list-chip rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-            金额 {{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}
+          <span class="order-stat-chip order-stat-chip--amount">
+            <span class="order-stat-chip-label">金额</span>
+            <span class="order-stat-chip-value">{{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}</span>
           </span>
         </div>
       </div>
@@ -260,11 +236,11 @@ onMounted(async () => {
       :description="
         searchKeyword
           ? '当前关键词没有命中任何本地订单，可更换关键词或清空筛选。'
-          : '点击上方“同步订单”，将最近订单拉入本地缓存后再进行搜索或评价匹配。'
+          : '点击上方「同步缓存」，将最近订单拉入本地缓存后再进行搜索或评价匹配。'
       "
       @action="handleSync"
     >
-      {{ searchKeyword ? "同步最近 30 天缓存" : "立即同步订单" }}
+      {{ searchKeyword ? "同步缓存" : "立即同步缓存" }}
     </EmptyState>
   </div>
 </template>

@@ -127,5 +127,11 @@ describe("DashboardView", () => {
     expect(wrapper.findAll(".metric-card-compact")).toHaveLength(5);
     expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
+    expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("TLS 工作台");
+    expect(wrapper.text()).not.toContain("作者微信");
+    expect(wrapper.text()).not.toContain("运行时");
+    expect(wrapper.text()).not.toContain("提醒");
+    expect(wrapper.findAll(".metric-card-compact")[0]?.text()).not.toContain("建议续费");
   });
 });
