@@ -70,19 +70,28 @@ impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
     }
 
     async fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()> {
-        // `activations.last_session_issued_at` / `last_offline_grant_issued_at`
-        // 两列是旧协议遗留，线上从未被任何 SELECT 路径消费。保留列结构以便回滚，
-        // 但新激活/续约不再写入；已有行中的旧值由 D1 原样保留。
+        // 停写几列历史遗留字段（审计报告 H1 + T-11'）：
+        //
+        // - `activations.last_session_issued_at` / `last_offline_grant_issued_at`
+        //   旧协议遗留，当前无 SELECT 消费者；列结构保留以便回滚。
+        // - `activations.device_fingerprint` 原文（含 macOS IOPlatformSerialNumber /
+        //   Windows UUID / Linux machine-id）隐私敏感，且与 `device_registrations
+        //   .device_fingerprint_hash` 的 hash 化存储模型相矛盾。改为彻底不写入，
+        //   已有行的历史值由 D1 原样保留；load_license 侧的 COALESCE 已能安全
+        //   读取空值。
+        //
+        // 设备绑定的真正判据仍然是 `activations.device_id`（16 hex = 8 字节 SHA
+        // 前缀），且 activate 入口已在 runtime_activate 加 device_id / device_
+        // fingerprint 的自洽校验（H2）。
         self.db
             .prepare(
-                "INSERT INTO activations (license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
-                 ON CONFLICT(license_key) DO UPDATE SET device_id = excluded.device_id, device_fingerprint = excluded.device_fingerprint, plan_days = excluded.plan_days, activated_at = excluded.activated_at, expires_at = excluded.expires_at, updated_at = excluded.updated_at, binding_version = excluded.binding_version, status = excluded.status, last_verify_at = excluded.last_verify_at",
+                "INSERT INTO activations (license_key, device_id, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(license_key) DO UPDATE SET device_id = excluded.device_id, plan_days = excluded.plan_days, activated_at = excluded.activated_at, expires_at = excluded.expires_at, updated_at = excluded.updated_at, binding_version = excluded.binding_version, status = excluded.status, last_verify_at = excluded.last_verify_at",
             )
             .bind(&[
                 JsValue::from_str(&record.license_key),
                 JsValue::from_str(&record.device_id),
-                JsValue::from_str(&record.device_fingerprint),
                 JsValue::from_f64(record.plan_days as f64),
                 JsValue::from_str(&record.activated_at),
                 JsValue::from_str(&record.license_expires_at),
