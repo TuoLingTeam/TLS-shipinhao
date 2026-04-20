@@ -13,10 +13,10 @@ sha2.workspace = true
 thiserror.workspace = true
 base64 = "0.22"
 ed25519-dalek = "2.1"
-api-contracts = { path = "../../shared/api-contracts" }
+api-contracts = { path = "../api-contracts" }
 
 [dev-dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand = "0.8"
-security_core = { path = "../../../crates/security-core" }
+security_core = { path = "../../crates/security-core" }
 tokio = { workspace = true, features = ["macros", "rt"] }

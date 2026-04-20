@@ -13,8 +13,8 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 sha2.workspace = true
-license-service = { path = "../../modules/license-service" }
-api-contracts = { path = "../../shared/api-contracts" }
+license-service = { path = "../license-service" }
+api-contracts = { path = "../api-contracts" }
 base64 = "0.22"
 async-trait = "0.1"
 ed25519-dalek = { version = "2.1", features = ["pkcs8"] }

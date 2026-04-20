@@ -16,7 +16,7 @@ tracing.workspace = true
 regex = "1"
 reqwest.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
-api-contracts = { path = "../../backend/shared/api-contracts" }
+api-contracts = { path = "../../backend/api-contracts" }
 domain-core = { path = "../domain-core" }
 
 [dev-dependencies]

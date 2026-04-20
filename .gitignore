@@ -100,5 +100,5 @@ tests/integration/__pycache__/
 
 backend/.wrangler/
 
-backend/apps/license-worker/build/
+backend/license-worker/build/
 backend/.cache/

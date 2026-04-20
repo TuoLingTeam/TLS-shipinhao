@@ -45,12 +45,12 @@ case "$SCRIPT_PATH" in
   *) SCRIPT_PATH="$(pwd)/$SCRIPT_PATH" ;;
 esac
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
-BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$BACKEND_DIR/.." && pwd)
 TEMP_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/license-worker-workspace.XXXXXX")
-REAL_WORKER_DIR="$BACKEND_DIR/apps/license-worker"
+REAL_WORKER_DIR="$BACKEND_DIR/license-worker"
 TEMP_BACKEND_DIR="$TEMP_WORKSPACE/backend"
-TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/apps/license-worker"
+TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/license-worker"
 
 cleanup() {
   rm -rf "$TEMP_WORKSPACE"
@@ -64,10 +64,10 @@ log "Using cargo: $(command -v cargo)"
 log "Using rustc: $(command -v rustc)"
 log "Working backend dir: $BACKEND_DIR"
 
-mkdir -p "$TEMP_BACKEND_DIR/shared" "$TEMP_BACKEND_DIR/modules" "$TEMP_BACKEND_DIR/apps"
+mkdir -p "$TEMP_BACKEND_DIR"
 cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"
-mkdir -p "$TEMP_BACKEND_DIR/shared" && cp -R "$BACKEND_DIR/shared/api-contracts" "$TEMP_BACKEND_DIR/shared/api-contracts"
-cp -R "$BACKEND_DIR/modules/license-service" "$TEMP_BACKEND_DIR/modules/license-service"
+cp -R "$BACKEND_DIR/api-contracts" "$TEMP_BACKEND_DIR/api-contracts"
+cp -R "$BACKEND_DIR/license-service" "$TEMP_BACKEND_DIR/license-service"
 
 if [ -f "$REPO_ROOT/Cargo.lock" ]; then
   cp "$REPO_ROOT/Cargo.lock" "$TEMP_WORKSPACE/Cargo.lock"
@@ -77,9 +77,9 @@ cat > "$TEMP_WORKSPACE/Cargo.toml" <<'EOF'
 [workspace]
 resolver = "2"
 members = [
-  "backend/apps/license-worker",
-  "backend/shared/api-contracts",
-  "backend/modules/license-service",
+  "backend/license-worker",
+  "backend/api-contracts",
+  "backend/license-service",
 ]
 
 [workspace.package]
