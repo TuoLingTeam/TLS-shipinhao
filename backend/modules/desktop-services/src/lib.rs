@@ -1,7 +1,7 @@
 pub mod delivery;
 pub mod order;
 pub mod review;
-pub mod shared;
+pub mod common;
 
 pub use delivery::batch_runner as delivery_batch_runner;
 pub use delivery::update as delivery_update;
@@ -19,10 +19,10 @@ pub use review::candidate_scoring as review_candidate_scoring;
 pub use review::index as review_index;
 pub use review::match_flow as review_match_flow;
 pub use review::matcher_helpers as review_matcher_helpers;
-pub use shared::day_window;
-pub use shared::http_client;
-pub use shared::matching;
-pub use shared::update_service;
+pub use common::day_window;
+pub use common::http_client;
+pub use common::matching;
+pub use common::update_service;
 
 use crate::delivery_batch_runner::{
     run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem,

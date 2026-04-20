@@ -42,7 +42,7 @@ pub async fn fetch_latest_version_info(
 ) -> Result<UpdateInfo, UpdateError> {
     // 走统一 builder，带产品 UA：若更新源未来切到 Cloudflare，默认 reqwest UA 会被拦
     // （与 /api/activate 同样的故障模式）。统一 helper 还方便后续插 proxy 与重试策略。
-    let client = crate::shared::http_client::build_desktop_http_client(Duration::from_secs(
+    let client = crate::common::http_client::build_desktop_http_client(Duration::from_secs(
         UPDATE_REQUEST_TIMEOUT_SECS,
     ));
     let response = client.get(UPDATE_VERSION_URL).send().await?;
