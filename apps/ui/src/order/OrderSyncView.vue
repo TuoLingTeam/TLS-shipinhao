@@ -12,6 +12,12 @@ const appStore = useAppStore();
 const { syncRecentCache, loadRecentCache, loadCacheStatus } = useOrder();
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const searchKeyword = ref("");
+
+// 列表渲染上限：默认仅渲染前 N 条，避免每次切换页面都把上万条订单一次性渲染导致卡顿。
+// 用户点击「显示完整订单」后才解锁全量渲染。
+const INITIAL_DISPLAY_LIMIT = 100;
+const showAllOrders = ref(false);
+
 // 切换到订单管理时默认不加载完整列表（可能上万条），避免渲染卡顿；
 // 用户点击「加载订单列表」或触发搜索时再懒加载
 // 基于 store 判断，跨路由切换回来时若已加载过，不再重复拉取
@@ -20,7 +26,9 @@ const totalAmount = computed(() =>
   store.cachedOrders.reduce((sum, item) => sum + (item.amount_cent ?? 0), 0),
 );
 const uniqueBuyerCount = computed(() => new Set(store.cachedOrders.map((item) => item.buyer_name)).size);
-const visibleOrders = computed(() => {
+
+// 关键词搜索后的完整匹配集合（不截断，用于统计 + 列表渲染上限决策）
+const filteredOrders = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
   if (!keyword) return store.cachedOrders;
   return store.cachedOrders.filter((item) =>
@@ -29,6 +37,21 @@ const visibleOrders = computed(() => {
     ),
   );
 });
+
+// 实际渲染的订单：搜索时用关键词过滤后的结果，否则按 showAllOrders 决定是否截断
+const visibleOrders = computed(() => {
+  const list = filteredOrders.value;
+  if (showAllOrders.value || searchKeyword.value.trim()) return list;
+  return list.length > INITIAL_DISPLAY_LIMIT ? list.slice(0, INITIAL_DISPLAY_LIMIT) : list;
+});
+
+// 截断标记：当前渲染条数 < 总条数时为 true，用于显示「展开全部」按钮和提示文案
+const isTruncated = computed(() => visibleOrders.value.length < filteredOrders.value.length);
+const totalOrderCount = computed(() => filteredOrders.value.length);
+
+function handleShowAllOrders() {
+  showAllOrders.value = true;
+}
 const cachedOrderCount = computed(() => store.cacheStatus?.cached_order_count ?? 0);
 const hasLocalCache = computed(() => cachedOrderCount.value > 0);
 const activeCoverageLabel = computed(() => {
@@ -241,11 +264,20 @@ onMounted(async () => {
             </svg>
           </span>
           <div class="text-sm font-semibold tracking-tight text-slate-900 sm:text-[0.95rem]">本地订单列表</div>
+          <span
+            v-if="isTruncated"
+            class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
+            :title="`已渲染前 ${visibleOrders.length} 条以保证流畅，点击右侧按钮查看全部 ${totalOrderCount} 条`"
+          >
+            预览模式
+          </span>
         </div>
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <span class="order-stat-chip order-stat-chip--count">
             <span class="order-stat-chip-label">订单</span>
-            <span class="order-stat-chip-value">{{ visibleOrders.length }}</span>
+            <span class="order-stat-chip-value">
+              {{ isTruncated ? `${visibleOrders.length} / ${totalOrderCount}` : visibleOrders.length }}
+            </span>
           </span>
           <span class="order-stat-chip order-stat-chip--buyer">
             <span class="order-stat-chip-label">买家</span>
@@ -255,6 +287,16 @@ onMounted(async () => {
             <span class="order-stat-chip-label">金额</span>
             <span class="order-stat-chip-value">{{ store.cachedOrders.length ? formatCent(totalAmount) : "--" }}</span>
           </span>
+          <button
+            v-if="isTruncated"
+            data-testid="order-show-all"
+            type="button"
+            class="action-btn action-btn-secondary action-btn-compact cursor-pointer"
+            :title="`一次性渲染 ${totalOrderCount} 条订单，可能略有卡顿`"
+            @click="handleShowAllOrders"
+          >
+            显示完整订单（{{ totalOrderCount }}）
+          </button>
         </div>
       </div>
       <div class="data-table-shell overflow-x-auto border-0 shadow-none">
