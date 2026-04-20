@@ -69,6 +69,14 @@ cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"
 cp -R "$BACKEND_DIR/api-contracts" "$TEMP_BACKEND_DIR/api-contracts"
 cp -R "$BACKEND_DIR/license-service" "$TEMP_BACKEND_DIR/license-service"
 
+# license-service 的 [dev-dependencies] 仍然引用 `../../crates/security-core`
+# 做跨 crate 一致性测试。wasm target 下不会编译 dev-dep，但 `cargo metadata`
+# 必须能读到 security-core 的 manifest，否则 worker-build 在解析 workspace
+# 时就会 "failed to load manifest for dependency security_core" 报错。
+# 因此把 crates/security-core 也复制进临时 workspace 并作为 member 声明。
+mkdir -p "$TEMP_WORKSPACE/crates"
+cp -R "$REPO_ROOT/crates/security-core" "$TEMP_WORKSPACE/crates/security-core"
+
 if [ -f "$REPO_ROOT/Cargo.lock" ]; then
   cp "$REPO_ROOT/Cargo.lock" "$TEMP_WORKSPACE/Cargo.lock"
 fi
@@ -80,6 +88,7 @@ members = [
   "backend/license-worker",
   "backend/api-contracts",
   "backend/license-service",
+  "crates/security-core",
 ]
 
 [workspace.package]
@@ -99,6 +108,8 @@ tokio = { version = "1", features = ["full"] }
 EOF
 
 cd "$TEMP_WORKER_DIR"
+
+# ---- worker-build（无官方预编译，只能 cargo install；下一次升级到 worker-build 0.7 可换预编译） ----
 WORKER_BUILD_ROOT="$BACKEND_DIR/.cache/worker-build-0.1"
 WORKER_BUILD_BIN="$WORKER_BUILD_ROOT/bin/worker-build"
 if [ ! -x "$WORKER_BUILD_BIN" ]; then
@@ -106,14 +117,68 @@ if [ ! -x "$WORKER_BUILD_BIN" ]; then
   mkdir -p "$WORKER_BUILD_ROOT"
   cargo install worker-build --version "^0.1" --locked --root "$WORKER_BUILD_ROOT"
 fi
-WASM_BINDGEN_ROOT="$BACKEND_DIR/.cache/wasm-bindgen-0.2.118"
+
+# ---- wasm-bindgen-cli（优先使用官方预编译二进制，节省 ~2 分钟 cargo install 时间） ----
+WASM_BINDGEN_VERSION="0.2.118"
+WASM_BINDGEN_ROOT="$BACKEND_DIR/.cache/wasm-bindgen-${WASM_BINDGEN_VERSION}"
 WASM_BINDGEN_BIN="$WASM_BINDGEN_ROOT/bin/wasm-bindgen"
+
+detect_wasm_bindgen_triple() {
+  uname_s=$(uname -s 2>/dev/null || echo "")
+  uname_m=$(uname -m 2>/dev/null || echo "")
+  case "${uname_s}-${uname_m}" in
+    Linux-x86_64)  echo "x86_64-unknown-linux-musl" ;;
+    Linux-aarch64) echo "aarch64-unknown-linux-musl" ;;
+    Darwin-x86_64) echo "x86_64-apple-darwin" ;;
+    Darwin-arm64)  echo "aarch64-apple-darwin" ;;
+    *) echo "" ;;
+  esac
+}
+
+install_wasm_bindgen_prebuilt() {
+  triple=$(detect_wasm_bindgen_triple)
+  if [ -z "$triple" ]; then
+    return 1
+  fi
+  archive_name="wasm-bindgen-${WASM_BINDGEN_VERSION}-${triple}.tar.gz"
+  url="https://github.com/rustwasm/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/${archive_name}"
+  tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/wasm-bindgen-dl.XXXXXX")
+  log "Fetching prebuilt wasm-bindgen: $url"
+  if ensure_cmd curl; then
+    curl -fsSL "$url" -o "$tmpdir/$archive_name" || return 1
+  elif ensure_cmd wget; then
+    wget -qO "$tmpdir/$archive_name" "$url" || return 1
+  else
+    return 1
+  fi
+  tar -xzf "$tmpdir/$archive_name" -C "$tmpdir" || return 1
+  mkdir -p "$WASM_BINDGEN_ROOT/bin"
+  extracted="$tmpdir/wasm-bindgen-${WASM_BINDGEN_VERSION}-${triple}/wasm-bindgen"
+  if [ ! -x "$extracted" ]; then
+    # Windows tar 可能解成子目录名不同，尽量找一下
+    extracted=$(find "$tmpdir" -maxdepth 3 -name wasm-bindgen -type f | head -1)
+  fi
+  if [ -z "$extracted" ] || [ ! -x "$extracted" ]; then
+    return 1
+  fi
+  cp "$extracted" "$WASM_BINDGEN_BIN"
+  chmod +x "$WASM_BINDGEN_BIN"
+  rm -rf "$tmpdir"
+  return 0
+}
+
 if [ ! -x "$WASM_BINDGEN_BIN" ]; then
-  log "Installing wasm-bindgen-cli 0.2.118 into $WASM_BINDGEN_ROOT ..."
+  log "Installing wasm-bindgen-cli ${WASM_BINDGEN_VERSION} into $WASM_BINDGEN_ROOT ..."
   mkdir -p "$WASM_BINDGEN_ROOT"
-  cargo install wasm-bindgen-cli --version "0.2.118" --root "$WASM_BINDGEN_ROOT"
+  if install_wasm_bindgen_prebuilt; then
+    log "wasm-bindgen-cli ${WASM_BINDGEN_VERSION} installed from prebuilt release."
+  else
+    log "Prebuilt wasm-bindgen not available for this platform, falling back to cargo install."
+    cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_VERSION}" --root "$WASM_BINDGEN_ROOT"
+  fi
 fi
 export WASM_BINDGEN_BIN
+
 log "Running worker-build..."
 "$WORKER_BUILD_BIN" "$@"
 
