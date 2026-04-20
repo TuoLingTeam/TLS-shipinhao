@@ -65,7 +65,18 @@ fn verifying_key_from_b64url(public_key_b64url: &str) -> Result<VerifyingKey, St
     VerifyingKey::from_bytes(&key_bytes).map_err(|err| format!("invalid public key: {err}"))
 }
 
-fn verify_lease_impl(
+/// 纯 Rust 版的 Lease 校验，与 [`security_core_verify_lease`] FFI 导出同构。
+///
+/// 返回值是扁平化的 JSON `Value`，字段包括：
+/// - `ok: bool`
+/// - `reason: "ok" | "invalid" | "device_mismatch" | "expired"`
+/// - `payload: null | <parsed payload Value>`
+/// - 可选 `error: string`
+///
+/// 对外 `pub fn` 便于集成测试锁住"FFI 与 `license_service::lease::LeaseVerifier`
+/// 两条验签路径的行为等价"。应用层业务请优先使用 `LeaseVerifier`，它返回类型化
+/// `LeasePayload` + `LeaseError`，比 JSON 扁平结构更适合错误分支穷尽。
+pub fn verify_lease_impl(
     token: &str,
     public_key_b64url: &str,
     expected_device_id: Option<&str>,

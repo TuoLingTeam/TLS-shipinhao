@@ -18,4 +18,5 @@ api-contracts = { path = "../../shared/api-contracts" }
 [dev-dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand = "0.8"
+security_core = { path = "../../shared/security-core" }
 tokio = { workspace = true, features = ["macros", "rt"] }
