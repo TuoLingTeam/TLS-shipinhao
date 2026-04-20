@@ -10,10 +10,10 @@ chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-api-contracts = { path = "../../../shared/api-contracts" }
+api-contracts = { path = "../../backend/shared/api-contracts" }
 base64 = "0.22"
 ed25519-dalek = { version = "2.1", features = ["pkcs8"] }
 
 [dev-dependencies]
-security_core = { path = "../../../shared/security-core" }
+security_core = { path = "../../crates/security-core" }
 tempfile = "3"

@@ -8,7 +8,7 @@ license.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
-desktop-services = { path = "../../../modules/desktop-services" }
+desktop-services = { path = "../../crates/desktop-services" }
 serde.workspace = true
 build-tools = { path = "../build-tools" }
 

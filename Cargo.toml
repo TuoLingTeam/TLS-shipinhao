@@ -2,13 +2,13 @@
 resolver = "2"
 members = [
   "backend/shared/api-contracts",
-  "backend/shared/domain-core",
-  "backend/shared/security-core",
   "backend/modules/license-service",
-  "backend/modules/desktop-services",
   "backend/apps/license-worker",
-  "backend/infra/tooling/build-tools",
-  "backend/infra/tooling/xtask",
+  "crates/domain-core",
+  "crates/security-core",
+  "crates/desktop-services",
+  "tools/build-tools",
+  "tools/xtask",
   "apps/desktop",
 ]
 

@@ -10,5 +10,5 @@ thiserror.workspace = true
 
 [dev-dependencies]
 # 仅用于锁定 TaskKind 与 api-contracts 常量字面量一致（SSoT 回归测试）
-api-contracts = { path = "../api-contracts" }
+api-contracts = { path = "../../backend/shared/api-contracts" }
 serde_json.workspace = true
