@@ -232,10 +232,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="settings-view-shell flex h-full min-h-0 flex-col gap-app">
+  <div class="settings-view-shell flex flex-col gap-app">
     <section
       data-testid="settings-panels"
-      class="settings-layout flex-1 min-h-0"
+      class="settings-layout"
     >
       <aside
         data-testid="settings-sidebar"

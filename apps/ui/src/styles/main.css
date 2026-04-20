@@ -845,24 +845,16 @@ textarea {
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 304px) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  /* 行高按内容自然撑开，避免外层 flex:1 撑高后内部卡片再被进一步拉大 */
+  grid-template-rows: auto;
   gap: 0.9rem;
-  min-height: 0;
-  /* 覆盖 .subsystem-panel-grid 的 align-items: start，让两栏撑满 section 高度 */
-  align-items: stretch;
-}
-
-.settings-sidebar,
-.settings-workspace,
-.settings-section-card {
-  min-height: 0;
+  align-items: start;
 }
 
 .settings-sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  min-height: 0;
   border-left: 4px solid var(--color-brand);
   box-shadow:
     0 18px 44px -32px rgba(5, 150, 105, 0.22),
@@ -900,39 +892,6 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
-}
-
-/* 双列布局：sidebar 高度由 grid 1fr 行限定，stack 撑满父高度，超出可纵向滚动，
-   保证授权信息卡的全部条目（含「已保存卡密」）都能看到，不被父高度截断。 */
-@media (min-width: 1181px) {
-  .settings-sidebar-stack {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 0.25rem;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
-  }
-
-  .settings-sidebar-stack::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .settings-sidebar-stack::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.45);
-    border-radius: 999px;
-  }
-
-  .settings-sidebar-stack::-webkit-scrollbar-track {
-    background: transparent;
-  }
-}
-
-/* 单列布局：sidebar 自适应高度，stack 按内容自然撑开，不需要滚动 */
-@media (max-width: 1180px) {
-  .settings-sidebar-stack {
-    flex: 0 0 auto;
-  }
 }
 
 .settings-nav-item {
@@ -1198,34 +1157,21 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  flex: 1;
-  min-height: 0;
   border-left: 4px solid var(--color-brand);
   box-shadow:
     0 18px 44px -32px rgba(5, 150, 105, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
-.settings-cookie-grid {
-  flex: 1;
-  min-height: 0;
-}
-
 .settings-cookie-main {
-  flex: 1 1 0;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
 .settings-cookie-textarea {
-  flex: 1 1 auto;
+  /* textarea 用合理的固定高度，避免被 flex:1 撑得过大；超长内容由 textarea 自身滚动 */
   min-height: 180px;
-}
-
-.settings-side-stack {
-  min-height: 0;
-  flex: 1;
+  max-height: 280px;
 }
 
 .settings-section-head {
@@ -1414,9 +1360,6 @@ textarea {
 @media (max-width: 1180px) {
   .settings-layout {
     grid-template-columns: 1fr;
-    /* 切到单列后，两个区块都需要按内容自然撑开，
-       否则 row1（仅显式声明 1fr）会被 row2（隐式 auto）挤成 ≈ 48px。 */
-    grid-template-rows: auto auto;
   }
 
   .settings-sidebar {
