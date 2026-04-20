@@ -9,7 +9,8 @@ import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../layout/useLayout";
-import { localDaysAgoStartIso, localYesterdayEndIso } from "../shared/format";
+import type { ReviewRangePresetKey } from "../shared/format";
+import { getReviewRangeFromPreset } from "../shared/format";
 
 const router = useRouter();
 const { mode } = useLayout();
@@ -18,63 +19,18 @@ const orderStore = useOrderStore();
 const appStore = useAppStore();
 const { findReviews, findQualityRefundOrders, prefillMatchedOrder } = useReview();
 
-const days = ref(30);
-const qualityReasonFilter = ref("");
+const rangePreset = ref<ReviewRangePresetKey>("last_30_days");
+const rangePresetOptions: { value: ReviewRangePresetKey; label: string }[] = [
+  { value: "today", label: "今天" },
+  { value: "yesterday", label: "昨天" },
+  { value: "last_7_days", label: "近 7 天" },
+  { value: "last_30_days", label: "近 30 天" },
+];
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const isQualityRefundMode = computed(() => store.lastMode === "quality_refund");
-const filteredResults = computed(() => {
-  if (!isQualityRefundMode.value) return store.results;
-  const keyword = qualityReasonFilter.value.trim();
-  if (!keyword) return store.results;
-  return store.results.filter((item) =>
-    item.quality_refund_info?.reason?.includes(keyword),
-  );
-});
 const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
 const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
 const unmatchedCount = computed(() => store.results.length - matchedCount.value);
-
-const heroEyebrow = computed(() =>
-  isQualityRefundMode.value ? "TLS · QUALITY REFUND" : "TLS · BAD REVIEW",
-);
-
-const heroTitle = computed(() =>
-  isQualityRefundMode.value ? "品退订单直连" : "差评评分匹配",
-);
-
-const heroLead = computed(() =>
-  isQualityRefundMode.value
-    ? "品退接口直接返回订单号，匹配成功即可一键带入发货。"
-    : "先补齐缓存，再按商品 / SKU / 昵称 / 时间多维度评分匹配。",
-);
-
-const summaryCards = computed(() => [
-  {
-    label: "当前模式",
-    value: isQualityRefundMode.value ? "品退直连" : "差评评分匹配",
-    hint: isQualityRefundMode.value ? "优先使用接口直返订单号" : "依赖缓存评分寻找最优订单",
-    tone: "brand",
-  },
-  {
-    label: "最近结果",
-    value: store.results.length ? `${store.results.length} 条` : "等待查询",
-    hint: store.lastQuery ? `${store.lastQuery.days} 天范围内的数据` : "尚未发起检索",
-    tone: "slate",
-  },
-  {
-    label: "已匹配",
-    value: store.results.length ? `${matchedCount.value} / ${store.results.length}` : "--",
-    hint: unmatchedCount.value > 0 ? `${unmatchedCount.value} 条待人工核实` : "命中后可直接带入发货",
-    tone: unmatchedCount.value > 0 && store.results.length ? "amber" : "success",
-  },
-]);
-
-const summaryCardAccent: Record<string, string> = {
-  brand: "review-summary-card--brand",
-  slate: "review-summary-card--slate",
-  amber: "review-summary-card--amber",
-  success: "review-summary-card--success",
-};
 
 const loadingTitle = computed(() =>
   orderStore.syncSource === "review_query"
@@ -85,7 +41,7 @@ const loadingTitle = computed(() =>
 );
 const loadingDescription = computed(() =>
   orderStore.syncSource === "review_query"
-    ? orderStore.syncMessage || "后端会先保障近 30 天（不含今天）订单缓存可用，再执行评分匹配。"
+    ? orderStore.syncMessage || "后端会先按所选日期范围保障订单缓存可用，再执行评分匹配。"
     : isQualityRefundMode.value
       ? "品退接口会直接返回订单号，成功后可直接带入发货页。"
       : "差评会先确保缓存覆盖，再按商品、SKU、昵称与时间执行评分匹配。",
@@ -93,32 +49,15 @@ const loadingDescription = computed(() =>
 const emptyTitle = computed(() => (isQualityRefundMode.value ? "未找到品退匹配订单" : "未找到匹配结果"));
 const emptyDescription = computed(() =>
   isQualityRefundMode.value
-    ? "请先确认订单缓存已同步，再尝试扩大查询天数。"
-    : "已完成缓存保障但仍未找到足够高分订单，可尝试扩大查询天数。",
+    ? "请先确认订单缓存已同步，再尝试调整日期范围。"
+    : "已完成缓存保障但仍未找到足够高分订单，可尝试调整日期范围。",
 );
-const resultSummary = computed(() => {
-  if (!store.results.length) return "";
-  const sourceLabel = isQualityRefundMode.value ? "品退订单" : "差评订单";
-  if (isQualityRefundMode.value) {
-    if (!unmatchedCount.value) {
-      return `本次共获取 ${store.results.length} 条${sourceLabel}，官方接口已直接返回订单号，可直接带入发货页。`;
-    }
-    return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条可直接带入发货，${unmatchedCount.value} 条因接口缺少订单号暂时无法自动带入。`;
-  }
-  if (!unmatchedCount.value) {
-    return `本次共获取 ${store.results.length} 条${sourceLabel}，全部命中订单缓存，可直接带入发货页。`;
-  }
-  const cacheNote = store.cacheSyncPerformed
-    ? `本次已自动补齐 ${store.cacheSyncWrittenCount} 条缓存订单，`
-    : "本次已完成缓存保障，";
-  return `本次共获取 ${store.results.length} 条${sourceLabel}，其中 ${matchedCount.value} 条已完成匹配，${unmatchedCount.value} 条未达到匹配阈值。${cacheNote}当前缓存覆盖 ${store.cacheCoverageStart || "-"} 至 ${store.cacheCoverageEnd || "-"}。`;
-});
 const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : "评价ID"));
 
-function switchMode(mode: "bad_review" | "quality_refund") {
-  store.setLastMode(mode);
+function buildReviewWindow(): { days: number; startAt: string; endAt: string } {
   store.setError(null);
-  qualityReasonFilter.value = "";
+  const r = getReviewRangeFromPreset(rangePreset.value);
+  return { days: r.days, startAt: r.startAt, endAt: r.endAt };
 }
 
 async function handleSearch() {
@@ -126,7 +65,8 @@ async function handleSearch() {
     store.setError("请先激活授权后再使用评价管理");
     return;
   }
-  await findReviews(days.value, localDaysAgoStartIso(days.value), localYesterdayEndIso());
+  const w = buildReviewWindow();
+  await findReviews(w.days, w.startAt, w.endAt);
 }
 
 async function handleQualityRefundSearch() {
@@ -134,11 +74,8 @@ async function handleQualityRefundSearch() {
     store.setError("请先激活授权后再使用品退订单");
     return;
   }
-  await findQualityRefundOrders(
-    days.value,
-    localDaysAgoStartIso(days.value),
-    localYesterdayEndIso(),
-  );
+  const w = buildReviewWindow();
+  await findQualityRefundOrders(w.days, w.startAt, w.endAt);
 }
 
 async function handleFetchCurrentMode() {
@@ -215,94 +152,66 @@ function formatReplyDeadline(value: string | null) {
         data-testid="review-control-shell"
         class="review-control-shell relative flex flex-col gap-2.5 p-0 border-0 bg-transparent shadow-none backdrop-blur-none"
       >
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h2 class="text-[1.05rem] font-bold tracking-tight text-slate-900 sm:text-[1.15rem] lg:text-[1.22rem]">
-                {{ heroTitle }}
-              </h2>
-              <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                {{ heroEyebrow }}
-              </span>
+        <div data-testid="review-filter-grid" class="review-config-panel flex flex-col gap-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-3">
+            <div class="min-w-0 w-full sm:w-[11.5rem] sm:shrink-0">
+              <label class="field-label" for="review-range-preset">选择日期</label>
+              <select
+                id="review-range-preset"
+                v-model="rangePreset"
+                data-testid="review-range-preset"
+                class="field-input w-full"
+              >
+                <option v-for="opt in rangePresetOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
             </div>
-            <p class="mt-0.5 max-w-[44rem] text-[12px] leading-5 text-slate-500">{{ heroLead }}</p>
-          </div>
 
-          <div
-            data-testid="review-mode-switch"
-            class="review-mode-switch shrink-0"
-          >
-            <button
-              type="button"
-              class="review-mode-option cursor-pointer"
-              :class="!isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
-              @click="switchMode('bad_review')"
-            >
-              差评
-            </button>
-            <button
-              type="button"
-              class="review-mode-option cursor-pointer"
-              :class="isQualityRefundMode ? 'review-mode-option-active' : 'review-mode-option-idle'"
-              @click="switchMode('quality_refund')"
-            >
-              品退
-            </button>
-          </div>
-        </div>
-
-        <div
-          data-testid="review-filter-grid"
-          class="review-filter-grid"
-        >
-          <div>
-            <label class="field-label">天数</label>
-            <input v-model.number="days" type="number" min="1" max="90" class="field-input" />
-          </div>
-          <div class="review-filter-field">
-            <label class="field-label">{{ isQualityRefundMode ? '原因过滤' : '匹配说明' }}</label>
-            <input
-              v-if="isQualityRefundMode"
-              v-model.trim="qualityReasonFilter"
-              type="text"
-              placeholder="输入关键字"
-              class="field-input"
-            />
-            <div v-else class="review-helper-card">
-              先补齐缓存，再按商品、SKU、昵称与时间评分匹配。
+            <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-stretch">
+              <button
+                data-testid="review-fetch-bad"
+                type="button"
+                :disabled="store.loading || licenseBlocked"
+                class="action-btn action-btn-primary min-h-[40px] w-full flex-1 cursor-pointer"
+                @click="handleSearch"
+              >
+                {{ store.loading && !isQualityRefundMode ? "处理中..." : "获取差评" }}
+              </button>
+              <button
+                data-testid="review-fetch-quality"
+                type="button"
+                :disabled="store.loading || licenseBlocked"
+                class="action-btn action-btn-secondary min-h-[40px] w-full flex-1 cursor-pointer border border-slate-200/90"
+                @click="handleQualityRefundSearch"
+              >
+                {{ store.loading && isQualityRefundMode ? "处理中..." : "获取品退" }}
+              </button>
             </div>
           </div>
-          <button
-            data-testid="review-primary-action"
-            type="button"
-            :disabled="store.loading || licenseBlocked"
-            class="review-primary-action action-btn action-btn-primary cursor-pointer"
-            @click="handleFetchCurrentMode"
-          >
-            {{
-              store.loading
-                ? "处理中..."
-                : isQualityRefundMode
-                  ? "获取品退"
-                  : "获取差评"
-            }}
-          </button>
         </div>
 
         <div
           data-testid="review-summary-strip"
-          class="subsystem-summary-strip grid gap-2 min-[960px]:grid-cols-3"
+          class="review-summary-inline flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200/70 pt-3 text-[12px] text-slate-600"
         >
-          <article
-            v-for="card in summaryCards"
-            :key="card.label"
-            class="subsystem-summary-card review-summary-card"
-            :class="summaryCardAccent[card.tone]"
-          >
-            <div class="subsystem-summary-label">{{ card.label }}</div>
-            <div class="subsystem-summary-value">{{ card.value }}</div>
-            <div class="subsystem-summary-hint">{{ card.hint }}</div>
-          </article>
+          <span class="font-medium text-slate-700">{{ isQualityRefundMode ? "品退直连" : "差评匹配" }}</span>
+          <span class="hidden text-slate-300 sm:inline" aria-hidden="true">|</span>
+          <span>
+            结果
+            <strong class="font-semibold text-slate-800">{{
+              store.results.length ? `${store.results.length} 条` : "—"
+            }}</strong>
+          </span>
+          <span>
+            已匹配
+            <strong class="font-semibold text-slate-800">{{
+              store.results.length ? `${matchedCount} / ${store.results.length}` : "—"
+            }}</strong>
+          </span>
+          <span v-if="unmatchedCount > 0 && store.results.length" class="text-amber-700">
+            {{ unmatchedCount }} 条待核实
+          </span>
         </div>
       </div>
     </section>
@@ -358,12 +267,6 @@ function formatReplyDeadline(value: string | null) {
     </div>
 
     <div v-else-if="store.results.length > 0" class="space-y-app">
-      <div
-        class="soft-alert"
-        :class="unmatchedCount > 0 ? 'warn' : 'success'"
-      >
-        {{ resultSummary }}
-      </div>
       <div v-if="store.cacheWarnings.length && !isQualityRefundMode" class="soft-alert warn">
         {{ store.cacheWarnings.join("；") }}
       </div>
@@ -392,7 +295,7 @@ function formatReplyDeadline(value: string | null) {
           </thead>
           <tbody>
             <tr
-              v-for="r in filteredResults"
+              v-for="r in store.results"
               :key="r.evaluation_id"
               class="table-row border-t border-slate-100/80 align-top transition-colors"
               :class="[

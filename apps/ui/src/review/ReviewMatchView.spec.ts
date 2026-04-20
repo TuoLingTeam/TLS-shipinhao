@@ -43,12 +43,11 @@ describe("ReviewMatchView", () => {
 
     const summary = wrapper.get('[data-testid="review-summary-strip"]');
 
-    expect(summary.classes()).toContain("xl:grid-cols-3");
-    expect(summary.classes()).toContain("subsystem-summary-strip");
+    expect(summary.classes()).toContain("review-summary-inline");
     expect(wrapper.text()).not.toContain("REVIEW MATCH");
   });
 
-  it("uses one unified control shell for both mode tabs and search actions", async () => {
+  it("uses date range plus separate fetch actions for bad reviews and quality refunds", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [...routes],
@@ -68,9 +67,12 @@ describe("ReviewMatchView", () => {
     });
 
     expect(wrapper.get('[data-testid="review-control-shell"]').classes()).toContain("review-control-shell");
-    expect(wrapper.get('[data-testid="review-mode-switch"]').classes()).toContain("review-mode-switch");
-    expect(wrapper.get('[data-testid="review-filter-grid"]').classes()).toContain("review-filter-grid");
-    expect(wrapper.findAll(".review-mode-option")).toHaveLength(2);
-    expect(wrapper.get('[data-testid="review-primary-action"]').classes()).toContain("review-primary-action");
+    expect(wrapper.get('[data-testid="review-filter-grid"]').classes()).toContain("review-config-panel");
+    expect(wrapper.text()).toContain("选择日期");
+    const preset = wrapper.get('[data-testid="review-range-preset"]');
+    expect(preset.element.tagName).toBe("SELECT");
+    expect(preset.findAll("option").length).toBe(4);
+    expect(wrapper.get('[data-testid="review-fetch-bad"]').text()).toContain("获取差评");
+    expect(wrapper.get('[data-testid="review-fetch-quality"]').text()).toContain("获取品退");
   });
 });

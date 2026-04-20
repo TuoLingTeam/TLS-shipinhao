@@ -54,25 +54,6 @@ function handleShowAllOrders() {
 }
 const cachedOrderCount = computed(() => store.cacheStatus?.cached_order_count ?? 0);
 const hasLocalCache = computed(() => cachedOrderCount.value > 0);
-const activeCoverageLabel = computed(() => {
-  if (!store.cacheStatus) return "等待建立缓存";
-  return store.cacheStatus.coverage_complete
-    ? "近 30 天（不含今天）缓存完整，可直接支撑评价匹配。"
-    : `近 30 天（不含今天）存在 ${store.cacheStatus.missing_segment_count} 个覆盖缺口，建议立即同步。`;
-});
-const cacheStatusTone = computed<"success" | "warn" | "idle">(() => {
-  if (!store.cacheStatus) return "idle";
-  return store.cacheStatus.coverage_complete ? "success" : "warn";
-});
-const cacheStatusBadgeLabel = computed(() => {
-  if (!store.cacheStatus) return "缓存待建立";
-  return store.cacheStatus.coverage_complete ? "缓存完整" : `缓存缺口 ${store.cacheStatus.missing_segment_count}`;
-});
-const cacheStatusBadgeClass = computed(() => {
-  if (cacheStatusTone.value === "success") return "order-cache-chip--success";
-  if (cacheStatusTone.value === "warn") return "order-cache-chip--warn";
-  return "order-cache-chip--idle";
-});
 const syncSteps = computed(() => [
   {
     key: "ensure_recent_cache",
@@ -171,27 +152,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-app">
-    <section class="hero-panel subsystem-hero relative overflow-hidden p-3 lg:p-3.5">
-      <div class="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.4),transparent_72%)]"></div>
-
-      <div data-testid="order-hero-shell" class="order-hero-shell relative">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <h2 class="text-[1.05rem] font-bold tracking-tight text-slate-900 sm:text-[1.15rem] lg:text-[1.22rem]">
-              订单缓存与本地检索
-            </h2>
-            <p class="mt-0.5 max-w-[44rem] text-[12px] leading-5 text-slate-500">
-              {{ activeCoverageLabel }}
-            </p>
-          </div>
-
-          <div class="order-cache-chip shrink-0" :class="cacheStatusBadgeClass">
-            <span class="status-dot" :class="cacheStatusTone"></span>
-            <span class="order-cache-chip-label">{{ cacheStatusBadgeLabel }}</span>
-          </div>
-        </div>
-
+  <div class="order-sync-view flex min-h-0 flex-1 flex-col gap-app">
+    <section class="hero-panel subsystem-hero relative shrink-0 overflow-hidden p-3 lg:p-3.5">
+      <div data-testid="order-hero-shell" class="order-hero-shell relative flex flex-col gap-2.5">
         <div v-if="store.cacheStatus?.last_error" class="soft-alert warn">
           最近一次缓存维护提示：{{ store.cacheStatus.last_error }}
         </div>
@@ -205,18 +168,18 @@ onMounted(async () => {
       </div>
     </section>
 
-    <div v-if="licenseBlocked" class="soft-alert warn">
+    <div v-if="licenseBlocked" class="shrink-0 soft-alert warn">
       当前未激活授权，订单同步不可用。请先前往设置中心完成激活。
     </div>
 
-    <div v-if="store.error" class="soft-alert error">
+    <div v-if="store.error" class="shrink-0 soft-alert error">
       {{ store.error }}
     </div>
 
     <section
       v-if="store.loading"
       data-testid="order-sync-progress"
-      class="order-progress-shell surface-panel p-3 lg:p-3.5"
+      class="order-progress-shell surface-panel shrink-0 p-3 lg:p-3.5"
     >
       <div class="order-progress-head">
         <div class="min-w-0">
@@ -251,9 +214,9 @@ onMounted(async () => {
     <section
       v-else-if="visibleOrders.length > 0"
       data-testid="order-table-shell"
-      class="order-table-shell surface-panel overflow-hidden"
+      class="order-table-shell surface-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
-      <div class="order-list-header flex flex-col gap-2 border-b border-slate-200/70 px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between">
+      <div class="order-list-header flex shrink-0 flex-col gap-2 border-b border-slate-200/70 px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex items-center gap-2">
           <span class="order-list-indicator" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
@@ -299,7 +262,7 @@ onMounted(async () => {
           </button>
         </div>
       </div>
-      <div class="data-table-shell overflow-x-auto border-0 shadow-none">
+      <div class="data-table-shell min-h-0 flex-1 overflow-auto border-0 shadow-none">
         <table class="order-table w-full min-w-[860px] text-sm">
           <thead class="table-head text-slate-600">
             <tr>
@@ -325,13 +288,15 @@ onMounted(async () => {
       </div>
     </section>
 
-    <EmptyState
-      v-else
-      :title="emptyStateTitle"
-      :description="emptyStateDescription"
-      @action="handleEmptyAction"
-    >
-      {{ emptyStateButtonLabel }}
-    </EmptyState>
+    <div v-else class="order-sync-empty flex min-h-0 min-w-0 flex-1 flex-col">
+      <EmptyState
+        class="min-h-0 flex flex-1 flex-col justify-center"
+        :title="emptyStateTitle"
+        :description="emptyStateDescription"
+        @action="handleEmptyAction"
+      >
+        {{ emptyStateButtonLabel }}
+      </EmptyState>
+    </div>
   </div>
 </template>

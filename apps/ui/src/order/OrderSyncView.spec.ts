@@ -57,7 +57,7 @@ describe("OrderSyncView", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("本地订单检索");
+    expect(wrapper.get("#order-local-search-input").attributes("placeholder")).toContain("订单号");
     expect(wrapper.text()).not.toContain("缓存统计");
     expect(wrapper.text()).not.toContain("本地检索状态");
     expect(wrapper.text()).not.toContain("ORDER CACHE");
