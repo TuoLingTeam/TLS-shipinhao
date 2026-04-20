@@ -1,11 +1,23 @@
 //! `license_worker` 整体集成测试：把从 `lib.rs` 抽离出来的 `#[cfg(test)]`
 //! 测试单独放到本文件，让 `lib.rs` 的生产代码不被千行测试淹没。
+//!
+//! `use super::*;` 拉入 crate root 的 pub 符号（`runtime_*` / `LeaseTokenSigner`
+//! / DTO / 契约常量等）；下面再显式从外部 crate import `api_contracts` /
+//! `chrono` / `license_service` 的类型，避免依赖"lib.rs 以前顺带 `use` 的
+//! 私有符号通过同一个模块传递"这种脆弱的耦合。
 
 use super::*;
+use api_contracts::{LicenseState, RuntimeGrant, LICENSE_TASK_REVIEW_FIND};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use chrono::Utc;
+use crate::runtime::{device_id_matches_fingerprint, now_iso};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
+use ed25519_dalek::SigningKey;
 use license_service::LeaseVerifier;
 use license_service::{
-    AuditEvent, DeviceRegistration, GeneratedKeyRecord, GeneratedKeyStatus, LicenseRecord,
+    ActivationInput, AuditEvent, DeviceRegistration, GeneratedKeyRecord, GeneratedKeyStatus,
+    LicenseRecord, VerifyInput,
 };
 use std::collections::HashMap;
 use std::sync::Mutex;
