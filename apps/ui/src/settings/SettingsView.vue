@@ -333,7 +333,7 @@ onMounted(() => {
                 </span>
                 <div class="min-w-0">
                   <div class="settings-sidebar-card-title">应用信息</div>
-                  <p class="settings-sidebar-card-copy">版本、联系方式与使用建议。</p>
+                  <p class="settings-sidebar-card-copy">版本与联系方式。</p>
                 </div>
               </div>
             </div>
@@ -346,10 +346,6 @@ onMounted(() => {
               <div class="settings-sidebar-row">
                 <span class="settings-sidebar-row-label">作者微信</span>
                 <span class="settings-sidebar-row-value font-mono">{{ AUTHOR_WECHAT }}</span>
-              </div>
-              <div class="settings-sidebar-row settings-sidebar-row--stacked">
-                <span class="settings-sidebar-row-label">建议节奏</span>
-                <span class="settings-sidebar-row-value">先授权，再 Cookie，最后回仪表盘核对整体状态。</span>
               </div>
             </div>
           </article>
