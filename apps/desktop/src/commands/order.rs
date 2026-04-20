@@ -3,6 +3,7 @@ use crate::adapters::http_order_search::{
 };
 use crate::adapters::sqlite_order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
+use crate::commands::paths::{cache_data_dir, rich_order_cache_path};
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_CACHE_MANAGE;
@@ -16,16 +17,6 @@ use domain_core::{OrderCacheEntry, TimeWindow};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-
-fn cache_data_dir() -> std::path::PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("TLS-shipinhao")
-}
-
-fn rich_order_cache_path() -> std::path::PathBuf {
-    cache_data_dir().join("order_cache.sqlite3")
-}
 
 fn recent_window() -> TimeWindow {
     let (start, end) = recent_day_range_timestamps(30, Some(chrono::Utc::now()));

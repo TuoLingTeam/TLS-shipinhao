@@ -8,6 +8,7 @@ use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized
 use crate::commands::order::{
     emit_order_sync_progress, mask_order_cache_error, recent_order_cache_status,
 };
+use crate::commands::paths::rich_order_cache_path;
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::{LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND};
@@ -22,18 +23,7 @@ use desktop_services::review_match_flow::{
 use desktop_services::ReviewQuery;
 use domain_core::{MatchSource, MatchStrategy as ApiMatchStrategy, OrderMatchResult, TimeWindow};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::sync::Arc;
-
-fn cache_data_dir() -> std::path::PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("TLS-shipinhao")
-}
-
-fn rich_order_cache_path() -> PathBuf {
-    cache_data_dir().join("order_cache.sqlite3")
-}
 
 fn parse_iso_timestamp(value: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(value.trim())
