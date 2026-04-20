@@ -20,6 +20,8 @@ permissions:
 
 env:
   APP_NAME: TLS-shipinhao
+  # 与 https://github.com/tauri-apps/tauri/releases?q=tauri-cli 的 tag（tauri-cli-v*）对齐，避免 cargo install 在 Windows 上长时间编译
+  TAURI_CLI_VERSION: "2.10.1"
 
 jobs:
   extract-version:
@@ -142,8 +144,26 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
+      - name: Install Tauri CLI (prebuilt)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ env.TAURI_CLI_VERSION }}"
+          $tag = "tauri-cli-v$version"
+          $zip = "cargo-tauri-x86_64-pc-windows-msvc.zip"
+          $url = "https://github.com/tauri-apps/tauri/releases/download/$tag/$zip"
+          $outDir = Join-Path $env:GITHUB_WORKSPACE ".tools/cargo-tauri"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $zipPath = Join-Path $outDir $zip
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $outDir -Force
+          $exe = Get-ChildItem -Path $outDir -Filter "cargo-tauri.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "cargo-tauri.exe not found under $outDir" }
+          $binDir = $exe.DirectoryName
+          Add-Content $env:GITHUB_PATH $binDir
+          $env:PATH = "$binDir;$env:PATH"
+          cargo tauri --version
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
@@ -195,8 +215,30 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
+      - name: Install Tauri CLI (prebuilt)
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAURI_CLI_VERSION}"
+          tag="tauri-cli-v${version}"
+          arch="$(uname -m)"
+          case "${arch}" in
+            arm64) zip="cargo-tauri-aarch64-apple-darwin.zip" ;;
+            x86_64) zip="cargo-tauri-x86_64-apple-darwin.zip" ;;
+            *) echo "unsupported arch: ${arch}"; exit 1 ;;
+          esac
+          url="https://github.com/tauri-apps/tauri/releases/download/${tag}/${zip}"
+          out_dir="${GITHUB_WORKSPACE}/.tools/cargo-tauri"
+          mkdir -p "${out_dir}"
+          echo "Downloading ${url}"
+          curl -fsSL "${url}" -o "${out_dir}/${zip}"
+          unzip -o "${out_dir}/${zip}" -d "${out_dir}"
+          bin="$(find "${out_dir}" -name cargo-tauri -type f | head -1)"
+          test -n "${bin}"
+          chmod +x "${bin}"
+          echo "$(dirname "${bin}")" >> "${GITHUB_PATH}"
+          export PATH="$(dirname "${bin}"):${PATH}"
+          cargo tauri --version
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
