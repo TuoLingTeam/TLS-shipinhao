@@ -252,8 +252,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="dashboard-view flex flex-col gap-app">
-    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-4 lg:p-5">
+  <div class="dashboard-view flex min-h-0 min-w-0 flex-1 flex-col gap-app overflow-y-auto pr-0.5">
+    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-3.5 lg:p-4">
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
@@ -298,28 +298,29 @@ onMounted(async () => {
 
     <div
       data-testid="dashboard-metrics"
-      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-app min-[420px]:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 items-stretch"
+      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 lg:gap-4 xl:grid-cols-5 items-stretch"
     >
       <article
         v-for="metric in metrics"
         :key="metric.key"
-        class="surface-panel metric-card metric-card-compact dashboard-metric-card relative overflow-hidden p-3 transition-all"
+        data-testid="dashboard-metric-tile"
+        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[6.25rem] flex-col gap-1.5 overflow-hidden p-3 transition-all sm:min-h-[6.5rem] sm:gap-2 lg:min-h-[7rem] lg:gap-2.5 lg:p-4"
         :class="metricAccentClass[metric.tone]"
       >
         <div class="flex items-start justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-1.5">
+          <div class="flex min-w-0 items-center gap-2">
             <span class="status-dot shrink-0" :class="metric.tone !== 'idle' ? metric.tone : ''"></span>
-            <div class="metric-label truncate">{{ metric.label }}</div>
+            <div class="metric-label dashboard-metric-label truncate">{{ metric.label }}</div>
           </div>
           <span
-            class="shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+            class="dashboard-metric-badge shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 font-semibold leading-none"
             :class="toneBadgeClass[metric.tone]"
           >
             {{ toneBadgeLabel[metric.tone] }}
           </span>
         </div>
-        <div class="metric-value">{{ metric.value }}</div>
-        <div class="metric-hint line-clamp-2">{{ metric.hint }}</div>
+        <div class="metric-value dashboard-metric-value">{{ metric.value }}</div>
+        <div class="metric-hint dashboard-metric-hint line-clamp-2">{{ metric.hint }}</div>
       </article>
     </div>
 
@@ -331,13 +332,13 @@ onMounted(async () => {
 
       <div
         data-testid="dashboard-shortcuts"
-        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-app"
+        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-x-4 gap-y-3 sm:gap-x-5 sm:gap-y-4"
       >
         <RouterLink
           v-for="item in quickLinks"
           :key="item.title"
           :to="item.to"
-          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-3 overflow-hidden"
+          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-2.5 overflow-hidden sm:gap-3"
           :class="shortcutClass[item.tone]"
         >
           <div class="dashboard-shortcut-icon" aria-hidden="true">

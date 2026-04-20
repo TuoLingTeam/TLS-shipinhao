@@ -1915,7 +1915,6 @@ textarea {
 @media (max-width: 1023.98px), (max-height: 719.98px) {
   .settings-view-shell,
   .delivery-view,
-  .dashboard-view,
   .delivery-workspace {
     height: auto !important;
     flex: 0 0 auto !important;
@@ -2177,15 +2176,14 @@ textarea {
 
 /* 仪表盘：快捷入口 2x2 卡片网格 —— 行高略压缩，行间 gap 由 Tailwind gap-y-* 控制 */
 .dashboard-shortcuts-grid {
-  grid-template-rows: repeat(2, minmax(80px, 108px));
+  grid-template-rows: repeat(2, minmax(68px, 88px));
 }
 
 /* 仪表盘：四个快捷入口，按业务域给图标上不同配色 */
 .dashboard-shortcut {
-  /* 卡片高度区间：略低于旧版，配合更大行距仍显透气 */
-  min-height: 76px;
-  max-height: 112px;
-  padding: 0.55rem 0.72rem;
+  min-height: 64px;
+  max-height: 92px;
+  padding: 0.5rem 0.7rem;
   transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }
 
