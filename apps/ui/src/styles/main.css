@@ -842,23 +842,43 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* 设置布局：3 个独立卡片（Cookie / 授权 / 应用）平级排布
+   桌面双列：Cookie 横跨整行，授权与应用并排在下；
+   单列布局下走 @media 重排成纵向堆叠（Cookie → 授权 → 应用）。 */
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(0, 304px) minmax(0, 1fr);
-  /* 行高按内容自然撑开，避免外层 flex:1 撑高后内部卡片再被进一步拉大 */
-  grid-template-rows: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "cookie cookie"
+    "license about";
   gap: 0.9rem;
   align-items: start;
 }
 
-.settings-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  border-left: 4px solid var(--color-brand);
+.settings-section-card--cookie {
+  grid-area: cookie;
+}
+
+.settings-section-card--license {
+  grid-area: license;
+}
+
+.settings-section-card--about {
+  grid-area: about;
+}
+
+/* 授权 / 应用信息卡的左边强调线沿用 cookie 卡的同色品牌色 */
+.settings-section-card.is-active {
+  border-left-color: rgba(5, 150, 105, 0.7);
   box-shadow:
-    0 18px 44px -32px rgba(5, 150, 105, 0.22),
+    0 22px 48px -32px rgba(5, 150, 105, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* 替代旧的 .settings-sidebar-action-row：授权卡内输入卡密 + 双按钮的横排 */
+.settings-action-row {
+  display: flex;
+  gap: 0.45rem;
 }
 
 .settings-sidebar-block {
@@ -1360,17 +1380,10 @@ textarea {
 @media (max-width: 1180px) {
   .settings-layout {
     grid-template-columns: 1fr;
-  }
-
-  .settings-sidebar {
-    position: static;
-    /* 单列布局下，把 sidebar（授权 + 应用信息）放到 workspace（Cookie 配置）之后，
-       让 Cookie 配置卡作为操作主区出现在视口顶部。 */
-    order: 2;
-  }
-
-  .settings-workspace {
-    order: 1;
+    grid-template-areas:
+      "cookie"
+      "license"
+      "about";
   }
 }
 

@@ -41,7 +41,7 @@ describe("SettingsView", () => {
     invokeMock.mockClear();
   });
 
-  it("renders a compact sidebar with row-based license and app information", async () => {
+  it("renders three independent flat section cards without nested sidebar wrappers", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [...routes],
@@ -61,14 +61,13 @@ describe("SettingsView", () => {
 
     const panels = wrapper.get('[data-testid="settings-panels"]');
     expect(panels.classes()).toContain("settings-layout");
-    expect(wrapper.get('[data-testid="settings-sidebar"]').classes()).toContain("settings-sidebar");
-    expect(wrapper.get('[data-testid="settings-sidebar-license"]').classes()).toContain("settings-sidebar-card");
-    expect(wrapper.get('[data-testid="settings-sidebar-about"]').classes()).toContain("settings-sidebar-card");
+    expect(wrapper.get('[data-testid="settings-section-cookie"]').classes()).toContain("settings-section-card");
+    expect(wrapper.get('[data-testid="settings-section-license"]').classes()).toContain("settings-section-card");
+    expect(wrapper.get('[data-testid="settings-section-about"]').classes()).toContain("settings-section-card");
     expect(wrapper.get('[data-testid="settings-license-actions"]').classes()).toContain("settings-action-card");
     expect(wrapper.get('[data-testid="settings-cookie-actions"]').classes()).toContain("settings-action-card");
-    expect(wrapper.get('[data-testid="settings-cookie-side"]').classes()).toContain("settings-side-stack");
     expect(wrapper.get('[data-testid="settings-cookie-path"]').text()).toContain("/tmp/cookie.txt");
-    expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-sidebar-row-list");
+    expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-info-grid");
     expect(wrapper.text()).toContain("授权信息");
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("应用信息");
@@ -78,6 +77,9 @@ describe("SettingsView", () => {
     expect(wrapper.text()).not.toContain("License");
     expect(wrapper.text()).not.toContain("About");
     expect(wrapper.text()).not.toContain("设置导览");
+    // 已不再使用 sidebar 嵌套包裹层，保证 DOM 扁平
+    expect(wrapper.find('[data-testid="settings-sidebar"]').exists()).toBe(false);
+    expect(wrapper.find('.settings-sidebar-stack').exists()).toBe(false);
     // 禁止出现独立的 step 编号样式（如 "01 授权 / 02 Cookie / 03 应用"），
     // 但允许数字嵌在其他字串（例如 AUTHOR_WECHAT = "TLS-801"）。
     expect(wrapper.text()).not.toMatch(/\b0[123]\b/);

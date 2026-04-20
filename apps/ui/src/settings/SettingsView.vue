@@ -237,245 +237,236 @@ onMounted(() => {
       data-testid="settings-panels"
       class="settings-layout"
     >
-      <aside
-        data-testid="settings-sidebar"
-        class="surface-panel settings-sidebar p-4 lg:p-5"
+      <article
+        id="settings-section-cookie"
+        data-testid="settings-section-cookie"
+        class="surface-panel settings-section-card settings-section-card--cookie p-4 lg:p-5"
       >
-        <div class="settings-sidebar-stack">
-          <article
-            id="settings-section-license"
-            data-testid="settings-sidebar-license"
-            class="settings-sidebar-card"
-            :class="{ 'is-active': activeSection === 'license' }"
-          >
-            <div class="settings-sidebar-card-head">
-              <div class="flex min-w-0 items-start gap-2.5">
-                <span class="settings-card-badge settings-card-badge--license" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-[15px] w-[15px]">
-                    <path d="M12 3 19 6v5c0 4.4-2.83 8.45-7 9.75C7.83 19.45 5 15.4 5 11V6z" />
-                    <path d="m9.4 11.8 1.7 1.7 3.5-3.8" />
-                  </svg>
-                </span>
-                <div class="min-w-0">
-                  <div class="settings-sidebar-card-title">授权信息</div>
-                  <p class="settings-sidebar-card-copy">激活卡密、刷新状态、管理到期时间。</p>
-                </div>
-              </div>
-              <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
+        <header class="settings-section-head">
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="settings-card-badge settings-card-badge--cookie" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M21 12a9 9 0 1 1-9-9c.4 0 .7.4.55.78a3 3 0 0 0 3.88 3.88c.36-.14.74.16.73.53a3 3 0 0 0 3.58 3.06c.35-.09.74.18.73.55.01.07.01.14.01.2Z" />
+                <path d="M8.5 9.5h.01" />
+                <path d="M11.5 13.5h.01" />
+                <path d="M15.5 15.5h.01" />
+                <path d="M8 15h.01" />
+              </svg>
+            </span>
+            <div class="min-w-0">
+              <h3 class="settings-section-title">Cookie 配置</h3>
+              <p class="settings-section-copy">优先「登录 → 自动提取」；只有自动链路拿不到完整内容时，才回到左侧手动覆盖。</p>
+            </div>
+          </div>
+          <div class="subsystem-chipbar">
+            <span class="subsystem-chip" :class="cookieConfigured ? '' : 'subsystem-chip--warn'">
+              {{ cookieConfigured ? "已配置" : "未配置" }}
+            </span>
+            <span class="subsystem-chip" :class="hasBizMagic ? '' : 'subsystem-chip--warn'">
+              {{ hasBizMagic ? "已识别 biz_magic" : "待识别 biz_magic" }}
+            </span>
+          </div>
+        </header>
+
+        <div class="settings-cookie-grid">
+          <div class="settings-field-card settings-cookie-main">
+            <label class="field-label">手动覆盖 Cookie</label>
+            <textarea
+              data-testid="settings-cookie-textarea"
+              v-model.trim="cookieHeader"
+              class="field-textarea settings-cookie-textarea font-mono text-sm"
+              placeholder="粘贴完整的 Cookie 字符串..."
+            />
+            <div class="settings-field-footer">
+              <span v-if="saved" class="settings-inline-note is-success">Cookie 已保存，可继续回仪表盘核对状态。</span>
+              <span v-else class="settings-inline-note">自动提取成功后会回填到这里，方便继续检查或微调。</span>
             </div>
 
-            <div class="settings-info-grid">
-              <div class="settings-info-item">
-                <span class="settings-info-label">状态</span>
-                <span class="settings-info-value">{{ currentStateText }}</span>
-              </div>
-              <div class="settings-info-item">
-                <span class="settings-info-label">到期</span>
-                <span class="settings-info-value">{{ licenseExpiresText }}</span>
-              </div>
-              <div class="settings-info-item">
-                <span class="settings-info-label">校验</span>
-                <span class="settings-info-value">{{ licenseVerifiedText }}</span>
-              </div>
-              <div class="settings-info-item">
-                <span class="settings-info-label">卡密</span>
-                <span class="settings-info-value settings-info-value--mono">{{ appStore.licenseKey || "未保存" }}</span>
-              </div>
-            </div>
-
-            <div
-              data-testid="settings-license-actions"
-              class="settings-sidebar-actions settings-action-card"
-            >
-              <input
-                v-model.trim="licenseKey"
-                class="field-input settings-license-field min-h-10 w-full min-w-0"
-                placeholder="输入卡密"
-                aria-label="卡密"
-              />
-              <div class="settings-sidebar-action-row">
-                <button
-                  :disabled="activateLoading"
-                  class="action-btn action-btn-primary min-h-10 min-w-0 flex-1 cursor-pointer"
-                  @click="handleActivate"
-                >
-                  {{ activateLoading ? "激活中..." : "立即激活" }}
-                </button>
-                <button
-                  :disabled="verifyLoading"
-                  class="action-btn action-btn-secondary min-h-10 min-w-0 flex-1 cursor-pointer"
-                  @click="handleRefresh"
-                >
-                  {{ verifyLoading ? "刷新中..." : "刷新状态" }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="licenseMessage" class="soft-alert" :class="licenseMessageType === 'success' ? 'success' : 'error'">
-              {{ licenseMessage }}
-            </div>
-          </article>
-
-          <article
-            id="settings-section-about"
-            data-testid="settings-sidebar-about"
-            class="settings-sidebar-card"
-            :class="{ 'is-active': activeSection === 'about' }"
-          >
-            <div class="settings-sidebar-card-head">
-              <div class="flex min-w-0 items-start gap-2.5">
-                <span class="settings-card-badge settings-card-badge--about" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-[15px] w-[15px]">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 8.5v4" />
-                    <path d="M12 15.5h.01" />
-                  </svg>
-                </span>
-                <div class="min-w-0">
-                  <div class="settings-sidebar-card-title">应用信息</div>
-                  <p class="settings-sidebar-card-copy">版本与联系方式。</p>
-                </div>
-              </div>
-            </div>
-
-            <div data-testid="settings-about-meta" class="settings-sidebar-row-list">
-              <div class="settings-sidebar-row">
-                <span class="settings-sidebar-row-label">版本</span>
-                <span class="settings-sidebar-row-value font-mono">v{{ APP_VERSION || appStore.appVersion }}</span>
-              </div>
-              <div class="settings-sidebar-row">
-                <span class="settings-sidebar-row-label">作者微信</span>
-                <span class="settings-sidebar-row-value font-mono">{{ AUTHOR_WECHAT }}</span>
-              </div>
-            </div>
-          </article>
-        </div>
-      </aside>
-
-      <div class="settings-workspace">
-        <article
-          id="settings-section-cookie"
-          data-testid="settings-section-cookie"
-          class="surface-panel settings-section-card p-4 lg:p-5"
-        >
-          <header class="settings-section-head">
-            <div class="flex min-w-0 items-start gap-3">
-              <span class="settings-card-badge settings-card-badge--cookie" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                  <path d="M21 12a9 9 0 1 1-9-9c.4 0 .7.4.55.78a3 3 0 0 0 3.88 3.88c.36-.14.74.16.73.53a3 3 0 0 0 3.58 3.06c.35-.09.74.18.73.55.01.07.01.14.01.2Z" />
-                  <path d="M8.5 9.5h.01" />
-                  <path d="M11.5 13.5h.01" />
-                  <path d="M15.5 15.5h.01" />
-                  <path d="M8 15h.01" />
+            <div data-testid="settings-cookie-path" class="settings-cookie-path-box">
+              <div class="settings-cookie-path-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                  <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
                 </svg>
-              </span>
-              <div class="min-w-0">
-                <h3 class="settings-section-title">Cookie 配置</h3>
-                <p class="settings-section-copy">优先「登录 → 自动提取」；只有自动链路拿不到完整内容时，才回到左侧手动覆盖。</p>
+                当前保存位置
               </div>
-            </div>
-            <div class="subsystem-chipbar">
-              <span class="subsystem-chip" :class="cookieConfigured ? '' : 'subsystem-chip--warn'">
-                {{ cookieConfigured ? "已配置" : "未配置" }}
-              </span>
-              <span class="subsystem-chip" :class="hasBizMagic ? '' : 'subsystem-chip--warn'">
-                {{ hasBizMagic ? "已识别 biz_magic" : "待识别 biz_magic" }}
-              </span>
-            </div>
-          </header>
-
-          <div class="settings-cookie-grid">
-            <div class="settings-field-card settings-cookie-main">
-              <label class="field-label">手动覆盖 Cookie</label>
-              <textarea
-                data-testid="settings-cookie-textarea"
-                v-model.trim="cookieHeader"
-                class="field-textarea settings-cookie-textarea font-mono text-sm"
-                placeholder="粘贴完整的 Cookie 字符串..."
-              />
-              <div class="settings-field-footer">
-                <span v-if="saved" class="settings-inline-note is-success">Cookie 已保存，可继续回仪表盘核对状态。</span>
-                <span v-else class="settings-inline-note">自动提取成功后会回填到这里，方便继续检查或微调。</span>
-              </div>
-
-              <div data-testid="settings-cookie-path" class="settings-cookie-path-box">
-                <div class="settings-cookie-path-label">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                    <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
-                  </svg>
-                  当前保存位置
-                </div>
-                <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
-              </div>
-            </div>
-
-            <div data-testid="settings-cookie-side" class="settings-side-stack">
-              <div class="settings-callout settings-callout--compact">
-                <div class="settings-callout-title">推荐顺序</div>
-                <p class="settings-callout-copy">
-                  登录 → 自动提取 →（失败时）手动覆盖。左侧编辑区聚焦内容，右侧按钮形成操作工作台。
-                </p>
-              </div>
-
-              <div
-                data-testid="settings-cookie-actions"
-                class="settings-action-card"
-              >
-                <div class="settings-action-title">快捷操作</div>
-                <div class="settings-action-buttons-grid">
-                  <button type="button" class="action-btn action-btn-primary min-h-10" @click="handleSave">
-                    保存 Cookie
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn action-btn-primary min-h-10"
-                    :disabled="extractLoading"
-                    @click="handleExtractCookie"
-                  >
-                    {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn action-btn-secondary min-h-10"
-                    :disabled="loginLoading"
-                    @click="handleOpenLogin"
-                  >
-                    {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn action-btn-secondary min-h-10"
-                    :disabled="pickDirLoading"
-                    @click="handlePickSaveDir"
-                  >
-                    {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="settings-cookie-health" :class="cookieHealthCardClass">
-                <div class="settings-cookie-health-head">
-                  <span class="status-dot" :class="cookieHealthTone !== 'idle' ? cookieHealthTone : ''"></span>
-                  <span class="settings-cookie-health-label">{{ cookieHealthLabel }}</span>
-                  <span class="settings-cookie-health-meta">{{ cookieHealthCheckedAt }}</span>
-                </div>
-                <p class="settings-cookie-health-hint">{{ cookieHealthHint }}</p>
-                <div class="settings-cookie-health-tags">
-                  <span class="settings-cookie-health-tag" :class="cookieConfigured ? 'is-positive' : 'is-muted'">
-                    {{ cookieConfigured ? "已保存 Cookie" : "未保存 Cookie" }}
-                  </span>
-                  <span class="settings-cookie-health-tag" :class="hasBizMagic ? 'is-positive' : 'is-muted'">
-                    {{ hasBizMagic ? "已识别 biz_magic" : "待识别 biz_magic" }}
-                  </span>
-                </div>
-              </div>
+              <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
             </div>
           </div>
 
-          <p v-if="loadError" class="text-xs text-amber-600">{{ loadError }}</p>
-          <p v-if="saveError" class="text-xs text-red-600">{{ saveError }}</p>
-        </article>
-      </div>
+          <div data-testid="settings-cookie-side" class="settings-side-stack">
+            <div class="settings-callout settings-callout--compact">
+              <div class="settings-callout-title">推荐顺序</div>
+              <p class="settings-callout-copy">
+                登录 → 自动提取 →（失败时）手动覆盖。左侧编辑区聚焦内容，右侧按钮形成操作工作台。
+              </p>
+            </div>
+
+            <div
+              data-testid="settings-cookie-actions"
+              class="settings-action-card"
+            >
+              <div class="settings-action-title">快捷操作</div>
+              <div class="settings-action-buttons-grid">
+                <button type="button" class="action-btn action-btn-primary min-h-10" @click="handleSave">
+                  保存 Cookie
+                </button>
+                <button
+                  type="button"
+                  class="action-btn action-btn-primary min-h-10"
+                  :disabled="extractLoading"
+                  @click="handleExtractCookie"
+                >
+                  {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
+                </button>
+                <button
+                  type="button"
+                  class="action-btn action-btn-secondary min-h-10"
+                  :disabled="loginLoading"
+                  @click="handleOpenLogin"
+                >
+                  {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
+                </button>
+                <button
+                  type="button"
+                  class="action-btn action-btn-secondary min-h-10"
+                  :disabled="pickDirLoading"
+                  @click="handlePickSaveDir"
+                >
+                  {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-cookie-health" :class="cookieHealthCardClass">
+              <div class="settings-cookie-health-head">
+                <span class="status-dot" :class="cookieHealthTone !== 'idle' ? cookieHealthTone : ''"></span>
+                <span class="settings-cookie-health-label">{{ cookieHealthLabel }}</span>
+                <span class="settings-cookie-health-meta">{{ cookieHealthCheckedAt }}</span>
+              </div>
+              <p class="settings-cookie-health-hint">{{ cookieHealthHint }}</p>
+              <div class="settings-cookie-health-tags">
+                <span class="settings-cookie-health-tag" :class="cookieConfigured ? 'is-positive' : 'is-muted'">
+                  {{ cookieConfigured ? "已保存 Cookie" : "未保存 Cookie" }}
+                </span>
+                <span class="settings-cookie-health-tag" :class="hasBizMagic ? 'is-positive' : 'is-muted'">
+                  {{ hasBizMagic ? "已识别 biz_magic" : "待识别 biz_magic" }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p v-if="loadError" class="text-xs text-amber-600">{{ loadError }}</p>
+        <p v-if="saveError" class="text-xs text-red-600">{{ saveError }}</p>
+      </article>
+
+      <article
+        id="settings-section-license"
+        data-testid="settings-section-license"
+        class="surface-panel settings-section-card settings-section-card--license p-4 lg:p-5"
+        :class="{ 'is-active': activeSection === 'license' }"
+      >
+        <header class="settings-section-head">
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="settings-card-badge settings-card-badge--license" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M12 3 19 6v5c0 4.4-2.83 8.45-7 9.75C7.83 19.45 5 15.4 5 11V6z" />
+                <path d="m9.4 11.8 1.7 1.7 3.5-3.8" />
+              </svg>
+            </span>
+            <div class="min-w-0">
+              <h3 class="settings-section-title">授权信息</h3>
+              <p class="settings-section-copy">激活卡密、刷新状态、管理到期时间。</p>
+            </div>
+          </div>
+          <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
+        </header>
+
+        <div class="settings-info-grid">
+          <div class="settings-info-item">
+            <span class="settings-info-label">状态</span>
+            <span class="settings-info-value">{{ currentStateText }}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-label">到期</span>
+            <span class="settings-info-value">{{ licenseExpiresText }}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-label">校验</span>
+            <span class="settings-info-value">{{ licenseVerifiedText }}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-label">卡密</span>
+            <span class="settings-info-value settings-info-value--mono">{{ appStore.licenseKey || "未保存" }}</span>
+          </div>
+        </div>
+
+        <div
+          data-testid="settings-license-actions"
+          class="settings-action-card"
+        >
+          <input
+            v-model.trim="licenseKey"
+            class="field-input settings-license-field min-h-10 w-full min-w-0"
+            placeholder="输入卡密"
+            aria-label="卡密"
+          />
+          <div class="settings-action-row">
+            <button
+              :disabled="activateLoading"
+              class="action-btn action-btn-primary min-h-10 min-w-0 flex-1 cursor-pointer"
+              @click="handleActivate"
+            >
+              {{ activateLoading ? "激活中..." : "立即激活" }}
+            </button>
+            <button
+              :disabled="verifyLoading"
+              class="action-btn action-btn-secondary min-h-10 min-w-0 flex-1 cursor-pointer"
+              @click="handleRefresh"
+            >
+              {{ verifyLoading ? "刷新中..." : "刷新状态" }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="licenseMessage" class="soft-alert" :class="licenseMessageType === 'success' ? 'success' : 'error'">
+          {{ licenseMessage }}
+        </div>
+      </article>
+
+      <article
+        id="settings-section-about"
+        data-testid="settings-section-about"
+        class="surface-panel settings-section-card settings-section-card--about p-4 lg:p-5"
+        :class="{ 'is-active': activeSection === 'about' }"
+      >
+        <header class="settings-section-head">
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="settings-card-badge settings-card-badge--about" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8.5v4" />
+                <path d="M12 15.5h.01" />
+              </svg>
+            </span>
+            <div class="min-w-0">
+              <h3 class="settings-section-title">应用信息</h3>
+              <p class="settings-section-copy">版本与联系方式。</p>
+            </div>
+          </div>
+        </header>
+
+        <div data-testid="settings-about-meta" class="settings-info-grid">
+          <div class="settings-info-item">
+            <span class="settings-info-label">版本</span>
+            <span class="settings-info-value settings-info-value--mono">v{{ APP_VERSION || appStore.appVersion }}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-label">作者微信</span>
+            <span class="settings-info-value settings-info-value--mono">{{ AUTHOR_WECHAT }}</span>
+          </div>
+        </div>
+      </article>
     </section>
   </div>
 </template>
