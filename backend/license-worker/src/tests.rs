@@ -290,7 +290,7 @@ async fn async_runtime_service_activate_verify_refresh_and_authorize_share_repo_
         &signer,
         ActivationInput {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             device_fingerprint: "fp-1".into(),
             client_version: "5.0.0".into(),
         },
@@ -306,7 +306,7 @@ async fn async_runtime_service_activate_verify_refresh_and_authorize_share_repo_
         &signer,
         VerifyInput {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             client_version: "5.1.0".into(),
         },
         now,
@@ -321,7 +321,7 @@ async fn async_runtime_service_activate_verify_refresh_and_authorize_share_repo_
         &signer,
         LeaseRefreshRequest {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             current_issued_at: now.timestamp(),
         },
         now,
@@ -335,7 +335,7 @@ async fn async_runtime_service_activate_verify_refresh_and_authorize_share_repo_
         &repo,
         TaskAuthorizeRequest {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             task_type: LICENSE_TASK_REVIEW_FIND.into(),
             client_version: "5.2.0".into(),
         },
@@ -359,7 +359,7 @@ async fn async_runtime_verify_reports_expired_from_shared_repo_state() {
         &signer,
         ActivationInput {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             device_fingerprint: "fp-1".into(),
             client_version: String::new(),
         },
@@ -376,7 +376,7 @@ async fn async_runtime_verify_reports_expired_from_shared_repo_state() {
         &signer,
         VerifyInput {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             client_version: String::new(),
         },
         expired_at,
@@ -400,7 +400,7 @@ async fn async_runtime_json_router_uses_shared_repo_flow() {
     let activated = handle_async_runtime_json(
         &repo,
         "/api/activate",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
         Some(&signer),
         now,
     )
@@ -412,17 +412,17 @@ async fn async_runtime_json_router_uses_shared_repo_flow() {
     let verified_lease = verifier
         .verify(
             activated_payload.license_lease.as_deref().unwrap(),
-            Some("device-1"),
+            Some("858c06cf9c505c9f"),
             now.timestamp(),
             false,
         )
         .unwrap();
-    assert_eq!(verified_lease.device_id, "device-1");
+    assert_eq!(verified_lease.device_id, "858c06cf9c505c9f");
 
     let grant = handle_async_runtime_json(
         &repo,
         "/api/task/authorize",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","task_type":"review_find","client_version":"5.2.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","task_type":"review_find","client_version":"5.2.0"}"#,
         Some(&signer),
         now,
     )
@@ -443,7 +443,7 @@ async fn async_runtime_json_router_covers_verify_refresh_and_not_found() {
     let _ = handle_async_runtime_json(
         &repo,
         "/api/activate",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
         Some(&signer),
         now,
     )
@@ -453,7 +453,7 @@ async fn async_runtime_json_router_covers_verify_refresh_and_not_found() {
     let verified = handle_async_runtime_json(
         &repo,
         "/api/verify",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","client_version":"5.1.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","client_version":"5.1.0"}"#,
         Some(&signer),
         now,
     )
@@ -466,7 +466,7 @@ async fn async_runtime_json_router_covers_verify_refresh_and_not_found() {
     let refreshed = handle_async_runtime_json(
         &repo,
         "/api/lease/refresh",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","current_issued_at":1713312000}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","current_issued_at":1713312000}"#,
         Some(&signer),
         now,
     )
@@ -487,7 +487,7 @@ async fn async_runtime_json_router_covers_verify_refresh_and_not_found() {
     let revoke = handle_async_runtime_json(
         &repo,
         "/api/lease/revoke",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","reason":"admin"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","reason":"admin"}"#,
         None,
         now,
     )
@@ -510,7 +510,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     let _ = handle_async_runtime_json(
         &repo,
         "/api/activate",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
         Some(&signer),
         now,
     )
@@ -520,7 +520,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     let revoked = handle_async_runtime_json(
         &repo,
         "/api/lease/revoke",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","reason":"admin"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","reason":"admin"}"#,
         None,
         now,
     )
@@ -534,7 +534,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     let verified = handle_async_runtime_json(
         &repo,
         "/api/verify",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","client_version":"5.1.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","client_version":"5.1.0"}"#,
         Some(&signer),
         now,
     )
@@ -547,7 +547,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     let refreshed = handle_async_runtime_json(
         &repo,
         "/api/lease/refresh",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","current_issued_at":1713312000}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","current_issued_at":1713312000}"#,
         Some(&signer),
         now,
     )
@@ -560,7 +560,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     let grant = handle_async_runtime_json(
         &repo,
         "/api/task/authorize",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","task_type":"review_find","client_version":"5.2.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","task_type":"review_find","client_version":"5.2.0"}"#,
         None,
         now,
     )
@@ -585,7 +585,7 @@ async fn admin_revoke_json_reuses_runtime_revoke_flow_without_device_id() {
     let _ = handle_async_runtime_json(
         &repo,
         "/api/activate",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
         Some(&signer),
         now,
     )
@@ -598,12 +598,12 @@ async fn admin_revoke_json_reuses_runtime_revoke_flow_without_device_id() {
     let revoked_payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
     assert!(revoked_payload.success);
     assert_eq!(revoked_payload.license_state, LicenseState::Revoked);
-    assert_eq!(revoked_payload.device_id.as_deref(), Some("device-1"));
+    assert_eq!(revoked_payload.device_id.as_deref(), Some("858c06cf9c505c9f"));
 
     let verified = handle_async_runtime_json(
         &repo,
         "/api/verify",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","client_version":"5.1.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","client_version":"5.1.0"}"#,
         Some(&signer),
         now,
     )
@@ -655,7 +655,7 @@ async fn admin_revoke_revokes_all_registrations_under_same_license_key() {
     let _ = handle_async_runtime_json(
         &repo,
         "/api/activate",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
         Some(&signer),
         now,
     )
@@ -664,7 +664,7 @@ async fn admin_revoke_revokes_all_registrations_under_same_license_key() {
 
     repo.save_device_registration(&DeviceRegistration {
         license_key: "TLS-TEST".into(),
-        device_id: "device-legacy".into(),
+        device_id: "f333ed59bc52e256".into(),
         device_fingerprint_hash: "legacy-hash".into(),
         registered_at: "2026-04-01T00:00:00Z".into(),
         last_seen_at: "2026-04-16T00:00:00Z".into(),
@@ -680,13 +680,13 @@ async fn admin_revoke_revokes_all_registrations_under_same_license_key() {
     let registrations = repo.registrations.lock().unwrap();
     assert_eq!(
         registrations
-            .get(&("TLS-TEST".into(), "device-1".into()))
+            .get(&("TLS-TEST".into(), "858c06cf9c505c9f".into()))
             .map(|value| value.registration_status.as_str()),
         Some("revoked")
     );
     assert_eq!(
         registrations
-            .get(&("TLS-TEST".into(), "device-legacy".into()))
+            .get(&("TLS-TEST".into(), "f333ed59bc52e256".into()))
             .map(|value| value.registration_status.as_str()),
         Some("revoked")
     );
@@ -702,7 +702,7 @@ async fn runtime_revoke_not_found_maps_to_404_contract() {
     let revoked = handle_async_runtime_json(
         &repo,
         "/api/lease/revoke",
-        r#"{"license_key":"TLS-MISSING","device_id":"device-1","reason":"admin"}"#,
+        r#"{"license_key":"TLS-MISSING","device_id":"858c06cf9c505c9f","reason":"admin"}"#,
         None,
         now,
     )
@@ -726,7 +726,7 @@ async fn runtime_revoke_persists_repo_side_effects_and_audit_event() {
     let _ = handle_async_runtime_json(
         &repo,
         "/api/activate",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","device_fingerprint":"fp-1","client_version":"5.0.0"}"#,
         Some(&signer),
         now,
     )
@@ -741,7 +741,7 @@ async fn runtime_revoke_persists_repo_side_effects_and_audit_event() {
     let revoked = handle_async_runtime_json(
         &repo,
         "/api/lease/revoke",
-        r#"{"license_key":"TLS-TEST","device_id":"device-1","reason":"admin"}"#,
+        r#"{"license_key":"TLS-TEST","device_id":"858c06cf9c505c9f","reason":"admin"}"#,
         None,
         now,
     )
@@ -767,7 +767,7 @@ async fn runtime_revoke_persists_repo_side_effects_and_audit_event() {
 
     let registrations = repo.registrations.lock().unwrap();
     let registration = registrations
-        .get(&("TLS-TEST".into(), "device-1".into()))
+        .get(&("TLS-TEST".into(), "858c06cf9c505c9f".into()))
         .unwrap();
     assert_eq!(registration.registration_status, "revoked");
     assert_eq!(registration.last_seen_at, revoked_at);
@@ -784,7 +784,7 @@ async fn runtime_revoke_persists_repo_side_effects_and_audit_event() {
     let audit = audits.last().unwrap();
     assert_eq!(audit.action, "lease_revoke");
     assert_eq!(audit.license_key, "TLS-TEST");
-    assert_eq!(audit.device_id, "device-1");
+    assert_eq!(audit.device_id, "858c06cf9c505c9f");
     assert_eq!(audit.reason, "admin");
 }
 
@@ -798,7 +798,7 @@ async fn runtime_revoke_with_empty_key_uses_stable_error_contract() {
     let revoked = handle_async_runtime_json(
         &repo,
         "/api/lease/revoke",
-        r#"{"license_key":"   ","device_id":"device-1","reason":"admin"}"#,
+        r#"{"license_key":"   ","device_id":"858c06cf9c505c9f","reason":"admin"}"#,
         None,
         now,
     )
@@ -839,7 +839,7 @@ async fn activate_default_license() -> (Repo, LeaseTokenSigner, chrono::DateTime
         &signer,
         ActivationInput {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             device_fingerprint: "fp-1".into(),
             client_version: "5.0.0".into(),
         },
@@ -858,7 +858,7 @@ async fn task_authorize_rejects_unknown_task_type_with_degraded_reason() {
         &repo,
         TaskAuthorizeRequest {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             task_type: "malicious_unknown_task".into(),
             client_version: "5.2.0".into(),
         },
@@ -909,7 +909,7 @@ async fn task_authorize_rejects_after_license_is_revoked() {
         &repo,
         TaskAuthorizeRequest {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             task_type: LICENSE_TASK_REVIEW_FIND.into(),
             client_version: "5.2.0".into(),
         },
@@ -924,7 +924,7 @@ async fn task_authorize_rejects_after_license_is_revoked() {
         &repo,
         LeaseRevokeRequest {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             reason: "admin_revoke_test".into(),
         },
         now,
@@ -937,7 +937,7 @@ async fn task_authorize_rejects_after_license_is_revoked() {
         &repo,
         TaskAuthorizeRequest {
             license_key: "TLS-TEST".into(),
-            device_id: "device-1".into(),
+            device_id: "858c06cf9c505c9f".into(),
             task_type: LICENSE_TASK_REVIEW_FIND.into(),
             client_version: "5.2.0".into(),
         },
@@ -951,4 +951,113 @@ async fn task_authorize_rejects_after_license_is_revoked() {
     );
     assert!(after_revoke.grant_id.is_empty());
     assert!(after_revoke.degraded_reason.is_some());
+}
+
+// ---- 激活时 device_id / device_fingerprint 自洽校验（审计报告 H2） -----
+
+#[test]
+fn device_id_matches_fingerprint_accepts_canonical_pair() {
+    // "fp-1" 的 SHA-256 前 8 字节是 858c06cf9c505c9f
+    assert!(device_id_matches_fingerprint(
+        "858c06cf9c505c9f",
+        "fp-1"
+    ));
+    // 大小写 / 前后空白均容忍
+    assert!(device_id_matches_fingerprint(
+        "  858C06CF9C505C9F  ",
+        "fp-1"
+    ));
+}
+
+#[test]
+fn device_id_matches_fingerprint_rejects_tampered_pair() {
+    // device_id 与 fingerprint 不匹配
+    assert!(!device_id_matches_fingerprint("0000000000000000", "fp-1"));
+    // fingerprint 非空时 device_id 空也应拒
+    assert!(!device_id_matches_fingerprint("", "fp-1"));
+    // device_id 长度不足 16
+    assert!(!device_id_matches_fingerprint("858c06cf", "fp-1"));
+}
+
+#[test]
+fn device_id_matches_fingerprint_bypasses_empty_fingerprint() {
+    // 空指纹的兜底兼容：client 采集失败场景不被硬拒
+    assert!(device_id_matches_fingerprint("whatever", ""));
+    assert!(device_id_matches_fingerprint("", ""));
+}
+
+#[tokio::test]
+async fn runtime_activate_rejects_mismatched_device_id_fingerprint() {
+    let repo = Repo::seeded();
+    let signer = test_signer();
+    let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+
+    // 攻击者声称 device_id = 858c06cf9c505c9f（本应对应 fp="fp-1"），
+    // 但实际发送 device_fingerprint = "tampered-fp"（其 SHA[..16] 完全不同）
+    let response = runtime_activate(
+        &repo,
+        &signer,
+        ActivationInput {
+            license_key: "TLS-TEST".into(),
+            device_id: "858c06cf9c505c9f".into(),
+            device_fingerprint: "tampered-fp".into(),
+            client_version: "5.2.0".into(),
+        },
+        now,
+    )
+    .await
+    .unwrap();
+
+    assert!(!response.success, "不自洽的设备凭证必须拒绝");
+    assert_eq!(response.license_state, LicenseState::DeviceMismatch);
+    assert!(response.license_lease.is_none());
+    assert!(
+        response.message.contains("不自洽"),
+        "拒绝原因应明确指示 device_id/device_fingerprint 不匹配：{}",
+        response.message
+    );
+
+    // 确认 D1 侧未创建任何污染数据
+    assert!(
+        repo.licenses
+            .lock()
+            .unwrap()
+            .get("TLS-TEST")
+            .is_none(),
+        "未通过自洽校验的激活不应写入 activations"
+    );
+    assert!(
+        repo.audits.lock().unwrap().is_empty(),
+        "未通过自洽校验的激活不应记录审计事件"
+    );
+}
+
+#[tokio::test]
+async fn runtime_activate_still_accepts_canonical_pair_after_h2() {
+    // H2 校验不能误杀正常 client 的激活流程（正向回归）
+    let repo = Repo::seeded();
+    let signer = test_signer();
+    let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+
+    let response = runtime_activate(
+        &repo,
+        &signer,
+        ActivationInput {
+            license_key: "TLS-TEST".into(),
+            device_id: "858c06cf9c505c9f".into(),
+            device_fingerprint: "fp-1".into(),
+            client_version: "5.2.0".into(),
+        },
+        now,
+    )
+    .await
+    .unwrap();
+
+    assert!(response.success);
+    assert!(response.license_lease.is_some());
+    assert_eq!(response.license_state, LicenseState::Active);
 }

@@ -171,6 +171,33 @@ fn sha256_hex(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 
+/// 校验 client 发来的 `device_id` 是否与 `device_fingerprint` 自洽：device_id
+/// 必须等于 `SHA256(device_fingerprint)` 前 8 字节（16 个小写 hex 字符）。
+///
+/// 前后端共享同一个派生规则：
+/// - Rust 客户端：`security_core::derive_device_id` = `sha256(raw).iter().take(8).hex()`
+/// - Python 旧客户端：`hashlib.sha256(raw).hexdigest()[:16]`
+///
+/// Worker 激活时加这层校验可以闭合"同 device_id 不同 device_fingerprint 被
+/// 静默覆盖"的协议窗口——`activations.device_id` 仅 16 hex（64 位熵），若不
+/// 强制 device_fingerprint 与之自洽，攻击者可用相同 device_id 提交任意
+/// fingerprint 覆盖 D1 记录，绕过真实的"设备绑定"语义。
+///
+/// 空串豁免：`device_fingerprint` 为空时不做校验，兼容极端兜底场景；正常
+/// client 走 fallback 也会返回 `hostname-arch-os` 这种非空值，因此豁免只
+/// 是防御性留门。比对忽略大小写以兼容历史 hex 字符串可能出现的 `to_upper`
+/// / `to_lower` 漂移。
+fn device_id_matches_fingerprint(device_id: &str, device_fingerprint: &str) -> bool {
+    if device_fingerprint.is_empty() {
+        return true;
+    }
+    let expected_full = sha256_hex(device_fingerprint);
+    expected_full
+        .get(..16)
+        .map(|prefix| prefix.eq_ignore_ascii_case(device_id.trim()))
+        .unwrap_or(false)
+}
+
 fn issue_license_lease_for_record(record: &LicenseRecord, now: DateTime<Utc>) -> LicenseLease {
     let lease = license_service::issue_license_lease(
         &record.license_key,
@@ -376,6 +403,15 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
     now: DateTime<Utc>,
 ) -> anyhow::Result<SignedLicenseApiResponse> {
     let normalized_key = normalize_key(&input.license_key);
+    // 闭合协议窗口：device_id 与 device_fingerprint 必须自洽，防止攻击者
+    // 用固定 device_id 提交不同 fingerprint 静默覆盖 D1 上已绑定的硬件指纹。
+    if !device_id_matches_fingerprint(&input.device_id, &input.device_fingerprint) {
+        return Ok(signed_failure_response_for_record(
+            "设备凭证不自洽：device_id 与 device_fingerprint 不匹配，请重新激活",
+            LicenseState::DeviceMismatch,
+            None,
+        ));
+    }
     let Some(mut key_record) = repo.load_generated_key(&normalized_key).await? else {
         return Ok(signed_failure_response_for_record(
             "该卡密不存在或已被吊销",
