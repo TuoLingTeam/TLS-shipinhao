@@ -252,8 +252,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="dashboard-view flex h-full min-h-0 flex-col gap-app">
-    <section class="hero-panel subsystem-hero dashboard-hero relative overflow-hidden p-4 lg:p-5">
+  <div class="dashboard-view flex flex-col gap-app">
+    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-4 lg:p-5">
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
@@ -270,7 +270,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-if="alerts.length > 0" class="dashboard-alerts flex flex-col gap-2">
+    <section v-if="alerts.length > 0" class="dashboard-alerts flex shrink-0 flex-col gap-2">
       <RouterLink
         v-for="alert in alerts"
         :key="alert.key"
@@ -298,7 +298,7 @@ onMounted(async () => {
 
     <div
       data-testid="dashboard-metrics"
-      class="dashboard-metrics grid grid-cols-1 gap-app min-[420px]:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 items-stretch"
+      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-app min-[420px]:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 items-stretch"
     >
       <article
         v-for="metric in metrics"
@@ -323,7 +323,7 @@ onMounted(async () => {
       </article>
     </div>
 
-    <section class="surface-panel dashboard-shortcuts-panel flex flex-1 min-h-0 flex-col p-3 lg:p-4">
+    <section class="surface-panel dashboard-shortcuts-panel flex shrink-0 flex-col p-3 lg:p-4">
       <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
         <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
         <span class="text-[11px] text-slate-400">一键直达核心业务</span>
@@ -331,7 +331,7 @@ onMounted(async () => {
 
       <div
         data-testid="dashboard-shortcuts"
-        class="dashboard-shortcuts-grid subsystem-summary-strip grid flex-1 min-h-0 grid-cols-2 gap-app"
+        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-app"
       >
         <RouterLink
           v-for="item in quickLinks"

@@ -2193,19 +2193,14 @@ textarea {
   border-top-color: rgba(148, 163, 184, 0.45);
 }
 
-/* 仪表盘：快捷入口面板按内容自然高度（避免撑满后卡片之间出现大片空白） */
-.dashboard-shortcuts-panel {
-  flex: 0 0 auto;
-}
-
+/* 仪表盘：快捷入口 2x2 卡片网格 —— 行高在 96~124px 区间内自适应，保证可读且不稀疏 */
 .dashboard-shortcuts-grid {
-  /* 两行高度按内容自适应，区间 96~124px，保证可读且不稀疏 */
   grid-template-rows: repeat(2, minmax(96px, 124px));
 }
 
 /* 仪表盘：四个快捷入口，按业务域给图标上不同配色 */
 .dashboard-shortcut {
-  /* 卡片高度区间：保证视觉密度，避免内容稀疏 */
+  /* 卡片高度区间：保证视觉密度，避免内容稀疏或被挤压成一条 */
   min-height: 88px;
   max-height: 124px;
   padding: 0.7rem 0.82rem;
