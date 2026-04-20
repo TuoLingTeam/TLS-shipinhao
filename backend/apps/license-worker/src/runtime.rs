@@ -1,3 +1,9 @@
+//! Cloudflare D1 上的 `AsyncRuntimeRepository` 实现。
+//!
+//! 结构扁平化：早期代码曾把 `D1RuntimeRepo` 放在 `runtime/repo_d1.rs` 下并由
+//! `runtime/mod.rs` 单行 `pub mod repo_d1;` 转发。随着 sync path 下线，这一层
+//! 冗余目录不再必要，直接作为顶层 `mod runtime` 的入口文件。
+
 use crate::*;
 use wasm_bindgen::JsValue;
 use worker::D1Database;

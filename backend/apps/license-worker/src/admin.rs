@@ -139,7 +139,7 @@ async fn admin_generate(db: &D1Database, body: &str) -> Result<Response> {
 }
 
 async fn admin_revoke(db: &D1Database, body: &str) -> Result<Response> {
-    let repo = crate::runtime::repo_d1::D1RuntimeRepo::new(db);
+    let repo = crate::runtime::D1RuntimeRepo::new(db);
     let payload = match crate::handle_admin_revoke_json(&repo, body, chrono::Utc::now()).await {
         Ok(payload) => payload,
         Err(err) => {
@@ -169,6 +169,6 @@ fn random_license_key() -> String {
 }
 
 pub async fn serve_admin_html() -> Result<Response> {
-    const HTML: &str = include_str!("../../assets/admin.html");
+    const HTML: &str = include_str!("../assets/admin.html");
     Response::from_html(HTML)
 }
