@@ -796,7 +796,7 @@ graph LR
 | 标签 | `epic:M2` `area:worker` `layer:worker` `risk:critical` |
 
 **技术目标**  
-在 `backend/apps/license-worker/`（Cloudflare Worker + D1）实现 5 个端点，与 Python 版签名协议对齐。
+在 `backend/license-worker/`（Cloudflare Worker + D1）实现 5 个端点，与 Python 版签名协议对齐。
 
 **范围 & 实现要点**
 - 端点：
@@ -817,9 +817,9 @@ graph LR
 - [ ] 审计表记录每次 activate/refresh/revoke
 
 **涉及文件**
-- `backend/apps/license-worker/src/*`
-- `backend/apps/license-worker/wrangler.toml`
-- `backend/apps/license-worker/migrations/*.sql`
+- `backend/license-worker/src/*`
+- `backend/license-worker/wrangler.toml`
+- `backend/license-worker/migrations/*.sql`
 - `docs/license-protocol-v3.md`（Spike 输出）
 
 **风险 / 澄清点**
