@@ -14,8 +14,11 @@ withDefaults(
 </script>
 
 <template>
-  <div class="surface-panel overflow-hidden" :class="compact ? 'p-5' : 'p-6 lg:p-7'">
-    <div class="flex flex-col gap-app lg:flex-row lg:items-center lg:justify-between">
+  <div
+    class="surface-panel flex min-h-0 flex-col overflow-hidden"
+    :class="compact ? 'p-5' : 'p-6 lg:p-7'"
+  >
+    <div class="flex shrink-0 flex-col gap-app lg:flex-row lg:items-center lg:justify-between">
       <div>
         <div class="text-lg font-semibold text-slate-900">{{ title }}</div>
         <p class="mt-2 text-sm leading-6 text-slate-500">{{ description }}</p>
@@ -26,7 +29,7 @@ withDefaults(
       </div>
     </div>
 
-    <div class="mt-6 space-y-app">
+    <div class="mt-6 flex min-h-0 flex-1 flex-col space-y-app">
       <div class="h-12 animate-pulse rounded-2xl bg-slate-100"></div>
       <div class="grid grid-cols-1 gap-app lg:grid-cols-3">
         <div class="h-28 animate-pulse rounded-3xl bg-slate-100"></div>

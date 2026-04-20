@@ -22,7 +22,7 @@ describe("ReviewMatchView", () => {
     });
   });
 
-  it("compresses the summary area into a single dense desktop row", async () => {
+  it("lays out preset select and two fetch buttons as three equal-width controls", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [...routes],
@@ -41,9 +41,10 @@ describe("ReviewMatchView", () => {
       },
     });
 
-    const summary = wrapper.get('[data-testid="review-summary-strip"]');
-
-    expect(summary.classes()).toContain("review-summary-inline");
+    const row = wrapper.get('[data-testid="review-config-actions"]');
+    expect(row.findAll("select").length).toBe(1);
+    expect(row.findAll("button").length).toBe(2);
+    expect(wrapper.get('[data-testid="review-range-preset"]').attributes("aria-label")).toBe("选择日期范围");
     expect(wrapper.text()).not.toContain("REVIEW MATCH");
   });
 
@@ -66,9 +67,9 @@ describe("ReviewMatchView", () => {
       },
     });
 
-    expect(wrapper.get('[data-testid="review-control-shell"]').classes()).toContain("review-control-shell");
-    expect(wrapper.get('[data-testid="review-filter-grid"]').classes()).toContain("review-config-panel");
-    expect(wrapper.text()).toContain("选择日期");
+    const shell = wrapper.get('[data-testid="review-control-shell"]');
+    expect(shell.classes()).toContain("hero-panel");
+    expect(shell.classes()).toContain("review-config-panel");
     const preset = wrapper.get('[data-testid="review-range-preset"]');
     expect(preset.element.tagName).toBe("SELECT");
     expect(preset.findAll("option").length).toBe(4);

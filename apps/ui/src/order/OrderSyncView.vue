@@ -153,19 +153,20 @@ onMounted(async () => {
 
 <template>
   <div class="order-sync-view flex min-h-0 flex-1 flex-col gap-app">
-    <section class="hero-panel subsystem-hero relative shrink-0 overflow-hidden p-3 lg:p-3.5">
-      <div data-testid="order-hero-shell" class="order-hero-shell relative flex flex-col gap-2.5">
-        <div v-if="store.cacheStatus?.last_error" class="soft-alert warn">
-          最近一次缓存维护提示：{{ store.cacheStatus.last_error }}
-        </div>
-
-        <OrderSearchBar
-          :sync-disabled="store.loading || licenseBlocked"
-          :sync-label="store.loading ? '同步中...' : '同步缓存'"
-          @search="handleSearch"
-          @sync="handleSync"
-        />
+    <section
+      data-testid="order-hero-shell"
+      class="hero-panel subsystem-hero order-hero-shell relative flex shrink-0 flex-col gap-2.5 overflow-hidden p-3 lg:p-3.5"
+    >
+      <div v-if="store.cacheStatus?.last_error" class="soft-alert warn">
+        最近一次缓存维护提示：{{ store.cacheStatus.last_error }}
       </div>
+
+      <OrderSearchBar
+        :sync-disabled="store.loading || licenseBlocked"
+        :sync-label="store.loading ? '同步中...' : '同步缓存'"
+        @search="handleSearch"
+        @sync="handleSync"
+      />
     </section>
 
     <div v-if="licenseBlocked" class="shrink-0 soft-alert warn">

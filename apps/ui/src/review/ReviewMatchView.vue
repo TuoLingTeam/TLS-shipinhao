@@ -5,7 +5,6 @@ import { useReview } from "../review/useReview";
 import { useReviewStore } from "../review/review.store";
 import { useOrderStore } from "../order/order.store";
 import { useAppStore } from "../app.store";
-import EmptyState from "../shared/EmptyState.vue";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../layout/useLayout";
@@ -28,9 +27,7 @@ const rangePresetOptions: { value: ReviewRangePresetKey; label: string }[] = [
 ];
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const isQualityRefundMode = computed(() => store.lastMode === "quality_refund");
-const matchedCount = computed(() => store.results.filter((item) => item.matched).length);
 const isCompactLayout = computed(() => ["compact", "high_dpi_compact"].includes(mode.value));
-const unmatchedCount = computed(() => store.results.length - matchedCount.value);
 
 const loadingTitle = computed(() =>
   orderStore.syncSource === "review_query"
@@ -46,13 +43,16 @@ const loadingDescription = computed(() =>
       ? "品退接口会直接返回订单号，成功后可直接带入发货页。"
       : "差评会先确保缓存覆盖，再按商品、SKU、昵称与时间执行评分匹配。",
 );
-const emptyTitle = computed(() => (isQualityRefundMode.value ? "未找到品退匹配订单" : "未找到匹配结果"));
-const emptyDescription = computed(() =>
-  isQualityRefundMode.value
-    ? "请先确认订单缓存已同步，再尝试调整日期范围。"
-    : "已完成缓存保障但仍未找到足够高分订单，可尝试调整日期范围。",
-);
 const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : "评价ID"));
+const tableEmptyColspan = computed(() => (isQualityRefundMode.value ? 4 : 5));
+const emptyTableHint = computed(() => {
+  if (store.lastQuery) {
+    return isQualityRefundMode.value
+      ? "本次查询暂无品退订单，可调整日期范围后重试。"
+      : "本次查询暂无差评结果，可调整日期范围后重试。";
+  }
+  return "暂无数据。请选择日期后点击「获取差评」或「获取品退」。";
+});
 
 function buildReviewWindow(): { days: number; startAt: string; endAt: string } {
   store.setError(null);
@@ -76,14 +76,6 @@ async function handleQualityRefundSearch() {
   }
   const w = buildReviewWindow();
   await findQualityRefundOrders(w.days, w.startAt, w.endAt);
-}
-
-async function handleFetchCurrentMode() {
-  if (isQualityRefundMode.value) {
-    await handleQualityRefundSearch();
-    return;
-  }
-  await handleSearch();
 }
 
 function handleUseMatchedOrder(orderId: string) {
@@ -144,75 +136,46 @@ function formatReplyDeadline(value: string | null) {
 </script>
 
 <template>
-  <div class="space-y-app">
-    <section class="hero-panel subsystem-hero relative overflow-hidden p-3 lg:p-3.5">
+  <div class="review-match-view flex min-h-0 flex-1 flex-col gap-app">
+    <section
+      data-testid="review-control-shell"
+      class="hero-panel subsystem-hero review-config-panel relative overflow-hidden p-3 lg:p-3.5"
+    >
       <div class="pointer-events-none absolute -right-20 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.4),transparent_72%)]"></div>
 
       <div
-        data-testid="review-control-shell"
-        class="review-control-shell relative flex flex-col gap-2.5 p-0 border-0 bg-transparent shadow-none backdrop-blur-none"
+        data-testid="review-config-actions"
+        class="relative z-[1] flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-3"
       >
-        <div data-testid="review-filter-grid" class="review-config-panel flex flex-col gap-3">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-3">
-            <div class="min-w-0 w-full sm:w-[11.5rem] sm:shrink-0">
-              <label class="field-label" for="review-range-preset">选择日期</label>
-              <select
-                id="review-range-preset"
-                v-model="rangePreset"
-                data-testid="review-range-preset"
-                class="field-input w-full"
-              >
-                <option v-for="opt in rangePresetOptions" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-            </div>
-
-            <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-stretch">
-              <button
-                data-testid="review-fetch-bad"
-                type="button"
-                :disabled="store.loading || licenseBlocked"
-                class="action-btn action-btn-primary min-h-[40px] w-full flex-1 cursor-pointer"
-                @click="handleSearch"
-              >
-                {{ store.loading && !isQualityRefundMode ? "处理中..." : "获取差评" }}
-              </button>
-              <button
-                data-testid="review-fetch-quality"
-                type="button"
-                :disabled="store.loading || licenseBlocked"
-                class="action-btn action-btn-secondary min-h-[40px] w-full flex-1 cursor-pointer border border-slate-200/90"
-                @click="handleQualityRefundSearch"
-              >
-                {{ store.loading && isQualityRefundMode ? "处理中..." : "获取品退" }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          data-testid="review-summary-strip"
-          class="review-summary-inline flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200/70 pt-3 text-[12px] text-slate-600"
+        <select
+          id="review-range-preset"
+          v-model="rangePreset"
+          data-testid="review-range-preset"
+          aria-label="选择日期范围"
+          class="field-input box-border min-h-[40px] min-w-0 flex-1"
         >
-          <span class="font-medium text-slate-700">{{ isQualityRefundMode ? "品退直连" : "差评匹配" }}</span>
-          <span class="hidden text-slate-300 sm:inline" aria-hidden="true">|</span>
-          <span>
-            结果
-            <strong class="font-semibold text-slate-800">{{
-              store.results.length ? `${store.results.length} 条` : "—"
-            }}</strong>
-          </span>
-          <span>
-            已匹配
-            <strong class="font-semibold text-slate-800">{{
-              store.results.length ? `${matchedCount} / ${store.results.length}` : "—"
-            }}</strong>
-          </span>
-          <span v-if="unmatchedCount > 0 && store.results.length" class="text-amber-700">
-            {{ unmatchedCount }} 条待核实
-          </span>
-        </div>
+          <option v-for="opt in rangePresetOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <button
+          data-testid="review-fetch-bad"
+          type="button"
+          :disabled="store.loading || licenseBlocked"
+          class="action-btn action-btn-primary box-border min-h-[40px] min-w-0 flex-1 cursor-pointer"
+          @click="handleSearch"
+        >
+          {{ store.loading && !isQualityRefundMode ? "处理中..." : "获取差评" }}
+        </button>
+        <button
+          data-testid="review-fetch-quality"
+          type="button"
+          :disabled="store.loading || licenseBlocked"
+          class="action-btn action-btn-secondary box-border min-h-[40px] min-w-0 flex-1 cursor-pointer border border-slate-200/90"
+          @click="handleQualityRefundSearch"
+        >
+          {{ store.loading && isQualityRefundMode ? "处理中..." : "获取品退" }}
+        </button>
       </div>
     </section>
 
@@ -224,54 +187,59 @@ function formatReplyDeadline(value: string | null) {
       {{ store.error }}
     </div>
 
-    <LoadingState
-      v-if="store.loading"
-      :title="loadingTitle"
-      :description="loadingDescription"
-    />
     <div
-      v-if="store.loading && orderStore.syncSource === 'review_query'"
-      class="surface-panel space-y-app px-4 py-4"
+      v-if="store.loading"
+      class="flex min-h-0 min-w-0 flex-1 flex-col gap-app"
     >
-      <div class="flex items-center justify-between text-sm">
-        <span class="font-semibold text-slate-800">自动同步进度</span>
-        <span class="font-mono text-slate-500">{{ orderStore.syncProgress }}%</span>
-      </div>
-      <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div
-          class="h-full rounded-full bg-brand transition-all duration-300"
-          :style="{ width: `${orderStore.syncProgress}%` }"
-        ></div>
-      </div>
+      <LoadingState
+        class="min-h-0 flex-1"
+        :title="loadingTitle"
+        :description="loadingDescription"
+      />
       <div
-        class="grid grid-cols-1 gap-app text-xs text-slate-500"
-        :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'"
+        v-if="orderStore.syncSource === 'review_query'"
+        class="surface-panel shrink-0 space-y-app px-4 py-4"
       >
-        <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
-          <div class="font-semibold text-slate-700">1. 缓存保障</div>
-          <div class="mt-1">{{ ['ensure_recent_cache', 'match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}</div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="font-semibold text-slate-800">自动同步进度</span>
+          <span class="font-mono text-slate-500">{{ orderStore.syncProgress }}%</span>
         </div>
-        <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
-          <div class="font-semibold text-slate-700">2. 评分匹配</div>
-          <div class="mt-1">
-            {{ ['match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}
+        <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+          <div
+            class="h-full rounded-full bg-brand transition-all duration-300"
+            :style="{ width: `${orderStore.syncProgress}%` }"
+          ></div>
+        </div>
+        <div
+          class="grid grid-cols-1 gap-app text-xs text-slate-500"
+          :class="isCompactLayout ? 'sm:grid-cols-1' : 'md:grid-cols-3'"
+        >
+          <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
+            <div class="font-semibold text-slate-700">1. 缓存保障</div>
+            <div class="mt-1">{{ ['ensure_recent_cache', 'match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}</div>
           </div>
-        </div>
-        <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
-          <div class="font-semibold text-slate-700">3. 完成结果</div>
-          <div class="mt-1">
-            {{ orderStore.syncPhase === 'completed' ? '已完成' : '等待中' }}
+          <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
+            <div class="font-semibold text-slate-700">2. 评分匹配</div>
+            <div class="mt-1">
+              {{ ['match_reviews', 'completed'].includes(orderStore.syncPhase || '') ? '进行中/完成' : '等待中' }}
+            </div>
+          </div>
+          <div class="rounded-[16px] border border-slate-200/80 px-3.5 py-3">
+            <div class="font-semibold text-slate-700">3. 完成结果</div>
+            <div class="mt-1">
+              {{ orderStore.syncPhase === 'completed' ? '已完成' : '等待中' }}
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-else-if="store.results.length > 0" class="space-y-app">
-      <div v-if="store.cacheWarnings.length && !isQualityRefundMode" class="soft-alert warn">
+    <div v-else-if="!store.loading" class="flex min-h-0 min-w-0 flex-1 flex-col gap-app">
+      <div v-if="store.cacheWarnings.length && !isQualityRefundMode" class="shrink-0 soft-alert warn">
         {{ store.cacheWarnings.join("；") }}
       </div>
 
-      <section class="data-table-shell overflow-x-auto">
+      <section class="data-table-shell flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overflow-x-auto">
         <table class="w-full text-sm" :class="isCompactLayout ? 'min-w-[820px]' : 'min-w-[980px]'">
           <thead class="table-head text-slate-600">
             <tr>
@@ -358,18 +326,17 @@ function formatReplyDeadline(value: string | null) {
                 </div>
               </td>
             </tr>
+            <tr v-if="store.results.length === 0" class="table-row border-t border-slate-100/80">
+              <td
+                class="px-4 py-14 text-center text-sm leading-6 text-slate-500 sm:px-6"
+                :colspan="tableEmptyColspan"
+              >
+                {{ emptyTableHint }}
+              </td>
+            </tr>
           </tbody>
         </table>
       </section>
     </div>
-
-    <EmptyState
-      v-else-if="store.lastQuery"
-      :title="emptyTitle"
-      :description="emptyDescription"
-      @action="handleFetchCurrentMode"
-    >
-      {{ isQualityRefundMode ? "再取一次品退订单" : "再查一次" }}
-    </EmptyState>
   </div>
 </template>
