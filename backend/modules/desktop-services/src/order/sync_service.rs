@@ -361,12 +361,24 @@ mod tests {
         stopped: bool,
         responses: Vec<CacheFetchResult>,
         calls: Vec<(i64, i64, i64)>,
+        /// 设为 `Some(msg)` 时，下一次 `get_orders_for_cache` 消耗该值并返回错误；
+        /// 允许按顺序塞多条错误（FIFO），验证 sync_range 对 finder 错误的传递行为。
+        errors: std::collections::VecDeque<String>,
     }
 
     impl FakeFinder {
         fn with_responses(responses: Vec<CacheFetchResult>) -> Self {
             Self {
                 responses,
+                ..Self::default()
+            }
+        }
+
+        fn with_error(message: &str) -> Self {
+            let mut errors = std::collections::VecDeque::new();
+            errors.push_back(message.to_string());
+            Self {
+                errors,
                 ..Self::default()
             }
         }
@@ -385,6 +397,9 @@ mod tests {
         ) -> anyhow::Result<CacheFetchResult> {
             self.calls
                 .push((earliest_time, create_time_start, create_time_end));
+            if let Some(message) = self.errors.pop_front() {
+                return Err(anyhow::anyhow!(message));
+            }
             Ok(if self.responses.is_empty() {
                 CacheFetchResult::default()
             } else {
@@ -837,5 +852,83 @@ mod tests {
         assert_eq!(orders.len(), 3);
         assert_eq!(warnings, vec!["temporary"]);
         assert_eq!(orders[0].order_id, "o-0");
+    }
+
+    // ---- 错误分支 / 停任务路径回归（Pass 4 · T15） ------------------------
+
+    #[test]
+    fn rebuild_cache_surfaces_finder_error_with_context() {
+        // finder 首次调用抛错时，sync_range 通过 .with_context(...) 将其包装为带窗口范围
+        // 的 anyhow::Error 向上传递；错误不能被吞成 Ok((0, []))
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let finder = FakeFinder::with_error("风控限流拒绝请求");
+        let repo = open_shared_repo(&path);
+        let mut service = OrderSyncService::new(finder, repo);
+        let now = DateTime::parse_from_rfc3339("1970-02-05T16:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let err = service.rebuild_cache(Some(now)).unwrap_err();
+        let text = format!("{err:?}");
+        assert!(text.contains("风控限流拒绝请求"), "原始错误消息必须保留：{text}");
+        assert!(
+            text.contains("fetch cache orders"),
+            "应带 sync_range 的 with_context 前缀：{text}",
+        );
+        // finder 被调用过一次（抛错的那一次）
+        assert_eq!(service.finder.calls.len(), 1);
+        // 失败不写 DB：订单库应为空
+        assert!(service.repository.fetch_order("any").unwrap().is_none());
+    }
+
+    #[test]
+    fn rebuild_cache_short_circuits_and_does_not_touch_finder_after_stop() {
+        // stop() 后 rebuild_cache 必须早退：不调用 finder、也不改状态表
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let finder = FakeFinder::with_responses(vec![CacheFetchResult::default()]);
+        let repo = open_shared_repo(&path);
+        let mut service = OrderSyncService::new(finder, repo);
+
+        service.stop();
+
+        let now = DateTime::parse_from_rfc3339("1970-02-05T16:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let (written, warnings) = service.rebuild_cache(Some(now)).unwrap();
+        assert_eq!(written, 0);
+        assert!(warnings.is_empty());
+        assert!(service.finder.calls.is_empty(), "stop 后不应派发给 finder");
+        // stop 后短路不会调用 repository.initialize()，因此 sync_state 表根本没创建。
+        // 不断言 `get_state()`：返回的是查询错误而非 `None`，真正关键语义是「finder 零调用 + 返回 (0, [])」。
+    }
+
+    #[test]
+    fn sync_range_rejects_illegal_window_without_calling_finder() {
+        // 非法时间窗（start > end / start <= 0 / end <= 0）直接返回 (0, []) 且不调 finder。
+        // 通过直接调用 private sync_range 验证 —— #[cfg(test)] 同模块内可见。
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("order_cache.sqlite3");
+        let repo = open_shared_repo(&path);
+        let mut service =
+            OrderSyncService::new(FakeFinder::with_responses(vec![]), Arc::clone(&repo));
+
+        // start > end
+        let (written, warnings) = service.sync_range(5_000, 1_000, "rebuild", None).unwrap();
+        assert_eq!(written, 0);
+        assert!(warnings.is_empty());
+
+        // start <= 0
+        let (written, warnings) = service.sync_range(0, 1_000, "rebuild", None).unwrap();
+        assert_eq!(written, 0);
+        assert!(warnings.is_empty());
+
+        // end <= 0
+        let (written, warnings) = service.sync_range(100, 0, "rebuild", None).unwrap();
+        assert_eq!(written, 0);
+        assert!(warnings.is_empty());
+
+        assert!(service.finder.calls.is_empty(), "非法窗口不应派发给 finder");
     }
 }

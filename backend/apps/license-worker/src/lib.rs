@@ -1834,4 +1834,133 @@ mod tests {
         let parsed: LeaseRefreshRequest = serde_json::from_str(&j).unwrap();
         assert_eq!(parsed, refresh);
     }
+
+    // ---- runtime_task_authorize：拒绝路径集成回归（Pass 4 · T15） -----------
+
+    /// 公共 helper：激活一把默认许可证，返回 (repo, signer, now)。
+    async fn activate_default_license()
+    -> (Repo, LeaseTokenSigner, chrono::DateTime<Utc>) {
+        let repo = Repo::seeded();
+        let signer = test_signer();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let activated = runtime_activate(
+            &repo,
+            &signer,
+            ActivationInput {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                device_fingerprint: "fp-1".into(),
+                client_version: "5.0.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(activated.success);
+        (repo, signer, now)
+    }
+
+    #[tokio::test]
+    async fn task_authorize_rejects_unknown_task_type_with_degraded_reason() {
+        let (repo, _signer, now) = activate_default_license().await;
+        let grant = runtime_task_authorize(
+            &repo,
+            TaskAuthorizeRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                task_type: "malicious_unknown_task".into(),
+                client_version: "5.2.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(!grant.granted, "未在 policy 白名单内的 task 必须被拒");
+        assert_eq!(grant.task_type, "malicious_unknown_task");
+        assert!(grant.grant_id.is_empty());
+        assert!(grant.valid_until.is_empty());
+        assert!(
+            grant.degraded_reason.is_some(),
+            "拒绝原因必须附在 degraded_reason 上方便前端显示",
+        );
+    }
+
+    #[tokio::test]
+    async fn task_authorize_rejects_when_device_id_does_not_match_activated_binding() {
+        let (repo, _signer, now) = activate_default_license().await;
+        let grant = runtime_task_authorize(
+            &repo,
+            TaskAuthorizeRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-other".into(),
+                task_type: LICENSE_TASK_REVIEW_FIND.into(),
+                client_version: "5.2.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(
+            !grant.granted,
+            "device 绑定不一致必须拒绝（防止 Lease 被移植到其它设备）",
+        );
+        assert_eq!(grant.task_type, LICENSE_TASK_REVIEW_FIND);
+        assert!(grant.grant_id.is_empty());
+        assert!(grant.degraded_reason.is_some());
+    }
+
+    #[tokio::test]
+    async fn task_authorize_rejects_after_license_is_revoked() {
+        let (repo, _signer, now) = activate_default_license().await;
+
+        // 先调用一次确认活跃状态
+        let granted = runtime_task_authorize(
+            &repo,
+            TaskAuthorizeRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                task_type: LICENSE_TASK_REVIEW_FIND.into(),
+                client_version: "5.2.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(granted.granted);
+
+        // 管理员吊销
+        runtime_revoke(
+            &repo,
+            LeaseRevokeRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                reason: "admin_revoke_test".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+
+        // 吊销后再申请任务授权应被拒
+        let after_revoke = runtime_task_authorize(
+            &repo,
+            TaskAuthorizeRequest {
+                license_key: "TLS-TEST".into(),
+                device_id: "device-1".into(),
+                task_type: LICENSE_TASK_REVIEW_FIND.into(),
+                client_version: "5.2.0".into(),
+            },
+            now,
+        )
+        .await
+        .unwrap();
+        assert!(
+            !after_revoke.granted,
+            "license 吊销后再次 authorize 必须拒绝",
+        );
+        assert!(after_revoke.grant_id.is_empty());
+        assert!(after_revoke.degraded_reason.is_some());
+    }
 }
