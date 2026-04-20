@@ -240,148 +240,9 @@ const heroSummaryText = computed(() => {
   return `有 ${pendingCount} 项需要处理，建议先清理再开始业务`;
 });
 
-const heroHintPills = computed<{ key: string; label: string; tone: Tone }[]>(() => {
-  const pills: { key: string; label: string; tone: Tone }[] = [];
-
-  if (!appStore.isLicensed) {
-    pills.push({ key: "license", label: "授权未激活", tone: "error" });
-  } else if (daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value <= 7) {
-    const days = daysUntilLicenseExpires.value;
-    pills.push({
-      key: "license",
-      label: days < 0 ? `授权过期 ${Math.abs(days)} 天` : `授权 ${days} 天到期`,
-      tone: "warn",
-    });
-  } else {
-    pills.push({ key: "license", label: "授权正常", tone: "success" });
-  }
-
-  if (cookieHealth.status === "healthy") {
-    pills.push({ key: "cookie", label: "Cookie 正常", tone: "success" });
-  } else if (cookieHealth.status === "unhealthy") {
-    pills.push({ key: "cookie", label: "Cookie 失效", tone: "error" });
-  } else if (cookieHealth.status === "unconfigured") {
-    pills.push({ key: "cookie", label: "Cookie 未配置", tone: "warn" });
-  } else {
-    pills.push({ key: "cookie", label: "Cookie 待探测", tone: "idle" });
-  }
-
-  if (cacheCount.value > 0) {
-    pills.push({
-      key: "cache",
-      label: missingSegments.value > 0 ? `缓存 ${cacheCount.value}·缺口 ${missingSegments.value}` : `缓存 ${cacheCount.value}`,
-      tone: missingSegments.value > 0 ? "warn" : "success",
-    });
-  }
-
-  return pills.slice(0, 3);
-});
-
-const heroPillClass: Record<Tone, string> = {
-  success: "dashboard-hint-pill--success",
-  warn: "dashboard-hint-pill--warn",
-  error: "dashboard-hint-pill--error",
-  idle: "dashboard-hint-pill--idle",
-};
-
 const alertToneClass: Record<"warn" | "error", string> = {
   warn: "dashboard-alert--warn",
   error: "dashboard-alert--error",
-};
-
-type WorkflowStatus = "done" | "warning" | "todo";
-type WorkflowIcon = "license" | "settings" | "order" | "review" | "delivery";
-
-interface WorkflowStep {
-  key: string;
-  label: string;
-  description: string;
-  status: WorkflowStatus;
-  to: RouteLocationRaw;
-  icon: WorkflowIcon;
-}
-
-const workflowSteps = computed<WorkflowStep[]>(() => [
-  {
-    key: "license",
-    label: "激活授权",
-    description: appStore.isLicensed
-      ? daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value <= 7
-        ? `授权 ${daysUntilLicenseExpires.value} 天后到期`
-        : "授权正常"
-      : "卡密尚未激活",
-    status: appStore.isLicensed
-      ? daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value <= 7
-        ? "warning"
-        : "done"
-      : "todo",
-    to: buildSettingsLocation("license"),
-    icon: "license",
-  },
-  {
-    key: "cookie",
-    label: "配置 Cookie",
-    description:
-      cookieHealth.status === "healthy"
-        ? "Cookie 可用"
-        : cookieHealth.status === "unhealthy"
-          ? "Cookie 已失效"
-          : cookieHealth.status === "unconfigured"
-            ? "Cookie 待配置"
-            : "Cookie 待探测",
-    status:
-      cookieHealth.status === "healthy"
-        ? "done"
-        : cookieHealth.status === "unhealthy"
-          ? "warning"
-          : "todo",
-    to: buildSettingsLocation("cookie"),
-    icon: "settings",
-  },
-  {
-    key: "cache",
-    label: "同步订单",
-    description:
-      cacheCount.value > 0
-        ? missingSegments.value > 0
-          ? `${cacheCount.value} 条 · ${missingSegments.value} 缺口`
-          : `${cacheCount.value} 条订单缓存`
-        : "尚未同步",
-    status: cacheCount.value > 0 ? (missingSegments.value > 0 ? "warning" : "done") : "todo",
-    to: "/order",
-    icon: "order",
-  },
-  {
-    key: "review",
-    label: "评价匹配",
-    description:
-      reviewStore.results.length > 0
-        ? `${matchedReviewCount.value}/${reviewStore.results.length} 已匹配`
-        : "未执行匹配",
-    status: reviewStore.results.length > 0 ? (unmatchedReviewCount.value > 0 ? "warning" : "done") : "todo",
-    to: "/review",
-    icon: "review",
-  },
-  {
-    key: "delivery",
-    label: "批量发货",
-    description: deliveryStore.batchProgress
-      ? `${deliveryStore.batchProgress.totalCount} 单任务 · 成功 ${deliveryStore.batchProgress.successCount}`
-      : "本次启动尚未执行",
-    status: deliveryStore.batchProgress
-      ? deliveryStore.batchProgress.failureCount > 0
-        ? "warning"
-        : "done"
-      : "todo",
-    to: "/delivery",
-    icon: "delivery",
-  },
-]);
-
-const workflowStatusLabel: Record<WorkflowStatus, string> = {
-  done: "已就绪",
-  warning: "需注意",
-  todo: "待执行",
 };
 
 onMounted(async () => {
@@ -396,29 +257,15 @@ onMounted(async () => {
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
-      <div class="relative flex flex-wrap items-end justify-between gap-3">
-        <div class="min-w-0 flex-1 space-y-1.5">
-          <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
-          <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
-            {{ greeting }}
-          </h2>
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
-            <span>{{ todayText }}</span>
-            <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
-            <span>{{ heroSummaryText }}</span>
-          </div>
-        </div>
-
-        <div v-if="heroHintPills.length > 0" class="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 sm:gap-2">
-          <span
-            v-for="hint in heroHintPills"
-            :key="hint.key"
-            class="dashboard-hint-pill"
-            :class="heroPillClass[hint.tone]"
-          >
-            <span class="status-dot" :class="hint.tone !== 'idle' ? hint.tone : ''"></span>
-            <span class="truncate">{{ hint.label }}</span>
-          </span>
+      <div class="relative flex min-w-0 flex-col gap-1.5">
+        <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
+        <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
+          {{ greeting }}
+        </h2>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
+          <span>{{ todayText }}</span>
+          <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
+          <span>{{ heroSummaryText }}</span>
         </div>
       </div>
     </section>
@@ -510,39 +357,5 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section class="surface-panel dashboard-workflow-panel p-3 lg:p-4">
-      <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
-        <h3 class="text-sm font-semibold tracking-tight text-slate-900">业务流程</h3>
-        <span class="text-[11px] text-slate-400">从授权到发货，按顺序完成</span>
-      </div>
-
-      <div class="dashboard-workflow-grid grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
-        <RouterLink
-          v-for="(step, idx) in workflowSteps"
-          :key="step.key"
-          :to="step.to"
-          class="dashboard-workflow-step group"
-          :class="`dashboard-workflow-step--${step.status}`"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="dashboard-workflow-index">{{ idx + 1 }}</span>
-            <span class="dashboard-workflow-icon" aria-hidden="true">
-              <AppNavIcon :name="step.icon" icon-class="h-[14px] w-[14px]" />
-            </span>
-          </div>
-          <div class="mt-2 min-w-0">
-            <div class="text-[13px] font-semibold text-slate-900">{{ step.label }}</div>
-            <div class="mt-0.5 truncate text-[11px] leading-4 text-slate-500">{{ step.description }}</div>
-          </div>
-          <div class="dashboard-workflow-status" :class="`dashboard-workflow-status--${step.status}`">
-            <span
-              class="status-dot shrink-0"
-              :class="step.status === 'done' ? 'success' : step.status === 'warning' ? 'warn' : ''"
-            ></span>
-            <span>{{ workflowStatusLabel[step.status] }}</span>
-          </div>
-        </RouterLink>
-      </div>
-    </section>
   </div>
 </template>
