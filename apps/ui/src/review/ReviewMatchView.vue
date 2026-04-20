@@ -378,7 +378,12 @@ function formatReplyDeadline(value: string | null) {
               >
                 买家昵称
               </th>
-              <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">评价内容</th>
+              <th
+                v-if="!isQualityRefundMode"
+                class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm"
+              >
+                评价内容
+              </th>
               <th v-if="isQualityRefundMode" class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">品退原因</th>
               <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">订单详情</th>
               <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">{{ idColumnLabel }}</th>
@@ -399,7 +404,7 @@ function formatReplyDeadline(value: string | null) {
               <td v-if="!isQualityRefundMode" class="px-3 py-2.5 sm:px-5 sm:py-3">
                 <div class="font-semibold text-slate-800">{{ r.buyer_nickname || "-" }}</div>
               </td>
-              <td class="max-w-md px-3 py-2.5 sm:px-5 sm:py-3">
+              <td v-if="!isQualityRefundMode" class="max-w-md px-3 py-2.5 sm:px-5 sm:py-3">
                 <div class="whitespace-pre-wrap break-all text-sm leading-6 text-slate-700 sm:text-[14.5px] sm:leading-[1.6]">
                   {{ r.evaluation_content || "（无评价内容）" }}
                 </div>

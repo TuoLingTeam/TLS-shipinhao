@@ -900,13 +900,39 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
-  flex: 1;
-  min-height: 0;
 }
 
-/* 左栏底部撑满：让应用信息卡自动推到底部，中间自然留白 */
-.settings-sidebar-stack > .settings-sidebar-card:last-child {
-  margin-top: auto;
+/* 双列布局：sidebar 高度由 grid 1fr 行限定，stack 撑满父高度，超出可纵向滚动，
+   保证授权信息卡的全部条目（含「已保存卡密」）都能看到，不被父高度截断。 */
+@media (min-width: 1181px) {
+  .settings-sidebar-stack {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+  }
+
+  .settings-sidebar-stack::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .settings-sidebar-stack::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.45);
+    border-radius: 999px;
+  }
+
+  .settings-sidebar-stack::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* 单列布局：sidebar 自适应高度，stack 按内容自然撑开，不需要滚动 */
+@media (max-width: 1180px) {
+  .settings-sidebar-stack {
+    flex: 0 0 auto;
+  }
 }
 
 .settings-nav-item {
@@ -1388,6 +1414,9 @@ textarea {
 @media (max-width: 1180px) {
   .settings-layout {
     grid-template-columns: 1fr;
+    /* 切到单列后，两个区块都需要按内容自然撑开，
+       否则 row1（仅显式声明 1fr）会被 row2（隐式 auto）挤成 ≈ 48px。 */
+    grid-template-rows: auto auto;
   }
 
   .settings-sidebar {
@@ -2164,8 +2193,21 @@ textarea {
   border-top-color: rgba(148, 163, 184, 0.45);
 }
 
+/* 仪表盘：快捷入口面板按内容自然高度（避免撑满后卡片之间出现大片空白） */
+.dashboard-shortcuts-panel {
+  flex: 0 0 auto;
+}
+
+.dashboard-shortcuts-grid {
+  /* 两行高度按内容自适应，区间 96~124px，保证可读且不稀疏 */
+  grid-template-rows: repeat(2, minmax(96px, 124px));
+}
+
 /* 仪表盘：四个快捷入口，按业务域给图标上不同配色 */
 .dashboard-shortcut {
+  /* 卡片高度区间：保证视觉密度，避免内容稀疏 */
+  min-height: 88px;
+  max-height: 124px;
   padding: 0.7rem 0.82rem;
   transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }
@@ -2265,15 +2307,15 @@ textarea {
 .settings-info-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.32rem;
 }
 
 .settings-info-item {
   display: flex;
   align-items: baseline;
-  gap: 0.7rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 12px;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
   border: 1px solid rgba(226, 232, 240, 0.88);
   background: rgba(248, 250, 252, 0.74);
   min-width: 0;
@@ -2297,16 +2339,16 @@ textarea {
   flex: 1;
   min-width: 0;
   text-align: right;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--color-heading);
   overflow-wrap: anywhere;
 }
 
 .settings-info-value--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 600;
 }
 

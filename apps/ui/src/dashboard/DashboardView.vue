@@ -323,7 +323,7 @@ onMounted(async () => {
       </article>
     </div>
 
-    <section class="surface-panel dashboard-shortcuts-panel p-3 lg:p-4">
+    <section class="surface-panel dashboard-shortcuts-panel flex flex-1 min-h-0 flex-col p-3 lg:p-4">
       <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
         <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
         <span class="text-[11px] text-slate-400">一键直达核心业务</span>
@@ -331,13 +331,13 @@ onMounted(async () => {
 
       <div
         data-testid="dashboard-shortcuts"
-        class="subsystem-summary-strip grid grid-cols-2 gap-app"
+        class="dashboard-shortcuts-grid subsystem-summary-strip grid flex-1 min-h-0 grid-cols-2 gap-app"
       >
         <RouterLink
           v-for="item in quickLinks"
           :key="item.title"
           :to="item.to"
-          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex items-center gap-3 overflow-hidden"
+          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-3 overflow-hidden"
           :class="shortcutClass[item.tone]"
         >
           <div class="dashboard-shortcut-icon" aria-hidden="true">
