@@ -24,6 +24,8 @@ pub struct HttpDeliveryGateway {
 }
 
 impl HttpDeliveryGateway {
+    /// 无任务授权 grant 时的便捷构造；当前业务统一走 `new_with_grant`，保留该入口供未来或脚本直接调用。
+    #[allow(dead_code)]
     pub fn new(cookie_header: String, biz_magic: String) -> Self {
         Self::new_with_grant(cookie_header, biz_magic, None)
     }

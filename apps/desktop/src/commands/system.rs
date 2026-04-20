@@ -306,6 +306,24 @@ pub async fn open_cookie_login(
     }))
 }
 
+/// 关闭由 `open_cookie_login` 打开的 Cookie 登录子窗口。
+///
+/// 幂等：窗口不存在时直接返回 `closed: false`，不报错；存在则尝试关闭并返回 `closed: true`。
+/// 用于轮询提取 Cookie 成功后自动关闭登录窗口，避免用户手动操作。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn close_cookie_login_window(
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, AppError> {
+    if let Some(window) = app.get_webview_window(COOKIE_LOGIN_WINDOW_LABEL) {
+        window
+            .close()
+            .map_err(|e| AppError::Message(format!("关闭登录窗口失败：{e}")))?;
+        Ok(serde_json::json!({ "closed": true }))
+    } else {
+        Ok(serde_json::json!({ "closed": false }))
+    }
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn extract_cookie_from_login(
     app: tauri::AppHandle,

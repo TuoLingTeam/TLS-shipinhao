@@ -73,6 +73,7 @@ fn main() {
             commands::system::open_external_url,
             commands::system::pick_cookie_save_dir,
             commands::system::open_cookie_login,
+            commands::system::close_cookie_login_window,
             commands::system::extract_cookie_from_login,
             commands::system::start_legacy_migration,
         ])

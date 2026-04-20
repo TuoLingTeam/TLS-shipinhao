@@ -81,6 +81,7 @@ impl MigrationPaths {
         })
     }
 
+    #[cfg(test)]
     pub fn with_roots(legacy_root: PathBuf, new_root: PathBuf, backup_root: PathBuf) -> Self {
         Self {
             legacy_root,
@@ -102,6 +103,7 @@ impl LegacyPythonMigrator {
     }
 
     /// 测试用入口：固定"今天"的字符串避免时区/时间敏感。
+    #[cfg(test)]
     pub fn with_today(paths: MigrationPaths, today: impl Into<String>) -> Self {
         Self {
             paths,

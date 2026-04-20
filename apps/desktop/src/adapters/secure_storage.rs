@@ -114,11 +114,13 @@ impl SecretStore for KeychainSecretStore {
 ///
 /// 在单元测试里替换 `KeychainSecretStore` 即可不触碰真实 Keychain；
 /// 并发场景通过 `Mutex` 保证 set/get/delete 互斥。
+#[allow(dead_code)] // 仅供 `#[cfg(test)]` 与跨模块单测引用；正式构建不实例化
 pub struct InMemorySecretStore {
     cell: Mutex<Option<String>>,
 }
 
 impl InMemorySecretStore {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             cell: Mutex::new(None),
