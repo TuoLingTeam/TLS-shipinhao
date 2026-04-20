@@ -73,7 +73,7 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("应用信息");
     expect(wrapper.text()).toContain("推荐顺序");
-    expect(wrapper.text()).toContain("当前状态");
+    expect(wrapper.text()).toContain("状态");
     expect(wrapper.text()).toContain("作者微信");
     expect(wrapper.text()).not.toContain("License");
     expect(wrapper.text()).not.toContain("About");

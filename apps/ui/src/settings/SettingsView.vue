@@ -266,24 +266,22 @@ onMounted(() => {
 
             <div class="settings-info-grid">
               <div class="settings-info-item">
-                <span class="settings-info-label">当前状态</span>
+                <span class="settings-info-label">状态</span>
                 <span class="settings-info-value">{{ currentStateText }}</span>
               </div>
               <div class="settings-info-item">
-                <span class="settings-info-label">到期时间</span>
+                <span class="settings-info-label">到期</span>
                 <span class="settings-info-value">{{ licenseExpiresText }}</span>
               </div>
               <div class="settings-info-item">
-                <span class="settings-info-label">最近校验</span>
+                <span class="settings-info-label">校验</span>
                 <span class="settings-info-value">{{ licenseVerifiedText }}</span>
               </div>
-              <div class="settings-info-item settings-info-item--wide">
-                <span class="settings-info-label">已保存卡密</span>
+              <div class="settings-info-item">
+                <span class="settings-info-label">卡密</span>
                 <span class="settings-info-value settings-info-value--mono">{{ appStore.licenseKey || "未保存" }}</span>
               </div>
             </div>
-
-            <p class="settings-sidebar-copy settings-sidebar-copy--tight">{{ licenseActionHint }}</p>
 
             <div
               data-testid="settings-license-actions"
