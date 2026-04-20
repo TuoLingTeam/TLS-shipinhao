@@ -14,8 +14,8 @@
         "title": "驼铃·视频小店差评处理 5.1.0",
         "width": 1280,
         "height": 860,
-        "minWidth": 1024,
-        "minHeight": 680,
+        "minWidth": 768,
+        "minHeight": 600,
         "resizable": true,
         "decorations": true
       }

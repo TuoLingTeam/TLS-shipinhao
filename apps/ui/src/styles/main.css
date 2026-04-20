@@ -59,13 +59,24 @@ body,
   min-height: 100%;
 }
 
-/* 与 Tailwind `lg`（1024px）对齐，避免 960～1023px 落在 md 布局导致与「常规窗口」版式不一致 */
+/*
+ * 全局最小宽度：与 Tauri 桌面窗口 minWidth (768px) 对齐。
+ * < 768px 才允许横向滚动作为兜底，常规桌面窗口 (>= 768px) 走真正的响应式自适应。
+ */
 #app {
-  min-width: 1024px;
+  min-width: 768px;
 }
 
-html {
-  overflow-x: auto;
+@media (min-width: 768px) {
+  html {
+    overflow-x: hidden;
+  }
+}
+
+@media (max-width: 767.98px) {
+  html {
+    overflow-x: auto;
+  }
 }
 
 body {
@@ -482,6 +493,13 @@ textarea {
 .review-primary-action {
   width: 100%;
   min-height: 40px;
+}
+
+/* >=720 三列布局即生效，避免 768~1024 之间「天数 / 匹配说明 / 按钮」单列堆叠造成的视觉空旷 */
+@media (min-width: 720px) {
+  .review-filter-grid {
+    grid-template-columns: 88px minmax(0, 1fr) 132px;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -1895,6 +1913,61 @@ textarea {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * 紧凑窗口兜底（任意一项触发即解除「flex:1 + min-height:0 强行撑满父高度」链路）：
+ *   - 宽度  < 1024px → 窄屏，子元素折行后高度变长，必须让 main 滚动
+ *   - 高度  < 720px  → 短屏，原本设计的「textarea 撑满父高度」会把其它块挤散，必须切回内容自然高度 + main 滚动
+ *
+ * 两条触发逻辑共享同一组重置规则。
+ *
+ * !important 用于压过 Tailwind v4 在 @layer utilities 内的 .h-full / .flex-1 等规则，
+ * 因为页面根元素同时挂着 Tailwind 的 utility 类，必须强制覆盖才能让 height 真正 auto。
+ */
+@media (max-width: 1023.98px), (max-height: 719.98px) {
+  .settings-view-shell,
+  .delivery-view,
+  .dashboard-view,
+  .delivery-workspace {
+    height: auto !important;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+  }
+
+  .settings-layout,
+  .settings-workspace,
+  .settings-section-card,
+  .settings-row-card,
+  .settings-cookie-grid,
+  .settings-license-grid,
+  .settings-cookie-main,
+  .settings-cookie-editor,
+  .settings-side-stack,
+  .settings-row-body,
+  .settings-row-body--cookie {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+  }
+
+  .settings-cookie-textarea {
+    flex: 0 0 auto !important;
+    min-height: 220px !important;
+    resize: vertical;
+  }
+
+  .delivery-main-grid,
+  .delivery-input-panel,
+  .delivery-progress-panel,
+  .delivery-input-column {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+  }
+
+  .delivery-input-textarea {
+    flex: 0 0 auto !important;
+    min-height: 140px !important;
   }
 }
 

@@ -291,7 +291,7 @@ function formatReplyDeadline(value: string | null) {
 
         <div
           data-testid="review-summary-strip"
-          class="subsystem-summary-strip grid gap-2 sm:grid-cols-3 xl:grid-cols-3"
+          class="subsystem-summary-strip grid gap-2 min-[960px]:grid-cols-3"
         >
           <article
             v-for="card in summaryCards"
