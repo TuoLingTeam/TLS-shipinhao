@@ -1,3 +1,8 @@
+/**
+ * 与 Rust `api_contracts::LicenseState` 严格一一对齐。
+ * 后端 serde 序列化永远落在下列 10 个取值之一；若未来新增状态，必须同时更新
+ * `api-contracts/src/lib.rs::LicenseState` 与本文件与 LICENSE_STATE_LABELS。
+ */
 export type LicenseState =
   | "active"
   | "not_found"
@@ -8,10 +13,7 @@ export type LicenseState =
   | "reactivation_required"
   | "online_refresh_required"
   | "invalid"
-  | "compromised"
-  | "offline_grace"
-  | "pending_activation"
-  | "unknown";
+  | "compromised";
 
 export const LICENSE_STATE_LABELS: Record<LicenseState, string> = {
   active: "已激活",
@@ -24,9 +26,6 @@ export const LICENSE_STATE_LABELS: Record<LicenseState, string> = {
   online_refresh_required: "需联网刷新",
   invalid: "未激活",
   compromised: "异常",
-  offline_grace: "离线宽限",
-  pending_activation: "待激活",
-  unknown: "未知状态",
 };
 
 export type RiskLevel = "low" | "medium" | "high";

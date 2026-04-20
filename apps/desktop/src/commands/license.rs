@@ -6,11 +6,7 @@ use crate::error::AppError;
 use crate::state::{self, AppState, StoredLicenseProfile};
 use api_contracts::{LeasePayload, LicenseState, RiskLevel, RuntimeGrant, RuntimeState};
 use license_service::{authorize_task_local, lease::RefreshOutcome};
-use sha2::{Digest, Sha256};
-use std::ffi::CStr;
 use tauri::State;
-
-const LICENSE_PROTOCOL_VERSION: u32 = 3;
 
 fn runtime_state_allows_feature(runtime: &RuntimeState) -> bool {
     runtime.reason.is_locally_allowed()
@@ -38,70 +34,6 @@ fn make_client() -> HttpLicenseClient {
             .map(|s| s.to_string())
             .collect(),
     )
-}
-
-fn legacy_compatible_device_id_from_raw(raw: &str) -> String {
-    let digest = Sha256::digest(raw.as_bytes());
-    digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
-}
-
-fn security_core_device_id() -> Option<String> {
-    let ptr = security_core::security_core_collect_device_id();
-    if ptr.is_null() {
-        return None;
-    }
-    let value = unsafe { CStr::from_ptr(ptr) }
-        .to_string_lossy()
-        .trim()
-        .to_string();
-    security_core::security_core_free_string(ptr);
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
-}
-
-fn device_id() -> String {
-    if let Some(id) = security_core_device_id() {
-        return id;
-    }
-    legacy_compatible_device_id_from_raw(&device_fingerprint())
-}
-
-fn device_fingerprint() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(output) = std::process::Command::new("ioreg")
-            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            for line in text.lines() {
-                if line.contains("IOPlatformSerialNumber") {
-                    if let Some(last) = line.split('=').last() {
-                        return last.trim().trim_matches('"').to_string();
-                    }
-                }
-            }
-        }
-    }
-    format!(
-        "{}-{}-{}",
-        hostname(),
-        std::env::consts::ARCH,
-        std::env::consts::OS
-    )
-}
-
-fn hostname() -> String {
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 fn license_state_detail(state: LicenseState) -> &'static str {
@@ -404,8 +336,8 @@ pub async fn activate_license(
     license_key: String,
 ) -> Result<serde_json::Value, AppError> {
     let client = make_client();
-    let did = device_id();
-    let fp = device_fingerprint();
+    let did = state.device_id.clone();
+    let fp = security_core::collect_raw_fingerprint();
     let version = env!("CARGO_PKG_VERSION").to_string();
 
     let resp = client
@@ -433,11 +365,11 @@ pub async fn verify_license(
     license_key: String,
 ) -> Result<serde_json::Value, AppError> {
     let client = make_client();
-    let did = device_id();
+    let did = state.device_id.clone();
     let version = env!("CARGO_PKG_VERSION").to_string();
 
     let resp = client
-        .verify(&license_key, &did, LICENSE_PROTOCOL_VERSION, &version)
+        .verify(&license_key, &did, &version)
         .await
         .map_err(|e| AppError::Message(e.to_string()))?;
 
@@ -608,14 +540,6 @@ mod tests {
                 "state {state:?} should be blocked"
             );
         }
-    }
-
-    #[test]
-    fn legacy_compatible_device_id_matches_python_rule() {
-        assert_eq!(
-            legacy_compatible_device_id_from_raw("SERIAL-123"),
-            "0c04dee8a171fce9"
-        );
     }
 
     #[test]

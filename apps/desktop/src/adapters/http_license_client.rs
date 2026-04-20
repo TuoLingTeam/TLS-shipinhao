@@ -113,21 +113,24 @@ async fn response_to_attempt<R: serde::de::DeserializeOwned>(
 /// 完全对齐（`license_key` 而非 `key`），否则 Worker 的 `serde_json::from_value`
 /// 会在 Activate 分支静默失败，被顶层 `or_else` 收敛为 `worker_runtime_error`
 /// 兜底响应，客户端看到"激活失败"却拿不到任何业务原因。
+///
+/// 结构体与 Worker `ActivationInput` 一一对齐；早期多发的 `platform` / `build_channel`
+/// 两个字段 Worker 侧 serde 虽然静默忽略，但会让前后端协议表面出现"看起来有用
+/// 但其实没用"的冗余字段，移除后以免未来加 `deny_unknown_fields` 时踩坑。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateRequest {
     pub license_key: String,
     pub device_id: String,
     pub device_fingerprint: String,
     pub client_version: String,
-    pub platform: String,
-    pub build_channel: String,
 }
 
+/// 校验请求体：与 Worker `VerifyInput` 对齐。早期带的 `license_version` 字段
+/// Worker 从未读取，移除以保持"协议字段 == Worker 结构体字段"的严格对应。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyRequest {
     pub license_key: String,
     pub device_id: String,
-    pub license_version: u32,
     pub client_version: String,
 }
 
@@ -271,8 +274,6 @@ impl HttpLicenseClient {
             device_id: device_id.to_string(),
             device_fingerprint: device_fingerprint.to_string(),
             client_version: client_version.to_string(),
-            platform: std::env::consts::OS.to_string(),
-            build_channel: "desktop".to_string(),
         };
         let resp = self.request_json("/api/activate", &req).await?;
         if !response_allows_activation(&resp) {
@@ -288,13 +289,11 @@ impl HttpLicenseClient {
         &self,
         key: &str,
         device_id: &str,
-        license_version: u32,
         client_version: &str,
     ) -> Result<LicenseApiResponse, LicenseHttpError> {
         let req = VerifyRequest {
             license_key: key.trim().to_uppercase(),
             device_id: device_id.to_string(),
-            license_version,
             client_version: client_version.to_string(),
         };
         self.request_json("/api/verify", &req).await
@@ -385,8 +384,6 @@ mod tests {
             device_id: "dev".into(),
             device_fingerprint: "fp".into(),
             client_version: "5.1.0".into(),
-            platform: "macos".into(),
-            build_channel: "desktop".into(),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(
@@ -397,6 +394,15 @@ mod tests {
             !json.contains("\"key\":\"TLS"),
             "Activate 请求体不得出现已废弃的 `key` 字段：{json}"
         );
+        // 与 Worker `ActivationInput` 字段严格一一对应，不再多发协议未读的字段
+        assert!(
+            !json.contains("\"platform\""),
+            "Activate 请求体不得发送 Worker 不消费的 `platform` 字段：{json}"
+        );
+        assert!(
+            !json.contains("\"build_channel\""),
+            "Activate 请求体不得发送 Worker 不消费的 `build_channel` 字段：{json}"
+        );
     }
 
     #[test]
@@ -404,13 +410,17 @@ mod tests {
         let req = VerifyRequest {
             license_key: "TLS-ABC".into(),
             device_id: "dev".into(),
-            license_version: 3,
             client_version: "5.1.0".into(),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(
             json.contains("\"license_key\""),
             "Verify 请求体必须包含 license_key 字段：{json}"
+        );
+        // 与 Worker `VerifyInput` 字段严格一一对应
+        assert!(
+            !json.contains("\"license_version\""),
+            "Verify 请求体不得发送 Worker 不消费的 `license_version` 字段：{json}"
         );
     }
 
