@@ -48,7 +48,9 @@ https://sphapi.199908.top/admin
 - `LICENSE_SIGNING_PRIVATE_KEY_B64`
   Ed25519 私钥，Base64 编码的 PKCS8 DER（或带 `-----BEGIN PRIVATE KEY-----` 的 PEM 文本）。Worker 用它对 `LeasePayload` 做 Ed25519 签名，签发客户端用的 Lease Token。
 
-> **历史兼容**：仓库早期版本还声明过 `HMAC_SECRET`，在当前 Rust Worker 代码中未被读取；出于安全回滚考虑**不主动清理**现有 Cloudflare Secret 值，但新部署不再需要设置它。
+> **历史遗留**：V1 协议曾用 `HMAC_SECRET` 做卡密 HMAC-SHA256 签名（JS Worker + Python 客户端共用）；V2 协议已切换到 Ed25519 Lease Token + 卡密纯随机 + D1 存在性校验模型，整个 Rust 仓库对 `HMAC_SECRET` **0 引用**。
+>
+> 建议执行 `cd backend && npx wrangler secret delete HMAC_SECRET` 清理线上 secret，新部署不再需要它。
 
 客户端内置的验签公钥常量在 `backend/license-service/src/service.rs` 的 `LICENSE_PUBLIC_KEY_B64`。**轮换签名私钥前，必须同步更新该常量与所有已发布客户端**，否则旧设备的 Lease Token 将全部进入 `LicenseState::Invalid`，被迫重新激活。
 

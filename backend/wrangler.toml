@@ -15,7 +15,7 @@ command = "./scripts/build_license_worker.sh --release"
 
 [vars]
 # ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置。
-# 旧的 HMAC_SECRET 在当前代码中未被引用；如果线上仍保留该 secret，出于兼容性考虑不主动清理。
+# V1 旧协议的 HMAC_SECRET 已彻底弃用；若线上仍残留可用 `wrangler secret delete HMAC_SECRET` 清理。
 
 [[d1_databases]]
 binding = "DB"
