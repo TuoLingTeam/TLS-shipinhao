@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DeliveryView from "./DeliveryView.vue";
 import { useAppStore } from "../app.store";
@@ -18,8 +18,11 @@ vi.mock("../delivery/useDelivery", () => ({
 }));
 
 describe("DeliveryView", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
 
     const appStore = useAppStore();
     appStore.setLicenseState("active");
@@ -52,7 +55,7 @@ describe("DeliveryView", () => {
   it("renders the two-column batch delivery workspace without the hero summary", () => {
     const wrapper = mount(DeliveryView, {
       global: {
-        plugins: [createPinia()],
+        plugins: [pinia],
         stubs: {
           ConfirmDialog: true,
         },

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsView from "./SettingsView.vue";
@@ -40,8 +40,11 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 describe("SettingsView", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
     invokeMock.mockClear();
   });
 
@@ -55,7 +58,7 @@ describe("SettingsView", () => {
 
     const wrapper = mount(SettingsView, {
       global: {
-        plugins: [router, createPinia()],
+        plugins: [router, pinia],
       },
     });
 

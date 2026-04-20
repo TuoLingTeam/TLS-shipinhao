@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardView from "./DashboardView.vue";
 import { useAppStore } from "../app.store";
@@ -46,8 +46,11 @@ vi.mock("../shared/cookieHealth", () => ({
 }));
 
 describe("DashboardView", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
     executeMock.mockClear();
     loadCacheStatusMock.mockClear();
     refreshSilentlyMock.mockClear();
@@ -111,7 +114,7 @@ describe("DashboardView", () => {
   it("uses a single-row metrics strip on desktop with enlarged metric tiles", async () => {
     const wrapper = mount(DashboardView, {
       global: {
-        plugins: [createPinia()],
+        plugins: [pinia],
         stubs: {
           RouterLink: { template: "<a><slot /></a>" },
           AppNavIcon: true,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import ReviewMatchView from "./ReviewMatchView.vue";
@@ -9,8 +9,11 @@ import { routes } from "../routeRecords";
 import { useReviewStore } from "./review.store";
 
 describe("ReviewMatchView", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
 
     const reviewStore = useReviewStore();
     reviewStore.setLastQuery({
@@ -32,7 +35,7 @@ describe("ReviewMatchView", () => {
 
     const wrapper = mount(ReviewMatchView, {
       global: {
-        plugins: [router, createPinia()],
+        plugins: [router, pinia],
         stubs: {
           LoadingState: true,
           EmptyState: true,
@@ -58,7 +61,7 @@ describe("ReviewMatchView", () => {
 
     const wrapper = mount(ReviewMatchView, {
       global: {
-        plugins: [router, createPinia()],
+        plugins: [router, pinia],
         stubs: {
           LoadingState: true,
           EmptyState: true,

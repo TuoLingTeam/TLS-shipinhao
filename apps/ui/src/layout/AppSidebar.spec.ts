@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import AppSidebar from "./AppSidebar.vue";
 import { routes } from "../routeRecords";
 
 describe("AppSidebar", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
   });
 
   it("uses compact brand and navigation blocks without redundant system summary", async () => {
@@ -22,7 +25,7 @@ describe("AppSidebar", () => {
 
     const wrapper = mount(AppSidebar, {
       global: {
-        plugins: [router, createPinia()],
+        plugins: [router, pinia],
       },
     });
 
@@ -41,7 +44,7 @@ describe("AppSidebar", () => {
 
     const wrapper = mount(AppSidebar, {
       global: {
-        plugins: [router, createPinia()],
+        plugins: [router, pinia],
       },
     });
 
