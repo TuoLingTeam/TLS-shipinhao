@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::adapters::http_delivery_gateway::HttpDeliveryGateway;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
+use crate::commands::shared::require_cookie_credentials;
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_BATCH_DELIVERY;
@@ -22,15 +23,10 @@ pub async fn update_delivery(
 ) -> Result<DeliveryUpdateResult, AppError> {
     ensure_feature_authorized(&state, "发货功能").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_BATCH_DELIVERY).await?;
-    let cookie_profile = state.cookie_profile.lock().await;
-    if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
-    }
-    let cookie = cookie_profile.cookie_header.clone();
-    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
-    drop(cookie_profile);
+    let creds = require_cookie_credentials(&state).await?;
 
-    let gateway = HttpDeliveryGateway::new_with_grant(cookie, magic, Some(grant.grant_id));
+    let gateway =
+        HttpDeliveryGateway::new_with_grant(creds.cookie, creds.magic, Some(grant.grant_id));
     let request = domain_core::DeliveryUpdateRequest {
         order_id,
         tracking_number,
@@ -53,13 +49,9 @@ pub async fn batch_delivery(
 ) -> Result<BatchDeliveryOutput, AppError> {
     ensure_feature_authorized(&state, "发货功能").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_BATCH_DELIVERY).await?;
-    let cookie_profile = state.cookie_profile.lock().await;
-    if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
-    }
-    let cookie = cookie_profile.cookie_header.clone();
-    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
-    drop(cookie_profile);
+    let creds = require_cookie_credentials(&state).await?;
+    let cookie = creds.cookie;
+    let magic = creds.magic;
 
     let batch_items: Vec<BatchDeliveryItem> = items
         .iter()

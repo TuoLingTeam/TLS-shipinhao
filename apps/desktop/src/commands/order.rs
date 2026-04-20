@@ -4,6 +4,7 @@ use crate::adapters::http_order_search::{
 use crate::adapters::sqlite_order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::paths::{cache_data_dir, rich_order_cache_path};
+use crate::commands::shared::require_cookie_credentials;
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_CACHE_MANAGE;
@@ -212,18 +213,13 @@ pub async fn sync_orders(
 ) -> Result<OrderSyncResult, AppError> {
     ensure_feature_authorized(&state, "订单同步").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_CACHE_MANAGE).await?;
-    let cookie_profile = state.cookie_profile.lock().await;
-    if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
-    }
-    let cookie = cookie_profile.cookie_header.clone();
-    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
-    drop(cookie_profile);
+    let creds = require_cookie_credentials(&state).await?;
 
     let (start_unix, end_unix) =
         parse_iso_window(&start_at, &end_at).map_err(|e| AppError::Message(e.to_string()))?;
 
-    let client = HttpOrderSearchClient::new_with_grant(cookie, magic, Some(grant.grant_id));
+    let client =
+        HttpOrderSearchClient::new_with_grant(creds.cookie, creds.magic, Some(grant.grant_id));
     let snapshot = client
         .fetch_order_snapshots_in_window(start_unix, end_unix)
         .await
@@ -262,13 +258,9 @@ pub async fn sync_recent_order_cache(
 ) -> Result<OrderSyncResult, AppError> {
     ensure_feature_authorized(&state, "订单同步").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_CACHE_MANAGE).await?;
-    let cookie_profile = state.cookie_profile.lock().await;
-    if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
-    }
-    let cookie = cookie_profile.cookie_header.clone();
-    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
-    drop(cookie_profile);
+    let creds = require_cookie_credentials(&state).await?;
+    let cookie = creds.cookie;
+    let magic = creds.magic;
 
     emit_order_sync_progress(
         &app,

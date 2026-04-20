@@ -9,6 +9,7 @@ use crate::commands::order::{
     emit_order_sync_progress, mask_order_cache_error, recent_order_cache_status,
 };
 use crate::commands::paths::rich_order_cache_path;
+use crate::commands::shared::require_cookie_credentials;
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::{LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND};
@@ -367,13 +368,7 @@ pub async fn find_reviews(
 ) -> Result<ReviewMatchResponse, AppError> {
     ensure_feature_authorized(&state, "评价管理").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_REVIEW_FIND).await?;
-    let cookie_profile = state.cookie_profile.lock().await;
-    if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
-    }
-    let cookie = cookie_profile.cookie_header.clone();
-    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
-    drop(cookie_profile);
+    let creds = require_cookie_credentials(&state).await?;
 
     let query = ReviewQuery {
         days,
@@ -381,7 +376,9 @@ pub async fn find_reviews(
         runtime_grant: Some(grant.clone()),
     };
 
-    tokio::task::spawn_blocking(move || run_review_match_flow(app, cookie, magic, query))
+    tokio::task::spawn_blocking(move || {
+        run_review_match_flow(app, creds.cookie, creds.magic, query)
+    })
         .await
         .map_err(|e| AppError::Message(e.to_string()))?
 }
@@ -395,13 +392,7 @@ pub async fn find_quality_refund_orders(
 ) -> Result<ReviewMatchResponse, AppError> {
     ensure_feature_authorized(&state, "品退订单").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_QUALITY_REFUND).await?;
-    let cookie_profile = state.cookie_profile.lock().await;
-    if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
-    }
-    let cookie = cookie_profile.cookie_header.clone();
-    let magic = cookie_profile.biz_magic.clone().unwrap_or_default();
-    drop(cookie_profile);
+    let creds = require_cookie_credentials(&state).await?;
 
     let query = ReviewQuery {
         days,
@@ -410,7 +401,11 @@ pub async fn find_quality_refund_orders(
     };
 
     let results = tokio::task::spawn_blocking(move || {
-        let source = HttpQualityRefundSource::new_with_grant(cookie, magic, Some(grant.grant_id));
+        let source = HttpQualityRefundSource::new_with_grant(
+            creds.cookie,
+            creds.magic,
+            Some(grant.grant_id),
+        );
         source.fetch_quality_refund_orders(&query.time_window)
     })
     .await
