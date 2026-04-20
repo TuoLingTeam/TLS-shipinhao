@@ -43,7 +43,7 @@ fn main() {
                     }
                     Ok(_) => {}
                     Err(err) => {
-                        eprintln!("update check skipped: {err}");
+                        tracing::warn!(target: "update.check", %err, "跳过本次自动更新检查");
                     }
                 }
             });

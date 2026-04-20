@@ -218,14 +218,11 @@ fn load_cookie_from_file(path: &Path) -> CookieProfile {
                 return CookieProfile::default();
             }
             let biz_magic = parse_biz_magic(&cookie_header);
-            eprintln!(
-                "[state] 从 {} 加载 Cookie（biz_magic={}）",
-                path.display(),
-                if biz_magic.is_some() {
-                    "已提取"
-                } else {
-                    "缺失"
-                }
+            tracing::debug!(
+                target: "state.cookie.load",
+                path = %path.display(),
+                biz_magic = if biz_magic.is_some() { "extracted" } else { "missing" },
+                "从磁盘加载 Cookie",
             );
             CookieProfile {
                 cookie_header,
@@ -233,7 +230,11 @@ fn load_cookie_from_file(path: &Path) -> CookieProfile {
             }
         }
         Err(_) => {
-            eprintln!("[state] Cookie 文件不存在：{}", path.display());
+            tracing::debug!(
+                target: "state.cookie.load",
+                path = %path.display(),
+                "Cookie 文件不存在，返回空 CookieProfile",
+            );
             CookieProfile::default()
         }
     }
