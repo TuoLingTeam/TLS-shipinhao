@@ -1,25 +1,36 @@
-use chrono::{DateTime, Duration, Local, TimeZone, Utc};
+use chrono::{DateTime, Duration, FixedOffset, TimeZone, Utc};
+
+/// 业务基准时区：中国标准时间（UTC+8）。
+///
+/// 视频号卖家的"自然日"语义固定为北京时间 00:00:00 – 23:59:59。历史上这组
+/// public API 用 `chrono::Local` 读取系统时区——开发机默认 `Asia/Shanghai`
+/// 时能侥幸跑对，但在 CI（GitHub Actions runner 默认 UTC）或海外部署机器上
+/// 会把"自然日"滑一个偏移，导致订单同步起止时间错位一整天。锁死 UTC+8 之
+/// 后，生产行为与单元测试断言的"北京时间日界"一致，跨时区环境不再漂移。
+fn china_offset() -> FixedOffset {
+    FixedOffset::east_opt(8 * 3600).expect("UTC+8 offset must construct successfully")
+}
 
 pub fn start_of_day_timestamp(dt: Option<DateTime<Utc>>) -> i64 {
     let current = dt.unwrap_or_else(Utc::now);
-    start_of_day_timestamp_in_timezone(current, &Local)
+    start_of_day_timestamp_in_timezone(current, &china_offset())
 }
 
 pub fn end_of_day_timestamp(dt: Option<DateTime<Utc>>) -> i64 {
     let current = dt.unwrap_or_else(Utc::now);
-    end_of_day_timestamp_in_timezone(current, &Local)
+    end_of_day_timestamp_in_timezone(current, &china_offset())
 }
 
 pub fn end_of_previous_day_timestamp(dt: Option<DateTime<Utc>>) -> i64 {
     let current = dt.unwrap_or_else(Utc::now);
     let previous = current - Duration::days(1);
-    end_of_day_timestamp_in_timezone(previous, &Local)
+    end_of_day_timestamp_in_timezone(previous, &china_offset())
 }
 
 pub fn recent_day_range_timestamps(days: i64, now: Option<DateTime<Utc>>) -> (i64, i64) {
     let current = now.unwrap_or_else(Utc::now);
     let safe_days = days.max(0);
-    recent_day_range_timestamps_in_timezone(safe_days, current, &Local)
+    recent_day_range_timestamps_in_timezone(safe_days, current, &china_offset())
 }
 
 fn boundary_timestamp_in_timezone<Tz: TimeZone>(
