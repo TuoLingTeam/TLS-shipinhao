@@ -12,6 +12,7 @@ ENV/
 *.egg-info/
 build/
 .pyinstaller/
+.playwright-mcp/
 
 # Downloaded files
 downloaded_invoices/*.pdf
