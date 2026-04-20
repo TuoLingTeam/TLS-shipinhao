@@ -45,49 +45,6 @@ const licenseActionHint = computed(() =>
   appStore.isLicensed ? "当前授权可继续使用；若刚续费，建议手动刷新同步服务端状态。" : "尚未激活，建议先输入卡密完成授权。",
 );
 
-type CookieTone = "success" | "warn" | "error" | "idle";
-
-const cookieHealthTone = computed<CookieTone>(() => {
-  switch (cookieHealth.status) {
-    case "healthy":
-      return "success";
-    case "unhealthy":
-      return "error";
-    case "unconfigured":
-      return "warn";
-    default:
-      return "idle";
-  }
-});
-
-const cookieHealthLabel = computed(() => {
-  switch (cookieHealth.status) {
-    case "healthy":
-      return "Cookie 可用";
-    case "unhealthy":
-      return "Cookie 已失效";
-    case "unconfigured":
-      return "Cookie 尚未配置";
-    default:
-      return "Cookie 待探测";
-  }
-});
-
-const cookieHealthHint = computed(
-  () =>
-    cookieHealth.error ||
-    cookieHealth.snapshot.hint ||
-    (cookieHealth.status === "healthy"
-      ? "Cookie 已通过探测，可直接进入评价匹配与批量发货。"
-      : "建议完成登录并执行一次自动提取，再回仪表盘核对状态。"),
-);
-
-const cookieHealthCheckedAt = computed(() =>
-  cookieHealth.snapshot.last_checked_at ? formatDateTime(cookieHealth.snapshot.last_checked_at) : "尚未探测",
-);
-
-const cookieHealthCardClass = computed(() => `settings-cookie-health--${cookieHealthTone.value}`);
-
 async function refreshCookieHealth() {
   try {
     await cookieHealth.refreshSilently();
@@ -268,90 +225,62 @@ onMounted(() => {
           </div>
         </header>
 
-        <div class="settings-cookie-grid">
-          <div class="settings-field-card settings-cookie-main">
-            <label class="field-label">手动覆盖 Cookie</label>
-            <textarea
-              data-testid="settings-cookie-textarea"
-              v-model.trim="cookieHeader"
-              class="field-textarea settings-cookie-textarea font-mono text-sm"
-              placeholder="粘贴完整的 Cookie 字符串..."
-            />
-            <div class="settings-field-footer">
-              <span v-if="saved" class="settings-inline-note is-success">Cookie 已保存，可继续回仪表盘核对状态。</span>
-              <span v-else class="settings-inline-note">自动提取成功后会回填到这里，方便继续检查或微调。</span>
-            </div>
-
-            <div data-testid="settings-cookie-path" class="settings-cookie-path-box">
-              <div class="settings-cookie-path-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                  <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
-                </svg>
-                当前保存位置
-              </div>
-              <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
-            </div>
+        <div class="settings-cookie-body">
+          <label class="field-label">手动覆盖 Cookie</label>
+          <textarea
+            data-testid="settings-cookie-textarea"
+            v-model.trim="cookieHeader"
+            class="field-textarea settings-cookie-textarea font-mono text-sm"
+            placeholder="粘贴完整的 Cookie 字符串..."
+          />
+          <div class="settings-field-footer">
+            <span v-if="saved" class="settings-inline-note is-success">Cookie 已保存，可继续回仪表盘核对状态。</span>
+            <span v-else class="settings-inline-note">自动提取成功后会回填到这里，方便继续检查或微调。</span>
           </div>
 
-          <div data-testid="settings-cookie-side" class="settings-side-stack">
-            <div class="settings-callout settings-callout--compact">
-              <div class="settings-callout-title">推荐顺序</div>
-              <p class="settings-callout-copy">
-                登录 → 自动提取 →（失败时）手动覆盖。左侧编辑区聚焦内容，右侧按钮形成操作工作台。
-              </p>
+          <div data-testid="settings-cookie-path" class="settings-cookie-path-box">
+            <div class="settings-cookie-path-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
+              </svg>
+              当前保存位置
             </div>
+            <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
+          </div>
 
-            <div
-              data-testid="settings-cookie-actions"
-              class="settings-action-card"
-            >
-              <div class="settings-action-title">快捷操作</div>
-              <div class="settings-action-buttons-grid">
-                <button type="button" class="action-btn action-btn-primary min-h-10" @click="handleSave">
-                  保存 Cookie
-                </button>
-                <button
-                  type="button"
-                  class="action-btn action-btn-primary min-h-10"
-                  :disabled="extractLoading"
-                  @click="handleExtractCookie"
-                >
-                  {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
-                </button>
-                <button
-                  type="button"
-                  class="action-btn action-btn-secondary min-h-10"
-                  :disabled="loginLoading"
-                  @click="handleOpenLogin"
-                >
-                  {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
-                </button>
-                <button
-                  type="button"
-                  class="action-btn action-btn-secondary min-h-10"
-                  :disabled="pickDirLoading"
-                  @click="handlePickSaveDir"
-                >
-                  {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
-                </button>
-              </div>
-            </div>
-
-            <div class="settings-cookie-health" :class="cookieHealthCardClass">
-              <div class="settings-cookie-health-head">
-                <span class="status-dot" :class="cookieHealthTone !== 'idle' ? cookieHealthTone : ''"></span>
-                <span class="settings-cookie-health-label">{{ cookieHealthLabel }}</span>
-                <span class="settings-cookie-health-meta">{{ cookieHealthCheckedAt }}</span>
-              </div>
-              <p class="settings-cookie-health-hint">{{ cookieHealthHint }}</p>
-              <div class="settings-cookie-health-tags">
-                <span class="settings-cookie-health-tag" :class="cookieConfigured ? 'is-positive' : 'is-muted'">
-                  {{ cookieConfigured ? "已保存 Cookie" : "未保存 Cookie" }}
-                </span>
-                <span class="settings-cookie-health-tag" :class="hasBizMagic ? 'is-positive' : 'is-muted'">
-                  {{ hasBizMagic ? "已识别 biz_magic" : "待识别 biz_magic" }}
-                </span>
-              </div>
+          <div
+            data-testid="settings-cookie-actions"
+            class="settings-action-card"
+          >
+            <div class="settings-action-title">快捷操作</div>
+            <div class="settings-action-buttons-grid settings-action-buttons-grid--2x2">
+              <button type="button" class="action-btn action-btn-primary min-h-10" @click="handleSave">
+                保存 Cookie
+              </button>
+              <button
+                type="button"
+                class="action-btn action-btn-primary min-h-10"
+                :disabled="extractLoading"
+                @click="handleExtractCookie"
+              >
+                {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
+              </button>
+              <button
+                type="button"
+                class="action-btn action-btn-secondary min-h-10"
+                :disabled="loginLoading"
+                @click="handleOpenLogin"
+              >
+                {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
+              </button>
+              <button
+                type="button"
+                class="action-btn action-btn-secondary min-h-10"
+                :disabled="pickDirLoading"
+                @click="handlePickSaveDir"
+              >
+                {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
+              </button>
             </div>
           </div>
         </div>
@@ -382,7 +311,7 @@ onMounted(() => {
           <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
         </header>
 
-        <div class="settings-info-grid">
+        <div class="settings-info-grid settings-info-grid--single">
           <div class="settings-info-item">
             <span class="settings-info-label">状态</span>
             <span class="settings-info-value">{{ currentStateText }}</span>

@@ -843,14 +843,14 @@ textarea {
 }
 
 /* 设置布局：3 个独立卡片（Cookie / 授权 / 应用）平级排布
-   桌面双列：Cookie 横跨整行，授权与应用并排在下；
+   桌面双列：Cookie 在左、授权在右上、应用在右下；
    单列布局下走 @media 重排成纵向堆叠（Cookie → 授权 → 应用）。 */
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   grid-template-areas:
-    "cookie cookie"
-    "license about";
+    "cookie license"
+    "cookie about";
   gap: 0.9rem;
   align-items: start;
 }
@@ -1183,15 +1183,17 @@ textarea {
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
-.settings-cookie-main {
+.settings-cookie-body {
   display: flex;
   flex-direction: column;
+  gap: 0.55rem;
 }
 
 .settings-cookie-textarea {
-  /* textarea 用合理的固定高度，避免被 flex:1 撑得过大；超长内容由 textarea 自身滚动 */
-  min-height: 180px;
-  max-height: 280px;
+  /* textarea 用紧凑高度，4 个按钮放到下方，整体减少垂直占用 */
+  min-height: 120px;
+  max-height: 160px;
+  resize: vertical;
 }
 
 .settings-section-head {
@@ -1215,40 +1217,6 @@ textarea {
   font-size: 0.76rem;
   line-height: 1.45;
   color: #64748b;
-}
-
-.settings-callout {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  border-radius: 16px;
-  border: 1px solid rgba(167, 243, 208, 0.78);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 253, 244, 0.58) 100%);
-  padding: 0.85rem 0.95rem;
-}
-
-.settings-callout--compact {
-  padding: 0.6rem 0.78rem;
-}
-
-.settings-callout-title {
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: var(--color-brand-deep);
-}
-
-.settings-callout-copy {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: #475569;
-}
-
-.settings-cookie-grid,
-.settings-license-grid {
-  display: grid;
-  gap: 0.85rem;
-  min-width: 0;
 }
 
 .settings-field-card,
@@ -1280,13 +1248,6 @@ textarea {
   font-weight: 600;
 }
 
-.settings-side-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  min-width: 0;
-}
-
 .settings-action-card {
   gap: 0.55rem;
   padding: 0.78rem;
@@ -1296,52 +1257,6 @@ textarea {
   font-size: 0.88rem;
   font-weight: 700;
   color: var(--color-heading);
-}
-
-.settings-action-copy {
-  margin: 0;
-  font-size: 0.74rem;
-  line-height: 1.45;
-  color: #64748b;
-}
-
-.settings-action-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.settings-action-divider {
-  height: 1px;
-  background: rgba(226, 232, 240, 0.95);
-}
-
-.settings-inline-path {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-}
-
-.settings-status-value--compact {
-  font-size: 0.8rem;
-  line-height: 1.45;
-}
-
-.settings-cookie-textarea {
-  min-height: 238px;
-}
-
-@media (min-width: 960px) {
-  .settings-cookie-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
-    grid-template-rows: 1fr;
-    align-items: stretch;
-  }
-}
-
-.settings-license-grid {
-  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 320px);
-  align-items: start;
 }
 
 .settings-stat-grid {
@@ -1388,8 +1303,6 @@ textarea {
 }
 
 @media (max-width: 960px) {
-  .settings-cookie-grid,
-  .settings-license-grid,
   .settings-about-grid,
   .settings-sidebar-info-grid,
   .settings-sidebar-about-grid {
@@ -1932,11 +1845,7 @@ textarea {
   .settings-workspace,
   .settings-section-card,
   .settings-row-card,
-  .settings-cookie-grid,
-  .settings-license-grid,
-  .settings-cookie-main,
   .settings-cookie-editor,
-  .settings-side-stack,
   .settings-row-body,
   .settings-row-body--cookie {
     flex: 0 0 auto !important;
@@ -1945,7 +1854,8 @@ textarea {
 
   .settings-cookie-textarea {
     flex: 0 0 auto !important;
-    min-height: 220px !important;
+    min-height: 120px !important;
+    max-height: 200px !important;
     resize: vertical;
   }
 
@@ -2346,9 +2256,16 @@ textarea {
   gap: 0.5rem;
 }
 
-/* Cookie 编辑卡：内嵌"当前保存位置"信息块，代替原右侧底部位置 */
-.settings-cookie-main {
-  gap: 0.7rem;
+/* Cookie 卡内 4 个按钮：2x2 紧凑网格 */
+.settings-action-buttons-grid--2x2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+/* 授权信息卡：单列每行一项 */
+.settings-info-grid--single {
+  grid-template-columns: 1fr;
 }
 
 .settings-cookie-path-box {
@@ -2633,94 +2550,6 @@ textarea {
   background: rgba(148, 163, 184, 0.14);
   color: #64748b;
   border-color: rgba(203, 213, 225, 0.7);
-}
-
-/* 设置 · Cookie 健康速览（填充右栏底部空白） */
-.settings-cookie-health {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 14px 32px -28px rgba(15, 23, 42, 0.2);
-}
-
-.settings-cookie-health--success {
-  border-color: rgba(5, 150, 105, 0.28);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(236, 253, 245, 0.72) 100%);
-}
-
-.settings-cookie-health--warn {
-  border-color: rgba(249, 115, 22, 0.32);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 237, 213, 0.7) 100%);
-}
-
-.settings-cookie-health--error {
-  border-color: rgba(220, 38, 38, 0.32);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(254, 226, 226, 0.7) 100%);
-}
-
-.settings-cookie-health--idle {
-  border-color: rgba(203, 213, 225, 0.9);
-  background: rgba(248, 250, 252, 0.92);
-}
-
-.settings-cookie-health-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.settings-cookie-health-label {
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--color-heading);
-  letter-spacing: -0.01em;
-}
-
-.settings-cookie-health-meta {
-  margin-left: auto;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #94a3b8;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.settings-cookie-health-hint {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: #475569;
-}
-
-.settings-cookie-health-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.settings-cookie-health-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.22rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.settings-cookie-health-tag.is-positive {
-  background: rgba(5, 150, 105, 0.12);
-  color: var(--color-brand-deep);
-}
-
-.settings-cookie-health-tag.is-muted {
-  background: rgba(148, 163, 184, 0.16);
-  color: #64748b;
 }
 
 /* 发货 · 进行中的显眼停止按钮 */
