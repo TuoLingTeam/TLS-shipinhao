@@ -13,6 +13,23 @@
 //! - UA 固定带产品名 + 版本号 + 平台，不模仿浏览器。Cloudflare 需要的只是
 //!   "非默认 reqwest UA"，使用真实标识更利于上游运维溯源。
 //! - 调用方传入 `timeout`，不再各自 `timeout()` + `Client::new()`。
+//!
+//! ## 同步边界说明
+//!
+//! 这里返回的是 **异步** `reqwest::Client`。`apps/desktop/src/adapters/http_*.rs`
+//! 的多数方法位于 `ReviewSource` / `DeliveryGateway` 等**同步 trait** 内部，
+//! 而 Tauri 命令层本身是 `async fn`。目前的执行链路是：
+//!
+//! 1. `#[tauri::command] async fn ...` 接到前端请求
+//! 2. 在 tokio runtime 内 `tokio::task::spawn_blocking(|| run_*_flow(...))`
+//!    把**同步**业务流程丢到阻塞线程池
+//! 3. `run_*_flow` 调用 adapter 的同步方法，方法内再 `std::thread::spawn + Handle::block_on`
+//!    在新线程里跑 async reqwest 请求，避免在阻塞线程上触发 `block_on` 嵌套检测
+//!
+//! 这种"内外两层线程"的兼容做法是历史原因导致的（同步 trait + async reqwest）。
+//! 未来若把 trait 切换为 `async_trait` 或迁移到 `reqwest::blocking::Client`，
+//! 便能去掉 `std::thread::spawn + Handle::block_on` 包装层。当前保留现状以锁住
+//! 生产可用性，不在 slop 清理期动。
 
 use std::time::Duration;
 

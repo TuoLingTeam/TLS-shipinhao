@@ -29,6 +29,13 @@ pub struct SingleEvaluationMatch {
     pub top_score: i32,
 }
 
+/// 按命中分数映射到策略分档。
+///
+/// **已知限制**：当前 `AUTO_FILL_SCORE_THRESHOLD == 100` 与首个分支阈值同值，导致
+/// `HighConfidence` 分支**当前不可达**——任何 `score >= 100` 都会命中 `ExactMatch`。
+/// 这是有意保留的"分档骨架"，方便未来把阈值下调（例如 `AUTO_FILL_SCORE_THRESHOLD = 90`）
+/// 让 `[90, 100)` 落入 `HighConfidence`。改阈值属语义调整，需产品确认后同步调整前端
+/// UI 的策略徽章与自动带入决策，因此 slop 清理期**不改此函数**。
 pub fn match_strategy_by_score(score: i32) -> MatchStrategy {
     if score >= 100 {
         MatchStrategy::ExactMatch
@@ -370,9 +377,31 @@ mod tests {
 
     #[test]
     fn maps_thresholds_to_expected_strategies() {
+        // 精确边界（ExactMatch）：score >= 100 必须命中首档
         assert_eq!(match_strategy_by_score(100), MatchStrategy::ExactMatch);
+        assert_eq!(match_strategy_by_score(1_000), MatchStrategy::ExactMatch);
+
+        // HighConfidence 分档当前被 ExactMatch 吞掉（AUTO_FILL_SCORE_THRESHOLD == 100），
+        // 这里显式锁住"score = 100 一定是 ExactMatch 而非 HighConfidence"，防止后续
+        // 有人无意中把 ExactMatch 的阈值改成 `> 100`。
+        assert_ne!(match_strategy_by_score(100), MatchStrategy::HighConfidence);
+
+        // ProbableMatch 区间：[MATCH_MIN_SCORE=50, 100)
+        assert_eq!(match_strategy_by_score(99), MatchStrategy::ProbableMatch);
         assert_eq!(match_strategy_by_score(80), MatchStrategy::ProbableMatch);
+        assert_eq!(
+            match_strategy_by_score(crate::review_candidate_scoring::MATCH_MIN_SCORE),
+            MatchStrategy::ProbableMatch
+        );
+
+        // Fallback：score < MATCH_MIN_SCORE
+        assert_eq!(
+            match_strategy_by_score(crate::review_candidate_scoring::MATCH_MIN_SCORE - 1),
+            MatchStrategy::Fallback
+        );
         assert_eq!(match_strategy_by_score(40), MatchStrategy::Fallback);
+        assert_eq!(match_strategy_by_score(0), MatchStrategy::Fallback);
+        assert_eq!(match_strategy_by_score(-5), MatchStrategy::Fallback);
     }
 
     #[test]
