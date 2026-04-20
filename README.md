@@ -151,15 +151,9 @@ npx wrangler deploy
 
 ## 相关文档
 
-<<<<<<< Updated upstream
-- 产品/任务卡片：`backend/docs/`
-- 发布手册：`backend/docs/release-runbook.md`
-- 回归矩阵：`backend/docs/regression-matrix.md`
-=======
 - 产品/任务卡片：`docs/`
 - 发布手册：`docs/operations/release-runbook.md`
 - 回归矩阵：`docs/reports/regression-matrix.md`
->>>>>>> Stashed changes
 - 变更设计：`openspec/changes/`
 
 ## 注意事项
