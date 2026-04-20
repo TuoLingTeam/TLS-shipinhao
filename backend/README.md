@@ -20,39 +20,42 @@ https://sphapi.199908.top/admin
 
 ## 功能概览
 
-- 客户端激活卡密：`POST /api/activate`
-- 客户端校验卡密：`POST /api/verify`
-- 客户端申请任务会话：`POST /api/session/issue`
-- 客户端刷新任务会话：`POST /api/session/refresh`
-- 管理后台登录页：`GET /admin`
-- 管理员生成卡密：`POST /api/admin/generate`
-- 管理员查看卡密列表与统计：`POST /api/admin/list`
-- 管理员吊销卡密：`POST /api/admin/revoke`
+运行时协议全部由 `backend/apps/license-worker/src/messages.rs` 定义，下述 5 条客户端路由 + 4 条管理端路由就是全部对外表面：
 
-**说明**：请使用本目录 `wrangler.toml` 部署 **Rust Worker**；管理员接口由 `backend/apps/license-worker` 内 D1 逻辑提供（需配置 `ADMIN_SECRET` 与 D1）。
-- 管理员重置设备绑定：`POST /api/admin/device/rebind`
-- 管理员吊销短期会话：`POST /api/admin/device/revoke_sessions`
-- 管理员查看授权审计：`POST /api/admin/audit/list`
+### 客户端路由
+
+- 激活卡密：`POST /api/activate`
+- 校验授权：`POST /api/verify`
+- 续约 Lease：`POST /api/lease/refresh`
+- 管理员吊销 Lease：`POST /api/lease/revoke`（要求 `X-Admin-Secret`）
+- 任务级授权：`POST /api/task/authorize`
+
+### 管理端路由
+
+- 管理后台登录页：`GET /admin`
+- 查看卡密列表与统计：`POST /api/admin/list`
+- 生成卡密：`POST /api/admin/generate`
+- 吊销卡密：`POST /api/admin/revoke`
+
+管理端路由全部要求 `X-Admin-Secret: <ADMIN_SECRET>` 请求头；具体鉴权逻辑见 `backend/apps/license-worker/src/admin/d1.rs`。
 
 ## 配置说明
 
-本项目依赖三个 Secret：
+本项目使用两个 Secret（通过 `npx wrangler secret put` 写入）：
 
-- `HMAC_SECRET`
-  用于旧卡密格式签名校验。
 - `ADMIN_SECRET`
-  用于 `/admin` 管理后台登录和管理员接口鉴权。
+  用于 `/admin` 管理后台登录和所有管理员接口鉴权。
 - `LICENSE_SIGNING_PRIVATE_KEY_B64`
-  Ed25519 私钥（Base64 编码的 PKCS8 PEM 文本），用于签发 `device_claims`、`offline_grant`、`session_token`。
+  Ed25519 私钥，Base64 编码的 PKCS8 DER（或带 `-----BEGIN PRIVATE KEY-----` 的 PEM 文本）。Worker 用它对 `LeasePayload` 做 Ed25519 签名，签发客户端用的 Lease Token。
 
-客户端内置的公钥位于 [backup/legacy-src/app/settings.py](../backup/legacy-src/app/settings.py) 的 `LICENSE_PUBLIC_KEY`。
-如需轮换密钥，请同时更新客户端公钥与后端私钥。
+> **历史兼容**：仓库早期版本还声明过 `HMAC_SECRET`，在当前 Rust Worker 代码中未被读取；出于安全回滚考虑**不主动清理**现有 Cloudflare Secret 值，但新部署不再需要设置它。
+
+客户端内置的验签公钥常量在 `backend/modules/license-service/src/service.rs` 的 `LICENSE_PUBLIC_KEY_B64`。**轮换签名私钥前，必须同步更新该常量与所有已发布客户端**，否则旧设备的 Lease Token 将全部进入 `LicenseState::Invalid`，被迫重新激活。
 
 ## 首次部署
 
 ```bash
 cd backend
-npx wrangler secret put HMAC_SECRET
 npx wrangler secret put ADMIN_SECRET
 npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
 npx wrangler deploy
@@ -62,11 +65,13 @@ npx wrangler deploy
 
 ## 线上升级到授权协议 V2
 
+> 当前已全部运行在协议 V2（`LICENSE_PROTOCOL_VERSION = 3`）下。以下步骤仅作为历史记录保留。
+
 ### 1. 先执行 D1 迁移
 
 ```bash
 cd backend
-npx wrangler d1 execute tls-license-db --remote --file=./db/migrations/20260415_license_v2.sql
+npx wrangler d1 execute tls-license-db --remote --file=./infra/db/migrations/20260415_license_v2.sql
 ```
 
 ### 2. 配置或轮换授权签名私钥
@@ -76,7 +81,7 @@ cd backend
 npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
 ```
 
-写入值应为 **Base64 编码后的 PKCS8 PEM 文本**，不要直接提交到仓库。
+写入值应为 **Base64 编码后的 PKCS8 DER**（或 `-----BEGIN PRIVATE KEY-----` PEM 文本的 Base64），**不要直接提交到仓库**。
 
 ### 3. 重新部署 Worker
 
@@ -85,104 +90,180 @@ cd backend
 npx wrangler deploy
 ```
 
-### 4. 升级后客户端迁移行为
-
-- 旧卡密：继续有效
-- 旧本地 `license.json`：不再受信任
-- 用户首次打开新客户端时：必须联网重新激活一次
-- 之后高价值任务会在启动前申请 `session_token`，若网络不可用则拒绝启动
-
 ## 本地开发
 
 在 `backend/` 目录创建 `.dev.vars`：
 
 ```dotenv
-HMAC_SECRET=<旧卡密签名密钥>
 ADMIN_SECRET=<本地管理密码>
 LICENSE_SIGNING_PRIVATE_KEY_B64=<Ed25519 私钥 Base64>
 ```
 
 ## 客户端 API
 
+所有请求/响应均为 JSON，字段名使用 `snake_case`。字段定义位于 `backend/apps/license-worker/src/messages.rs` 与 `backend/modules/license-service/src/model.rs`。
+
 ### `POST /api/activate`
 
-请求体：
+首次激活：把卡密与设备绑定，成功后返回已签名的 Lease Token。
+
+请求体（`ActivationInput`）：
 
 ```json
 {
-  "key": "TLS-XXXX-XXXX-XXXX-XXXX",
-  "device_id": "设备指纹哈希（16位）",
-  "device_fingerprint": "原始设备信息",
-  "client_version": "4.3.0",
-  "platform": "darwin",
-  "build_channel": "desktop"
+  "license_key": "TLS-XXXXXXXXXXXXXXXX",
+  "device_id": "设备指纹哈希（16 位 hex）",
+  "device_fingerprint": "原始设备指纹",
+  "client_version": "5.1.0"
 }
 ```
 
-成功响应会返回：
-- `device_claims`
-- `offline_grant`
-- `session_token`
-- 各自的过期时间
-- `license_version=2`
+成功响应（`SignedLicenseApiResponse`）：
+
+```json
+{
+  "success": true,
+  "message": "激活成功",
+  "license_state": "active",
+  "license_lease": "<base64url(payload).base64url(signature)>",
+  "license_expires_at": "2026-05-16T00:00:00Z",
+  "activated_at": "2026-04-16T00:00:00Z",
+  "device_id": "...",
+  "license_key": "TLS-...",
+  "lease_expires_at": "2026-04-19T00:00:00Z",
+  "renew_after": "2026-04-17T00:00:00Z",
+  "issued_at": "2026-04-16T00:00:00Z",
+  "license_status": "active",
+  "task_policy": ["review_find", "review_full_scan", "quality_refund", "batch_delivery", "cache_manage"]
+}
+```
 
 ### `POST /api/verify`
 
-用于在线刷新授权状态与离线票据。
+在线复检，返回新的 Lease Token。
 
-请求体：
+请求体（`VerifyInput`）：
 
 ```json
 {
-  "key": "TLS-XXXX-XXXX-XXXX-XXXX",
-  "device_id": "设备指纹哈希（16位）",
-  "license_version": 2,
-  "session_id": "可选，当前短期会话 ID",
-  "client_version": "4.3.0"
+  "license_key": "TLS-XXXXXXXXXXXXXXXX",
+  "device_id": "设备指纹哈希（16 位 hex）",
+  "client_version": "5.1.0"
 }
 ```
 
-### `POST /api/session/issue`
+响应与 `/api/activate` 一致。
 
-任务启动前申请短期任务令牌。
+### `POST /api/lease/refresh`
 
-请求体：
+Lease 进入软刷新窗口（`now >= renew_after`）后调用；硬过期（`now >= exp`）只能走 `/api/verify`。
+
+请求体（`LeaseRefreshRequest`）：
 
 ```json
 {
-  "license_key": "TLS-XXXX-XXXX-XXXX-XXXX",
-  "device_id": "设备指纹哈希（16位）",
-  "device_claims": "<服务端签发票据>",
+  "license_key": "TLS-XXXXXXXXXXXXXXXX",
+  "device_id": "设备指纹哈希（16 位 hex）",
+  "current_issued_at": 1718000000
+}
+```
+
+响应（`LeaseRefreshResponse`）：
+
+```json
+{
+  "success": true,
+  "message": "lease_refreshed",
+  "new_token": "<base64url(payload).base64url(signature)>"
+}
+```
+
+### `POST /api/lease/revoke`
+
+管理员在客户端侧吊销某个 `license_key`。**必须**携带 `X-Admin-Secret: <ADMIN_SECRET>` 头。
+
+请求体（`LeaseRevokeRequest`）：
+
+```json
+{
+  "license_key": "TLS-XXXXXXXXXXXXXXXX",
+  "device_id": "设备指纹哈希（16 位 hex）",
+  "reason": "admin_revoke"
+}
+```
+
+响应为 `SignedLicenseApiResponse`，`license_state = "revoked"`。
+
+### `POST /api/task/authorize`
+
+高风险任务启动前申请 `RuntimeGrant`。
+
+请求体（`TaskAuthorizeRequest`）：
+
+```json
+{
+  "license_key": "TLS-XXXXXXXXXXXXXXXX",
+  "device_id": "设备指纹哈希（16 位 hex）",
   "task_type": "review_find",
-  "client_version": "4.3.0"
+  "client_version": "5.1.0"
 }
 ```
 
-### `POST /api/session/refresh`
-
-长任务中刷新短期令牌。
-
-请求体：
+响应（`RuntimeGrant`）：
 
 ```json
 {
-  "license_key": "TLS-XXXX-XXXX-XXXX-XXXX",
-  "device_id": "设备指纹哈希（16位）",
-  "session_token": "<旧短期令牌>",
-  "task_type": "review_find"
+  "task_type": "review_find",
+  "granted": true,
+  "grant_id": "worker-grant-1718000000000-1",
+  "valid_until": "2026-04-16T00:30:00Z",
+  "risk_level": "low",
+  "degraded_reason": null
 }
 ```
+
+支持的 `task_type` 白名单在 `backend/shared/api-contracts/src/lib.rs` 的 `SUPPORTED_TASKS`：`review_find` / `review_full_scan` / `quality_refund` / `batch_delivery` / `cache_manage`。
+
+## 管理员 API
+
+全部要求 `X-Admin-Secret: <ADMIN_SECRET>` 请求头。
+
+### `POST /api/admin/list`
+
+无请求体。返回 `generated_keys` 按状态分组统计 + 全量卡密清单（LEFT JOIN `activations`，按创建时间倒序）。
+
+### `POST /api/admin/generate`
+
+```json
+{
+  "count": 10,
+  "plan_days": 30,
+  "note": "可选备注"
+}
+```
+
+`count` 会被钳制到 `[1, 100]`。响应包含生成的 `keys` 数组。
+
+### `POST /api/admin/revoke`
+
+```json
+{
+  "key": "TLS-XXXXXXXXXXXXXXXX"
+}
+```
+
+注意：管理端使用 `key` 字段名（历史协议），客户端 API 统一使用 `license_key`。
 
 ## D1 数据表
 
-- `activations`：设备绑定、授权总状态、最近签发时间
+- `activations`：设备绑定、授权总状态、Lease 过期时间
 - `generated_keys`：后台生成过的卡密
-- `device_sessions`：短期任务令牌
-- `device_registrations`：设备注册记录
-- `license_audit_logs`：审计日志
+- `device_sessions`：历史遗留的短期任务令牌表（当前运行时仅在吊销时做副作用写入，线上保留以供后续兼容或审计查询）
+- `device_registrations`：设备注册记录（激活与吊销时被写入，审计用）
+- `license_audit_logs`：授权动作审计日志
 
 ## 迁移说明
 
-- 旧卡密仍可继续使用
-- 旧客户端的本地 `license.json` 不再受信任
-- 用户升级到新客户端后，必须联网重新激活一次，生成 V2 票据
+- 旧卡密继续有效
+- 升级到 V2 后的客户端必须联网重新激活一次，才能换取 V2 的 Lease Token
+- 轮换签名私钥 = 旧客户端全部需要重新激活（在客户端公钥常量与 Worker secret **同步更新**前，不要执行私钥轮换）

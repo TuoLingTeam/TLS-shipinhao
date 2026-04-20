@@ -1,4 +1,4 @@
-use api_contracts::{LicenseLease, LicenseState};
+use api_contracts::LicenseState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -64,15 +64,4 @@ pub struct AuditEvent {
     pub device_id: String,
     pub reason: String,
     pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LicenseServiceResponse {
-    pub success: bool,
-    pub message: String,
-    pub license_state: LicenseState,
-    pub expired: bool,
-    pub activated_at: Option<String>,
-    pub license_expires_at: Option<String>,
-    pub license_lease: Option<LicenseLease>,
 }

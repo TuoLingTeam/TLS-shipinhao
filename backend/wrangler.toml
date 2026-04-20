@@ -14,7 +14,8 @@ routes = [
 command = "./infra/scripts/build_license_worker.sh --release"
 
 [vars]
-# HMAC_SECRET / ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置
+# ADMIN_SECRET / LICENSE_SIGNING_PRIVATE_KEY_B64 通过 wrangler secret put 设置。
+# 旧的 HMAC_SECRET 在当前代码中未被引用；如果线上仍保留该 secret，出于兼容性考虑不主动清理。
 
 [[d1_databases]]
 binding = "DB"
