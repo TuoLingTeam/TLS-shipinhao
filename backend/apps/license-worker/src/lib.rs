@@ -13,7 +13,6 @@ use license_service::{
     authorize_task_local, ActivationInput, AuditEvent, DeviceRegistration, GeneratedKeyRecord,
     GeneratedKeyStatus, LicenseRecord, VerifyInput,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,94 +29,13 @@ mod admin;
 #[cfg(target_arch = "wasm32")]
 mod runtime;
 
-/// Worker 支持的路由枚举。
-///
-/// 新增路由必须同时更新 `parse_route` / `route_request` / `handle_async_runtime_json`
-/// 与对应的请求/响应结构（`LeaseRefreshRequest` 等）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WorkerRoute {
-    Activate,
-    Verify,
-    /// M2-04 续约端点：input = LeaseRefreshRequest, output = LeaseRefreshResponse
-    LeaseRefresh,
-    /// 管理员吊销端点：由后台管理 UI 触发
-    LeaseRevoke,
-    /// M2-08 任务级授权：input = TaskAuthorizeRequest, output = RuntimeGrant
-    TaskAuthorize,
-    NotFound,
-}
+pub mod messages;
 
-/// `/api/lease/refresh` 入参。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LeaseRefreshRequest {
-    pub license_key: String,
-    pub device_id: String,
-    /// 原 Lease 的 issued_at，Worker 用它做乐观并发控制。
-    pub current_issued_at: i64,
-}
-
-/// `/api/lease/refresh` 响应。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LeaseRefreshResponse {
-    pub success: bool,
-    #[serde(default)]
-    pub message: String,
-    /// 新签发的 Lease Token（base64url(payload).base64url(signature)），
-    /// 客户端需本地验签后才能写回 Keychain。
-    pub new_token: String,
-}
-
-/// `/api/lease/revoke` 入参（管理员使用）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LeaseRevokeRequest {
-    pub license_key: String,
-    pub device_id: String,
-    #[serde(default)]
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AdminRevokeRequest {
-    pub key: String,
-}
-
-/// `/api/task/authorize` 入参。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TaskAuthorizeRequest {
-    pub license_key: String,
-    pub device_id: String,
-    pub task_type: String,
-    #[serde(default)]
-    pub client_version: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SignedLicenseApiResponse {
-    pub success: bool,
-    #[serde(default)]
-    pub message: String,
-    pub license_state: LicenseState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub license_lease: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub license_expires_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub activated_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub device_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub license_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lease_expires_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub renew_after: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issued_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub license_status: Option<LicenseState>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub task_policy: Option<Vec<String>>,
-}
+pub use messages::{
+    parse_route, route_request, route_requires_signer, AdminRevokeRequest, LeaseRefreshRequest,
+    LeaseRefreshResponse, LeaseRevokeRequest, SignedLicenseApiResponse, TaskAuthorizeRequest,
+    WorkerRoute,
+};
 
 #[derive(Debug, Clone)]
 pub struct LeaseTokenSigner {
@@ -788,35 +706,6 @@ pub async fn handle_admin_revoke_json<R: AsyncRuntimeRepository + ?Sized>(
         }
     };
     Ok(serde_json::to_string(&payload)?)
-}
-
-pub fn parse_route(path: &str) -> WorkerRoute {
-    match path {
-        "/api/activate" => WorkerRoute::Activate,
-        "/api/verify" => WorkerRoute::Verify,
-        "/api/lease/refresh" => WorkerRoute::LeaseRefresh,
-        "/api/lease/revoke" => WorkerRoute::LeaseRevoke,
-        "/api/task/authorize" => WorkerRoute::TaskAuthorize,
-        _ => WorkerRoute::NotFound,
-    }
-}
-
-pub fn route_request(path: &str) -> &'static str {
-    match parse_route(path) {
-        WorkerRoute::Activate => "activate",
-        WorkerRoute::Verify => "verify",
-        WorkerRoute::LeaseRefresh => "lease_refresh",
-        WorkerRoute::LeaseRevoke => "lease_revoke",
-        WorkerRoute::TaskAuthorize => "task_authorize",
-        WorkerRoute::NotFound => "not_found",
-    }
-}
-
-pub fn route_requires_signer(route: WorkerRoute) -> bool {
-    matches!(
-        route,
-        WorkerRoute::Activate | WorkerRoute::Verify | WorkerRoute::LeaseRefresh
-    )
 }
 
 pub async fn handle_async_runtime_json<R: AsyncRuntimeRepository + ?Sized>(
