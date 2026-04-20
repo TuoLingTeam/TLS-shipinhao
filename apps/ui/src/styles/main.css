@@ -1765,7 +1765,12 @@ textarea {
 }
 
 .data-table-shell {
-  overflow: hidden;
+  /* 不再固定 `overflow: hidden`：该简写属于普通规则、优先级高于 Tailwind v4
+   * `@layer utilities`，会把使用方申明的 `overflow-x-auto` / `overflow-y-auto`
+   * 压掉导致列表无法滚动。改由每个使用方用 Tailwind utility 决定溢出行为：
+   *   - OrderSyncView 用 `overflow-auto`
+   *   - ReviewMatchView 用 `overflow-x-auto overflow-y-auto`
+   * `.data-table-shell` 的底色已覆盖，内部 `<table>` 即使是矩形四角也不会视觉穿透。 */
   border-radius: 18px;
   border: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.96);
