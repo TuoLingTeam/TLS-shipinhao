@@ -30,10 +30,12 @@ pub struct ManifestFile {
 /// Manifest payload 主体（去掉 `signature` 之外的所有字段）。
 ///
 /// 字段命名与 Worker 签名侧保持一致；新增字段要同时更新 canonical 序列化。
+/// `version` 与 `api_contracts::IntegrityManifest.version` 对齐为 `u32`，
+/// 便于两侧在同一份 manifest 上比对 canonical 字节串完全一致。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManifestPayload {
     /// 格式版本号（打包侧当前恒为 1；日后升级再迭代）。
-    pub version: u64,
+    pub version: u32,
     pub generated_at: String,
     pub files: Vec<ManifestFile>,
 }

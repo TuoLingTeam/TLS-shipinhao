@@ -24,19 +24,6 @@ pub struct ManifestSignature {
     pub signature: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct CanonicalManifest<'a> {
-    pub version: u32,
-    pub generated_at: &'a str,
-    pub files: Vec<CanonicalManifestFile<'a>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct CanonicalManifestFile<'a> {
-    pub path: &'a str,
-    pub sha256: &'a str,
-}
-
 pub fn generate_integrity_manifest(
     base_dir: &Path,
     files: &[PathBuf],
@@ -111,19 +98,8 @@ pub fn verify_manifest_signature(
 }
 
 fn canonical_manifest_payload(manifest: &IntegrityManifest) -> anyhow::Result<Vec<u8>> {
-    let payload = CanonicalManifest {
-        version: manifest.version,
-        generated_at: &manifest.generated_at,
-        files: manifest
-            .files
-            .iter()
-            .map(|entry| CanonicalManifestFile {
-                path: &entry.path,
-                sha256: &entry.sha256,
-            })
-            .collect(),
-    };
-    Ok(serde_json::to_vec(&payload)?)
+    // 统一委托到 api-contracts 的权威实现，避免 build-tools 与 security-core 各自投影导致字节漂移。
+    Ok(manifest.canonical_payload_bytes()?)
 }
 
 fn load_manifest_signing_private_key(signing_private_key_b64: &str) -> anyhow::Result<SigningKey> {

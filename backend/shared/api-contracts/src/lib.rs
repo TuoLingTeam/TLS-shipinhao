@@ -108,6 +108,30 @@ pub struct IntegrityManifest {
     pub signature: String,
 }
 
+impl IntegrityManifest {
+    /// 返回签名所覆盖的 canonical payload 字节（`version` / `generated_at` / `files`，**不含 `signature`**）。
+    ///
+    /// 打包侧（`build-tools::sign_manifest`）与校验侧（`security_core::integrity::canonicalize_manifest`）
+    /// 必须落在**完全一致**的字节串上，否则 Ed25519 签名会失效。抽到本方法后：
+    ///
+    /// - 字段顺序固定（按 struct 声明顺序）
+    /// - `version: u32` / `generated_at: &str` / `files: &[..]` 的序列化规则固定，无尾随空白
+    /// - 后续如需扩字段，同步调整 `security_core::integrity::ManifestPayload`（需加 regression fixture）
+    pub fn canonical_payload_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        #[derive(Serialize)]
+        struct PayloadView<'a> {
+            version: u32,
+            generated_at: &'a str,
+            files: &'a [IntegrityManifestFile],
+        }
+        serde_json::to_vec(&PayloadView {
+            version: self.version,
+            generated_at: &self.generated_at,
+            files: &self.files,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct RiskReport {
