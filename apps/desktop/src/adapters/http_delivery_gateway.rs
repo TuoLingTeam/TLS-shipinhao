@@ -1,3 +1,4 @@
+use crate::adapters::http_common::{build_client, build_weixin_shop_headers};
 use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
 use desktop_services::delivery_update::{
     build_raw_update_delivery_payload, determine_delivery_override_from_raw_info,
@@ -14,7 +15,6 @@ const INIT_SHIP_DATA_URL: &str =
 const DELIVERY_UPDATE_URL: &str =
     "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo";
 const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
-const REQUEST_TIMEOUT_SECS: u64 = 30;
 
 pub struct HttpDeliveryGateway {
     cookie_header: String,
@@ -29,52 +29,21 @@ impl HttpDeliveryGateway {
         biz_magic: String,
         grant_id: Option<String>,
     ) -> Self {
-        let client = desktop_services::http_client::build_desktop_http_client(
-            std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS),
-        );
         Self {
             cookie_header,
             biz_magic,
             grant_id,
-            client,
+            client: build_client(),
         }
     }
 
     fn build_headers(&self) -> reqwest::header::HeaderMap {
-        use reqwest::header::{
-            HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, USER_AGENT,
-        };
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers.insert(
-            ORIGIN,
-            HeaderValue::from_static("https://store.weixin.qq.com"),
-        );
-        headers.insert(REFERER, HeaderValue::from_static(ORDER_LIST_REFERER));
-        headers.insert(
-            USER_AGENT,
-            HeaderValue::from_static(security_core::http_headers::get_user_agent()),
-        );
-        if let Ok(v) = HeaderValue::from_str(&self.cookie_header) {
-            headers.insert(COOKIE, v);
-        }
-        if let Ok(v) = HeaderValue::from_str(&self.biz_magic) {
-            headers.insert(HeaderName::from_static("biz_magic"), v);
-        }
-        if let Some(grant_id) = self.grant_id.as_deref() {
-            if let Ok(v) = HeaderValue::from_str(grant_id) {
-                headers.insert(HeaderName::from_static("x-grant-id"), v);
-            }
-        }
-        headers.insert(
-            HeaderName::from_static("potter-scene"),
-            HeaderValue::from_static("weixinShop"),
-        );
-        headers.insert(
-            HeaderName::from_static("sec-ch-ua-platform"),
-            HeaderValue::from_static(security_core::http_headers::get_sec_ch_ua_platform()),
-        );
-        headers
+        build_weixin_shop_headers(
+            ORDER_LIST_REFERER,
+            &self.cookie_header,
+            &self.biz_magic,
+            self.grant_id.as_deref(),
+        )
     }
 
     fn post_json_sync(&self, url: &str, body: &Value) -> anyhow::Result<Value> {

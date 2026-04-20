@@ -1,3 +1,4 @@
+pub(crate) mod http_common;
 pub mod http_delivery_gateway;
 pub mod http_license_client;
 pub mod http_order_search;

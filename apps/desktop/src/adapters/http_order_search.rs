@@ -1,12 +1,11 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
+use crate::adapters::http_common::{build_client, build_weixin_shop_headers};
 use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
 use desktop_services::order_fetcher::{backoff_seconds, is_api_rate_limited, is_http_rate_limited};
 use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
 use domain_core::OrderCacheEntry;
-use reqwest::header::{
-    HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, USER_AGENT,
-};
+use reqwest::header::HeaderMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::future::Future;
@@ -18,7 +17,6 @@ const ORDER_SEARCH_URL: &str =
     "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch";
 const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
 const ORDER_PAGE_SIZE: i64 = 100;
-const REQUEST_TIMEOUT_SECS: u64 = 30;
 /// 订单缓存拉取并发数：过高会加速触发平台频率限制，2 是经验上较稳的折中值。
 const ORDER_CACHE_FETCH_WORKERS: usize = 2;
 /// 订单搜索的限流退避次数（全窗口共享）。
@@ -203,49 +201,21 @@ impl HttpOrderSearchClient {
         biz_magic: String,
         grant_id: Option<String>,
     ) -> Self {
-        let client = desktop_services::http_client::build_desktop_http_client(Duration::from_secs(
-            REQUEST_TIMEOUT_SECS,
-        ));
         Self {
             cookie_header,
             biz_magic,
             grant_id,
-            client,
+            client: build_client(),
         }
     }
 
     fn build_headers(&self) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers.insert(
-            ORIGIN,
-            HeaderValue::from_static("https://store.weixin.qq.com"),
-        );
-        headers.insert(REFERER, HeaderValue::from_static(ORDER_LIST_REFERER));
-        headers.insert(
-            USER_AGENT,
-            HeaderValue::from_static(security_core::http_headers::get_user_agent()),
-        );
-        if let Ok(v) = HeaderValue::from_str(&self.cookie_header) {
-            headers.insert(COOKIE, v);
-        }
-        if let Ok(v) = HeaderValue::from_str(&self.biz_magic) {
-            headers.insert(HeaderName::from_static("biz_magic"), v);
-        }
-        if let Some(grant_id) = self.grant_id.as_deref() {
-            if let Ok(v) = HeaderValue::from_str(grant_id) {
-                headers.insert(HeaderName::from_static("x-grant-id"), v);
-            }
-        }
-        headers.insert(
-            HeaderName::from_static("potter-scene"),
-            HeaderValue::from_static("weixinShop"),
-        );
-        headers.insert(
-            HeaderName::from_static("sec-ch-ua-platform"),
-            HeaderValue::from_static(security_core::http_headers::get_sec_ch_ua_platform()),
-        );
-        headers
+        build_weixin_shop_headers(
+            ORDER_LIST_REFERER,
+            &self.cookie_header,
+            &self.biz_magic,
+            self.grant_id.as_deref(),
+        )
     }
 
     pub async fn fetch_order_snapshots_in_window(
