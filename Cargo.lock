@@ -421,6 +421,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "ed25519-dalek",
+ "security_core",
  "serde",
  "serde_json",
  "sha2",
@@ -1060,7 +1061,9 @@ dependencies = [
 name = "domain-core"
 version = "5.1.0"
 dependencies = [
+ "api-contracts",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -2443,6 +2446,7 @@ dependencies = [
  "chrono",
  "ed25519-dalek",
  "rand 0.8.5",
+ "security_core",
  "serde",
  "serde_json",
  "sha2",
@@ -3989,6 +3993,7 @@ dependencies = [
 name = "security_core"
 version = "5.1.0"
 dependencies = [
+ "api-contracts",
  "base64 0.22.1",
  "ed25519-dalek",
  "rand 0.8.5",
