@@ -42,7 +42,7 @@ const activeSection = computed<SettingsSectionId>(() => {
   return isSettingsSection(raw) ? raw : "cookie";
 });
 
-const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? LICENSE_STATE_LABELS.unknown);
+const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? "未知状态");
 const cookiePathText = computed(() => cookiePath.value || "未设置保存目录");
 const licenseExpiresText = computed(() => formatDateTime(appStore.licenseExpiresAt));
 const licenseVerifiedText = computed(() => formatDateTime(appStore.lastVerifiedAt));

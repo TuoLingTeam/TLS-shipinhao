@@ -35,7 +35,7 @@ async function handleRefresh() {
   }
 }
 
-const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? LICENSE_STATE_LABELS.unknown);
+const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? "未知状态");
 const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-600'));
 </script>
 
