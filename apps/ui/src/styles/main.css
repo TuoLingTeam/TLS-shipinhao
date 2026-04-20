@@ -1227,23 +1227,11 @@ textarea {
   color: var(--color-heading);
 }
 
-.settings-section-copy {
-  margin: 0.2rem 0 0;
-  font-size: 0.76rem;
-  line-height: 1.45;
-  color: #64748b;
-}
-
-.settings-field-card,
 .settings-action-card {
   display: flex;
   flex-direction: column;
-}
-
-.settings-field-card {
   gap: 0.55rem;
   padding: 0.78rem;
-  min-height: 0;
 }
 
 .settings-field-footer {
@@ -1261,17 +1249,6 @@ textarea {
 .settings-inline-note.is-success {
   color: var(--color-brand-deep);
   font-weight: 600;
-}
-
-.settings-action-card {
-  gap: 0.55rem;
-  padding: 0.78rem;
-}
-
-.settings-action-title {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--color-heading);
 }
 
 .settings-stat-grid {

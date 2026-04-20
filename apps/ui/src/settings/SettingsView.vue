@@ -41,10 +41,6 @@ const cookiePathText = computed(() => cookiePath.value || "未设置保存目录
 const licenseExpiresText = computed(() => formatDateTime(appStore.licenseExpiresAt));
 const licenseVerifiedText = computed(() => formatDateTime(appStore.lastVerifiedAt));
 
-const licenseActionHint = computed(() =>
-  appStore.isLicensed ? "当前授权可继续使用；若刚续费，建议手动刷新同步服务端状态。" : "尚未激活，建议先输入卡密完成授权。",
-);
-
 async function refreshCookieHealth() {
   try {
     await cookieHealth.refreshSilently();
@@ -212,16 +208,11 @@ onMounted(() => {
             </span>
             <div class="min-w-0">
               <h3 class="settings-section-title">Cookie 配置</h3>
-              <p class="settings-section-copy">优先「登录 → 自动提取」；只有自动链路拿不到完整内容时，才回到左侧手动覆盖。</p>
             </div>
           </div>
-          <div class="subsystem-chipbar">
-            <span class="subsystem-chip" :class="cookieConfigured ? '' : 'subsystem-chip--warn'">
-              {{ cookieConfigured ? "已配置" : "未配置" }}
-            </span>
-            <span class="subsystem-chip" :class="hasBizMagic ? '' : 'subsystem-chip--warn'">
-              {{ hasBizMagic ? "已识别 biz_magic" : "待识别 biz_magic" }}
-            </span>
+          <div v-if="!cookieConfigured || !hasBizMagic" class="subsystem-chipbar">
+            <span v-if="!cookieConfigured" class="subsystem-chip subsystem-chip--warn">未配置</span>
+            <span v-if="!hasBizMagic" class="subsystem-chip subsystem-chip--warn">待识别 biz_magic</span>
           </div>
         </header>
 
@@ -233,9 +224,8 @@ onMounted(() => {
             class="field-textarea settings-cookie-textarea font-mono text-sm"
             placeholder="粘贴完整的 Cookie 字符串..."
           />
-          <div class="settings-field-footer">
-            <span v-if="saved" class="settings-inline-note is-success">Cookie 已保存，可继续回仪表盘核对状态。</span>
-            <span v-else class="settings-inline-note">自动提取成功后会回填到这里，方便继续检查或微调。</span>
+          <div v-if="saved" class="settings-field-footer">
+            <span class="settings-inline-note is-success">Cookie 已保存</span>
           </div>
 
           <div data-testid="settings-cookie-path" class="settings-cookie-path-box">
@@ -243,7 +233,7 @@ onMounted(() => {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
                 <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
               </svg>
-              当前保存位置
+              保存位置
             </div>
             <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
           </div>
@@ -252,7 +242,6 @@ onMounted(() => {
             data-testid="settings-cookie-actions"
             class="settings-action-card"
           >
-            <div class="settings-action-title">快捷操作</div>
             <div class="settings-action-buttons-grid settings-action-buttons-grid--2x2">
               <button type="button" class="action-btn action-btn-primary min-h-10" @click="handleSave">
                 保存 Cookie
@@ -305,7 +294,6 @@ onMounted(() => {
             </span>
             <div class="min-w-0">
               <h3 class="settings-section-title">授权信息</h3>
-              <p class="settings-section-copy">激活卡密、刷新状态、管理到期时间。</p>
             </div>
           </div>
           <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
@@ -380,7 +368,6 @@ onMounted(() => {
             </span>
             <div class="min-w-0">
               <h3 class="settings-section-title">应用信息</h3>
-              <p class="settings-section-copy">版本与联系方式。</p>
             </div>
           </div>
         </header>

@@ -86,6 +86,13 @@ describe("SettingsView", () => {
     expect(wrapper.text()).not.toContain("推荐顺序");
     expect(wrapper.find(".settings-callout").exists()).toBe(false);
     expect(wrapper.find(".settings-cookie-health").exists()).toBe(false);
+    // 简化内容：三处冗余 description 与「快捷操作」小标题已移除
+    expect(wrapper.text()).not.toContain("只有自动链路拿不到完整内容时");
+    expect(wrapper.text()).not.toContain("激活卡密、刷新状态、管理到期时间");
+    expect(wrapper.text()).not.toContain("版本与联系方式");
+    expect(wrapper.text()).not.toContain("快捷操作");
+    // 已配置（mock 返回 configured=true & has_biz_magic=true）下不显示状态 chip
+    expect(wrapper.find('[data-testid="settings-section-cookie"] .subsystem-chipbar').exists()).toBe(false);
     // 已不再使用 sidebar 嵌套包裹层，保证 DOM 扁平
     expect(wrapper.find('[data-testid="settings-sidebar"]').exists()).toBe(false);
     expect(wrapper.find('.settings-sidebar-stack').exists()).toBe(false);
