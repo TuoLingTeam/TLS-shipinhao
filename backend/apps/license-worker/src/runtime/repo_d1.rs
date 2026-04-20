@@ -64,10 +64,13 @@ impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
     }
 
     async fn save_license(&self, record: &LicenseRecord) -> anyhow::Result<()> {
+        // `activations.last_session_issued_at` / `last_offline_grant_issued_at`
+        // 两列是旧协议遗留，线上从未被任何 SELECT 路径消费。保留列结构以便回滚，
+        // 但新激活/续约不再写入；已有行中的旧值由 D1 原样保留。
         self.db
             .prepare(
-                "INSERT INTO activations (license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at, last_session_issued_at, last_offline_grant_issued_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT last_session_issued_at FROM activations WHERE license_key = ?), ''), COALESCE((SELECT last_offline_grant_issued_at FROM activations WHERE license_key = ?), '')) \
+                "INSERT INTO activations (license_key, device_id, device_fingerprint, plan_days, activated_at, expires_at, updated_at, binding_version, status, last_verify_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
                  ON CONFLICT(license_key) DO UPDATE SET device_id = excluded.device_id, device_fingerprint = excluded.device_fingerprint, plan_days = excluded.plan_days, activated_at = excluded.activated_at, expires_at = excluded.expires_at, updated_at = excluded.updated_at, binding_version = excluded.binding_version, status = excluded.status, last_verify_at = excluded.last_verify_at",
             )
             .bind(&[
@@ -81,8 +84,6 @@ impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
                 JsValue::from_f64(record.binding_version as f64),
                 JsValue::from_str(&enum_text(&record.status)?),
                 JsValue::from_str(&record.last_verify_at),
-                JsValue::from_str(&record.license_key),
-                JsValue::from_str(&record.license_key),
             ])?
             .run()
             .await?;
@@ -165,35 +166,23 @@ impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
         &self,
         license_key: &str,
         now_iso: &str,
-        session_issued: bool,
-        grant_issued: bool,
+        _session_issued: bool,
+        _grant_issued: bool,
         new_status: Option<LicenseState>,
     ) -> anyhow::Result<()> {
-        let session_sql = if session_issued {
-            ", last_session_issued_at = ?"
-        } else {
-            ""
-        };
-        let grant_sql = if grant_issued {
-            ", last_offline_grant_issued_at = ?"
-        } else {
-            ""
-        };
+        // `session_issued` / `grant_issued` 是旧协议遗留入参；对应 D1 列
+        // `last_session_issued_at` / `last_offline_grant_issued_at` 从未被
+        // 任何 SELECT 路径消费。trait 签名保留以避免侵入 runtime_* 调用层；
+        // 这里把实际写入彻底停掉，等一段观察期后再评估是否连列一起 DROP。
         let status_sql = if new_status.is_some() {
             ", status = ?"
         } else {
             ""
         };
         let sql = format!(
-            "UPDATE activations SET updated_at = ?, last_verify_at = ?{session_sql}{grant_sql}{status_sql} WHERE license_key = ?"
+            "UPDATE activations SET updated_at = ?, last_verify_at = ?{status_sql} WHERE license_key = ?"
         );
         let mut binds = vec![JsValue::from_str(now_iso), JsValue::from_str(now_iso)];
-        if session_issued {
-            binds.push(JsValue::from_str(now_iso));
-        }
-        if grant_issued {
-            binds.push(JsValue::from_str(now_iso));
-        }
         if let Some(status) = new_status {
             binds.push(JsValue::from_str(&enum_text(&status)?));
         }
@@ -243,13 +232,8 @@ impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
             .run()
             .await?;
 
-        self.db
-            .prepare(
-                "UPDATE device_sessions SET revoked_at = ? WHERE license_key = ? AND (revoked_at IS NULL OR revoked_at = '')",
-            )
-            .bind(&[JsValue::from_str(revoked_at), JsValue::from_str(license_key)])?
-            .run()
-            .await?;
+        // `device_sessions` 表在当前协议中从未被 SELECT / INSERT，仅保留在
+        // schema 里等观察期结束后再评估 DROP。吊销链路不再触碰它。
 
         self.db
             .prepare(
@@ -305,13 +289,7 @@ impl AsyncRuntimeRepository for D1RuntimeRepo<'_> {
             .run()
             .await?;
 
-        self.db
-            .prepare(
-                "UPDATE device_sessions SET revoked_at = ? WHERE license_key = ? AND (revoked_at IS NULL OR revoked_at = '')",
-            )
-            .bind(&[JsValue::from_str(revoked_at), JsValue::from_str(license_key)])?
-            .run()
-            .await?;
+        // 同 `revoke_license`：不再触碰 `device_sessions`。
 
         self.db
             .prepare(
