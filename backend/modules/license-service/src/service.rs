@@ -3,10 +3,7 @@ use crate::model::{
     LicenseServiceResponse, VerifyInput,
 };
 use crate::repository::LicenseRepository;
-use api_contracts::{
-    LicenseLease, LicenseState, LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE,
-    LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
-};
+use api_contracts::{LicenseLease, LicenseState, SUPPORTED_TASKS};
 use chrono::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
 
@@ -24,13 +21,9 @@ pub const LICENSE_RUNTIME_GRANT_MINUTES: i64 = 30;
 /// `LicenseState::Invalid`，从而触发「请重新激活」流程。
 pub const LICENSE_PUBLIC_KEY_B64: &str = "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo";
 
-pub const DEFAULT_TASK_POLICY: &[&str] = &[
-    LICENSE_TASK_REVIEW_FIND,
-    LICENSE_TASK_REVIEW_FULL_SCAN,
-    LICENSE_TASK_QUALITY_REFUND,
-    LICENSE_TASK_BATCH_DELIVERY,
-    LICENSE_TASK_CACHE_MANAGE,
-];
+/// 默认签发给 Lease 的任务白名单。与 `api_contracts::SUPPORTED_TASKS` 同值（单一事实源），
+/// 新增任务类型时只需在 `api-contracts` 一处扩展 `SUPPORTED_TASKS`。
+pub const DEFAULT_TASK_POLICY: &[&str] = SUPPORTED_TASKS;
 
 pub struct LicenseService<R> {
     pub(crate) repository: R,

@@ -112,7 +112,7 @@ fn verify_lease_impl(
         }
     };
 
-    if payload.get("kind").and_then(Value::as_str) != Some("license_lease") {
+    if payload.get("kind").and_then(Value::as_str) != Some(api_contracts::LEASE_KIND_LICENSE) {
         return json!({"ok": false, "reason": "invalid", "payload": null});
     }
 
@@ -316,7 +316,7 @@ mod tests {
 
     fn lease_payload(device_id: &str, exp: i64) -> Value {
         json!({
-            "kind": "license_lease",
+            "kind": api_contracts::LEASE_KIND_LICENSE,
             "device_id": device_id,
             "exp": exp
         })
