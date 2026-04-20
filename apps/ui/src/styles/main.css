@@ -1911,6 +1911,11 @@ textarea {
  *
  * !important 用于压过 Tailwind v4 在 @layer utilities 内的 .h-full / .flex-1 等规则，
  * 因为页面根元素同时挂着 Tailwind 的 utility 类，必须强制覆盖才能让 height 真正 auto。
+ *
+ * 演进方向（优于本兜底）：
+ * - DashboardView 已走 `overflow-y-auto` 自滚动模式，内容超高时自身滚动，不再依赖此 media query
+ * - 后续重构 SettingsView / DeliveryView 时可参照同样路径，把 media query 依赖降到零；
+ *   当前它们（尤其 DeliveryView 的两列 grid）直接切换会改变多块区域的滚动行为，风险大，暂保留
  */
 @media (max-width: 1023.98px), (max-height: 719.98px) {
   .settings-view-shell,
