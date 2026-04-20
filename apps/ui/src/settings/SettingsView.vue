@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { APP_VERSION, AUTHOR_WECHAT } from "../shared/brand";
@@ -11,21 +11,27 @@ import { useCookieHealthStore } from "../shared/cookieHealth";
 import { isSettingsSection } from "../layout/navigation";
 import type { SettingsSectionId } from "../layout/navigation";
 
+/** 登录窗口打开后，前端轮询读取登录态的间隔（ms） */
+const COOKIE_POLL_INTERVAL_MS = 1500;
+/** 轮询最长持续时间（ms），到期后自动停止以避免无谓占用 */
+const COOKIE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
 const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
 const route = useRoute();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
 
-const cookieHeader = ref("");
-const saved = ref(false);
+/** 最近一次成功保存来源：`auto`=登录窗口轮询；`manual`=手动粘贴后保存 */
+const saveNotice = ref<null | "auto" | "manual">(null);
 const saveError = ref<string | null>(null);
 const loadError = ref<string | null>(null);
 const hasBizMagic = ref(false);
 const cookieConfigured = ref(false);
 const cookiePath = ref("");
 const loginLoading = ref(false);
-const extractLoading = ref(false);
 const pickDirLoading = ref(false);
+const manualCookie = ref("");
+const manualSaveLoading = ref(false);
 
 const licenseKey = ref("");
 const licenseMessage = ref<string | null>(null);
@@ -40,6 +46,16 @@ const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseSta
 const cookiePathText = computed(() => cookiePath.value || "未设置保存目录");
 const licenseExpiresText = computed(() => formatDateTime(appStore.licenseExpiresAt));
 const licenseVerifiedText = computed(() => formatDateTime(appStore.lastVerifiedAt));
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollDeadline = 0;
+
+function stopCookiePoll() {
+  if (pollTimer !== null) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
 
 async function refreshCookieHealth() {
   try {
@@ -65,32 +81,13 @@ async function loadCookieStatus() {
   }
 }
 
-function flashSaved() {
-  saved.value = true;
+function flashSaveNotice(kind: "auto" | "manual") {
+  saveNotice.value = kind;
   setTimeout(() => {
-    saved.value = false;
+    if (saveNotice.value === kind) {
+      saveNotice.value = null;
+    }
   }, 2200);
-}
-
-async function handleSave() {
-  saveError.value = null;
-  const raw = cookieHeader.value.trim();
-  if (!raw) {
-    saveError.value = "请先粘贴 Cookie 字符串";
-    return;
-  }
-  try {
-    const res = await invoke<{ success: boolean; biz_magic: string | null; cookie_path: string }>("set_cookie", {
-      cookie_header: raw,
-    });
-    hasBizMagic.value = Boolean(res.biz_magic);
-    cookieConfigured.value = true;
-    cookiePath.value = res.cookie_path;
-    flashSaved();
-    await refreshCookieHealth();
-  } catch (e) {
-    saveError.value = typeof e === "string" ? e : String(e);
-  }
 }
 
 async function handlePickSaveDir() {
@@ -106,21 +103,7 @@ async function handlePickSaveDir() {
   }
 }
 
-async function handleOpenLogin() {
-  loginLoading.value = true;
-  saveError.value = null;
-  try {
-    await invoke("open_cookie_login");
-  } catch (e) {
-    saveError.value = typeof e === "string" ? e : String(e);
-  } finally {
-    loginLoading.value = false;
-  }
-}
-
-async function handleExtractCookie() {
-  extractLoading.value = true;
-  saveError.value = null;
+async function tryExtractCookieOnce() {
   try {
     const result = await invoke<{
       success: boolean;
@@ -128,16 +111,68 @@ async function handleExtractCookie() {
       cookie_header: string;
       cookie_path: string;
     }>("extract_cookie_from_login");
-    cookieHeader.value = result.cookie_header;
     cookiePath.value = result.cookie_path;
     hasBizMagic.value = Boolean(result.biz_magic);
     cookieConfigured.value = true;
-    flashSaved();
+    return true;
+  } catch {
+    // 登录尚未完成或窗口已关闭：保持轮询继续，由调用方控制超时
+    return false;
+  }
+}
+
+function startCookiePoll() {
+  stopCookiePoll();
+  pollDeadline = Date.now() + COOKIE_POLL_TIMEOUT_MS;
+  pollTimer = setInterval(async () => {
+    if (Date.now() > pollDeadline) {
+      stopCookiePoll();
+      return;
+    }
+    const ok = await tryExtractCookieOnce();
+    if (!ok) return;
+    stopCookiePoll();
+    flashSaveNotice("auto");
     await refreshCookieHealth();
+    try {
+      await invoke("close_cookie_login_window");
+    } catch {
+      // 关窗失败不影响保存结果，留给用户手动关闭
+    }
+  }, COOKIE_POLL_INTERVAL_MS);
+}
+
+async function handleSaveManualCookie() {
+  const raw = manualCookie.value.trim();
+  if (!raw) {
+    saveError.value = "请粘贴 Cookie 内容后再保存";
+    return;
+  }
+  manualSaveLoading.value = true;
+  saveError.value = null;
+  try {
+    await invoke("set_cookie", { cookie_header: raw });
+    await loadCookieStatus();
+    await refreshCookieHealth();
+    flashSaveNotice("manual");
+    manualCookie.value = "";
   } catch (e) {
     saveError.value = typeof e === "string" ? e : String(e);
   } finally {
-    extractLoading.value = false;
+    manualSaveLoading.value = false;
+  }
+}
+
+async function handleOpenLogin() {
+  loginLoading.value = true;
+  saveError.value = null;
+  try {
+    await invoke("open_cookie_login");
+    startCookiePoll();
+  } catch (e) {
+    saveError.value = typeof e === "string" ? e : String(e);
+  } finally {
+    loginLoading.value = false;
   }
 }
 
@@ -182,10 +217,14 @@ onMounted(() => {
     void revealSection(activeSection.value);
   });
 });
+
+onBeforeUnmount(() => {
+  stopCookiePoll();
+});
 </script>
 
 <template>
-  <div class="settings-view-shell flex flex-col gap-app">
+  <div class="settings-view-shell flex flex-col gap-6 lg:gap-7">
     <section
       data-testid="settings-panels"
       class="settings-layout"
@@ -193,9 +232,9 @@ onMounted(() => {
       <article
         id="settings-section-cookie"
         data-testid="settings-section-cookie"
-        class="surface-panel settings-section-card settings-section-card--cookie p-4 lg:p-5"
+        class="surface-panel settings-section-card settings-section-card--cookie flex min-h-0 h-full flex-col p-5 lg:p-6"
       >
-        <header class="settings-section-head">
+        <header class="settings-section-head shrink-0">
           <div class="flex min-w-0 items-start gap-3">
             <span class="settings-card-badge settings-card-badge--cookie" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -216,19 +255,12 @@ onMounted(() => {
           </div>
         </header>
 
-        <div class="settings-cookie-body">
-          <label class="field-label">手动覆盖 Cookie</label>
-          <textarea
-            data-testid="settings-cookie-textarea"
-            v-model.trim="cookieHeader"
-            class="field-textarea settings-cookie-textarea font-mono text-sm"
-            placeholder="粘贴完整的 Cookie 字符串..."
-          />
-          <div v-if="saved" class="settings-field-footer">
-            <span class="settings-inline-note is-success">Cookie 已保存</span>
-          </div>
+        <div class="settings-cookie-body flex min-h-0 flex-1 flex-col">
+          <p class="settings-cookie-helper shrink-0">
+            两种方式任选其一：<strong>打开登录页</strong>后由应用自动检测并保存 Cookie；或在下方<strong>手动粘贴</strong>完整 Cookie 请求头后保存。
+          </p>
 
-          <div data-testid="settings-cookie-path" class="settings-cookie-path-box">
+          <div data-testid="settings-cookie-path" class="settings-cookie-path-box shrink-0">
             <div class="settings-cookie-path-label">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
                 <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
@@ -238,38 +270,62 @@ onMounted(() => {
             <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
           </div>
 
-          <div
-            data-testid="settings-cookie-actions"
-            class="settings-action-card"
-          >
-            <div class="settings-action-buttons-grid settings-action-buttons-grid--2x2">
-              <button type="button" class="action-btn action-btn-primary min-h-10" @click="handleSave">
-                保存 Cookie
-              </button>
-              <button
-                type="button"
-                class="action-btn action-btn-primary min-h-10"
-                :disabled="extractLoading"
-                @click="handleExtractCookie"
-              >
-                {{ extractLoading ? "提取中..." : "自动提取 Cookie" }}
-              </button>
-              <button
-                type="button"
-                class="action-btn action-btn-secondary min-h-10"
-                :disabled="loginLoading"
-                @click="handleOpenLogin"
-              >
-                {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
-              </button>
-              <button
-                type="button"
-                class="action-btn action-btn-secondary min-h-10"
-                :disabled="pickDirLoading"
-                @click="handlePickSaveDir"
-              >
-                {{ pickDirLoading ? "选择中..." : "选择保存目录" }}
-              </button>
+          <div data-testid="settings-cookie-actions" class="settings-cookie-flows flex min-h-0 flex-1 flex-col">
+            <div class="settings-cookie-subpanel settings-cookie-subpanel--auto shrink-0">
+              <p class="settings-cookie-subpanel-title">方式一 · 浏览器登录（推荐）</p>
+              <p class="settings-cookie-subpanel-hint">在弹出窗口完成登录后，应用会轮询并写入 Cookie；可用下方「选择保存路径」调整落盘目录。</p>
+              <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2">
+                <button
+                  type="button"
+                  class="action-btn action-btn-primary min-h-10"
+                  :disabled="loginLoading"
+                  @click="handleOpenLogin"
+                >
+                  {{ loginLoading ? "打开登录页中..." : "打开登录页" }}
+                </button>
+                <button
+                  type="button"
+                  class="action-btn action-btn-secondary min-h-10"
+                  :disabled="pickDirLoading"
+                  @click="handlePickSaveDir"
+                >
+                  {{ pickDirLoading ? "选择中..." : "选择保存路径" }}
+                </button>
+              </div>
+              <div v-if="saveNotice === 'auto'" class="settings-field-footer pt-0.5">
+                <span class="settings-inline-note is-success">Cookie 已自动保存</span>
+              </div>
+            </div>
+
+            <div class="settings-cookie-subpanel settings-cookie-subpanel--manual flex min-h-0 min-w-0 flex-1 flex-col">
+              <p class="settings-cookie-subpanel-title shrink-0">方式二 · 手动粘贴</p>
+              <p class="settings-cookie-subpanel-hint shrink-0">适合已自行复制请求头、或自动链路无法完整拿到 Cookie 时使用。</p>
+              <div class="settings-cookie-editor flex min-h-0 min-w-0 flex-1 flex-col">
+                <label class="field-label settings-cookie-manual-label shrink-0" for="settings-cookie-textarea">Cookie 请求头</label>
+                <textarea
+                  id="settings-cookie-textarea"
+                  v-model.trim="manualCookie"
+                  data-testid="settings-cookie-textarea"
+                  class="field-input field-textarea settings-cookie-textarea min-h-0 w-full min-w-0 flex-1 resize-y font-mono"
+                  placeholder="粘贴浏览器中复制的完整 Cookie 请求头（含 biz_magic 等字段时将自动解析）"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <div class="settings-cookie-manual-actions shrink-0">
+                  <button
+                    type="button"
+                    class="action-btn action-btn-secondary min-h-10 min-w-[9.5rem]"
+                    data-testid="settings-cookie-save-manual"
+                    :disabled="manualSaveLoading"
+                    @click="handleSaveManualCookie"
+                  >
+                    {{ manualSaveLoading ? "保存中..." : "保存手动 Cookie" }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="saveNotice === 'manual'" class="settings-field-footer pt-0.5">
+                <span class="settings-inline-note is-success">手动 Cookie 已保存</span>
+              </div>
             </div>
           </div>
         </div>
@@ -281,10 +337,10 @@ onMounted(() => {
       <article
         id="settings-section-license"
         data-testid="settings-section-license"
-        class="surface-panel settings-section-card settings-section-card--license p-4 lg:p-5"
+        class="surface-panel settings-section-card settings-section-card--license flex min-h-0 flex-col p-5 lg:p-6"
         :class="{ 'is-active': activeSection === 'license' }"
       >
-        <header class="settings-section-head">
+        <header class="settings-section-head shrink-0">
           <div class="flex min-w-0 items-start gap-3">
             <span class="settings-card-badge settings-card-badge--license" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -299,7 +355,7 @@ onMounted(() => {
           <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
         </header>
 
-        <div class="settings-info-grid settings-info-grid--single">
+        <div class="settings-info-grid settings-info-grid--single shrink-0">
           <div class="settings-info-item">
             <span class="settings-info-label">状态</span>
             <span class="settings-info-value">{{ currentStateText }}</span>
@@ -320,7 +376,7 @@ onMounted(() => {
 
         <div
           data-testid="settings-license-actions"
-          class="settings-action-card"
+          class="settings-action-card settings-license-actions mt-2 flex flex-col gap-2"
         >
           <input
             v-model.trim="licenseKey"
@@ -328,17 +384,17 @@ onMounted(() => {
             placeholder="输入卡密"
             aria-label="卡密"
           />
-          <div class="settings-action-row">
+          <div class="settings-action-row settings-action-row--auto-width shrink-0 justify-end">
             <button
               :disabled="activateLoading"
-              class="action-btn action-btn-primary min-h-10 min-w-0 flex-1 cursor-pointer"
+              class="action-btn action-btn-primary min-h-10 w-auto min-w-[6.5rem] shrink-0 cursor-pointer px-5"
               @click="handleActivate"
             >
               {{ activateLoading ? "激活中..." : "立即激活" }}
             </button>
             <button
               :disabled="verifyLoading"
-              class="action-btn action-btn-secondary min-h-10 min-w-0 flex-1 cursor-pointer"
+              class="action-btn action-btn-secondary min-h-10 w-auto min-w-[6.5rem] shrink-0 cursor-pointer px-5"
               @click="handleRefresh"
             >
               {{ verifyLoading ? "刷新中..." : "刷新状态" }}
@@ -354,7 +410,7 @@ onMounted(() => {
       <article
         id="settings-section-about"
         data-testid="settings-section-about"
-        class="surface-panel settings-section-card settings-section-card--about p-4 lg:p-5"
+        class="surface-panel settings-section-card settings-section-card--about flex flex-col p-5 lg:p-6"
         :class="{ 'is-active': activeSection === 'about' }"
       >
         <header class="settings-section-head">

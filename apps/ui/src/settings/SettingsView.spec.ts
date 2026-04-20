@@ -27,6 +27,10 @@ const { invokeMock } = vi.hoisted(() => ({
       };
     }
 
+    if (command === "set_cookie") {
+      return { success: true, biz_magic: "mock", cookie_path: "/tmp/cookie.txt" };
+    }
+
     return {};
   }),
 }));
@@ -65,17 +69,25 @@ describe("SettingsView", () => {
     expect(wrapper.get('[data-testid="settings-section-license"]').classes()).toContain("settings-section-card");
     expect(wrapper.get('[data-testid="settings-section-about"]').classes()).toContain("settings-section-card");
     expect(wrapper.get('[data-testid="settings-license-actions"]').classes()).toContain("settings-action-card");
-    expect(wrapper.get('[data-testid="settings-cookie-actions"]').classes()).toContain("settings-action-card");
+    expect(wrapper.get('[data-testid="settings-cookie-actions"]').classes()).toContain("settings-cookie-flows");
+    expect(wrapper.find('[data-testid="settings-cookie-textarea"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="settings-cookie-save-manual"]').text()).toContain("保存手动 Cookie");
     expect(wrapper.get('[data-testid="settings-cookie-path"]').text()).toContain("/tmp/cookie.txt");
     expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-info-grid");
-    // Cookie 卡内 4 个按钮使用 2x2 紧凑网格
-    expect(
-      wrapper.get('[data-testid="settings-cookie-actions"]').find(".settings-action-buttons-grid--2x2").exists(),
-    ).toBe(true);
-    // 授权信息走单列 grid，按钮放下方
+    // 自动：2 个核心按钮（1x2）+ 手动保存 1 个
+    const actionsHost = wrapper.get('[data-testid="settings-cookie-actions"]');
+    expect(actionsHost.find(".settings-action-buttons-grid--1x2").exists()).toBe(true);
+    expect(actionsHost.findAll("button").length).toBe(3);
+    expect(actionsHost.text()).toContain("打开登录页");
+    expect(actionsHost.text()).toContain("选择保存路径");
+    expect(actionsHost.text()).toContain("保存手动 Cookie");
+    // 授权信息走单列 grid
     expect(wrapper.find(".settings-info-grid--single").exists()).toBe(true);
     expect(wrapper.text()).toContain("授权信息");
     expect(wrapper.text()).toContain("Cookie 配置");
+    expect(wrapper.text()).toContain("Cookie 请求头");
+    expect(wrapper.text()).toContain("方式一");
+    expect(wrapper.text()).toContain("方式二");
     expect(wrapper.text()).toContain("应用信息");
     expect(wrapper.text()).toContain("状态");
     expect(wrapper.text()).toContain("作者微信");
@@ -91,6 +103,7 @@ describe("SettingsView", () => {
     expect(wrapper.text()).not.toContain("激活卡密、刷新状态、管理到期时间");
     expect(wrapper.text()).not.toContain("版本与联系方式");
     expect(wrapper.text()).not.toContain("快捷操作");
+    expect(wrapper.text()).not.toContain("选择保存目录");
     // 已配置（mock 返回 configured=true & has_biz_magic=true）下不显示状态 chip
     expect(wrapper.find('[data-testid="settings-section-cookie"] .subsystem-chipbar').exists()).toBe(false);
     // 已不再使用 sidebar 嵌套包裹层，保证 DOM 扁平

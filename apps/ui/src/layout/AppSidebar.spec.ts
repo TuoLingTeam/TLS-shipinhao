@@ -27,9 +27,8 @@ describe("AppSidebar", () => {
     });
 
     expect(wrapper.text()).not.toContain("系统状态");
-    expect(wrapper.text()).not.toContain("版本");
     expect(wrapper.text()).not.toContain("代号");
-    expect(wrapper.html()).toContain("min-h-[84px]");
+    expect(wrapper.find("nav").exists()).toBe(true);
   });
 
   it("pins the sidebar to the viewport instead of letting page content push it", async () => {

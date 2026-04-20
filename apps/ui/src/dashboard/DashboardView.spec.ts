@@ -108,7 +108,7 @@ describe("DashboardView", () => {
     };
   });
 
-  it("uses a dense single-row metrics strip on desktop", async () => {
+  it("uses a single-row metrics strip on desktop with enlarged metric tiles", async () => {
     const wrapper = mount(DashboardView, {
       global: {
         plugins: [createPinia()],
@@ -124,7 +124,8 @@ describe("DashboardView", () => {
     const metrics = wrapper.get('[data-testid="dashboard-metrics"]');
 
     expect(metrics.classes()).toContain("xl:grid-cols-5");
-    expect(wrapper.findAll(".metric-card-compact")).toHaveLength(5);
+    expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')).toHaveLength(5);
+    expect(wrapper.findAll(".dashboard-metric-tile")).toHaveLength(5);
     expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
     expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);
@@ -132,6 +133,6 @@ describe("DashboardView", () => {
     expect(wrapper.text()).not.toContain("作者微信");
     expect(wrapper.text()).not.toContain("运行时");
     expect(wrapper.text()).not.toContain("提醒");
-    expect(wrapper.findAll(".metric-card-compact")[0]?.text()).not.toContain("建议续费");
+    expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')[0]?.text()).not.toContain("建议续费");
   });
 });
