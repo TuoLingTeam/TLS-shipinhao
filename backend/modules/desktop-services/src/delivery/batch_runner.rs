@@ -285,4 +285,97 @@ mod tests {
         assert!(report.fatal_error.unwrap().contains("授权租约已失效"));
         assert_eq!(gateway.calls.len(), 10);
     }
+
+    // ---- run_batch_delivery_with_hooks：cancel 与 on_step 回调行为 ------------
+
+    #[test]
+    fn hooks_should_cancel_stops_before_dispatching_remaining_items() {
+        // 5 条任务，第 3 条开始取消：只执行前两条，剩余条目不派发给 gateway
+        let items = (1..=5)
+            .map(|index| item(&format!("o-{index}"), &format!("t-{index}")))
+            .collect::<Vec<_>>();
+        let mut gateway = FakeGateway {
+            results: (0..5).map(|_| Ok(None)).collect(),
+            ..Default::default()
+        };
+        let mut guard = FakeRuntimeGuard::default();
+        let triggered = std::cell::RefCell::new(0_usize);
+        let report = run_batch_delivery_with_hooks(
+            &items,
+            &mut gateway,
+            &mut guard,
+            |_step, _progress| {},
+            || {
+                let mut n = triggered.borrow_mut();
+                *n += 1;
+                // 第 1、2 次循环前未取消；第 3 次开始返回 true
+                *n >= 3
+            },
+        );
+        assert!(report.stopped, "取消后 report.stopped 必须为 true");
+        assert_eq!(report.success_count, 2);
+        assert_eq!(report.failure_count, 0);
+        assert_eq!(report.steps.len(), 2);
+        assert_eq!(
+            gateway.calls.len(),
+            2,
+            "取消后剩余条目不应被派发到 gateway"
+        );
+    }
+
+    #[test]
+    fn hooks_on_step_fires_once_per_completed_item_with_latest_report() {
+        let items = vec![item("o-1", "t-1"), item("o-2", "t-2"), item("o-3", "t-3")];
+        let mut gateway = FakeGateway {
+            results: vec![
+                Ok(None),
+                Err(anyhow::anyhow!("模拟失败")),
+                Ok(Some("old-3".into())),
+            ],
+            ..Default::default()
+        };
+        let mut guard = FakeRuntimeGuard::default();
+        let snapshots: std::cell::RefCell<Vec<(usize, usize, usize)>> =
+            std::cell::RefCell::new(Vec::new());
+        let report = run_batch_delivery_with_hooks(
+            &items,
+            &mut gateway,
+            &mut guard,
+            |step, progress| {
+                snapshots.borrow_mut().push((
+                    step.index,
+                    progress.success_count,
+                    progress.failure_count,
+                ));
+            },
+            || false,
+        );
+        let snaps = snapshots.borrow().clone();
+        assert_eq!(snaps.len(), 3, "3 条应触发 3 次 on_step");
+        // 每次回调时 progress 是到当前为止的累计值
+        assert_eq!(snaps[0], (1, 1, 0));
+        assert_eq!(snaps[1], (2, 1, 1));
+        assert_eq!(snaps[2], (3, 2, 1));
+        assert!(!report.stopped);
+    }
+
+    #[test]
+    fn hooks_should_cancel_checked_before_first_item_keeps_report_empty() {
+        // 极端场景：第一条循环前 should_cancel 就已 true —— 完整 0 派发
+        let items = vec![item("o-1", "t-1")];
+        let mut gateway = FakeGateway::default();
+        let mut guard = FakeRuntimeGuard::default();
+        let report = run_batch_delivery_with_hooks(
+            &items,
+            &mut gateway,
+            &mut guard,
+            |_, _| {},
+            || true,
+        );
+        assert!(report.stopped);
+        assert_eq!(report.success_count, 0);
+        assert_eq!(report.failure_count, 0);
+        assert!(report.steps.is_empty());
+        assert!(gateway.calls.is_empty());
+    }
 }
