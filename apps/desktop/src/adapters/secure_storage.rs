@@ -17,7 +17,9 @@
 //! 应用运行目录下；设备指纹一旦变化，解密失败会返回 `StorageError::DeviceChanged`。
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+#[cfg(test)]
+use std::sync::Mutex;
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
@@ -110,17 +112,17 @@ impl SecretStore for KeychainSecretStore {
     }
 }
 
-/// 内存实现，**仅用于测试 / 开发**：数据只在进程生命周期内保留。
+/// 内存实现，**仅用于测试**：数据只在进程生命周期内保留。
 ///
 /// 在单元测试里替换 `KeychainSecretStore` 即可不触碰真实 Keychain；
-/// 并发场景通过 `Mutex` 保证 set/get/delete 互斥。
-#[allow(dead_code)] // 仅供 `#[cfg(test)]` 与跨模块单测引用；正式构建不实例化
+/// 并发场景通过 `Mutex` 保证 set/get/delete 互斥。正式构建不编译此实现。
+#[cfg(test)]
 pub struct InMemorySecretStore {
     cell: Mutex<Option<String>>,
 }
 
+#[cfg(test)]
 impl InMemorySecretStore {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             cell: Mutex::new(None),
@@ -128,12 +130,14 @@ impl InMemorySecretStore {
     }
 }
 
+#[cfg(test)]
 impl Default for InMemorySecretStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(test)]
 impl SecretStore for InMemorySecretStore {
     fn set(&self, value: &str) -> Result<(), StorageError> {
         let mut guard = self

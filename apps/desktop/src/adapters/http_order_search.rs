@@ -248,19 +248,6 @@ impl HttpOrderSearchClient {
         headers
     }
 
-    /// 按页顺序拉取，客户端按 `createTime` 过滤到 `[start_unix, end_unix]`（与 Python 侧「API 忽略时间参数 + 客户端过滤」一致）。
-    #[allow(dead_code)]
-    pub async fn fetch_orders_in_window(
-        &self,
-        start_unix: i64,
-        end_unix: i64,
-    ) -> anyhow::Result<Vec<OrderCacheEntry>> {
-        Ok(self
-            .fetch_order_snapshots_in_window(start_unix, end_unix)
-            .await?
-            .ui_entries)
-    }
-
     pub async fn fetch_order_snapshots_in_window(
         &self,
         start_unix: i64,
