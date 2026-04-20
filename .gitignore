@@ -84,6 +84,8 @@ target/
 # Tauri / Vue frontend
 apps/ui/dist/
 apps/ui/node_modules/
+# Tauri CLI 在 build 时自动写入的 schema / ACL manifest，属生成产物，本地每人都会重新生成
+apps/desktop/gen/
 backend/tests/artifacts/
 backend/dist/
 
