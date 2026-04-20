@@ -78,17 +78,36 @@ export function useReview() {
   }
 
   async function findQualityRefundOrders(days: number, startAt: string, endAt: string) {
+    // 与 `findReviews` 链路对齐：统一加 try/catch/finally 防 loading 卡死，
+    // 失败文案带「品退匹配失败：」前缀，便于用户识别哪条链路。
+    // 注：后端 `find_quality_refund_orders` 不发 `order-sync-progress` 事件，
+    // 因此这里不像差评链路那样用 `withSyncEvents` 包裹（否则就是死监听）。
     store.setLoading(true);
     store.setError(null);
     store.setLastMode("quality_refund");
     store.setLastQuery({ days, time_window: { start_at: startAt, end_at: endAt } });
-    const payload = await qualityRefundInvoke.execute({ days, start_at: startAt, end_at: endAt });
-    if (payload) {
-      applyResults(payload, "品退匹配");
-    } else {
-      store.setError(qualityRefundInvoke.error.value ?? "获取品退订单失败");
+    try {
+      const payload = await qualityRefundInvoke.execute({
+        days,
+        start_at: startAt,
+        end_at: endAt,
+      });
+      if (payload) {
+        applyResults(payload, "品退匹配");
+        // 品退链路刷新轻量的缓存状态（订单计数/覆盖缺口）即可；
+        // 完整订单列表由「订单管理」按需拉取，不在此链路触发，避免多余开销。
+        void loadCacheStatus().catch((error) => {
+          orderStore.error = typeof error === "string" ? error : String(error);
+        });
+      } else {
+        store.setError(qualityRefundInvoke.error.value ?? "获取品退订单失败");
+      }
+    } catch (error) {
+      orderStore.error = typeof error === "string" ? error : String(error);
+      store.setError(`品退匹配失败：${orderStore.error}`);
+    } finally {
+      store.setLoading(false);
     }
-    store.setLoading(false);
   }
 
   function prefillMatchedOrder(orderId: string, source: "评价匹配" | "品退匹配" = "评价匹配") {
