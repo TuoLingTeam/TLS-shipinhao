@@ -1,6 +1,5 @@
 use desktop_services::parse_cookie_profile;
 use desktop_services::update_service::{fetch_latest_version_info, UpdateInfo};
-use domain_core::brand::{get_window_title, APP_NAME, APP_NAME_EN, AUTHOR_WECHAT};
 use reqwest::Url;
 use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -16,14 +15,6 @@ fn store_login_url() -> String {
 }
 const COOKIE_LOGIN_WINDOW_LABEL: &str = "cookie-login";
 
-const DEFAULT_UI_SCALE: f64 = 1.0;
-const MIN_UI_SCALE: f64 = 0.82;
-const MAX_UI_SCALE: f64 = 1.0;
-
-fn clamp_ui_scale(scale: f64) -> f64 {
-    scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
-}
-
 #[tauri::command]
 pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
     fetch_latest_version_info(None, Some(&get_device_id()))
@@ -31,28 +22,8 @@ pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
         .map_err(|e| AppError::Message(format!("检查更新失败：{e}")))
 }
 
-#[tauri::command]
-pub async fn get_app_info() -> Result<serde_json::Value, AppError> {
-    let version = env!("CARGO_PKG_VERSION");
-    Ok(serde_json::json!({
-        "name": APP_NAME,
-        "name_en": APP_NAME_EN,
-        "version": version,
-        "author_wechat": AUTHOR_WECHAT,
-        "window_title": get_window_title(version),
-        "runtime": "tauri-2.0",
-    }))
-}
-
-#[tauri::command]
-pub async fn get_ui_scale() -> Result<f64, AppError> {
-    Ok(DEFAULT_UI_SCALE)
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn set_ui_scale(scale: f64) -> Result<f64, AppError> {
-    Ok(clamp_ui_scale(scale))
-}
+// NOTE: get_app_info / get_ui_scale / set_ui_scale 已删除，前端改走本地 brand 常量 + localStorage，
+// 不再需要 Tauri 中转；UI 缩放阈值 const 与 clamp 辅助同步清理，收缩 invoke / 代码面。
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_cookie(
@@ -431,27 +402,5 @@ fn looks_like_logged_in_store_session(cookies: &[tauri::webview::Cookie<'static>
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn get_app_info_returns_brand_fields() {
-        let payload = get_app_info().await.expect("app info");
-        assert_eq!(payload["name"], APP_NAME);
-        assert_eq!(payload["name_en"], APP_NAME_EN);
-        assert_eq!(payload["author_wechat"], AUTHOR_WECHAT);
-        assert!(payload["window_title"]
-            .as_str()
-            .unwrap_or("")
-            .contains(APP_NAME));
-    }
-
-    #[tokio::test]
-    async fn set_ui_scale_clamps_to_supported_range() {
-        assert_eq!(get_ui_scale().await.expect("default scale"), 1.0);
-        assert_eq!(set_ui_scale(0.6).await.expect("low scale"), 0.82);
-        assert_eq!(set_ui_scale(1.2).await.expect("high scale"), 1.0);
-        assert_eq!(set_ui_scale(0.9).await.expect("normal scale"), 0.9);
-    }
-}
+// NOTE: 原 get_app_info / set_ui_scale 单元测试随命令删除一起下线；
+// 前端 brand 常量和 localStorage 管理不需要 Tauri 中转测试。

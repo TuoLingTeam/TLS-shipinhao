@@ -192,7 +192,6 @@ pub struct HttpOrderCacheFinder {
 
 #[derive(Debug, Default)]
 pub struct SyncedOrderSnapshot {
-    pub ui_entries: Vec<OrderCacheEntry>,
     pub cache_records: Vec<CacheOrderRecord>,
 }
 
@@ -322,12 +321,6 @@ impl HttpOrderSearchClient {
             result.map_err(|join_err| anyhow::anyhow!(join_err.to_string()))??;
         }
 
-        let ui_entries = Arc::try_unwrap(ui_by_id)
-            .map_err(|_| anyhow::anyhow!("ui cache still shared"))?
-            .into_inner()
-            .map_err(|_| anyhow::anyhow!("ui cache poisoned"))?
-            .into_values()
-            .collect();
         let cache_records = Arc::try_unwrap(cache_by_id)
             .map_err(|_| anyhow::anyhow!("rich cache still shared"))?
             .into_inner()
@@ -335,10 +328,7 @@ impl HttpOrderSearchClient {
             .into_values()
             .collect();
 
-        Ok(SyncedOrderSnapshot {
-            ui_entries,
-            cache_records,
-        })
+        Ok(SyncedOrderSnapshot { cache_records })
     }
 }
 

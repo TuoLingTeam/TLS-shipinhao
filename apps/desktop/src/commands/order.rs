@@ -1,6 +1,4 @@
-use crate::adapters::http_order_search::{
-    parse_iso_window, HttpOrderCacheFinder, HttpOrderSearchClient,
-};
+use crate::adapters::http_order_search::{parse_iso_window, HttpOrderCacheFinder};
 use crate::adapters::sqlite_order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::paths::{cache_data_dir, rich_order_cache_path};
@@ -203,52 +201,8 @@ pub async fn get_order_cache_status() -> Result<OrderCacheStatus, AppError> {
         .map_err(AppError::Internal)
 }
 
-/// 兼容旧接口：按窗口抓单并写入两套缓存。
-#[tauri::command(rename_all = "snake_case")]
-pub async fn sync_orders(
-    state: State<'_, AppState>,
-    start_at: String,
-    end_at: String,
-) -> Result<OrderSyncResult, AppError> {
-    ensure_feature_authorized(&state, "订单同步").await?;
-    let grant = authorize_runtime_task(&state, LICENSE_TASK_CACHE_MANAGE).await?;
-    let creds = require_cookie_credentials(&state).await?;
-
-    let (start_unix, end_unix) =
-        parse_iso_window(&start_at, &end_at).map_err(|e| AppError::Message(e.to_string()))?;
-
-    let client =
-        HttpOrderSearchClient::new_with_grant(creds.cookie, creds.magic, Some(grant.grant_id));
-    let snapshot = client
-        .fetch_order_snapshots_in_window(start_unix, end_unix)
-        .await
-        .map_err(|e| AppError::Message(e.to_string()))?;
-
-    let orders_saved = snapshot.ui_entries.len();
-    let data_dir = cache_data_dir();
-    let rich_cache_path = rich_order_cache_path();
-    tokio::task::spawn_blocking(move || {
-        use desktop_services::OrderCacheStore;
-        let cache = SqliteOrderCache::new(data_dir);
-        cache.save_orders(&snapshot.ui_entries)?;
-
-        let repository = SqliteOrderCacheRepository::open(&rich_cache_path)?;
-        repository.initialize()?;
-        repository.upsert_orders(&snapshot.cache_records)?;
-        Ok::<(), anyhow::Error>(())
-    })
-    .await
-    .map_err(|e| AppError::Message(e.to_string()))?
-    .map_err(AppError::Internal)?;
-
-    Ok(OrderSyncResult {
-        orders_saved,
-        cache_sync_performed: true,
-        cache_coverage_start: Some(start_at),
-        cache_coverage_end: Some(end_at),
-        cache_warnings: Vec::new(),
-    })
-}
+// NOTE: 原 sync_orders(start_at, end_at) 兼容旧接口接窗口抓单已废弃；
+// 前端统一走 sync_recent_order_cache 增量同步。删除以收缩 invoke 面。
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn sync_recent_order_cache(
