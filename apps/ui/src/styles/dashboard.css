@@ -169,60 +169,94 @@
   border-top-color: rgba(148, 163, 184, 0.45);
 }
 
-/* 仪表盘 Hero 右上：运行时元数据 chip（版本 / 作者 / 启动时长 / 当前时间） */
-.dashboard-hero-meta {
-  z-index: 1;
-  font-size: 0.72rem;
+/* 仪表盘底部：运行时元数据 4 卡片（版本 / 作者 / 会话时长 / 当前时间）
+   与上方业务域 tiles / shortcuts 解耦，纯元数据信息。
+   独立一行，shrink-0，不参与 flex-1 争夺。 */
+.dashboard-meta-cards {
+  /* 视觉深度略弱于 shortcut / metric：不抢焦点 */
 }
 
-.dashboard-hero-chip {
+.dashboard-meta-card {
+  border-top: 3px solid transparent;
+  transition:
+    transform 200ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+  min-height: 4.25rem;
+}
+
+.dashboard-meta-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px -22px rgba(15, 23, 42, 0.22);
+}
+
+.dashboard-meta-card--version {
+  border-top-color: rgba(5, 150, 105, 0.55);
+}
+
+.dashboard-meta-card--author {
+  border-top-color: rgba(148, 163, 184, 0.55);
+}
+
+.dashboard-meta-card--uptime {
+  border-top-color: rgba(234, 179, 8, 0.55);
+}
+
+.dashboard-meta-card--clock {
+  border-top-color: rgba(56, 189, 248, 0.6);
+}
+
+.dashboard-meta-icon {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.38rem;
-  padding: 0.28rem 0.65rem;
-  border-radius: 999px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.22);
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.9) 100%);
+  color: #475569;
+  box-shadow: 0 2px 8px -6px rgba(15, 23, 42, 0.18);
+  flex-shrink: 0;
+}
+
+.dashboard-meta-card--version .dashboard-meta-icon {
+  color: #065f46;
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.95) 0%, rgba(209, 250, 229, 0.85) 100%);
+}
+
+.dashboard-meta-card--uptime .dashboard-meta-icon {
+  color: #92400e;
+  background: linear-gradient(180deg, rgba(254, 249, 195, 0.9) 0%, rgba(254, 243, 199, 0.85) 100%);
+}
+
+.dashboard-meta-card--clock .dashboard-meta-icon {
+  color: #075985;
+  background: linear-gradient(180deg, rgba(240, 249, 255, 0.95) 0%, rgba(224, 242, 254, 0.85) 100%);
+}
+
+.dashboard-meta-label {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.dashboard-meta-value {
+  margin-top: 0.15rem;
+  font-size: 0.92rem;
+  color: #0f172a;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dashboard-hero-chip-label {
-  color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.dashboard-hero-chip-value {
-  color: #0f172a;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.dashboard-hero-chip-value--mono {
+.dashboard-meta-value--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.78rem;
-}
-
-.dashboard-hero-chip--version {
-  border-color: rgba(5, 150, 105, 0.3);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(236, 253, 245, 0.84) 100%);
-}
-
-.dashboard-hero-chip--version .dashboard-hero-chip-value {
-  color: #065f46;
-}
-
-.dashboard-hero-chip--clock {
-  border-color: rgba(56, 189, 248, 0.32);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(224, 242, 254, 0.84) 100%);
-}
-
-.dashboard-hero-chip--clock .dashboard-hero-chip-value {
-  color: #075985;
+  font-size: 0.88rem;
 }
 
 /* 仪表盘：快捷入口 2x2 卡片网格 —— 行高略压缩，行间 gap 由 Tailwind gap-y-* 控制 */

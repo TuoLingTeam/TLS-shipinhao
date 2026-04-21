@@ -291,37 +291,15 @@ onUnmounted(() => {
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
-      <div class="relative flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div class="flex min-w-0 flex-col gap-1.5">
-          <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
-          <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
-            {{ greeting }}
-          </h2>
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
-            <span>{{ todayText }}</span>
-            <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
-            <span>{{ heroSummaryText }}</span>
-          </div>
-        </div>
-
-        <!-- Hero 右上：版本 / 作者 / 启动时长 / 当前时间 chip 组，纯元数据不重复业务信息 -->
-        <div class="dashboard-hero-meta flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-col sm:items-end sm:gap-1.5" aria-label="运行时元数据">
-          <span class="dashboard-hero-chip dashboard-hero-chip--version">
-            <span class="dashboard-hero-chip-label">版本</span>
-            <span class="dashboard-hero-chip-value">v{{ appStore.appVersion }}</span>
-          </span>
-          <span class="dashboard-hero-chip dashboard-hero-chip--author">
-            <span class="dashboard-hero-chip-label">作者</span>
-            <span class="dashboard-hero-chip-value">{{ AUTHOR_WECHAT }}</span>
-          </span>
-          <span class="dashboard-hero-chip dashboard-hero-chip--uptime">
-            <span class="dashboard-hero-chip-label">会话</span>
-            <span class="dashboard-hero-chip-value">{{ uptimeText }}</span>
-          </span>
-          <span class="dashboard-hero-chip dashboard-hero-chip--clock">
-            <span class="dashboard-hero-chip-label">当前</span>
-            <span class="dashboard-hero-chip-value dashboard-hero-chip-value--mono">{{ clockText }}</span>
-          </span>
+      <div class="relative flex min-w-0 flex-col gap-1.5">
+        <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
+        <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
+          {{ greeting }}
+        </h2>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
+          <span>{{ todayText }}</span>
+          <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
+          <span>{{ heroSummaryText }}</span>
         </div>
       </div>
     </section>
@@ -412,6 +390,70 @@ onUnmounted(() => {
           </div>
         </RouterLink>
       </div>
+    </section>
+
+    <!-- 底部元数据卡片：版本 / 作者 / 会话时长 / 当前时间，与上方业务域信息完全解耦 -->
+    <section
+      data-testid="dashboard-meta-cards"
+      class="dashboard-meta-cards grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4"
+      aria-label="运行时元数据"
+    >
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--version flex items-center gap-3 p-3">
+        <span class="dashboard-meta-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M12 2 4 7v10l8 5 8-5V7z" />
+            <path d="M12 22V12" />
+            <path d="m4 7 8 5 8-5" />
+          </svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="dashboard-meta-label">版本</div>
+          <div class="dashboard-meta-value">v{{ appStore.appVersion }}</div>
+        </div>
+      </article>
+
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--author flex items-center gap-3 p-3">
+        <span class="dashboard-meta-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="dashboard-meta-label">作者微信</div>
+          <div class="dashboard-meta-value dashboard-meta-value--mono">{{ AUTHOR_WECHAT }}</div>
+        </div>
+      </article>
+
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--uptime flex items-center gap-3 p-3">
+        <span class="dashboard-meta-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M12 8V4H8" />
+            <rect width="16" height="12" x="4" y="8" rx="2" />
+            <path d="M2 14h2" />
+            <path d="M20 14h2" />
+            <path d="M15 13v2" />
+            <path d="M9 13v2" />
+          </svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="dashboard-meta-label">会话时长</div>
+          <div class="dashboard-meta-value">{{ uptimeText }}</div>
+        </div>
+      </article>
+
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--clock flex items-center gap-3 p-3">
+        <span class="dashboard-meta-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="dashboard-meta-label">当前时间</div>
+          <div class="dashboard-meta-value dashboard-meta-value--mono">{{ clockText }}</div>
+        </div>
+      </article>
     </section>
 
   </div>
