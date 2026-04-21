@@ -113,7 +113,11 @@ describe("SettingsView", () => {
     expect(wrapper.find('[data-testid="settings-sidebar"]').exists()).toBe(false);
     expect(wrapper.find('.settings-sidebar-stack').exists()).toBe(false);
     // 禁止出现独立的 step 编号样式（如 "01 授权 / 02 Cookie / 03 应用"），
-    // 但允许数字嵌在其他字串（例如 AUTHOR_WECHAT = "TLS-801"）。
-    expect(wrapper.text()).not.toMatch(/\b0[123]\b/);
+    // 但允许数字嵌在其他字串（例如 AUTHOR_WECHAT = "TLS-801"、时钟 HH:mm）。
+    // 历史用的 /\b0[123]\b/ 会误匹配 01/02/03:XX 时钟格式——在凌晨跑测试会挂；
+    // 改为精确断言不应出现的 step + 字样组合，更稳。
+    expect(wrapper.text()).not.toContain("01 授权");
+    expect(wrapper.text()).not.toContain("02 Cookie");
+    expect(wrapper.text()).not.toContain("03 应用");
   });
 });
