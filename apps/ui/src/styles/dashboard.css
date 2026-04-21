@@ -169,15 +169,108 @@
   border-top-color: rgba(148, 163, 184, 0.45);
 }
 
+/* 仪表盘：Hero 区业务流程节点（Cookie → 订单 → 评价 → 发货） */
+.dashboard-flow {
+  z-index: 1;
+}
+
+.dashboard-flow-node {
+  background: rgba(255, 255, 255, 0.9);
+  color: #334155;
+  border-color: rgba(226, 232, 240, 0.85);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+  min-width: 0;
+}
+
+.dashboard-flow-node--ready {
+  border-color: rgba(5, 150, 105, 0.38);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(236, 253, 245, 0.9) 100%);
+  color: #065f46;
+}
+
+.dashboard-flow-node--warn {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(254, 243, 199, 0.88) 100%);
+  color: #92400e;
+}
+
+.dashboard-flow-node--error {
+  border-color: rgba(220, 38, 38, 0.46);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(254, 226, 226, 0.88) 100%);
+  color: #991b1b;
+}
+
+.dashboard-flow-node--idle {
+  border-color: rgba(203, 213, 225, 0.85);
+  background: rgba(248, 250, 252, 0.88);
+  color: #64748b;
+}
+
+.dashboard-flow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px -6px rgba(15, 23, 42, 0.24);
+}
+
+.dashboard-flow-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+
+.dashboard-flow-hint {
+  font-size: 0.7rem;
+  line-height: 1.15;
+  color: inherit;
+  opacity: 0.78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.dashboard-flow-index {
+  position: absolute;
+  top: 0.28rem;
+  right: 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.32;
+}
+
+.dashboard-flow-link {
+  align-self: center;
+  width: 0.85rem;
+  height: 1px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.55);
+}
+
+.dashboard-flow-link--done {
+  border-top-style: solid;
+  border-top-color: rgba(5, 150, 105, 0.62);
+}
+
 /* 仪表盘：快捷入口 2x2 卡片网格 —— 行高略压缩，行间 gap 由 Tailwind gap-y-* 控制 */
 .dashboard-shortcuts-grid {
-  grid-template-rows: repeat(2, minmax(68px, 88px));
+  grid-template-rows: repeat(2, minmax(68px, 1fr));
 }
 
 /* 仪表盘：四个快捷入口，按业务域给图标上不同配色 */
 .dashboard-shortcut {
   min-height: 64px;
-  max-height: 92px;
+  /* 去掉 max-height，让 shortcuts-grid 的 1fr rows 按剩余空间自动拉伸，避免仪表盘底部留空白 */
   padding: 0.5rem 0.7rem;
   transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }

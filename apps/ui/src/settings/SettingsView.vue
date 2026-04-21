@@ -366,10 +366,6 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="settings-info-grid settings-info-grid--single shrink-0">
-          <div class="settings-info-item">
-            <span class="settings-info-label">状态</span>
-            <span class="settings-info-value">{{ currentStateText }}</span>
-          </div>
           <div class="settings-info-item" title="卡密自身的有效期，到期后卡密将失效">
             <span class="settings-info-label">卡密有效期</span>
             <span class="settings-info-value">{{ licenseExpiresText }}</span>
