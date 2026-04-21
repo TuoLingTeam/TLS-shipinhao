@@ -1,0 +1,45 @@
+{
+  "_comment": "javascript-obfuscator 发版配置。开启后编译性能会下降 15~25%，JS 体积 ~1.5~2×，属于可接受代价。",
+  "_reference": "https://github.com/javascript-obfuscator/javascript-obfuscator#javascript-obfuscator-options",
+  "compact": true,
+  "simplify": true,
+  "target": "browser",
+  "sourceMap": false,
+
+  "stringArray": true,
+  "stringArrayEncoding": ["rc4"],
+  "stringArrayIndexShift": true,
+  "stringArrayRotate": true,
+  "stringArrayShuffle": true,
+  "stringArrayWrappersCount": 3,
+  "stringArrayWrappersChainedCalls": true,
+  "stringArrayWrappersParametersMaxCount": 4,
+  "stringArrayWrappersType": "function",
+  "stringArrayThreshold": 0.85,
+  "splitStrings": true,
+  "splitStringsChunkLength": 8,
+
+  "transformObjectKeys": true,
+  "rotateStringArray": true,
+  "shuffleStringArray": true,
+  "unicodeEscapeSequence": false,
+
+  "controlFlowFlattening": true,
+  "controlFlowFlatteningThreshold": 0.75,
+  "deadCodeInjection": true,
+  "deadCodeInjectionThreshold": 0.4,
+
+  "numbersToExpressions": true,
+  "renameGlobals": false,
+  "renameProperties": false,
+  "identifierNamesGenerator": "hexadecimal",
+
+  "selfDefending": true,
+  "debugProtection": true,
+  "debugProtectionInterval": 4000,
+  "disableConsoleOutput": false,
+
+  "_note_renameGlobals": "renameGlobals=true 会重命名顶层 const / let / var，但可能破坏 Vite/ES module 导出；保守关闭",
+  "_note_renameProperties": "renameProperties=true 会重命名对象 key，但 Tauri invoke(name) 依赖字符串名，Vue 组件 props 也依赖，必须关闭",
+  "_note_disableConsoleOutput": "开启 true 会吃掉 console.log/warn/error，线上排障不利；保持 false"
+}
