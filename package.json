@@ -8,6 +8,8 @@
     "tauri:build": "cd apps/desktop && cargo tauri build -b app",
     "release:build": "node scripts/build-release.mjs",
     "release:build:plain": "node scripts/build-release.mjs --no-obfuscate",
+    "release:build:deep": "node scripts/build-obfuscate.mjs",
+    "release:build:deep:mirror-only": "node scripts/build-obfuscate.mjs --skip-build",
     "worker:deploy": "cd backend && npx wrangler deploy",
     "worker:deploy:preview": "cd backend && npx wrangler versions upload"
   }

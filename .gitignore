@@ -103,3 +103,6 @@ backend/.wrangler/
 
 backend/license-worker/build/
 backend/.cache/
+
+# 深度混淆镜像产物（scripts/build-obfuscate.mjs 生成）
+/TLS-shipinhao-release/
