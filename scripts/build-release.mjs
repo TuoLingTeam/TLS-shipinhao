@@ -38,6 +38,39 @@ const obfuscatorConfigPath = join(repoRoot, "scripts", "obfuscator.config.json")
 
 const desktopDir = join(repoRoot, "apps", "desktop");
 
+/**
+ * 发版专用 RUSTFLAGS：在稳定工具链上把源码/依赖缓存的绝对路径映射成短前缀，
+ * 降低 `strings desktop` 命中 `.../apps/desktop/src/...`、registry 路径等可读面。
+ * nightly 可选追加见 `TLS_RELEASE_RUSTFLAGS`（例如 `-Zlocation-detail=none`）。
+ */
+function mergeReleaseRustflags() {
+  const chunks = [];
+  const base = (process.env.RUSTFLAGS || "").trim();
+  if (base) {
+    chunks.push(base);
+  }
+
+  const normRoot = repoRoot.replace(/\\/g, "/");
+  chunks.push(`-Cremap-path-prefix=${normRoot}=.`);
+
+  const cargoHome = process.env.CARGO_HOME;
+  if (cargoHome) {
+    chunks.push(`-Cremap-path-prefix=${cargoHome.replace(/\\/g, "/")}=/.cargo`);
+  }
+
+  const rustupHome = process.env.RUSTUP_HOME;
+  if (rustupHome) {
+    chunks.push(`-Cremap-path-prefix=${rustupHome.replace(/\\/g, "/")}=/.rustup`);
+  }
+
+  const extra = (process.env.TLS_RELEASE_RUSTFLAGS || "").trim();
+  if (extra) {
+    chunks.push(extra);
+  }
+
+  return chunks.join(" ");
+}
+
 function log(section, msg) {
   const stamp = new Date().toISOString().split("T")[1].slice(0, 8);
   console.log(`\n[${stamp}] [${section}] ${msg}`);
@@ -138,7 +171,12 @@ function buildTauri() {
   // 注意：beforeBuildCommand 是 `pnpm --filter tls-shipinhao-ui build`，会再跑一次前端
   // 这里用 --no-bundle 的逻辑也可考虑，但保守：仍让 Tauri 自行跑一次（幂等，不影响混淆产物的 frontendDist）
   // 如果要绕开 beforeBuildCommand，可加环境变量或未来迁移 Tauri 配置
-  run(`cargo tauri build --config '${configOverride}'`, { cwd: desktopDir });
+  const rustflags = mergeReleaseRustflags();
+  log("tauri", `RUSTFLAGS 已合并 path remap（长度=${rustflags.length}）`);
+  run(`cargo tauri build --config '${configOverride}'`, {
+    cwd: desktopDir,
+    env: { ...process.env, RUSTFLAGS: rustflags },
+  });
 }
 
 // ---------- 阶段 4：收集产物到 dist/release/ ----------

@@ -8,7 +8,7 @@
 | 层级 | 目标 | 工具 / 配置 | 开关位置 |
 |------|------|-------------|----------|
 | L1-Rust 字符串 | 加密 URL / API 路径 / 敏感文案 | `obfstr` crate（workspace 依赖） | 源码：逐点 `obfstr::obfstr!(...)` |
-| L1-Rust 编译 | 最大化优化 + 清除可读面 | `[profile.release]` lto/strip/panic=abort/debug=0 | `Cargo.toml` |
+| L1-Rust 编译 | 最大化优化 + 清除可读面 | `[profile.release]` lto/strip/panic=abort/debug=0 + 发版 `RUSTFLAGS` path remap | `Cargo.toml` + `scripts/build-release.mjs` |
 | L2-JS 混淆 | 前端 stringArray / CFG 扁平 / selfDefending | `javascript-obfuscator@^4.2` | `scripts/obfuscator.config.json` |
 | L2-编排 | 一键完成前端构建 → 混淆 → Tauri 打包 | `scripts/build-release.mjs` | 顶层 `package.json` 的 `release:build` |
 | L3-Tauri 壳 | CSP / invoke 面 | `tauri.conf.json` + `generate_handler!` | `apps/desktop/src/main.rs` |
@@ -76,6 +76,14 @@ CI 额外环境变量：
 ### 后续可选
 
 - **代码签名证书**：Windows EV 证书 ~$200~$500/年，消除 SmartScreen 警告，抗二次篡改
+
+## Rust 二进制：`strings` 与路径 / panic 元数据
+
+- **已做**：`[profile.release]` 的 `strip` / `panic = "abort"` / `debug = 0`；workspace 里 `tracing` 使用 `release_max_level_off`，减少宏展开带入的 file/line 静态串（见根 `Cargo.toml` 注释）。
+- **发版脚本追加（稳定工具链）**：`node scripts/build-release.mjs` 在调用 `cargo tauri build` 时合并 `RUSTFLAGS`，包含  
+  `-C remap-path-prefix=<仓库根目录>=.`，并在设置了 `CARGO_HOME` / `RUSTUP_HOME` 时把依赖缓存路径映射为 `/.cargo`、`/.rustup`，减轻 `strings` 扫出本机绝对路径与 registry 路径。
+- **可选（需 nightly 或支持该 unstable 的工具链）**：在环境中设置 `TLS_RELEASE_RUSTFLAGS=-Zlocation-detail=none`，可进一步削弱 panic / caller 相关位置信息（与 `remap-path-prefix` 互补）。当前 `rust-toolchain.toml` 为 **stable**，默认 CI/本地不启用该项。
+- **serde「短 tag / 短字段名」**：桌面端与授权服务之间存在 **稳定 JSON 契约**（例如 `domain-core::TaskKind` 与 `api_contracts` 任务字面量、Tauri `invoke` 载荷字段名）。把 `rename_all` 或枚举序列化字面量改成短 id **会同步破坏** 前端、已发放 Lease、以及服务端校验，因此不在此做「全局短名」式混淆；若将来仅有 **纯 Rust 内部、永不序列化到 IPC/磁盘 JSON** 的结构，再对单结构评估 `#[serde(rename = "…")]`。
 
 ## 产物特征（阶段 5 实测 / macOS arm64）
 

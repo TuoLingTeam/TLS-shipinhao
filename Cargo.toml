@@ -42,6 +42,9 @@ obfstr = "0.4"
 lto = true
 codegen-units = 1
 strip = true
+# 路径字面量：发版脚本 `scripts/build-release.mjs` 会合并 RUSTFLAGS 的
+# `-C remap-path-prefix=...`（工作区 / CARGO_HOME / RUSTUP_HOME），与下述 panic/tracing 策略叠加。
+# 可选：环境变量 `TLS_RELEASE_RUSTFLAGS` 追加 nightly 标志（如 `-Zlocation-detail=none`）。
 # 去掉 panic unwind 表 + panic 字符串，进一步缩小可被分析的字面量面
 panic = "abort"
 # 关闭 release 下的溢出断言，避免留下检测分支字符串
