@@ -15,16 +15,7 @@ const COOKIE_DIR_POINTER_FILE: &str = "selected_config_dir.txt";
 const LICENSE_FILE_NAME: &str = "license.json";
 const LOGIN_WEBVIEW_DIR_NAME: &str = "login-webview";
 
-macro_rules! blank_debug_release {
-    ($t:ty) => {
-        #[cfg(not(debug_assertions))]
-        impl ::core::fmt::Debug for $t {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                f.write_str("_")
-            }
-        }
-    };
-}
+use api_contracts::blank_debug_release;
 blank_debug_release!(Slp);
 
 #[cfg_attr(debug_assertions, derive(Debug))]

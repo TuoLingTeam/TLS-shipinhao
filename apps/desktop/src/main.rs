@@ -74,5 +74,5 @@ fn main() {
             commands::system::start_legacy_migration,
         ])
         .run(tauri::generate_context!())
-        .expect("启动 Tauri 应用失败");
+        .unwrap_or_else(|_| std::process::exit(1));
 }

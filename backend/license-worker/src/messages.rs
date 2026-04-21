@@ -7,19 +7,9 @@
 //!   迁移风险最小；对外公共 API 通过 `pub use messages::*` 保持不变
 //! - 后续若要继续拆 handler / dispatch，可以在本模块稳定后以相同思路进行
 
+use api_contracts::blank_debug_release;
 use api_contracts::LicenseState;
 use serde::{Deserialize, Serialize};
-
-macro_rules! blank_debug_release {
-    ($t:ty) => {
-        #[cfg(not(debug_assertions))]
-        impl ::core::fmt::Debug for $t {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                f.write_str("_")
-            }
-        }
-    };
-}
 
 /// Worker 支持的路由枚举。
 ///

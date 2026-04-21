@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 /// release 占位 Debug：避免二进制里残留 struct/字段名；dev build 仍走 derive(Debug)。
 /// 调用点 `{:?}` 依旧能编译，但 release 下输出统一是 "_"。
+/// 跨 crate 共享以避免各 `src/*.rs` 重复定义同款宏。
+#[macro_export]
 macro_rules! blank_debug_release {
     ($t:ty) => {
         #[cfg(not(debug_assertions))]

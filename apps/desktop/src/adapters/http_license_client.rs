@@ -6,18 +6,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::app_settings::LICENSE_API_TIMEOUT_SECS;
+use api_contracts::blank_debug_release;
 
-/// release 占位 Debug：避免二进制里残留字段名，dev 仍走 derive(Debug)。
-macro_rules! blank_debug_release {
-    ($t:ty) => {
-        #[cfg(not(debug_assertions))]
-        impl ::core::fmt::Debug for $t {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                f.write_str("_")
-            }
-        }
-    };
-}
 blank_debug_release!(Lrr);
 blank_debug_release!(Lar);
 

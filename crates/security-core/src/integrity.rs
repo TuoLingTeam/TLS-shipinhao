@@ -17,16 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-macro_rules! blank_debug_release {
-    ($t:ty) => {
-        #[cfg(not(debug_assertions))]
-        impl ::core::fmt::Debug for $t {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                f.write_str("_")
-            }
-        }
-    };
-}
+use api_contracts::blank_debug_release;
 
 /// 默认 Manifest 文件名。与打包侧 `xtask generate-manifest` 输出保持一致。
 pub const INTEGRITY_MANIFEST_FILE_NAME: &str = "integrity_manifest.json";
