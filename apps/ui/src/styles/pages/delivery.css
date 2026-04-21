@@ -1,0 +1,315 @@
+/* 发货管理页样式：DeliveryView.vue / DeliveryTable 等
+ * 从 main.css 抽出；cascade 顺序保持等价。 */
+
+.delivery-view {
+  width: 100%;
+  min-height: 0;
+}
+
+.delivery-license-banner {
+  padding: 0.5rem 0.85rem;
+  border-radius: 14px;
+  flex: 0 0 auto;
+}
+
+.delivery-main-grid {
+  min-height: 0;
+}
+
+.delivery-input-panel,
+.delivery-progress-panel {
+  min-height: 0;
+}
+
+.delivery-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.delivery-input-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 0.35rem;
+}
+
+.delivery-input-textarea {
+  flex: 1 1 auto;
+  min-height: 120px;
+  resize: none;
+}
+
+.delivery-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.delivery-action-bar > .action-btn {
+  min-height: 40px;
+}
+
+@media (max-width: 640px) {
+  .delivery-action-bar {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+}
+
+.delivery-progress-stats {
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.68);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  padding: 0.55rem;
+}
+
+.delivery-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.delivery-stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-neutral-text);
+  letter-spacing: 0.02em;
+}
+
+.delivery-stat-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-heading);
+  line-height: 1.1;
+}
+
+.delivery-progress-detail {
+  gap: 0.45rem;
+}
+
+.delivery-tab-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  background: rgba(241, 245, 249, 0.75);
+  border-radius: 999px;
+  align-self: flex-start;
+}
+
+.delivery-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  transition: background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+
+.delivery-tab:hover {
+  color: var(--color-heading);
+}
+
+.delivery-tab--active {
+  background: white;
+  color: var(--color-brand-deep);
+  box-shadow: 0 6px 18px -12px rgba(15, 23, 42, 0.2);
+}
+
+.delivery-detail-body table thead th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.delivery-progress-placeholder {
+  padding: 1rem 1.25rem;
+  color: var(--color-neutral-text);
+}
+
+.delivery-placeholder-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand-deep);
+  background: rgba(167, 243, 208, 0.35);
+  border: 1px solid rgba(110, 231, 183, 0.4);
+}
+
+.delivery-placeholder-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+
+.delivery-cancel-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(220, 38, 38, 0.24);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(254, 226, 226, 0.62) 100%);
+  box-shadow: 0 14px 32px -28px rgba(220, 38, 38, 0.32);
+}
+
+.delivery-cancel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.delivery-cancel-pulse {
+  position: relative;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  animation: delivery-pulse 1.6s infinite;
+}
+
+@keyframes delivery-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.delivery-cancel-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+  letter-spacing: -0.005em;
+}
+
+.delivery-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.48rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  box-shadow: 0 14px 28px -16px rgba(220, 38, 38, 0.55);
+  transition: transform 180ms ease, box-shadow 200ms ease, background 200ms ease;
+  white-space: nowrap;
+}
+
+.delivery-cancel-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px -18px rgba(220, 38, 38, 0.65);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+.delivery-cancel-btn:disabled,
+.delivery-cancel-btn.is-pending {
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delivery-cancel-pulse {
+    animation: none;
+  }
+}
+
+/* 发货 · 右栏空状态三步引导 */
+.delivery-progress-placeholder {
+  padding: 0.9rem 1rem;
+}
+
+.delivery-placeholder-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.delivery-placeholder-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.delivery-placeholder-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(5, 150, 105, 0.12);
+  color: var(--color-brand-deep);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.delivery-placeholder-step-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-heading);
+  letter-spacing: -0.01em;
+}
+
+.delivery-placeholder-step-copy {
+  margin: 0.1rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.delivery-placeholder-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed rgba(226, 232, 240, 0.95);
+}
+
+.delivery-placeholder-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
