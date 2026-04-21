@@ -133,8 +133,7 @@ describe("DashboardView", () => {
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
     expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("TLS 工作台");
-    // NOTE: 「作者微信」断言已移除。用户要求在仪表盘底部新增运行时元数据卡片
-    //       （版本 / 作者微信 / 会话时长 / 当前时间），不再维持「不展示作者」的约束。
+    // NOTE: 底部元数据卡片为：版本 / 作者微信 / 查看教程 / 当前时间。
     expect(wrapper.text()).not.toContain("运行时");
     expect(wrapper.text()).not.toContain("提醒");
     expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')[0]?.text()).not.toContain("建议续费");

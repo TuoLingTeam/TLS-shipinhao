@@ -7,6 +7,7 @@ import { useReviewStore } from "../review/store";
 import { useDeliveryStore } from "../delivery/store";
 import { useOrder } from "../order/useOrder";
 import { useCookieHealthStore } from "../shared/cookieHealth";
+import { useUpdateCheckStore } from "../shared/updateCheck";
 import AppNavIcon from "../layout/AppNavIcon.vue";
 import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/types";
@@ -19,6 +20,7 @@ const orderStore = useOrderStore();
 const reviewStore = useReviewStore();
 const deliveryStore = useDeliveryStore();
 const cookieHealth = useCookieHealthStore();
+const updateCheck = useUpdateCheckStore();
 const { loadCacheStatus } = useOrder();
 
 type Tone = "success" | "warn" | "error" | "idle";
@@ -266,9 +268,10 @@ const alertToneClass: Record<"warn" | "error", string> = {
   error: "dashboard-alert--error",
 };
 
-// 启动时长与当前时钟抽到 useRuntimeClock：模块级 appStartedAt 让切换路由时「已运行」不被重置，
-// 同时通过引用计数共享单个定时器，避免仪表盘与设置页同时存在时跑重复的 setInterval。
-const { clockText, uptimeText } = useRuntimeClock();
+// 当前时钟抽到 useRuntimeClock；会话时长已迁至设置页，底部元数据卡改为「查看教程」。
+const { clockText } = useRuntimeClock();
+
+const hasTutorialUrl = computed(() => Boolean(updateCheck.latestInfo?.tutorial_url?.trim()));
 
 onMounted(async () => {
   void loadCacheStatus();
@@ -383,7 +386,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- 底部元数据卡片：版本 / 作者 / 会话时长 / 当前时间，与上方业务域信息完全解耦 -->
+    <!-- 底部元数据卡片：版本 / 作者微信 / 查看教程 / 当前时间 -->
     <section
       data-testid="dashboard-meta-cards"
       class="dashboard-meta-cards grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4"
@@ -399,7 +402,17 @@ onMounted(async () => {
         </span>
         <div class="min-w-0 flex-1">
           <div class="dashboard-meta-label">版本</div>
-          <div class="dashboard-meta-value">v{{ appStore.appVersion }}</div>
+          <button
+            v-if="updateCheck.hasUpdateAvailable"
+            type="button"
+            data-testid="dashboard-update-hint"
+            class="dashboard-meta-value dashboard-meta-update w-full cursor-pointer truncate text-left hover:underline"
+            :title="updateCheck.downloadActionError || `当前 v${appStore.appVersion} · 打开下载页`"
+            @click="updateCheck.openDownloadUrl()"
+          >
+            有新版本 v{{ updateCheck.latestInfo?.version }}
+          </button>
+          <div v-else class="dashboard-meta-value">v{{ appStore.appVersion }}</div>
         </div>
       </article>
 
@@ -416,20 +429,33 @@ onMounted(async () => {
         </div>
       </article>
 
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--uptime flex items-center gap-3 p-3">
+      <article
+        class="surface-panel dashboard-meta-card dashboard-meta-card--tutorial flex items-center gap-3 p-3"
+        data-testid="dashboard-meta-tutorial"
+      >
         <span class="dashboard-meta-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-            <path d="M12 8V4H8" />
-            <rect width="16" height="12" x="4" y="8" rx="2" />
-            <path d="M2 14h2" />
-            <path d="M20 14h2" />
-            <path d="M15 13v2" />
-            <path d="M9 13v2" />
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            <path d="M8 7h8" />
+            <path d="M8 11h6" />
           </svg>
         </span>
         <div class="min-w-0 flex-1">
-          <div class="dashboard-meta-label">会话时长</div>
-          <div class="dashboard-meta-value">{{ uptimeText }}</div>
+          <div class="dashboard-meta-label">查看教程</div>
+          <button
+            v-if="hasTutorialUrl"
+            type="button"
+            class="dashboard-meta-value w-full cursor-pointer truncate text-left hover:underline"
+            :title="updateCheck.tutorialActionError || '在浏览器中打开'"
+            @click="updateCheck.openTutorialUrl()"
+          >
+            点击打开
+          </button>
+          <div v-else class="dashboard-meta-value text-slate-400">暂无链接</div>
+          <p v-if="updateCheck.tutorialActionError" class="mt-0.5 truncate text-[10px] text-red-600">
+            {{ updateCheck.tutorialActionError }}
+          </p>
         </div>
       </article>
 

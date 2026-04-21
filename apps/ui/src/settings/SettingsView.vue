@@ -9,6 +9,7 @@ import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/types";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
+import { useUpdateCheckStore } from "../shared/updateCheck";
 import { toErrorMessage } from "../shared/toErrorMessage";
 import { isSettingsSection } from "../layout/navigation";
 import type { SettingsSectionId } from "../layout/navigation";
@@ -20,6 +21,7 @@ const COOKIE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
+const updateCheck = useUpdateCheckStore();
 const route = useRoute();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
 const { clockText, uptimeText } = useRuntimeClock();
@@ -445,7 +447,44 @@ onBeforeUnmount(() => {
         <div data-testid="settings-about-meta" class="settings-info-grid">
           <div class="settings-info-item">
             <span class="settings-info-label">版本</span>
-            <span class="settings-info-value settings-info-value--mono">v{{ APP_VERSION || appStore.appVersion }}</span>
+            <div class="min-w-0">
+              <div v-if="updateCheck.hasUpdateAvailable" class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                <button
+                  type="button"
+                  data-testid="settings-update-download"
+                  class="settings-info-value settings-info-value--mono min-w-0 cursor-pointer truncate text-left font-semibold text-emerald-800 underline decoration-emerald-600/45 underline-offset-2 hover:text-emerald-900"
+                  :title="
+                    [
+                      `当前 v${APP_VERSION || appStore.appVersion}`,
+                      updateCheck.isSnoozed ? `顶部提示已暂停至 ${updateCheck.snoozeUntilText}` : '',
+                      '打开下载页',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  "
+                  @click="updateCheck.openDownloadUrl()"
+                >
+                  有新版本 v{{ updateCheck.latestInfo?.version }}
+                </button>
+                <button
+                  v-if="updateCheck.isSnoozed"
+                  type="button"
+                  class="shrink-0 cursor-pointer text-[11px] text-slate-500 underline decoration-slate-400/60 underline-offset-2 hover:text-slate-700"
+                  title="恢复顶部更新提示"
+                  @click="updateCheck.clearSnooze()"
+                >
+                  恢复
+                </button>
+              </div>
+              <span v-else class="settings-info-value settings-info-value--mono">v{{ APP_VERSION || appStore.appVersion }}</span>
+              <p v-if="updateCheck.downloadActionError" class="mt-0.5 truncate text-[11px] text-red-600" :title="updateCheck.downloadActionError">
+                {{ updateCheck.downloadActionError }}
+              </p>
+              <p v-if="updateCheck.lastError && !updateCheck.hasUpdateAvailable" class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-amber-800">
+                <span class="min-w-0 break-all">{{ updateCheck.lastError }}</span>
+                <button type="button" class="shrink-0 cursor-pointer underline" @click="updateCheck.refresh()">重试</button>
+              </p>
+            </div>
           </div>
           <div class="settings-info-item">
             <span class="settings-info-label">作者微信</span>
