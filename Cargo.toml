@@ -32,6 +32,9 @@ tauri = { version = "2" }
 tauri-build = { version = "2" }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
+# 编译期字符串加密：用 obfstr!("...") 包装关键明文（URL / API 路径 / 卡密报错），
+# release 产物中 `strings` 扫不出原文，逆向需要还原解密过程
+obfstr = "0.4"
 
 [profile.release]
 lto = true

@@ -18,6 +18,7 @@ reqwest.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
 api-contracts = { path = "../../backend/api-contracts" }
 domain-core = { path = "../domain-core" }
+obfstr = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

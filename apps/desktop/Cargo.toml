@@ -30,6 +30,7 @@ rfd = "0.15"
 keyring = "3"
 aes-gcm = "0.10"
 rand = "0.8"
+obfstr = { workspace = true }
 
 [dev-dependencies]
 base64 = "0.22"
