@@ -74,7 +74,7 @@ onMounted(async () => {
         </div>
 
         <div class="mt-2 text-sm leading-6 text-brand-deep">
-          已在启动时自动检查并迁移旧版本地数据，避免你首次进入 5.1.0 后还要重新同步订单或重新配置环境。
+          已在启动时自动检查并迁移旧版本地数据，避免你首次进入 5.0.0 后还要重新同步订单或重新配置环境。
         </div>
 
         <div class="mt-3 text-sm leading-6 text-slate-700">

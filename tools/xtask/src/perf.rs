@@ -251,7 +251,7 @@ fn render_markdown(report: &PerfReport) -> String {
     let mut md = String::new();
     md.push_str("# TLS-shipinhao 性能报告（2026-04-17）\n\n");
     md.push_str(&format!("- 生成时间：`{}`\n", report.generated_at));
-    md.push_str("- 基线版本：`5.1.0`\n");
+    md.push_str("- 基线版本：`5.0.0`\n");
     md.push_str("- 对应卡片：`M6-03 性能压测与指标校验`\n\n");
     md.push_str("## 指标矩阵\n\n");
     md.push_str("| 指标 | 目标 | 实测 | 状态 | 证据/备注 |\n|---|---|---|---|---|\n");
