@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/order.store";
@@ -11,6 +11,7 @@ import AppNavIcon from "../layout/AppNavIcon.vue";
 import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
 import { buildSettingsLocation } from "../layout/navigation";
+import { AUTHOR_WECHAT } from "../shared/brand";
 
 const appStore = useAppStore();
 const orderStore = useOrderStore();
@@ -245,98 +246,42 @@ const alertToneClass: Record<"warn" | "error", string> = {
   error: "dashboard-alert--error",
 };
 
-type FlowNodeState = "ready" | "warn" | "error" | "idle";
+// Hero 的元数据 chip：版本 / 作者 / 本次启动时长 / 当前时间
+// 本次启动时长基于 appStartedAt（模块级常量）而非 onMounted 内的 ref，
+// 避免用户切换路由重新挂载时「已运行」被重置。
+const appStartedAt = new Date();
+const now = ref(new Date());
+let tickerTimer: ReturnType<typeof setInterval> | null = null;
 
-/**
- * Hero 区业务流程节点：从现有 store 派生状态，不引入新后端依赖
- * 顺序：登录 → 订单同步 → 评价匹配 → 批量发货
- * 每一步对应一个可聚焦的业务入口，颜色与仪表盘 tone 体系保持一致
- */
-const flowNodes = computed<{ key: string; label: string; hint: string; state: FlowNodeState; icon: "cookie" | "order" | "review" | "delivery"; to: RouteLocationRaw }[]>(() => [
-  {
-    key: "cookie",
-    label: "登录态",
-    hint:
-      cookieHealth.status === "healthy"
-        ? "Cookie 可用"
-        : cookieHealth.status === "unhealthy"
-          ? "需重新登录"
-          : cookieHealth.status === "unconfigured"
-            ? "尚未配置"
-            : "待探测",
-    state:
-      cookieHealth.status === "healthy"
-        ? "ready"
-        : cookieHealth.status === "unhealthy"
-          ? "error"
-          : cookieHealth.status === "unconfigured"
-            ? "warn"
-            : "idle",
-    icon: "cookie" as const,
-    to: buildSettingsLocation("cookie"),
-  },
-  {
-    key: "order",
-    label: "订单同步",
-    hint:
-      cacheCount.value === 0
-        ? "未建立缓存"
-        : missingSegments.value > 0
-          ? `有 ${missingSegments.value} 处缺口`
-          : `已缓存 ${cacheCount.value} 单`,
-    state:
-      cacheCount.value === 0
-        ? "warn"
-        : missingSegments.value > 0
-          ? "warn"
-          : "ready",
-    icon: "order" as const,
-    to: "/order",
-  },
-  {
-    key: "review",
-    label: "评价匹配",
-    hint:
-      reviewStore.results.length === 0
-        ? "未执行匹配"
-        : unmatchedReviewCount.value > 0
-          ? `${unmatchedReviewCount.value} 条待核实`
-          : `${matchedReviewCount.value} 条已匹配`,
-    state:
-      reviewStore.results.length === 0
-        ? "idle"
-        : unmatchedReviewCount.value > 0
-          ? "warn"
-          : "ready",
-    icon: "review" as const,
-    to: "/review",
-  },
-  {
-    key: "delivery",
-    label: "批量发货",
-    hint: deliveryStore.batchProgress
-      ? `成功 ${deliveryStore.batchProgress.successCount} · 失败 ${deliveryStore.batchProgress.failureCount}`
-      : "本次尚未执行",
-    state: deliveryStore.batchProgress
-      ? deliveryStore.batchProgress.failureCount > 0
-        ? "warn"
-        : "ready"
-      : "idle",
-    icon: "delivery" as const,
-    to: "/delivery",
-  },
-]);
+const clockText = computed(() => {
+  const hh = String(now.value.getHours()).padStart(2, "0");
+  const mm = String(now.value.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+});
 
-const flowNodeClass: Record<FlowNodeState, string> = {
-  ready: "dashboard-flow-node--ready",
-  warn: "dashboard-flow-node--warn",
-  error: "dashboard-flow-node--error",
-  idle: "dashboard-flow-node--idle",
-};
+const uptimeText = computed(() => {
+  const diffMs = now.value.getTime() - appStartedAt.getTime();
+  const totalMin = Math.max(0, Math.floor(diffMs / 60_000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0) return `已运行 ${h}h ${m}m`;
+  if (m > 0) return `已运行 ${m} 分钟`;
+  return `刚刚启动`;
+});
 
 onMounted(async () => {
   void loadCacheStatus();
   void cookieHealth.refreshSilently();
+  tickerTimer = setInterval(() => {
+    now.value = new Date();
+  }, 30_000); // 半分钟粒度足够，避免频繁重渲染
+});
+
+onUnmounted(() => {
+  if (tickerTimer) {
+    clearInterval(tickerTimer);
+    tickerTimer = null;
+  }
 });
 </script>
 
@@ -346,66 +291,38 @@ onMounted(async () => {
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
-      <div class="relative flex min-w-0 flex-col gap-1.5">
-        <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
-        <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
-          {{ greeting }}
-        </h2>
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
-          <span>{{ todayText }}</span>
-          <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
-          <span>{{ heroSummaryText }}</span>
+      <div class="relative flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div class="flex min-w-0 flex-col gap-1.5">
+          <span class="card-eyebrow">TLS · OPERATIONS OVERVIEW</span>
+          <h2 class="text-xl font-bold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.7rem]">
+            {{ greeting }}
+          </h2>
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 sm:text-[13px]">
+            <span>{{ todayText }}</span>
+            <span aria-hidden="true" class="h-1 w-1 rounded-full bg-slate-300"></span>
+            <span>{{ heroSummaryText }}</span>
+          </div>
         </div>
-      </div>
 
-      <!-- 业务流程图：Cookie → 订单 → 评价 → 发货，四步顺序节点，节点状态由现有 store 派生 -->
-      <div class="dashboard-flow relative mt-3.5 flex items-stretch gap-2 sm:gap-3">
-        <template v-for="(node, idx) in flowNodes" :key="node.key">
-          <RouterLink
-            :to="node.to"
-            class="dashboard-flow-node group relative flex flex-1 min-w-0 flex-col items-start gap-1 rounded-[14px] border px-2.5 py-2 transition-all hover:-translate-y-px hover:shadow-md sm:gap-1.5 sm:px-3 sm:py-2.5"
-            :class="flowNodeClass[node.state]"
-          >
-            <div class="flex items-center gap-1.5">
-              <span class="dashboard-flow-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-[14px] w-[14px]">
-                  <!-- 简化的 step 图：每个节点展示一个通用流程符号 -->
-                  <template v-if="node.icon === 'cookie'">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M9 11.5h.01" />
-                    <path d="M14 9.5h.01" />
-                    <path d="M14.5 14h.01" />
-                  </template>
-                  <template v-else-if="node.icon === 'order'">
-                    <path d="M20.5 7.78 12 12m0 0L3.5 7.78M12 12v9.5" />
-                    <path d="M20 16V8.2a1 1 0 0 0-.55-.9l-7-3.5a1 1 0 0 0-.9 0l-7 3.5a1 1 0 0 0-.55.9V16a1 1 0 0 0 .55.9l7 3.5a1 1 0 0 0 .9 0l7-3.5a1 1 0 0 0 .55-.9Z" />
-                  </template>
-                  <template v-else-if="node.icon === 'review'">
-                    <path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8l-6.2 3.3L7 14.2 2 9.3l6.9-1L12 2z" />
-                  </template>
-                  <template v-else-if="node.icon === 'delivery'">
-                    <rect x="1" y="7" width="14" height="10" rx="1.5" />
-                    <path d="M15 10h4l3 3v4h-7" />
-                    <circle cx="6" cy="18" r="2" />
-                    <circle cx="18" cy="18" r="2" />
-                  </template>
-                </svg>
-              </span>
-              <span class="dashboard-flow-label">{{ node.label }}</span>
-            </div>
-            <span class="dashboard-flow-hint">{{ node.hint }}</span>
-            <span class="dashboard-flow-index" aria-hidden="true">{{ idx + 1 }}</span>
-          </RouterLink>
-          <!-- 节点之间的连线：前一节点 ready 时实色 -->
-          <span
-            v-if="idx < flowNodes.length - 1"
-            class="dashboard-flow-link shrink-0"
-            :class="{
-              'dashboard-flow-link--done': node.state === 'ready',
-            }"
-            aria-hidden="true"
-          ></span>
-        </template>
+        <!-- Hero 右上：版本 / 作者 / 启动时长 / 当前时间 chip 组，纯元数据不重复业务信息 -->
+        <div class="dashboard-hero-meta flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-col sm:items-end sm:gap-1.5" aria-label="运行时元数据">
+          <span class="dashboard-hero-chip dashboard-hero-chip--version">
+            <span class="dashboard-hero-chip-label">版本</span>
+            <span class="dashboard-hero-chip-value">v{{ appStore.appVersion }}</span>
+          </span>
+          <span class="dashboard-hero-chip dashboard-hero-chip--author">
+            <span class="dashboard-hero-chip-label">作者</span>
+            <span class="dashboard-hero-chip-value">{{ AUTHOR_WECHAT }}</span>
+          </span>
+          <span class="dashboard-hero-chip dashboard-hero-chip--uptime">
+            <span class="dashboard-hero-chip-label">会话</span>
+            <span class="dashboard-hero-chip-value">{{ uptimeText }}</span>
+          </span>
+          <span class="dashboard-hero-chip dashboard-hero-chip--clock">
+            <span class="dashboard-hero-chip-label">当前</span>
+            <span class="dashboard-hero-chip-value dashboard-hero-chip-value--mono">{{ clockText }}</span>
+          </span>
+        </div>
       </div>
     </section>
 
