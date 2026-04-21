@@ -16,9 +16,38 @@
   min-height: 0;
 }
 
+/* 两张工作面板：左=批量输入；右=进度/引导。与设置 / 订单 / 评价页的"配置区"同一视觉语言：
+   左侧品牌色强调线 + 顶部高光 + 轻柔外投阴影，让面板在整页绿色背景中有清晰层次 */
 .delivery-input-panel,
 .delivery-progress-panel {
   min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-left: 3px solid rgba(5, 150, 105, 0.55);
+  box-shadow:
+    0 22px 46px -28px rgba(5, 150, 105, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+/* 右上方柔和光斑：呼应 order-hero / review-config 的同款装饰 */
+.delivery-input-panel::before,
+.delivery-progress-panel::before {
+  content: "";
+  position: absolute;
+  top: -4rem;
+  right: -5rem;
+  width: 10rem;
+  height: 10rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(167, 243, 208, 0.38), transparent 72%);
+  pointer-events: none;
+}
+
+/* 让 section-header / workspace / action-bar 浮在装饰层之上 */
+.delivery-input-panel > *,
+.delivery-progress-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .delivery-workspace {
@@ -38,6 +67,14 @@
   flex: 1 1 auto;
   min-height: 120px;
   resize: none;
+  /* 紧凑横向内边距 + 稍小 monospace 字号：确保 19~20 位订单号/快递号单行显示不折行 */
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+  font-size: 0.74rem;
+  letter-spacing: 0;
+  /* textarea 抬升：白底 + 轻阴影，"表单在卡片中"的纵深 */
+  background-color: #ffffff;
+  box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.22);
 }
 
 .delivery-action-bar {

@@ -15,15 +15,21 @@ const keyword = ref("");
 
 <template>
   <div class="order-search-shell flex flex-col gap-app sm:flex-row sm:items-center sm:gap-app">
-    <input
-      id="order-local-search-input"
-      v-model.trim="keyword"
-      type="text"
-      aria-label="搜索本地订单缓存"
-      placeholder="搜索订单号或买家昵称"
-      class="field-input min-h-10 w-full min-w-0 sm:flex-1"
-      @keyup.enter="emit('search', keyword)"
-    />
+    <label class="field-affix field-affix--leading min-h-10 w-full min-w-0 sm:flex-1" for="order-local-search-input">
+      <svg class="field-affix-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+      <input
+        id="order-local-search-input"
+        v-model.trim="keyword"
+        type="text"
+        aria-label="搜索本地订单缓存"
+        placeholder="搜索订单号或买家昵称"
+        class="field-input field-input--with-leading-icon min-h-10 w-full min-w-0"
+        @keyup.enter="emit('search', keyword)"
+      />
+    </label>
     <div class="flex w-full gap-app sm:w-auto sm:shrink-0">
       <button
         type="button"

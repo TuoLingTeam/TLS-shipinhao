@@ -210,6 +210,77 @@ textarea {
   box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.16);
 }
 
+/* 带前缀图标的输入 / 下拉：由 .field-affix--leading 提供绝对定位的图标槽，
+ * 内部控件再加 .field-input--with-leading-icon 预留左侧 padding。
+ * select 需要显式关闭原生外观，否则浏览器会在同一区域绘制自己的文字与指示箭头，
+ * 把绝对定位的图标遮住。 */
+.field-affix {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.field-affix-icon {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--color-brand-deep);
+  opacity: 0.72;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.field-affix--leading .field-affix-icon {
+  left: 0.85rem;
+}
+
+.field-input--with-leading-icon {
+  padding-left: 2.45rem;
+}
+
+/* 配置区顶部的「小标签」：点 + 小字，作为 section 身份标识，不追加叙述性文案 */
+.config-panel-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--color-brand-deep);
+  text-transform: uppercase;
+}
+
+.config-panel-eyebrow-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18);
+}
+
+.config-panel-eyebrow-label {
+  line-height: 1;
+}
+
+/* 对 <select> 关闭原生外观，改用右侧 CSS 箭头，左侧留给 affix 图标 */
+select.field-input--with-leading-icon {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.2rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(4, 120, 87, 0.75) 50%),
+    linear-gradient(-45deg, transparent 50%, rgba(4, 120, 87, 0.75) 50%);
+  background-position:
+    calc(100% - 16px) 50%,
+    calc(100% - 10px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
 .action-btn {
   display: inline-flex;
   align-items: center;

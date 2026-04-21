@@ -143,21 +143,34 @@ function formatReplyDeadline(value: string | null) {
     >
       <div class="pointer-events-none absolute -right-20 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.4),transparent_72%)]"></div>
 
+      <div class="config-panel-eyebrow relative z-[1]">
+        <span class="config-panel-eyebrow-dot" aria-hidden="true"></span>
+        <span class="config-panel-eyebrow-label">评价查询</span>
+      </div>
+
       <div
         data-testid="review-config-actions"
         class="relative z-[1] flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-3"
       >
-        <select
-          id="review-range-preset"
-          v-model="rangePreset"
-          data-testid="review-range-preset"
-          aria-label="选择日期范围"
-          class="field-input box-border min-h-[40px] min-w-0 flex-1"
-        >
-          <option v-for="opt in rangePresetOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
+        <label class="field-affix field-affix--leading flex-1" for="review-range-preset">
+          <svg class="field-affix-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="16" rx="3" />
+            <path d="M3 10h18" />
+            <path d="M8 3v4" />
+            <path d="M16 3v4" />
+          </svg>
+          <select
+            id="review-range-preset"
+            v-model="rangePreset"
+            data-testid="review-range-preset"
+            aria-label="选择日期范围"
+            class="field-input field-input--with-leading-icon box-border min-h-[40px] min-w-0 w-full"
+          >
+            <option v-for="opt in rangePresetOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </label>
         <button
           data-testid="review-fetch-bad"
           type="button"

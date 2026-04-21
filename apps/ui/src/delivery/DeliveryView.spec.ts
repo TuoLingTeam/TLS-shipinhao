@@ -62,7 +62,7 @@ describe("DeliveryView", () => {
       },
     });
 
-    expect(wrapper.get('[data-testid="delivery-workspace"]').classes()).toContain("xl:grid-cols-[0.92fr_1.08fr]");
+    expect(wrapper.get('[data-testid="delivery-workspace"]').classes()).toContain("md:grid-cols-2");
     expect(wrapper.find('[data-testid="delivery-summary-strip"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain("DELIVERY DESK");
     expect(wrapper.text()).not.toContain("单条修正");

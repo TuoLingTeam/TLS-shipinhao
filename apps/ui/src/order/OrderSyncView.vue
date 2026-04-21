@@ -157,16 +157,25 @@ onMounted(async () => {
       data-testid="order-hero-shell"
       class="hero-panel subsystem-hero order-hero-shell relative flex shrink-0 flex-col gap-2.5 overflow-hidden p-3 lg:p-3.5"
     >
-      <div v-if="store.cacheStatus?.last_error" class="soft-alert warn">
+      <div class="pointer-events-none absolute -right-20 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.38),transparent_72%)]"></div>
+
+      <div class="config-panel-eyebrow relative z-[1]">
+        <span class="config-panel-eyebrow-dot" aria-hidden="true"></span>
+        <span class="config-panel-eyebrow-label">订单检索</span>
+      </div>
+
+      <div v-if="store.cacheStatus?.last_error" class="relative z-[1] soft-alert warn">
         最近一次缓存维护提示：{{ store.cacheStatus.last_error }}
       </div>
 
-      <OrderSearchBar
-        :sync-disabled="store.loading || licenseBlocked"
-        :sync-label="store.loading ? '同步中...' : '同步缓存'"
-        @search="handleSearch"
-        @sync="handleSync"
-      />
+      <div class="relative z-[1]">
+        <OrderSearchBar
+          :sync-disabled="store.loading || licenseBlocked"
+          :sync-label="store.loading ? '同步中...' : '同步缓存'"
+          @search="handleSearch"
+          @sync="handleSync"
+        />
+      </div>
     </section>
 
     <div v-if="licenseBlocked" class="shrink-0 soft-alert warn">

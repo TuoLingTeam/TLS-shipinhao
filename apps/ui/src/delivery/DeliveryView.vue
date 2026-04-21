@@ -110,29 +110,22 @@ function handleClearInputs() {
       当前未激活授权，发货功能不可用，请先前往「设置中心」完成激活。
     </div>
 
-    <section class="delivery-main-grid grid flex-1 min-h-0 gap-app lg:grid-cols-[1.05fr_0.95fr]">
+    <section class="delivery-main-grid grid flex-1 min-h-0 gap-app lg:grid-cols-[1fr_1fr]">
       <article class="surface-panel delivery-input-panel p-3 lg:p-4 flex flex-col min-h-0">
         <div class="subsystem-section-header">
           <div class="min-w-0">
             <h3 class="text-base font-semibold tracking-tight text-slate-900">批量发货</h3>
-            <p class="mt-0.5 text-[11px] text-slate-500">
-              左侧订单号、右侧快递单号，每行一条，按行号顺序配对。
-            </p>
           </div>
-          <div class="subsystem-chipbar">
-            <span class="subsystem-chip">可提交 {{ parsedBatchItems.length }} 条</span>
-            <span v-if="lineCountMismatch" class="subsystem-chip subsystem-chip--warn">
-              {{ orderIdLines.length }} · {{ trackingNumberLines.length }}
-            </span>
-            <span v-if="store.draftOrderId" class="subsystem-chip">
-              已带入：{{ store.draftSource || '匹配订单' }}
+          <div v-if="lineCountMismatch" class="subsystem-chipbar">
+            <span class="subsystem-chip subsystem-chip--warn">
+              订单 {{ orderIdLines.length }} · 快递 {{ trackingNumberLines.length }}
             </span>
           </div>
         </div>
 
         <div
           data-testid="delivery-workspace"
-          class="delivery-workspace mt-app grid flex-1 min-h-0 grid-cols-1 gap-app xl:grid-cols-[0.92fr_1.08fr]"
+          class="delivery-workspace mt-app grid flex-1 min-h-0 grid-cols-1 gap-app md:grid-cols-2"
         >
           <div class="delivery-input-column">
             <label class="field-label flex items-center justify-between">
