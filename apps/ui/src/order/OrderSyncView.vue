@@ -273,7 +273,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="data-table-shell min-h-0 flex-1 overflow-auto border-0 shadow-none">
-        <table class="order-table w-full min-w-[720px] text-sm">
+        <table class="order-table w-full min-w-[768px] text-sm">
           <thead class="table-head text-slate-600">
             <tr>
               <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">订单号</th>

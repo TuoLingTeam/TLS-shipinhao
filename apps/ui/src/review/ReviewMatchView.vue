@@ -253,7 +253,7 @@ function formatReplyDeadline(value: string | null) {
       </div>
 
       <section class="data-table-shell flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto overflow-y-auto">
-        <table class="w-full text-sm" :class="isCompactLayout ? 'min-w-[820px]' : 'min-w-[980px]'">
+        <table class="w-full text-sm" :class="isCompactLayout ? 'min-w-[820px]' : 'min-w-[1024px]'">
           <thead class="table-head text-slate-600">
             <tr>
               <th

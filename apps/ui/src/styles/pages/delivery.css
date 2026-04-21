@@ -260,7 +260,10 @@
   letter-spacing: -0.005em;
   cursor: pointer;
   box-shadow: 0 14px 28px -16px rgba(220, 38, 38, 0.55);
-  transition: transform 180ms ease, box-shadow 200ms ease, background 200ms ease;
+  transition:
+    transform var(--motion-fast) ease,
+    box-shadow var(--motion-mid) ease,
+    background var(--motion-mid) ease;
   white-space: nowrap;
 }
 

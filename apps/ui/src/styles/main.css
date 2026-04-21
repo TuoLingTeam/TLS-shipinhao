@@ -13,6 +13,8 @@
   --color-success-soft: #d1fae5;
   --color-warning: #f97316;
   --color-warning-soft: #ffedd5;
+  --color-warning-text: #d97706;
+  --color-warning-tint: #fef3c7;
   --color-danger: #b91c1c;
   --color-danger-soft: #fee2e2;
 }
@@ -35,6 +37,20 @@
   --color-neutral-bg: #f1f5f9;
   --color-neutral-text: #64748b;
   --color-neutral-border: #cbd5e1;
+
+  /* 中性灰十级（slate palette）。仅补 token，历史 rgba/hex 保留不强制改，
+     后续新增代码优先用变量引用，避免散落硬编码值继续扩散。 */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+
   --color-sidebar: linear-gradient(180deg, #064e3b 0%, #065f46 48%, #022c22 100%);
   --color-sidebar-line: rgba(167, 243, 208, 0.18);
   --color-sidebar-text: rgba(220, 252, 231, 0.86);
@@ -47,6 +63,12 @@
   --radius-badge: 12px;
   --radius-xl: 20px;
   --radius-lg: 16px;
+
+  /* 过渡时长节律：快 / 中 / 基础 / 慢，复用避免各处散落 180/200/220/300ms */
+  --motion-fast: 180ms;
+  --motion-mid: 200ms;
+  --motion-base: 220ms;
+  --motion-slow: 320ms;
 }
 
 * {
@@ -173,7 +195,10 @@ textarea {
   background: rgba(255, 255, 255, 0.98);
   color: var(--color-text);
   box-shadow: 0 10px 30px -24px rgba(15, 23, 42, 0.18);
-  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
 }
 
 .field-input,
@@ -293,7 +318,12 @@ select.field-input--with-leading-icon {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+  transition:
+    transform var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .action-btn:hover:not(:disabled) {
@@ -307,6 +337,7 @@ select.field-input--with-leading-icon {
 
 .action-btn-primary {
   color: white;
+  min-height: 40px;
   background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%);
   box-shadow: 0 18px 36px -22px rgba(5, 150, 105, 0.72);
 }
@@ -402,8 +433,8 @@ select.field-input--with-leading-icon {
 }
 
 .status-badge-warning {
-  background: #fef3c7;
-  color: #d97706;
+  background: var(--color-warning-tint);
+  color: var(--color-warning-text);
 }
 
 .status-badge-danger {
@@ -635,7 +666,11 @@ select.field-input--with-leading-icon {
   padding: 0.55rem 0.55rem;
   border-radius: 14px;
   color: var(--color-sidebar-text);
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
   border: 1px solid transparent;
   justify-content: center;
 }
@@ -696,7 +731,10 @@ select.field-input--with-leading-icon {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  transition:
+    transform var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .quick-link-compact {
@@ -745,8 +783,8 @@ select.field-input--with-leading-icon {
 /* 历史兜底 @media (max-width: 1023.98px), (max-height: 719.98px) 已下线：
  * - Dashboard / Delivery / Settings 的视图容器都改为自己开 `overflow-y: auto`
  * - 短视口 / 窄屏不再触发「切回内容自然高度 + main 滚动」的 !important 重置，
- *   避免同一页面在 720/1024 两侧切换时布局发生明显跳变
- * - 仍保留窄屏单列布局（settings-layout 在 max-width: 980px 内重排为 1 列）
+ *   避免同一页面在 768/1024 两侧切换时布局发生明显跳变
+ * - 仍保留窄屏单列布局（settings-layout 在 max-width: 1023px 内重排为 1 列）
  */
 
 

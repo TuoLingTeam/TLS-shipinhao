@@ -107,7 +107,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.75;
-  transition: opacity 180ms ease;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .dashboard-alert:hover .dashboard-alert-cta {
@@ -121,7 +121,10 @@
  * 内部 items-center / h-full 做垂直居中。
  */
 .dashboard-metric-card {
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  transition:
+    transform var(--motion-mid) ease,
+    box-shadow var(--motion-mid) ease,
+    border-color var(--motion-mid) ease;
   border-top: 3px solid transparent;
   height: var(--dashboard-card-h-metric);
   justify-content: space-between;
@@ -190,9 +193,9 @@
 .dashboard-meta-card {
   border-top: 3px solid transparent;
   transition:
-    transform 200ms ease,
-    box-shadow 220ms ease,
-    border-color 220ms ease;
+    transform var(--motion-mid) ease,
+    box-shadow var(--motion-base) ease,
+    border-color var(--motion-base) ease;
   height: var(--dashboard-card-h-meta);
 }
 
@@ -283,7 +286,10 @@
 .dashboard-shortcut {
   height: var(--dashboard-card-h-shortcut);
   padding: 0.5rem 0.7rem;
-  transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  transition:
+    transform var(--motion-fast) ease,
+    box-shadow var(--motion-mid) ease,
+    border-color var(--motion-mid) ease;
 }
 
 .dashboard-shortcut:hover {
@@ -299,7 +305,7 @@
   flex-shrink: 0;
   border-radius: 14px;
   color: white;
-  transition: transform 200ms ease, box-shadow 250ms ease;
+  transition: transform var(--motion-mid) ease, box-shadow 250ms ease;
 }
 
 .dashboard-shortcut:hover .dashboard-shortcut-icon {
@@ -317,7 +323,10 @@
   background: rgba(255, 255, 255, 0.82);
   color: #475569;
   border: 1px solid rgba(226, 232, 240, 0.85);
-  transition: background 200ms ease, color 200ms ease, border-color 200ms ease;
+  transition:
+    background var(--motion-mid) ease,
+    color var(--motion-mid) ease,
+    border-color var(--motion-mid) ease;
 }
 
 .dashboard-shortcut:hover .dashboard-shortcut-arrow {
@@ -356,7 +365,10 @@
   border: 1px solid rgba(226, 232, 240, 0.9);
   background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 14px 32px -28px rgba(15, 23, 42, 0.18);
-  transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  transition:
+    transform var(--motion-fast) ease,
+    box-shadow var(--motion-mid) ease,
+    border-color var(--motion-mid) ease;
   min-width: 0;
   overflow: hidden;
 }
@@ -414,7 +426,7 @@
   border-radius: 8px;
   background: rgba(15, 23, 42, 0.04);
   color: #475569;
-  transition: background-color 180ms ease, color 180ms ease;
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
 }
 
 .dashboard-workflow-step--done .dashboard-workflow-icon {
