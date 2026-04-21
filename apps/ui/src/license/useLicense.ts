@@ -8,7 +8,10 @@ type LicensePayload = {
   configured?: boolean;
   license_state: LicenseState;
   license_key?: string | null;
+  /** 卡密硬过期（一般 100 年）；来自 REST 响应，UI 标签「卡密有效期」。 */
   license_expires_at?: string | null;
+  /** Lease Token 硬过期（一般 3 天）；来自已签名 Lease payload.exp，UI 标签「下次续约」。 */
+  lease_expires_at?: string | null;
   last_verified_at?: string | null;
   /** 后端探测到本地 profile 有卡密但 Lease 容器丢失时为 true，前端据此自动远端恢复。 */
   needs_restore?: boolean;
@@ -26,6 +29,7 @@ export function useLicense() {
       license_state: result.license_state ?? "invalid",
       license_key: result.license_key,
       license_expires_at: result.license_expires_at,
+      lease_expires_at: result.lease_expires_at,
       last_verified_at: result.last_verified_at,
     });
   }

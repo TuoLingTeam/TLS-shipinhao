@@ -49,7 +49,9 @@ const activeSection = computed<SettingsSectionId>(() => {
 
 const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? "未知状态");
 const cookiePathText = computed(() => cookiePath.value || "未设置保存目录");
+// 卡密有效期：100 年级别的硬过期；Lease TTL：3 天级别的短效 Token，到期需联网续约
 const licenseExpiresText = computed(() => formatDateTime(appStore.licenseExpiresAt));
+const leaseExpiresText = computed(() => formatDateTime(appStore.leaseExpiresAt));
 const licenseVerifiedText = computed(() => formatDateTime(appStore.lastVerifiedAt));
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -368,12 +370,16 @@ onBeforeUnmount(() => {
             <span class="settings-info-label">状态</span>
             <span class="settings-info-value">{{ currentStateText }}</span>
           </div>
-          <div class="settings-info-item">
-            <span class="settings-info-label">到期</span>
+          <div class="settings-info-item" title="卡密自身的有效期，到期后卡密将失效">
+            <span class="settings-info-label">卡密有效期</span>
             <span class="settings-info-value">{{ licenseExpiresText }}</span>
           </div>
+          <div class="settings-info-item" title="短效执行 Token 到期时间，到期需联网续约后继续使用">
+            <span class="settings-info-label">下次续约</span>
+            <span class="settings-info-value">{{ leaseExpiresText }}</span>
+          </div>
           <div class="settings-info-item">
-            <span class="settings-info-label">校验</span>
+            <span class="settings-info-label">最近校验</span>
             <span class="settings-info-value">{{ licenseVerifiedText }}</span>
           </div>
           <div class="settings-info-item">

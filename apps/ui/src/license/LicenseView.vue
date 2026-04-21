@@ -84,12 +84,16 @@ const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-bran
           <span class="text-slate-500">卡密</span>
           <span class="break-all text-right font-mono text-xs text-slate-700">{{ appStore.licenseKey || "未保存" }}</span>
         </div>
-        <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3">
-          <span class="text-slate-500">到期</span>
+        <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3" title="卡密自身的有效期，到期后卡密失效">
+          <span class="text-slate-500">卡密有效期</span>
           <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.licenseExpiresAt) }}</span>
         </div>
+        <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3" title="短效执行 Token，到期需联网续约">
+          <span class="text-slate-500">下次续约</span>
+          <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.leaseExpiresAt) }}</span>
+        </div>
         <div class="flex justify-between gap-app rounded-2xl bg-slate-50 px-4 py-3">
-          <span class="text-slate-500">校验时间</span>
+          <span class="text-slate-500">最近校验</span>
           <span class="text-right font-medium text-slate-700">{{ formatDateTime(appStore.lastVerifiedAt) }}</span>
         </div>
       </div>

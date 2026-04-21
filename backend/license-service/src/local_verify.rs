@@ -70,12 +70,19 @@ fn runtime_state_from_payload(
     reason: LicenseState,
     status_hint: LicenseState,
 ) -> RuntimeState {
+    // 字段语义澄清：
+    // - `lease_expires_at`（短期、来自已签名的 payload.exp）：Lease Token 的硬过期。
+    //   Lease 到这个时间必须联网续约，否则离线使用也会拒绝。典型 72 小时。
+    // - `license_expires_at`（长期、**不**从 Lease payload 读取）：卡密自身的硬过期。
+    //   Worker 在 REST 响应里单独返回该字段，desktop 端会在 persist_runtime_profile
+    //   的 fallback 路径把 response.license_expires_at 注入到 profile 里。
+    //   这里留空以显式触发 fallback，避免把 Lease TTL 误当成卡密有效期展示给用户。
     RuntimeState {
         license_key: payload.license_key,
         device_id: payload.device_id,
         reason,
         status_hint,
-        license_expires_at: epoch_to_iso(payload.exp),
+        license_expires_at: String::new(),
         lease_expires_at: epoch_to_iso(payload.exp),
         renew_after: epoch_to_iso(payload.renew_after),
         task_policy: payload.task_policy,
@@ -163,7 +170,9 @@ mod tests {
         assert_eq!(state.risk_level, "low");
         assert_eq!(state.runtime_backend, "rust");
         assert!(!state.compromised);
-        assert!(state.license_expires_at.ends_with("Z"));
+        // license_expires_at 留空（由 REST 响应的卡密硬过期 fallback 注入）
+        assert!(state.license_expires_at.is_empty());
+        assert!(state.lease_expires_at.ends_with("Z"));
         assert!(state.renew_after.ends_with("Z"));
     }
 
@@ -186,7 +195,7 @@ mod tests {
         assert_eq!(state.reason, LicenseState::Expired);
         // 过期情况下仍带出 license_key / lease_expires_at 供 UI 展示
         assert_eq!(state.license_key, "ABCD-1234");
-        assert!(state.license_expires_at.ends_with("Z"));
+        assert!(state.lease_expires_at.ends_with("Z"));
         assert!(!state.reason.is_locally_allowed());
     }
 
@@ -239,13 +248,15 @@ mod tests {
         let (sk, verifier, _) = keypair();
         let token = sign(&sk, &payload_for("dev-1", 2_000, 3_000));
         let state = verify_stored_lease_local(Some(&token), "dev-1", 1_500, &verifier);
-        for field in [
-            &state.license_expires_at,
-            &state.lease_expires_at,
-            &state.renew_after,
-        ] {
+        for field in [&state.lease_expires_at, &state.renew_after] {
             assert!(field.contains('T'));
             assert!(field.ends_with('Z'), "字段必须以 Z 结尾：{field}");
         }
+        // license_expires_at 故意留空，避免把 Lease TTL 误当卡密有效期展示；
+        // 卡密硬过期由 REST 响应的 license_expires_at 走 fallback 注入到 profile。
+        assert!(
+            state.license_expires_at.is_empty(),
+            "license_expires_at 必须为空，强制走 REST 响应的 fallback 路径"
+        );
     }
 }

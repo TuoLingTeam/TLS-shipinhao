@@ -341,6 +341,7 @@ pub async fn activate_license(
         .map_err(|e| AppError::Message(e.to_string()))?;
 
     let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
+    let lease_expires_at = state.runtime_license_state.lock().await.lease_expires_at.clone();
 
     Ok(serde_json::json!({
         "success": resp.success,
@@ -349,6 +350,7 @@ pub async fn activate_license(
         "license_key": profile.license_key,
         "device_id": resp.device_id,
         "license_expires_at": profile.license_expires_at,
+        "lease_expires_at": if lease_expires_at.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(lease_expires_at) },
         "license_lease": resp.license_lease.is_some(),
         "last_verified_at": profile.last_verified_at,
     }))
@@ -369,6 +371,7 @@ pub async fn verify_license(
         .map_err(|e| AppError::Message(e.to_string()))?;
 
     let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
+    let lease_expires_at = state.runtime_license_state.lock().await.lease_expires_at.clone();
 
     Ok(serde_json::json!({
         "success": resp.success,
@@ -376,6 +379,7 @@ pub async fn verify_license(
         "license_state": profile.license_state,
         "license_key": profile.license_key,
         "license_expires_at": profile.license_expires_at,
+        "lease_expires_at": if lease_expires_at.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(lease_expires_at) },
         "license_lease": resp.license_lease.is_some(),
         "last_verified_at": profile.last_verified_at,
     }))
@@ -451,11 +455,17 @@ fn build_license_status_payload(
             (!runtime.last_verify_at.trim().is_empty()).then(|| runtime.last_verify_at.clone())
         });
 
+    let lease_expires_at = if runtime.lease_expires_at.trim().is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::String(runtime.lease_expires_at.clone())
+    };
     serde_json::json!({
         "configured": !license_key.is_empty(),
         "license_key": license_key,
         "license_state": license_state,
         "license_expires_at": license_expires_at,
+        "lease_expires_at": lease_expires_at,
         "last_verified_at": last_verified_at,
         "needs_restore": needs_restore,
     })
