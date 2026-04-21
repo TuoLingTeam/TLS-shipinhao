@@ -1,19 +1,15 @@
 name: Tauri Desktop Release
 
+# 仅在以下两种情况触发桌面构建（Windows + macOS runner 成本高，按分钟 2× / 10× 扣费）：
+#   1. 打 tag `v*`（推荐方式：`git tag v5.2.0 && git push --tags` 一次性产出两平台安装包）
+#   2. 手动 workflow_dispatch 触发
+# 每次 push main 的轻量 CI（Rust test + 前端构建）已拆到 .github/workflows/ci.yml 独立跑在 Ubuntu 上
+
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.cargo/**'
-      - 'backend/**'
-      - 'crates/**'
-      - 'tools/**'
-      - 'apps/**'
-      - 'apps/ui/**'
-      - '.github/workflows/build.yml'
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
