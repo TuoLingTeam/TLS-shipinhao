@@ -6,6 +6,8 @@
     "lint": "pnpm --filter tls-shipinhao-ui lint",
     "tauri:dev": "./scripts/tauri_dev.sh",
     "tauri:build": "cd apps/desktop && cargo tauri build -b app",
+    "release:build": "node scripts/build-release.mjs",
+    "release:build:plain": "node scripts/build-release.mjs --no-obfuscate",
     "worker:deploy": "cd backend && npx wrangler deploy",
     "worker:deploy:preview": "cd backend && npx wrangler versions upload"
   }
