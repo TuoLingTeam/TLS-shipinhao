@@ -46,9 +46,16 @@ jobs:
             }
           ' Cargo.toml)
           test -n "$version"
+          # tag 触发时用 tag 名（可能带 -diag、-rc 等后缀）创建独立 release；
+          # workflow_dispatch 时回退到 v<workspace version>，保持原行为
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="v${version}"
+          fi
           {
             echo "app_version=$version"
-            echo "release_tag=v$version"
+            echo "release_tag=$release_tag"
           } >> "$GITHUB_OUTPUT"
 
   test:
