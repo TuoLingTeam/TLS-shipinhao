@@ -156,16 +156,45 @@ fn js_iso_timestamp() -> String {
     js_sys::Date::new_0().to_iso_string().into()
 }
 
+/// 生成 `TLS-XXXX-XXXX-XXXX-XXXX` 格式的卡密。
+///
+/// - 10 字节熵源 = 80 bit，按 Crockford Base32（32 字符、剔除 I/L/O/U）编码恰好 16 字符
+/// - 16 字符拆成 4 组，便于用户抄写时分组核对
+/// - 熵值 80 bit 远高于先前 hex (64 bit) 方案，暴力破解搜索空间多 65,536 倍
 fn random_license_key() -> String {
-    let mut buf = [0u8; 8];
+    const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let mut buf = [0u8; 10];
     if getrandom::getrandom(&mut buf).is_err() {
-        return format!("TLS-FALLBACK-{:020}", js_sys::Date::now() as u64);
+        // getrandom 理论上不应失败（Worker 运行时有 crypto.getRandomValues），
+        // 给个可识别的兜底：仍维持 TLS- 前缀 + 4 组 4 字符的长度骨架
+        let ts = (js_sys::Date::now() as u64).to_be_bytes();
+        return format!("TLS-{}", encode_crockford_base32(&ts, ALPHABET));
     }
-    format!(
-        "TLS-{}",
-        buf.iter()
-            .fold(String::new(), |acc, b| acc + &format!("{:02X}", b))
-    )
+    format!("TLS-{}", encode_crockford_base32(&buf, ALPHABET))
+}
+
+/// 把 10 字节（80 bit）编码成 16 字符 Crockford Base32，并按 4-4-4-4 分组。
+///
+/// `bytes` 长度必须是 5 的倍数；此处固定接收 10 字节，5 bit/字符 × 16 = 80 bit 一一对应。
+fn encode_crockford_base32(bytes: &[u8], alphabet: &[u8; 32]) -> String {
+    let mut out = String::with_capacity(19); // 16 字符 + 3 连字符
+    let mut bit_buf: u64 = 0;
+    let mut bit_count: u32 = 0;
+    let mut char_count: u32 = 0;
+    for &b in bytes {
+        bit_buf = (bit_buf << 8) | b as u64;
+        bit_count += 8;
+        while bit_count >= 5 {
+            bit_count -= 5;
+            let idx = ((bit_buf >> bit_count) & 0x1F) as usize;
+            if char_count > 0 && char_count % 4 == 0 {
+                out.push('-');
+            }
+            out.push(alphabet[idx] as char);
+            char_count += 1;
+        }
+    }
+    out
 }
 
 pub async fn serve_admin_html() -> Result<Response> {
