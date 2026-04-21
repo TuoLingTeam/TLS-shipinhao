@@ -159,7 +159,6 @@ fn write_lightweight_recent_cache() -> anyhow::Result<Vec<OrderCacheEntry>> {
         .map(|order| OrderCacheEntry {
             order_id: order.order_id,
             buyer_name: order.buyer_nickname,
-            receiver_name: order.receiver_name,
             amount_cent: order.amount_cent,
             created_at: timestamp_to_iso(order.create_time).unwrap_or_default(),
             updated_at: timestamp_to_iso(order.updated_at).unwrap_or_default(),

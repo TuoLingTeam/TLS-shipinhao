@@ -546,15 +546,6 @@ fn order_json_to_entry(raw: &Value, now_rfc: &str) -> Option<OrderCacheEntry> {
         .unwrap_or("")
         .to_string();
 
-    let receiver = raw
-        .pointer("/acceptInfo/receiverName")
-        .or_else(|| raw.pointer("/acceptInfo/addressInfo/userName"))
-        .or_else(|| raw.pointer("/deliveryInfo/receiverName"))
-        .or_else(|| raw.pointer("/addressInfo/userName"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
     let amount_cent = pick_amount_cent(raw);
     let created_at = chrono::DateTime::from_timestamp(create_ts, 0)
         .map(|d| d.to_rfc3339())
@@ -563,7 +554,6 @@ fn order_json_to_entry(raw: &Value, now_rfc: &str) -> Option<OrderCacheEntry> {
     Some(OrderCacheEntry {
         order_id: order_id.to_string(),
         buyer_name: buyer,
-        receiver_name: receiver,
         amount_cent,
         created_at,
         updated_at: now_rfc.to_string(),
@@ -607,15 +597,6 @@ fn order_json_to_cache_record(raw: &Value, now_epoch: i64) -> Option<CacheOrderR
 
     let buyer_nickname = raw
         .pointer("/buyerInfo/nickName")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or("")
-        .to_string();
-    let receiver_name = raw
-        .pointer("/acceptInfo/receiverName")
-        .or_else(|| raw.pointer("/acceptInfo/addressInfo/userName"))
-        .or_else(|| raw.pointer("/deliveryInfo/receiverName"))
-        .or_else(|| raw.pointer("/addressInfo/userName"))
         .and_then(Value::as_str)
         .map(str::trim)
         .unwrap_or("")
@@ -680,7 +661,6 @@ fn order_json_to_cache_record(raw: &Value, now_epoch: i64) -> Option<CacheOrderR
         order_id: order_id.to_string(),
         buyer_nickname: buyer_nickname.clone(),
         normalized_nickname: buyer_nickname,
-        receiver_name,
         amount_cent: pick_amount_cent(raw),
         create_time: common
             .get("createTime")
@@ -842,7 +822,7 @@ mod tests {
     }
 
     #[test]
-    fn order_json_to_entry_maps_nested_receiver_and_string_amount() {
+    fn order_json_to_entry_maps_buyer_and_string_amount() {
         let raw = json!({
             "commonInfo": {
                 "orderId": "3735739244192085760",
@@ -850,11 +830,6 @@ mod tests {
             },
             "buyerInfo": {
                 "nickName": "琼花🌸若现"
-            },
-            "acceptInfo": {
-                "addressInfo": {
-                    "userName": "李**"
-                }
             },
             "priceInfo": {
                 "orderPrice": "5990"
@@ -864,7 +839,6 @@ mod tests {
         let entry = order_json_to_entry(&raw, "2026-04-16T07:30:00Z").expect("order entry");
         assert_eq!(entry.order_id, "3735739244192085760");
         assert_eq!(entry.buyer_name, "琼花🌸若现");
-        assert_eq!(entry.receiver_name, "李**");
         assert_eq!(entry.amount_cent, 5990);
         assert_eq!(entry.created_at, "2026-04-16T07:24:03+00:00");
     }
@@ -905,7 +879,6 @@ mod tests {
         let record = order_json_to_cache_record(&raw, 1776329999).expect("cache record");
         assert_eq!(record.order_id, "3735739244192085760");
         assert_eq!(record.buyer_nickname, "琼花🌸若现");
-        assert_eq!(record.receiver_name, "");
         assert_eq!(record.amount_cent, 0);
         assert_eq!(record.create_time, 1776324243);
         assert_eq!(record.confirm_receipt_time, 1776400000);

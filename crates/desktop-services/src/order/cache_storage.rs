@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT PRIMARY KEY,
     buyer_nickname TEXT NOT NULL DEFAULT '',
     normalized_nickname TEXT NOT NULL DEFAULT '',
-    receiver_name TEXT NOT NULL DEFAULT '',
     amount_cent INTEGER NOT NULL DEFAULT 0,
     create_time INTEGER NOT NULL DEFAULT 0,
     confirm_receipt_time INTEGER NOT NULL DEFAULT 0,
@@ -84,7 +83,6 @@ CREATE INDEX IF NOT EXISTS idx_cache_segments_scope_start ON cache_segments(scop
 const ORDERS_V2_COLUMNS: &[(&str, &str)] = &[
     ("buyer_nickname", "TEXT NOT NULL DEFAULT ''"),
     ("normalized_nickname", "TEXT NOT NULL DEFAULT ''"),
-    ("receiver_name", "TEXT NOT NULL DEFAULT ''"),
     ("amount_cent", "INTEGER NOT NULL DEFAULT 0"),
     ("create_time", "INTEGER NOT NULL DEFAULT 0"),
     ("confirm_receipt_time", "INTEGER NOT NULL DEFAULT 0"),
@@ -221,16 +219,15 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                     r#"
                     INSERT OR REPLACE INTO orders (
                         order_id, buyer_nickname, normalized_nickname, create_time,
-                        receiver_name, amount_cent, confirm_receipt_time, is_waybill_received, waybill_received_time,
+                        amount_cent, confirm_receipt_time, is_waybill_received, waybill_received_time,
                         is_education_order, order_status, openid, raw_source, updated_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                     "#,
                     params![
                         order.order_id,
                         order.buyer_nickname,
                         order.normalized_nickname,
                         order.create_time,
-                        order.receiver_name,
                         order.amount_cent,
                         order.confirm_receipt_time,
                         bool_to_int(order.is_waybill_received),
@@ -321,7 +318,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
             let order = conn
                 .query_row(
                     r#"
-                    SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
+                    SELECT order_id, buyer_nickname, normalized_nickname, amount_cent, create_time,
                            confirm_receipt_time, is_waybill_received, waybill_received_time,
                            is_education_order, order_status, openid, raw_source, updated_at
                     FROM orders WHERE order_id = ?1
@@ -332,17 +329,16 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                             order_id: row.get(0)?,
                             buyer_nickname: row.get(1)?,
                             normalized_nickname: row.get(2)?,
-                            receiver_name: row.get(3)?,
-                            amount_cent: row.get(4)?,
-                            create_time: row.get(5)?,
-                            confirm_receipt_time: row.get(6)?,
-                            is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
-                            waybill_received_time: row.get(8)?,
-                            is_education_order: int_to_bool(row.get::<_, i64>(9)?),
-                            order_status: row.get(10)?,
-                            openid: row.get(11)?,
-                            raw_source: row.get(12)?,
-                            updated_at: row.get(13)?,
+                            amount_cent: row.get(3)?,
+                            create_time: row.get(4)?,
+                            confirm_receipt_time: row.get(5)?,
+                            is_waybill_received: int_to_bool(row.get::<_, i64>(6)?),
+                            waybill_received_time: row.get(7)?,
+                            is_education_order: int_to_bool(row.get::<_, i64>(8)?),
+                            order_status: row.get(9)?,
+                            openid: row.get(10)?,
+                            raw_source: row.get(11)?,
+                            updated_at: row.get(12)?,
                             products: Vec::new(),
                         })
                     },
@@ -484,7 +480,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
         self.with_connection(|conn| {
             let mut order_stmt = conn.prepare(
                 r#"
-                SELECT order_id, buyer_nickname, normalized_nickname, receiver_name, amount_cent, create_time,
+                SELECT order_id, buyer_nickname, normalized_nickname, amount_cent, create_time,
                        confirm_receipt_time, is_waybill_received, waybill_received_time,
                        is_education_order, order_status, openid, raw_source, updated_at
                 FROM orders
@@ -497,17 +493,16 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                     order_id: row.get(0)?,
                     buyer_nickname: row.get(1)?,
                     normalized_nickname: row.get(2)?,
-                    receiver_name: row.get(3)?,
-                    amount_cent: row.get(4)?,
-                    create_time: row.get(5)?,
-                    confirm_receipt_time: row.get(6)?,
-                    is_waybill_received: int_to_bool(row.get::<_, i64>(7)?),
-                    waybill_received_time: row.get(8)?,
-                    is_education_order: int_to_bool(row.get::<_, i64>(9)?),
-                    order_status: row.get(10)?,
-                    openid: row.get(11)?,
-                    raw_source: row.get(12)?,
-                    updated_at: row.get(13)?,
+                    amount_cent: row.get(3)?,
+                    create_time: row.get(4)?,
+                    confirm_receipt_time: row.get(5)?,
+                    is_waybill_received: int_to_bool(row.get::<_, i64>(6)?),
+                    waybill_received_time: row.get(7)?,
+                    is_education_order: int_to_bool(row.get::<_, i64>(8)?),
+                    order_status: row.get(9)?,
+                    openid: row.get(10)?,
+                    raw_source: row.get(11)?,
+                    updated_at: row.get(12)?,
                     products: Vec::new(),
                 })
             })?;
@@ -599,7 +594,6 @@ mod tests {
             order_id: "o-1".into(),
             buyer_nickname: "buyer".into(),
             normalized_nickname: "buyer".into(),
-            receiver_name: "李**".into(),
             amount_cent: 3990,
             create_time: 100,
             confirm_receipt_time: 120,

@@ -413,7 +413,6 @@ mod tests {
             order_id: order_id.into(),
             buyer_nickname: "buyer".into(),
             normalized_nickname: "buyer".into(),
-            receiver_name: "李**".into(),
             amount_cent: 3990,
             create_time,
             confirm_receipt_time: create_time + 100,

@@ -77,18 +77,18 @@ describe("SettingsView", () => {
     expect(wrapper.get('[data-testid="settings-cookie-save-manual"]').text()).toContain("保存手动 Cookie");
     expect(wrapper.get('[data-testid="settings-cookie-path"]').text()).toContain("/tmp/cookie.txt");
     expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-info-grid");
-    // 自动：2 个核心按钮（1x2）+ 手动保存 1 个
+    // 方式一：打开登录页 / 选择保存路径（1x2） + 方式二：清除 Cookie / 保存手动 Cookie（1x2）
     const actionsHost = wrapper.get('[data-testid="settings-cookie-actions"]');
     expect(actionsHost.find(".settings-action-buttons-grid--1x2").exists()).toBe(true);
-    expect(actionsHost.findAll("button").length).toBe(3);
+    expect(actionsHost.findAll("button").length).toBe(4);
     expect(actionsHost.text()).toContain("打开登录页");
     expect(actionsHost.text()).toContain("选择保存路径");
+    expect(actionsHost.text()).toContain("清除 Cookie");
     expect(actionsHost.text()).toContain("保存手动 Cookie");
     // 授权信息走单列 grid
     expect(wrapper.find(".settings-info-grid--single").exists()).toBe(true);
     expect(wrapper.text()).toContain("授权信息");
     expect(wrapper.text()).toContain("Cookie 配置");
-    expect(wrapper.text()).toContain("Cookie 请求头");
     expect(wrapper.text()).toContain("方式一");
     expect(wrapper.text()).toContain("方式二");
     expect(wrapper.text()).toContain("应用信息");

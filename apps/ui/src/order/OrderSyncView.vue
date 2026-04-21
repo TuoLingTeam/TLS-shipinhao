@@ -32,7 +32,7 @@ const filteredOrders = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
   if (!keyword) return store.cachedOrders;
   return store.cachedOrders.filter((item) =>
-    [item.order_id, item.buyer_name, item.receiver_name].some((field) =>
+    [item.order_id, item.buyer_name].some((field) =>
       field.toLowerCase().includes(keyword),
     ),
   );
@@ -264,12 +264,11 @@ onMounted(async () => {
         </div>
       </div>
       <div class="data-table-shell min-h-0 flex-1 overflow-auto border-0 shadow-none">
-        <table class="order-table w-full min-w-[860px] text-sm">
+        <table class="order-table w-full min-w-[720px] text-sm">
           <thead class="table-head text-slate-600">
             <tr>
               <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">订单号</th>
               <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">买家</th>
-              <th class="table-head-sticky px-4 py-2.5 text-left font-semibold">收件人</th>
               <th class="table-head-sticky px-4 py-2.5 text-right font-semibold">金额</th>
             </tr>
           </thead>
@@ -281,7 +280,6 @@ onMounted(async () => {
             >
               <td class="order-id-cell px-4 py-2.5 font-mono text-xs text-slate-700">{{ o.order_id }}</td>
               <td class="px-4 py-2.5 font-medium text-slate-800">{{ o.buyer_name }}</td>
-              <td class="px-4 py-2.5 text-slate-700">{{ o.receiver_name }}</td>
               <td class="px-4 py-2.5 text-right font-semibold text-slate-900">{{ formatCent(o.amount_cent) }}</td>
             </tr>
           </tbody>

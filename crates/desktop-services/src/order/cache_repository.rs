@@ -22,7 +22,6 @@ pub struct CacheOrderRecord {
     pub order_id: String,
     pub buyer_nickname: String,
     pub normalized_nickname: String,
-    pub receiver_name: String,
     pub amount_cent: i64,
     pub create_time: i64,
     pub confirm_receipt_time: i64,

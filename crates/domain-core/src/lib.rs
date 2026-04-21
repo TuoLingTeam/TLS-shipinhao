@@ -91,7 +91,6 @@ pub struct TimeWindow {
 pub struct OrderCacheEntry {
     pub order_id: String,
     pub buyer_name: String,
-    pub receiver_name: String,
     pub amount_cent: i64,
     pub created_at: String,
     pub updated_at: String,

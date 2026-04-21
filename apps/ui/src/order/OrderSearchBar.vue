@@ -20,7 +20,7 @@ const keyword = ref("");
       v-model.trim="keyword"
       type="text"
       aria-label="搜索本地订单缓存"
-      placeholder="搜索订单号、买家昵称或收件人"
+      placeholder="搜索订单号或买家昵称"
       class="field-input min-h-10 w-full min-w-0 sm:flex-1"
       @keyup.enter="emit('search', keyword)"
     />

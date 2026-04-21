@@ -14,7 +14,7 @@ function isActive(path: string): boolean {
 
 <template>
   <aside
-    class="app-sidebar-shell flex w-[60px] shrink-0 flex-col self-stretch overflow-hidden rounded-[18px] border border-[var(--color-sidebar-line)] bg-[image:var(--color-sidebar)] shadow-[0_28px_72px_-38px_rgba(15,23,42,0.82)] sm:w-[64px] lg:sticky lg:w-[228px] lg:rounded-[22px]"
+    class="app-sidebar-shell flex w-[60px] shrink-0 flex-col self-stretch overflow-hidden rounded-[18px] border border-[var(--color-sidebar-line)] bg-[image:var(--color-sidebar)] shadow-[0_28px_72px_-38px_rgba(15,23,42,0.82)] sm:w-[64px] lg:sticky lg:w-[200px] lg:rounded-[22px]"
   >
     <!-- 仅宽侧栏展示应用名；窄栏为纯图标带，避免标题被截成竖条 -->
     <div
