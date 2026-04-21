@@ -39,6 +39,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -295,17 +296,46 @@ function stage_rewriteTauriConf() {
   log("conf", "✓ 改写 apps/desktop/tauri.conf.json（去 beforeBuildCommand/beforeDevCommand）");
 }
 
+// 阶段 6b：注入 Rust 二进制加固 rustflags
+// 作用：
+//   1. --remap-path-prefix：重写 file!()/panic location/debuginfo 中的绝对路径
+//      （镜像内源码在 TLS-shipinhao-release/ 下，按子目录压成单字母前缀，strings 不易还原树形）
+//   2. -Z location-detail=none：panic / track_caller 等不再嵌入 file/line/column（需 RUSTC_BOOTSTRAP=1）
+// 说明：tracing 宏里的路径也走 file!()，额外依赖 workspace 里 tracing 的 release_max_level_off
+//       先把 callsite 里「带行号的 event ...」打薄；remap 再把裸路径变短。
+function stage_hardenRustflags() {
+  const cargoConfigPath = join(OUT_DIR, ".cargo", "config.toml");
+  ensureDir(dirname(cargoConfigPath));
+  const cargoHome = (process.env.CARGO_HOME || join(homedir(), ".cargo")).replace(/\\/g, "/");
+  const mirror = OUT_DIR.replace(/\\/g, "/");
+  const config = `# 此文件由 scripts/build-obfuscate.mjs 在镜像目录内覆盖写入，源码目录不动。
+[build]
+target-dir = "target"
+rustflags = [
+  "--remap-path-prefix", "${mirror}/apps/desktop/src=s",
+  "--remap-path-prefix", "${mirror}/crates/=c/",
+  "--remap-path-prefix", "${mirror}/backend/=b/",
+  "--remap-path-prefix", "${mirror}/tools/=t/",
+  "--remap-path-prefix", "${cargoHome}=r",
+  "-Z", "location-detail=none",
+]
+`;
+  writeFileSync(cargoConfigPath, config);
+  log("harden", `✓ 注入 rustflags（mirror remap + cargo registry + location-detail=none）`);
+}
+
 // 阶段 7：Tauri 构建
 function stage_buildTauri() {
   const desktopDir = join(OUT_DIR, "apps", "desktop");
   const mirrorTarget = join(OUT_DIR, "target");
   log("tauri", `cargo tauri build (cwd=${relative(REPO_ROOT, desktopDir)})`);
-  // 强制 target 落在镜像内：即使 .cargo/config.toml 出问题或 cargo 向上递归找到源码根 config，
-  // CARGO_TARGET_DIR 环境变量也会覆盖 config 设置
+  // - CARGO_TARGET_DIR：强制 target 落在镜像内，不污染源码根
+  // - RUSTC_BOOTSTRAP=1：允许 stable rustc 使用 -Z unstable flag（本项目用到 -Z location-detail=none）
   run("cargo tauri build", {
     cwd: desktopDir,
     env: {
       CARGO_TARGET_DIR: mirrorTarget,
+      RUSTC_BOOTSTRAP: "1",
     },
   });
 }
@@ -373,6 +403,7 @@ const skipBuild = args.has("--skip-build");
   stage_mirrorUiDist();
   stage_obfuscateJs();
   stage_rewriteTauriConf();
+  stage_hardenRustflags();
 
   if (skipBuild) {
     const t = ((Date.now() - t0) / 1000).toFixed(1);
