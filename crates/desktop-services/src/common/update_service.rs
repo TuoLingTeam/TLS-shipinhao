@@ -3,8 +3,11 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 
-pub const UPDATE_VERSION_URL: &str =
-    "https://gitee.com/tuolingshe/tuoling-shipinhao/raw/master/version.json";
+/// 版本检查 URL：Gitee raw 文件。obfstr 编译期加密，发版二进制里 `strings` 扫不到原文
+pub fn update_version_url() -> String {
+    obfstr::obfstr!("https://gitee.com/tuolingshe/tuoling-shipinhao/raw/master/version.json")
+        .to_string()
+}
 pub const UPDATE_CHECK_DELAY_MS: u64 = 1200;
 const UPDATE_REQUEST_TIMEOUT_SECS: u64 = 8;
 
@@ -45,7 +48,7 @@ pub async fn fetch_latest_version_info(
     let client = crate::common::http_client::build_desktop_http_client(Duration::from_secs(
         UPDATE_REQUEST_TIMEOUT_SECS,
     ));
-    let response = client.get(UPDATE_VERSION_URL).send().await?;
+    let response = client.get(&update_version_url()).send().await?;
 
     if !response.status().is_success() {
         return Err(UpdateError::HttpStatus(response.status()));

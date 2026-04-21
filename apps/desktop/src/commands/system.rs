@@ -10,7 +10,10 @@ use crate::error::AppError;
 use crate::migration::{LegacyPythonMigrator, MigrationPaths, MigrationReport};
 use crate::state::{self, AppState, CookieHealthSnapshot};
 
-const STORE_LOGIN_URL: &str = "https://store.weixin.qq.com/";
+/// 小店登录页 URL：obfstr 编译期加密，避免二进制里 strings 直接扫到域名
+fn store_login_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/").to_string()
+}
 const COOKIE_LOGIN_WINDOW_LABEL: &str = "cookie-login";
 
 const DEFAULT_UI_SCALE: f64 = 1.0;
@@ -285,7 +288,7 @@ pub async fn open_cookie_login(
     }
 
     let login_url =
-        Url::parse(STORE_LOGIN_URL).map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
+        Url::parse(&store_login_url()).map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
     let data_dir = state::login_webview_data_dir(&state.app_home_dir);
 
     WebviewWindowBuilder::new(
@@ -335,7 +338,7 @@ pub async fn extract_cookie_from_login(
 
     let cookies = window
         .cookies_for_url(
-            Url::parse(STORE_LOGIN_URL)
+            Url::parse(&store_login_url())
                 .map_err(|e| AppError::Message(format!("读取 Cookie 失败：{e}")))?,
         )
         .map_err(|e| AppError::Message(format!("读取登录窗口 Cookie 失败：{e}")))?;

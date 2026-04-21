@@ -3,9 +3,15 @@ use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, QualityRefundInf
 use reqwest::header::HeaderMap;
 use serde_json::{json, Value};
 
-const QUALITY_REFUND_ORDER_URL: &str =
-    "https://store.weixin.qq.com/shop-faas/statistic/dsr/product/refund/order";
-const QUALITY_REFUND_REFERER: &str = "https://store.weixin.qq.com/shop/setting/ratedetail?type=product&key=productQualityRatio_30d&detail=order";
+/// 品退接口 URL / Referer：obfstr 编译期加密
+fn quality_refund_order_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/statistic/dsr/product/refund/order")
+        .to_string()
+}
+fn quality_refund_referer() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop/setting/ratedetail?type=product&key=productQualityRatio_30d&detail=order")
+        .to_string()
+}
 
 pub struct HttpQualityRefundSource {
     cookie_header: String,
@@ -30,7 +36,7 @@ impl HttpQualityRefundSource {
 
     fn build_headers(&self) -> HeaderMap {
         build_weixin_shop_headers(
-            QUALITY_REFUND_REFERER,
+            &quality_refund_referer(),
             &self.cookie_header,
             &self.biz_magic,
             self.grant_id.as_deref(),
@@ -41,7 +47,7 @@ impl HttpQualityRefundSource {
         let rt = tokio::runtime::Handle::current();
         let headers = self.build_headers();
         let client = self.client.clone();
-        let url = format!("{QUALITY_REFUND_ORDER_URL}?token=&lang=zh_CN");
+        let url = format!("{}?token=&lang=zh_CN", quality_refund_order_url());
 
         let resp = std::thread::spawn(move || {
             rt.block_on(async move {

@@ -8,13 +8,22 @@ use desktop_services::DeliveryGateway;
 use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult};
 use serde_json::Value;
 
-const ORDER_DETAIL_URL: &str =
-    "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail";
-const INIT_SHIP_DATA_URL: &str =
-    "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/initShipData";
-const DELIVERY_UPDATE_URL: &str =
-    "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo";
-const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
+/// 发货链路相关 URL：obfstr 编译期加密
+fn order_detail_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail")
+        .to_string()
+}
+fn init_ship_data_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/initShipData")
+        .to_string()
+}
+fn delivery_update_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo")
+        .to_string()
+}
+fn order_list_referer() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop/order/list").to_string()
+}
 
 pub struct HttpDeliveryGateway {
     cookie_header: String,
@@ -39,7 +48,7 @@ impl HttpDeliveryGateway {
 
     fn build_headers(&self) -> reqwest::header::HeaderMap {
         build_weixin_shop_headers(
-            ORDER_LIST_REFERER,
+            &order_list_referer(),
             &self.cookie_header,
             &self.biz_magic,
             self.grant_id.as_deref(),
@@ -73,14 +82,14 @@ impl HttpDeliveryGateway {
 
     fn fetch_init_ship_data(&self, order_id: &str) -> anyhow::Result<Value> {
         let body = serde_json::json!({"id": order_id});
-        let resp = self.post_json_sync(INIT_SHIP_DATA_URL, &body)?;
+        let resp = self.post_json_sync(&init_ship_data_url(), &body)?;
         ensure_payload_success(&resp, "发货初始化接口返回失败")?;
         Ok(resp)
     }
 
     fn fetch_order_detail(&self, order_id: &str) -> anyhow::Result<Value> {
         let body = serde_json::json!({"id": order_id});
-        let resp = self.post_json_sync(ORDER_DETAIL_URL, &body)?;
+        let resp = self.post_json_sync(&order_detail_url(), &body)?;
         ensure_payload_success(&resp, "订单详情接口返回失败")?;
         Ok(resp)
     }
@@ -132,7 +141,7 @@ impl HttpDeliveryGateway {
             old_info,
             delivery_override.as_ref(),
         )?;
-        let resp = self.post_json_sync(DELIVERY_UPDATE_URL, &body)?;
+        let resp = self.post_json_sync(&delivery_update_url(), &body)?;
         check_update_response(&resp)
     }
 }

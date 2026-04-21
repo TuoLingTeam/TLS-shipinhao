@@ -1,7 +1,7 @@
 use crate::adapters::http_license_client::{
     normalize_license_state, HttpLicenseClient, LicenseApiResponse,
 };
-use crate::app_settings::LICENSE_API_BASE_URLS;
+use crate::app_settings::license_api_base_urls;
 use crate::error::AppError;
 use crate::state::{self, AppState, StoredLicenseProfile};
 use api_contracts::{LeasePayload, LicenseState, RiskLevel, RuntimeGrant, RuntimeState};
@@ -28,12 +28,7 @@ pub async fn ensure_feature_authorized(
 }
 
 fn make_client() -> HttpLicenseClient {
-    HttpLicenseClient::new(
-        LICENSE_API_BASE_URLS
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-    )
+    HttpLicenseClient::new(license_api_base_urls())
 }
 
 fn license_state_detail(state: LicenseState) -> &'static str {

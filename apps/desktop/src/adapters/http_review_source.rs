@@ -11,9 +11,14 @@ use serde_json::Value;
 use std::future::Future;
 use std::time::Duration;
 
-const EVALUATION_SEARCH_URL: &str =
-    "https://store.weixin.qq.com/shop-faas/mmchannelstradeevaluation/cgi/search";
-const EVALUATION_REFERER: &str = "https://store.weixin.qq.com/shop/evaluate/home";
+/// 评价接口 URL / Referer：obfstr 编译期加密
+fn evaluation_search_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeevaluation/cgi/search")
+        .to_string()
+}
+fn evaluation_referer() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop/evaluate/home").to_string()
+}
 const EVALUATION_PAGE_SIZE: usize = 20;
 const EVALUATION_MAX_PAGES: usize = 50;
 
@@ -119,7 +124,7 @@ impl HttpReviewSource {
 
     fn build_headers(&self) -> reqwest::header::HeaderMap {
         build_weixin_shop_headers(
-            EVALUATION_REFERER,
+            &evaluation_referer(),
             &self.cookie_header,
             &self.biz_magic,
             self.grant_id.as_deref(),
@@ -130,7 +135,7 @@ impl HttpReviewSource {
         let rt = tokio::runtime::Handle::current();
         let headers = self.build_headers();
         let client = self.client.clone();
-        let url = format!("{}?token=&lang=zh_CN", EVALUATION_SEARCH_URL);
+        let url = format!("{}?token=&lang=zh_CN", evaluation_search_url());
         let body = body.clone();
 
         let resp = std::thread::spawn(move || {

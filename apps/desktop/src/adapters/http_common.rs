@@ -28,19 +28,23 @@ pub(crate) fn build_client() -> reqwest::Client {
 ///
 /// - 固定头：`Content-Type` / `Origin` / `User-Agent` / `potter-scene` / `sec-ch-ua-platform`
 /// - 可变头：`Referer`（来自调用方的 URL 上下文）、`Cookie` / `biz_magic` / `x-grant-id`
+///
+/// 注：`referer` 形参类型从 `&'static str` 放宽为 `&str`，以便调用方传入 obfstr 解密后的运行时 String。
 pub(crate) fn build_weixin_shop_headers(
-    referer: &'static str,
+    referer: &str,
     cookie_header: &str,
     biz_magic: &str,
     grant_id: Option<&str>,
 ) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    headers.insert(
-        ORIGIN,
-        HeaderValue::from_static("https://store.weixin.qq.com"),
-    );
-    headers.insert(REFERER, HeaderValue::from_static(referer));
+    // Origin 域名用 obfstr 编译期加密，运行时动态构造 HeaderValue
+    if let Ok(v) = HeaderValue::from_str(obfstr::obfstr!("https://store.weixin.qq.com")) {
+        headers.insert(ORIGIN, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(referer) {
+        headers.insert(REFERER, v);
+    }
     headers.insert(
         USER_AGENT,
         HeaderValue::from_static(security_core::http_headers::get_user_agent()),

@@ -13,9 +13,14 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const ORDER_SEARCH_URL: &str =
-    "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch";
-const ORDER_LIST_REFERER: &str = "https://store.weixin.qq.com/shop/order/list";
+/// 订单接口 URL / Referer：obfstr 编译期加密，二进制里 `strings` 扫不到原文
+fn order_search_url() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch")
+        .to_string()
+}
+fn order_list_referer() -> String {
+    obfstr::obfstr!("https://store.weixin.qq.com/shop/order/list").to_string()
+}
 const ORDER_PAGE_SIZE: i64 = 100;
 /// 订单缓存拉取并发数：过高会加速触发平台频率限制，2 是经验上较稳的折中值。
 const ORDER_CACHE_FETCH_WORKERS: usize = 2;
@@ -211,7 +216,7 @@ impl HttpOrderSearchClient {
 
     fn build_headers(&self) -> HeaderMap {
         build_weixin_shop_headers(
-            ORDER_LIST_REFERER,
+            &order_list_referer(),
             &self.cookie_header,
             &self.biz_magic,
             self.grant_id.as_deref(),
@@ -236,7 +241,7 @@ impl HttpOrderSearchClient {
         let worker_count = workers.max(1);
         let now_rfc = Arc::new(chrono::Utc::now().to_rfc3339());
         let now_epoch = chrono::Utc::now().timestamp();
-        let url = Arc::new(format!("{ORDER_SEARCH_URL}?token=&lang=zh_CN"));
+        let url = Arc::new(format!("{}?token=&lang=zh_CN", order_search_url()));
         let next_page = Arc::new(AtomicI64::new(1));
         let should_stop = Arc::new(AtomicBool::new(false));
         let rate_limit_gate = Arc::new(OrderRateLimitGate::default());
