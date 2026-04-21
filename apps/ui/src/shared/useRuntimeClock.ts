@@ -38,8 +38,6 @@ export interface RuntimeClock {
   clockText: ComputedRef<string>;
   /** 会话累计时长：刚启动显示「刚刚启动」，不足 1 小时显示分钟，否则「Nh Mm」。 */
   uptimeText: ComputedRef<string>;
-  /** 底层启动时间（Date），便于外部二次派生。 */
-  appStartedAt: Date;
 }
 
 /**
@@ -72,5 +70,5 @@ export function useRuntimeClock(): RuntimeClock {
     return "刚刚启动";
   });
 
-  return { clockText, uptimeText, appStartedAt };
+  return { clockText, uptimeText };
 }

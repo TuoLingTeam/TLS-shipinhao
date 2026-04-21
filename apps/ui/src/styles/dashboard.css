@@ -11,6 +11,13 @@
  * / delivery）目前在 main.css 中穿插分布较广，强行拆分会打乱 cascade，暂保留。
  */
 
+/* 仪表盘三组卡片固定高度变量：集中此处便于调整阶梯节奏。 */
+:root {
+  --dashboard-card-h-metric: 9rem;
+  --dashboard-card-h-shortcut: 7rem;
+  --dashboard-card-h-meta: 5rem;
+}
+
 /* 仪表盘：hero 右侧状态 pill（授权/Cookie/缓存健康速览） */
 .dashboard-hint-pill {
   display: inline-flex;
@@ -107,16 +114,16 @@
   opacity: 1;
 }
 
-/* 仪表盘：三组卡片统一视觉节律。
- * 目标：指标卡 / 快捷入口 / 底部元数据三组所有卡片使用同一个高度（7rem），
- * 让整个仪表盘呈规整的等距网格感，不因内容多寡而有高度参差。
- * 指标卡 space-between 让 header / value / hint 上中下均匀分布；
- * 其余两组依赖内部 items-center / h-full 自行做垂直居中。
+/* 仪表盘：三组卡片固定各自高度（指标 9rem / 快捷入口 7rem / 元数据 5rem），
+ * 让每一组内部等高、跨组按信息密度呈阶梯状排布。
+ * 指标卡 space-between 让 header / value / hint 上中下均匀分布，
+ * 避免 hint 字数差异把 value 位置漂移；其余两组内容简单，依赖
+ * 内部 items-center / h-full 做垂直居中。
  */
 .dashboard-metric-card {
   transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
   border-top: 3px solid transparent;
-  height: 9rem;
+  height: var(--dashboard-card-h-metric);
   justify-content: space-between;
 }
 
@@ -178,18 +185,15 @@
 
 /* 仪表盘底部：运行时元数据 4 卡片（版本 / 作者 / 会话时长 / 当前时间）
    与上方业务域 tiles / shortcuts 解耦，纯元数据信息。
-   独立一行，shrink-0，不参与 flex-1 争夺。 */
-.dashboard-meta-cards {
-  /* 视觉深度略弱于 shortcut / metric：不抢焦点 */
-}
-
+   独立一行，shrink-0，不参与 flex-1 争夺；
+   视觉深度略弱于 shortcut / metric：不抢焦点。 */
 .dashboard-meta-card {
   border-top: 3px solid transparent;
   transition:
     transform 200ms ease,
     box-shadow 220ms ease,
     border-color 220ms ease;
-  height: 5rem;
+  height: var(--dashboard-card-h-meta);
 }
 
 .dashboard-meta-card:hover {
@@ -277,7 +281,7 @@
  * 与指标卡 / 元数据卡统一为 7rem，保持仪表盘整体卡片高度一致。
  */
 .dashboard-shortcut {
-  height: 7rem;
+  height: var(--dashboard-card-h-shortcut);
   padding: 0.5rem 0.7rem;
   transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }
