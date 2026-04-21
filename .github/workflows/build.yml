@@ -173,6 +173,15 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
         run: node scripts/build-obfuscate.mjs
 
+      - name: Upload Windows obfuscated dist (diag)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-obfuscated-dist
+          path: TLS-shipinhao-release/apps/ui/dist/**
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload Windows portable exe
         shell: pwsh
         env:
@@ -258,6 +267,15 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: thin
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
         run: node scripts/build-obfuscate.mjs
+
+      - name: Upload macOS obfuscated dist (diag)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-obfuscated-dist
+          path: TLS-shipinhao-release/apps/ui/dist/**
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload macOS asset
         shell: bash

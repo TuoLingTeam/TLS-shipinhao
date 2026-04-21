@@ -1,6 +1,8 @@
 {
   "_comment": "javascript-obfuscator 发版配置。开启后编译性能会下降 15~25%，JS 体积 ~1.5~2×，属于可接受代价。",
   "_reference": "https://github.com/javascript-obfuscator/javascript-obfuscator#javascript-obfuscator-options",
+  "_note_seed": "seed=1 让 stringArrayShuffle / stringArrayRotate / CFF / DCI 等随机项确定化，保证 Mac/Windows CI 产物 byte-identical，便于端到端对比与本地复现",
+  "seed": 1,
   "compact": true,
   "simplify": true,
   "target": "browser",

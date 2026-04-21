@@ -10,7 +10,7 @@ mod state;
 use desktop_services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
 use security_core::get_device_id;
 use state::AppState;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 /// 初始化全局 tracing 订阅器：
 /// - 默认级别 `info`，尊重 `RUST_LOG` 环境变量（例如
@@ -33,6 +33,10 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState::new())
         .setup(|app| {
+            // 诊断版：强制开启 DevTools，便于 F12 定位 Windows WebView2 下的 JS 报错
+            if let Some(win) = app.get_webview_window("main") {
+                win.open_devtools();
+            }
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(UPDATE_CHECK_DELAY_MS)).await;
