@@ -164,14 +164,14 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build obfuscated release (frontend obfuscate + cargo tauri build)
+      - name: Build deep-obfuscated release (mirror + JS obfuscate + cargo tauri build)
         shell: pwsh
         env:
           # CI 专用 release profile 覆盖：本地 Cargo.toml 保持 lto=true / codegen-units=1 的最高优化；
           # CI 改用 thin LTO + 16 codegen-units，显著压缩 Windows 编译时间，产物体积略增但无大影响。
           CARGO_PROFILE_RELEASE_LTO: thin
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-        run: node scripts/build-release.mjs
+        run: node scripts/build-obfuscate.mjs
 
       - name: Upload Windows portable exe
         shell: pwsh
@@ -180,19 +180,18 @@ jobs:
         run: |
           $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $version = "${{ needs.extract-version.outputs.app_version }}"
-          # Tauri Rust 编译的原生 exe 位于 target/release/desktop.exe
-          # Windows 10/11 自带 WebView2 Runtime 时可双击直接运行，无需安装
-          $portable = Get-ChildItem -Path "target/release/desktop.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          # 深混脚本 build-obfuscate.mjs 会把产物统一收集到 dist/release/
+          # 便携 exe 名字由 stage_collectArtifacts 固化为 TLS-shipinhao-portable.exe
+          $portable = Get-ChildItem -Path "dist/release/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $portable) {
-            $portable = Get-ChildItem -Path "target/release/*.exe" -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -notlike "*_deps*" -and $_.Name -notlike "build-*" -and $_.Name -notmatch "^(cargo|rustc)" } |
-              Select-Object -First 1
+            # 兜底：若未来修改了收集命名，再去镜像 target 里查一遍
+            $portable = Get-ChildItem -Path "TLS-shipinhao-release/target/release/desktop.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           }
           if ($portable) {
             gh release upload $tag "$($portable.FullName)#TLS-shipinhao-v$version-portable.exe" `
               --repo "${{ github.repository }}" --clobber
           } else {
-            throw "Portable exe not found under target/release/"
+            throw "Portable exe not found under dist/release/ or TLS-shipinhao-release/target/release/"
           }
 
   build-macos:
@@ -252,13 +251,13 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build obfuscated release (frontend obfuscate + cargo tauri build)
+      - name: Build deep-obfuscated release (mirror + JS obfuscate + cargo tauri build)
         shell: bash
         env:
           # CI 专用 release profile 覆盖：与 Windows 同策略，本地 Cargo.toml 仍保持最高优化
           CARGO_PROFILE_RELEASE_LTO: thin
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-        run: node scripts/build-release.mjs
+        run: node scripts/build-obfuscate.mjs
 
       - name: Upload macOS asset
         shell: bash
@@ -268,8 +267,15 @@ jobs:
           set -euo pipefail
           tag='${{ needs.extract-version.outputs.release_tag }}'
           version='${{ needs.extract-version.outputs.app_version }}'
-          dmg=$(find target/release/bundle/dmg -name '*.dmg' 2>/dev/null | head -1)
+          # 深混脚本会把 dmg 收集到 dist/release/；兜底再查镜像 bundle 目录
+          dmg=$(find dist/release -name '*.dmg' 2>/dev/null | head -1)
+          if [ -z "$dmg" ]; then
+            dmg=$(find TLS-shipinhao-release/target/release/bundle/dmg -name '*.dmg' 2>/dev/null | head -1)
+          fi
           if [ -n "$dmg" ]; then
             gh release upload "$tag" "${dmg}#TLS-shipinhao-v${version}-mac.dmg" \
               --repo "${{ github.repository }}" --clobber
+          else
+            echo "dmg not found in dist/release/ nor TLS-shipinhao-release/target/release/bundle/dmg" >&2
+            exit 1
           fi
