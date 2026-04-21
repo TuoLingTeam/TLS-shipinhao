@@ -40,3 +40,11 @@ obfstr = "0.4"
 lto = true
 codegen-units = 1
 strip = true
+# 去掉 panic unwind 表 + panic 字符串，进一步缩小可被分析的字面量面
+panic = "abort"
+# 关闭 release 下的溢出断言，避免留下检测分支字符串
+overflow-checks = false
+# 确保不写入任何 DWARF 调试信息（strip=true 会再清一次，双保险）
+debug = 0
+# 禁用 debug-assertions（RUST_BACKTRACE 也受此影响，逆向信息更少）
+debug-assertions = false
