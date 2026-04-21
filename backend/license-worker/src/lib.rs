@@ -42,7 +42,7 @@ mod admin;
 
 pub use messages::{
     parse_route, route_request, route_requires_signer, AdminRevokeRequest, LeaseRefreshRequest,
-    LeaseRefreshResponse, LeaseRevokeRequest, SignedLicenseApiResponse, TaskAuthorizeRequest,
+    Lrr, LeaseRevokeRequest, SignedLicenseApiResponse, TaskAuthorizeRequest,
     WorkerRoute,
 };
 pub use runtime::{
@@ -56,7 +56,7 @@ pub use runtime::{
 /// Ed25519 Lease Token 签发器。
 ///
 /// 从 Cloudflare Secret `LICENSE_SIGNING_PRIVATE_KEY_B64` 里加载 PKCS8 DER
-/// 或 PEM 文本；`sign_license_lease` 把 `LicenseLease` 折叠成 `LeasePayload`
+/// 或 PEM 文本；`sign_license_lease` 把 `LicenseLease` 折叠成 `Lp`
 /// canonical JSON 后做 `base64url(payload).base64url(ed25519_sig)` 格式的
 /// Token 输出，客户端 `security_core` / `license-service::lease::LeaseVerifier`
 /// 用同一份公钥（`LICENSE_PUBLIC_KEY_B64`）验签。

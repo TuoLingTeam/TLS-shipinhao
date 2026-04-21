@@ -1,11 +1,25 @@
 use std::future::Future;
 use std::time::Duration;
 
-use api_contracts::RuntimeGrant;
+use api_contracts::Rg;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::app_settings::LICENSE_API_TIMEOUT_SECS;
+
+/// release 占位 Debug：避免二进制里残留字段名，dev 仍走 derive(Debug)。
+macro_rules! blank_debug_release {
+    ($t:ty) => {
+        #[cfg(not(debug_assertions))]
+        impl ::core::fmt::Debug for $t {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str("_")
+            }
+        }
+    };
+}
+blank_debug_release!(Lrr);
+blank_debug_release!(Lar);
 
 /// 授权服务 HTTP 调用的结构化错误。
 ///
@@ -141,8 +155,9 @@ pub struct LeaseRefreshRequest {
     pub current_issued_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LeaseRefreshResponse {
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Lrr {
     pub success: bool,
     #[serde(default)]
     pub message: String,
@@ -159,8 +174,9 @@ pub struct TaskAuthorizeRequest {
     pub client_version: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LicenseApiResponse {
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Lar {
     pub success: bool,
     #[serde(default)]
     pub message: String,
@@ -196,7 +212,7 @@ pub fn normalize_license_state(raw: &str) -> String {
     }
 }
 
-impl LicenseApiResponse {
+impl Lar {
     pub fn normalized_state(&self) -> String {
         if !self.license_state.trim().is_empty() {
             return normalize_license_state(&self.license_state);
@@ -208,7 +224,7 @@ impl LicenseApiResponse {
     }
 }
 
-fn response_allows_activation(resp: &LicenseApiResponse) -> bool {
+fn response_allows_activation(resp: &Lar) -> bool {
     if !resp.success {
         return false;
     }
@@ -237,7 +253,7 @@ impl HttpLicenseClient {
         &self,
         path: &str,
         payload: &T,
-    ) -> Result<LicenseApiResponse, LicenseHttpError> {
+    ) -> Result<Lar, LicenseHttpError> {
         try_each_domain(&self.base_urls, |base_url| {
             let url = format!("{base_url}{path}");
             let client = self.client.clone();
@@ -268,7 +284,7 @@ impl HttpLicenseClient {
         device_id: &str,
         device_fingerprint: &str,
         client_version: &str,
-    ) -> Result<LicenseApiResponse, LicenseHttpError> {
+    ) -> Result<Lar, LicenseHttpError> {
         let req = ActivateRequest {
             license_key: key.trim().to_uppercase(),
             device_id: device_id.to_string(),
@@ -290,7 +306,7 @@ impl HttpLicenseClient {
         key: &str,
         device_id: &str,
         client_version: &str,
-    ) -> Result<LicenseApiResponse, LicenseHttpError> {
+    ) -> Result<Lar, LicenseHttpError> {
         let req = VerifyRequest {
             license_key: key.trim().to_uppercase(),
             device_id: device_id.to_string(),
@@ -304,7 +320,7 @@ impl HttpLicenseClient {
         license_key: &str,
         device_id: &str,
         current_issued_at: i64,
-    ) -> Result<LeaseRefreshResponse, LicenseHttpError> {
+    ) -> Result<Lrr, LicenseHttpError> {
         let req = LeaseRefreshRequest {
             license_key: license_key.trim().to_uppercase(),
             device_id: device_id.to_string(),
@@ -338,7 +354,7 @@ impl HttpLicenseClient {
         device_id: &str,
         task_type: &str,
         client_version: &str,
-    ) -> Result<RuntimeGrant, LicenseHttpError> {
+    ) -> Result<Rg, LicenseHttpError> {
         let req = TaskAuthorizeRequest {
             license_key: license_key.trim().to_uppercase(),
             device_id: device_id.to_string(),
@@ -434,7 +450,7 @@ mod tests {
 
     #[test]
     fn activation_accepts_success_without_lease_when_state_is_ok() {
-        let resp = LicenseApiResponse {
+        let resp = Lar {
             success: true,
             message: "重新激活成功".into(),
             license_state: "ok".into(),
@@ -455,13 +471,13 @@ mod tests {
 
     #[test]
     fn lease_refresh_response_roundtrip_keeps_new_token() {
-        let response = LeaseRefreshResponse {
+        let response = Lrr {
             success: true,
             message: "ok".into(),
             new_token: "lease.token.next".into(),
         };
         let json = serde_json::to_string(&response).unwrap();
-        let parsed: LeaseRefreshResponse = serde_json::from_str(&json).unwrap();
+        let parsed: Lrr = serde_json::from_str(&json).unwrap();
         assert!(parsed.success);
         assert_eq!(parsed.new_token, "lease.token.next");
     }

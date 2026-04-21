@@ -10,6 +10,17 @@
 use api_contracts::LicenseState;
 use serde::{Deserialize, Serialize};
 
+macro_rules! blank_debug_release {
+    ($t:ty) => {
+        #[cfg(not(debug_assertions))]
+        impl ::core::fmt::Debug for $t {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str("_")
+            }
+        }
+    };
+}
+
 /// Worker 支持的路由枚举。
 ///
 /// 新增路由必须同时更新 [`parse_route`] / [`route_request`] /
@@ -18,7 +29,7 @@ use serde::{Deserialize, Serialize};
 pub enum WorkerRoute {
     Activate,
     Verify,
-    /// M2-04 续约端点：input = [`LeaseRefreshRequest`]，output = [`LeaseRefreshResponse`]
+    /// M2-04 续约端点：input = [`LeaseRefreshRequest`]，output = [`Lrr`]
     LeaseRefresh,
     /// 管理员吊销端点：由后台管理 UI 触发
     LeaseRevoke,
@@ -38,8 +49,9 @@ pub struct LeaseRefreshRequest {
 }
 
 /// `/api/lease/refresh` 响应。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LeaseRefreshResponse {
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Lrr {
     pub success: bool,
     #[serde(default)]
     pub message: String,
@@ -47,6 +59,7 @@ pub struct LeaseRefreshResponse {
     /// 客户端需本地验签后才能写回 Keychain。
     pub new_token: String,
 }
+blank_debug_release!(Lrr);
 
 /// `/api/lease/revoke` 入参（管理员使用）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

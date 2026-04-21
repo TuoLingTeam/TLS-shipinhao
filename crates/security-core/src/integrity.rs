@@ -17,12 +17,24 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+macro_rules! blank_debug_release {
+    ($t:ty) => {
+        #[cfg(not(debug_assertions))]
+        impl ::core::fmt::Debug for $t {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str("_")
+            }
+        }
+    };
+}
+
 /// 默认 Manifest 文件名。与打包侧 `xtask generate-manifest` 输出保持一致。
 pub const INTEGRITY_MANIFEST_FILE_NAME: &str = "integrity_manifest.json";
 
 /// 单条文件记录。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ManifestFile {
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Mf {
     pub path: String,
     pub sha256: String,
 }
@@ -37,16 +49,19 @@ pub struct ManifestPayload {
     /// 格式版本号（打包侧当前恒为 1；日后升级再迭代）。
     pub version: u32,
     pub generated_at: String,
-    pub files: Vec<ManifestFile>,
+    pub files: Vec<Mf>,
 }
 
 /// 完整 Manifest = payload + 签名。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedManifest {
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Sm {
     #[serde(flatten)]
     pub payload: ManifestPayload,
     pub signature: String,
 }
+blank_debug_release!(Mf);
+blank_debug_release!(Sm);
 
 /// 完整性校验失败分类。
 #[derive(Debug, Error)]
@@ -95,7 +110,7 @@ pub fn validate_runtime_continuity(
 ) -> Result<(), IntegrityError> {
     let public_key = load_public_key(public_key_b64url)?;
     let raw = read_manifest_file(manifest_path)?;
-    let signed: SignedManifest = serde_json::from_str(&raw)
+    let signed: Sm = serde_json::from_str(&raw)
         .map_err(|e| IntegrityError::InvalidManifest(format!("JSON 解析失败：{e}")))?;
 
     verify_manifest_signature(&public_key, &signed)?;
@@ -128,7 +143,7 @@ fn read_manifest_file(path: &Path) -> Result<String, IntegrityError> {
 
 fn verify_manifest_signature(
     public_key: &VerifyingKey,
-    signed: &SignedManifest,
+    signed: &Sm,
 ) -> Result<(), IntegrityError> {
     if signed.signature.trim().is_empty() {
         return Err(IntegrityError::InvalidManifest("signature 为空".into()));
@@ -204,10 +219,10 @@ mod tests {
         (sk, vk_b64)
     }
 
-    fn build_manifest(payload: &ManifestPayload, sk: &SigningKey) -> SignedManifest {
+    fn build_manifest(payload: &ManifestPayload, sk: &SigningKey) -> Sm {
         let canonical = canonicalize_manifest(payload).unwrap();
         let signature = sk.sign(&canonical);
-        SignedManifest {
+        Sm {
             payload: payload.clone(),
             signature: URL_SAFE_NO_PAD.encode(signature.to_bytes()),
         }
@@ -231,11 +246,11 @@ mod tests {
             version: 1,
             generated_at: "2026-04-16T00:00:00Z".into(),
             files: vec![
-                ManifestFile {
+                Mf {
                     path: "bin/app".into(),
                     sha256: hash_a,
                 },
-                ManifestFile {
+                Mf {
                     path: "apps/ui/dist/index.html".into(),
                     sha256: hash_b,
                 },
@@ -303,7 +318,7 @@ mod tests {
     fn signature_tamper_reports_invalid_signature() {
         let (_dir, manifest_path, _, _sk, vk) = fresh_setup();
         let raw = std::fs::read_to_string(&manifest_path).unwrap();
-        let mut signed: SignedManifest = serde_json::from_str(&raw).unwrap();
+        let mut signed: Sm = serde_json::from_str(&raw).unwrap();
         // 篡改签名：随机替换几个字符
         signed.signature = signed.signature.replace('a', "b").replace('A', "B");
         if signed.signature == raw {
@@ -338,7 +353,7 @@ mod tests {
     fn empty_signature_is_rejected() {
         let (_dir, manifest_path, _, _sk, vk) = fresh_setup();
         let raw = std::fs::read_to_string(&manifest_path).unwrap();
-        let mut signed: SignedManifest = serde_json::from_str(&raw).unwrap();
+        let mut signed: Sm = serde_json::from_str(&raw).unwrap();
         signed.signature = "".into();
         std::fs::write(&manifest_path, serde_json::to_vec_pretty(&signed).unwrap()).unwrap();
 
@@ -352,11 +367,11 @@ mod tests {
             version: 1,
             generated_at: "2026-04-16T00:00:00Z".into(),
             files: vec![
-                ManifestFile {
+                Mf {
                     path: "a".into(),
                     sha256: "aa".into(),
                 },
-                ManifestFile {
+                Mf {
                     path: "b".into(),
                     sha256: "bb".into(),
                 },

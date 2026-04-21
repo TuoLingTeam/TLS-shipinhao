@@ -14,21 +14,21 @@ pub mod integrity;
 
 pub use device_id::{collect_raw_fingerprint, derive_device_id, get_device_id, DEVICE_ID_HEX_LEN};
 pub use integrity::{
-    validate_runtime_continuity, IntegrityError, ManifestFile, ManifestPayload, SignedManifest,
+    validate_runtime_continuity, IntegrityError, Mf, ManifestPayload, Sm,
     INTEGRITY_MANIFEST_FILE_NAME,
 };
 
 static BACKEND_NAME: &[u8] = b"rust-security-core\0";
 
 #[derive(Serialize)]
-struct CanonicalManifestFile<'a> {
+struct CanonicalMf<'a> {
     path: &'a str,
     sha256: &'a str,
 }
 
 #[derive(Serialize)]
 struct CanonicalManifest<'a> {
-    files: Vec<CanonicalManifestFile<'a>>,
+    files: Vec<CanonicalMf<'a>>,
     generated_at: &'a str,
     version: u64,
 }
@@ -161,7 +161,7 @@ fn canonical_manifest_bytes(payload: &Value) -> Result<Vec<u8>, String> {
             .get("sha256")
             .and_then(Value::as_str)
             .ok_or_else(|| "manifest sha256 missing".to_string())?;
-        normalized_files.push(CanonicalManifestFile { path, sha256 });
+        normalized_files.push(CanonicalMf { path, sha256 });
     }
     serde_json::to_vec(&CanonicalManifest {
         files: normalized_files,

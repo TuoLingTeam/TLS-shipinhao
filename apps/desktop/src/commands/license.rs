@@ -1,10 +1,10 @@
 use crate::adapters::http_license_client::{
-    normalize_license_state, HttpLicenseClient, LicenseApiResponse,
+    normalize_license_state, HttpLicenseClient, Lar,
 };
 use crate::app_settings::license_api_base_urls;
 use crate::error::AppError;
-use crate::state::{self, AppState, StoredLicenseProfile};
-use api_contracts::{LeasePayload, LicenseState, RiskLevel, RuntimeGrant, RuntimeState};
+use crate::state::{self, AppState, Slp};
+use api_contracts::{Lp, LicenseState, RiskLevel, Rg, RuntimeState};
 use license_service::{authorize_task_local, lease::RefreshOutcome};
 use tauri::State;
 
@@ -64,9 +64,9 @@ async fn persist_runtime_profile(
     runtime: RuntimeState,
     fallback_license_key: String,
     fallback_license_expires_at: Option<String>,
-) -> Result<StoredLicenseProfile, AppError> {
+) -> Result<Slp, AppError> {
     let last_verified_at = current_timestamp();
-    let profile = StoredLicenseProfile {
+    let profile = Slp {
         license_key: if runtime.license_key.trim().is_empty() {
             fallback_license_key
         } else {
@@ -92,8 +92,8 @@ async fn persist_runtime_profile(
 async fn sync_license_state_from_response(
     state: &AppState,
     requested_key: &str,
-    response: &LicenseApiResponse,
-) -> Result<StoredLicenseProfile, AppError> {
+    response: &Lar,
+) -> Result<Slp, AppError> {
     let normalized_key = response
         .license_key
         .clone()
@@ -149,7 +149,7 @@ fn parse_runtime_from_token(
     token: &str,
     now_epoch: i64,
     allow_expired: bool,
-) -> Result<LeasePayload, AppError> {
+) -> Result<Lp, AppError> {
     state
         .lease_verifier
         .verify(token, Some(&state.device_id), now_epoch, allow_expired)
@@ -161,7 +161,7 @@ async fn update_runtime_from_token(
     token: &str,
     fallback_license_key: String,
     fallback_license_expires_at: Option<String>,
-) -> Result<StoredLicenseProfile, AppError> {
+) -> Result<Slp, AppError> {
     let runtime = state::verify_and_store_license_token(
         state.lease_store.as_ref(),
         token,
@@ -284,7 +284,7 @@ fn task_requires_remote_authorization(task_type: &str) -> bool {
 pub async fn authorize_runtime_task(
     state: &AppState,
     task_type: &str,
-) -> Result<RuntimeGrant, AppError> {
+) -> Result<Rg, AppError> {
     ensure_runtime_integrity(state).await?;
     let _ = refresh_runtime_license_if_needed(state).await;
     let now_epoch = chrono::Utc::now().timestamp();
@@ -396,7 +396,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<serde_json
 
 async fn persist_license_profile(
     state: &AppState,
-    profile: StoredLicenseProfile,
+    profile: Slp,
 ) -> Result<(), AppError> {
     {
         let mut current = state.license_profile.lock().await;
@@ -412,7 +412,7 @@ fn current_timestamp() -> String {
 }
 
 fn build_license_status_payload(
-    profile: &StoredLicenseProfile,
+    profile: &Slp,
     runtime: &RuntimeState,
 ) -> serde_json::Value {
     let license_key = if runtime.license_key.trim().is_empty() {
@@ -516,7 +516,7 @@ mod tests {
                 .unwrap(),
             task_grant_cache: license_service::TaskGrantCache::new(),
             runtime_license_state: Mutex::new(RuntimeState::reason_only(LicenseState::Invalid)),
-            license_profile: Mutex::new(StoredLicenseProfile::default()),
+            license_profile: Mutex::new(Slp::default()),
             batch_delivery_cancel: Arc::new(AtomicBool::new(false)),
             cookie_health: Mutex::new(crate::state::CookieHealthSnapshot::default()),
         }
@@ -561,7 +561,7 @@ mod tests {
         let store: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::new());
         let (token, public_key_b64) = signed_lease_token("dev-1", 1_800_000_000, 1_900_000_000);
         let state = test_state("dev-1", store.clone(), &public_key_b64);
-        let response = LicenseApiResponse {
+        let response = Lar {
             success: true,
             message: "ok".into(),
             license_state: "active".into(),
@@ -597,7 +597,7 @@ mod tests {
             store,
             "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo",
         );
-        let response = LicenseApiResponse {
+        let response = Lar {
             success: true,
             message: "ok".into(),
             license_state: "active".into(),
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn build_license_status_prefers_runtime_snapshot_over_legacy_profile() {
-        let profile = StoredLicenseProfile {
+        let profile = Slp {
             license_key: "OLD-KEY".into(),
             license_state: "invalid".into(),
             license_expires_at: Some("2020-01-01T00:00:00Z".into()),
@@ -696,7 +696,7 @@ mod tests {
         // （Keychain / 加密文件）缺失 → runtime.reason 被降级为 NotFound。
         // 期望：暴露 needs_restore=true 并把 license_state 统一为 reactivation_required，
         // 让前端能自动触发一次远端 verify 恢复 Lease。
-        let profile = StoredLicenseProfile {
+        let profile = Slp {
             license_key: "TLS-Q2PR-YFUB-SCBU-3ISK".into(),
             license_state: "active".into(),
             license_expires_at: Some("2120-08-24T03:19:29+00:00".into()),
@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn build_license_status_returns_invalid_when_everything_is_empty() {
-        let profile = StoredLicenseProfile::default();
+        let profile = Slp::default();
         let runtime = RuntimeState::reason_only(LicenseState::NotFound);
 
         let payload = build_license_status_payload(&profile, &runtime);

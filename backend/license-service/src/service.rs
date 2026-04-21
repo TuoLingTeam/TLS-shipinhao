@@ -34,7 +34,7 @@ pub const DEFAULT_TASK_POLICY: &[&str] = SUPPORTED_TASKS;
 
 /// 按给定字段构造一个 `LicenseLease` 结构（未签名的 UI 展示层）。
 ///
-/// Worker 端会拿这个结构转成 `LeasePayload` 再做 Ed25519 签名；客户端验签后
+/// Worker 端会拿这个结构转成 `Lp` 再做 Ed25519 签名；客户端验签后
 /// 会以相同字段回填。字段命名和默认任务策略都锁死在本模块里，保证协议 v3
 /// 前后端完全一致。
 pub fn issue_license_lease(

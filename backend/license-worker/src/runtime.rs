@@ -16,7 +16,7 @@
 //! super::*;` / `use license_worker::…`）不变。
 
 use api_contracts::{
-    LeasePayload, LicenseLease, LicenseState, RiskLevel, RuntimeGrant, LEASE_KIND_LICENSE,
+    Lp, LicenseLease, LicenseState, RiskLevel, Rg, LEASE_KIND_LICENSE,
     LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE, LICENSE_TASK_QUALITY_REFUND,
     LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
 };
@@ -31,7 +31,7 @@ use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::messages::{
-    parse_route, AdminRevokeRequest, LeaseRefreshRequest, LeaseRefreshResponse, LeaseRevokeRequest,
+    parse_route, AdminRevokeRequest, LeaseRefreshRequest, Lrr, LeaseRevokeRequest,
     SignedLicenseApiResponse, TaskAuthorizeRequest, WorkerRoute,
 };
 use crate::LeaseTokenSigner;
@@ -55,12 +55,12 @@ fn parse_iso_epoch(value: &str) -> anyhow::Result<i64> {
 }
 
 /// 把 UI 层的 [`LicenseLease`] 结构（时间字段为 ISO8601 字符串）折叠成 Worker
-/// 真正签发的 [`LeasePayload`] 结构（时间字段为 Unix 秒）。
+/// 真正签发的 [`Lp`] 结构（时间字段为 Unix 秒）。
 ///
 /// 暴露为 `pub(crate)` 是因为 `crate::LeaseTokenSigner::sign_license_lease`
 /// 也需要直接调用它。
-pub(crate) fn lease_to_payload(lease: &LicenseLease) -> anyhow::Result<LeasePayload> {
-    Ok(LeasePayload {
+pub(crate) fn lease_to_payload(lease: &LicenseLease) -> anyhow::Result<Lp> {
+    Ok(Lp {
         kind: LEASE_KIND_LICENSE.to_string(),
         license_key: lease.license_key.clone(),
         device_id: lease.device_id.clone(),
@@ -86,8 +86,8 @@ fn next_grant_id() -> String {
     format!("worker-grant-{}-{seq}", Utc::now().timestamp_millis())
 }
 
-fn denied_grant(task_type: &str, message: impl Into<String>) -> RuntimeGrant {
-    RuntimeGrant {
+fn denied_grant(task_type: &str, message: impl Into<String>) -> Rg {
+    Rg {
         task_type: task_type.to_string(),
         granted: false,
         grant_id: String::new(),
@@ -524,7 +524,7 @@ pub async fn runtime_refresh_lease<R: AsyncRuntimeRepository + ?Sized>(
     signer: &LeaseTokenSigner,
     input: LeaseRefreshRequest,
     now: DateTime<Utc>,
-) -> anyhow::Result<LeaseRefreshResponse> {
+) -> anyhow::Result<Lrr> {
     let record = match runtime_load_usable_license(
         repo,
         &input.license_key,
@@ -536,7 +536,7 @@ pub async fn runtime_refresh_lease<R: AsyncRuntimeRepository + ?Sized>(
     {
         Ok(record) => record,
         Err((message, _, _)) => {
-            return Ok(LeaseRefreshResponse {
+            return Ok(Lrr {
                 success: false,
                 message,
                 new_token: String::new(),
@@ -560,7 +560,7 @@ pub async fn runtime_refresh_lease<R: AsyncRuntimeRepository + ?Sized>(
         created_at: now_iso_str,
     })
     .await?;
-    Ok(LeaseRefreshResponse {
+    Ok(Lrr {
         success: true,
         message: "lease_refreshed".into(),
         new_token: signer.sign_license_lease(&issue_license_lease_for_record(&record, now))?,
@@ -571,7 +571,7 @@ pub async fn runtime_task_authorize<R: AsyncRuntimeRepository + ?Sized>(
     repo: &R,
     input: TaskAuthorizeRequest,
     now: DateTime<Utc>,
-) -> anyhow::Result<RuntimeGrant> {
+) -> anyhow::Result<Rg> {
     let record = match runtime_load_usable_license(
         repo,
         &input.license_key,

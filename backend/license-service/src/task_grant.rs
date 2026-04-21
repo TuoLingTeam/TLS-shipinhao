@@ -1,7 +1,7 @@
 //! 任务级授权（PRD §5.6 / M2-08）。
 //!
 //! 功能：每次执行「差评查询 / 全量扫描 / 品退查询 / 批量发货 / 缓存管理」
-//! 等危险操作之前，向 LicenseService 申请一个 30 分钟有效的 `RuntimeGrant`；
+//! 等危险操作之前，向 LicenseService 申请一个 30 分钟有效的 `Rg`；
 //! Grant 结构体里带 `grant_id`，业务层把它作为 `X-Grant-Id` 头随请求发往
 //! 平台 API，方便运营端追溯每次高风险操作。
 //!
@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use api_contracts::{is_supported_task, LeasePayload, RiskLevel, RuntimeGrant};
+use api_contracts::{is_supported_task, Lp, RiskLevel, Rg};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
@@ -36,7 +36,7 @@ pub enum GrantError {
     InvalidLease(String),
 }
 
-/// 本地快速通道：基于当前 Lease 直接签发 30 分钟有效的 `RuntimeGrant`。
+/// 本地快速通道：基于当前 Lease 直接签发 30 分钟有效的 `Rg`。
 ///
 /// 入参：
 /// - `payload`：已验签的 Lease（上层保证已通过 `LeaseVerifier`）
@@ -48,13 +48,13 @@ pub enum GrantError {
 /// - `task_type` 不在白名单 → `UnsupportedTask`
 /// - Lease 的 task_policy 不包含 → `PolicyDenied`
 /// - Lease 硬过期 → `InvalidLease`
-/// - 否则返回 `RuntimeGrant`，`valid_until = now + 30min` ISO8601
+/// - 否则返回 `Rg`，`valid_until = now + 30min` ISO8601
 pub fn authorize_task_local<F>(
-    payload: &LeasePayload,
+    payload: &Lp,
     task_type: &str,
     now_epoch: i64,
     grant_id_gen: F,
-) -> Result<RuntimeGrant, GrantError>
+) -> Result<Rg, GrantError>
 where
     F: FnOnce() -> String,
 {
@@ -72,7 +72,7 @@ where
     let valid_until = epoch_to_iso(valid_until_epoch);
     let risk_level = parse_risk_level(&payload.risk_level);
 
-    Ok(RuntimeGrant {
+    Ok(Rg {
         task_type: task_type.to_string(),
         granted: true,
         grant_id: grant_id_gen(),
@@ -109,7 +109,7 @@ fn parse_risk_level(raw: &str) -> Option<RiskLevel> {
 /// 内部 `Mutex` 保证多线程下 set/get/invalidate 原子。
 #[derive(Debug, Default)]
 pub struct TaskGrantCache {
-    entries: Mutex<HashMap<String, RuntimeGrant>>,
+    entries: Mutex<HashMap<String, Rg>>,
 }
 
 impl TaskGrantCache {
@@ -118,7 +118,7 @@ impl TaskGrantCache {
     }
 
     /// 命中未过期的缓存才返回 Some；过期项会被动失效。
-    pub fn get_valid(&self, task_type: &str, now_epoch: i64) -> Option<RuntimeGrant> {
+    pub fn get_valid(&self, task_type: &str, now_epoch: i64) -> Option<Rg> {
         let guard = self.entries.lock().ok()?;
         let grant = guard.get(task_type)?.clone();
         let valid_until = iso_to_epoch(&grant.valid_until)?;
@@ -130,7 +130,7 @@ impl TaskGrantCache {
     }
 
     /// 写入/覆盖 grant。
-    pub fn put(&self, grant: RuntimeGrant) {
+    pub fn put(&self, grant: Rg) {
         if let Ok(mut guard) = self.entries.lock() {
             guard.insert(grant.task_type.clone(), grant);
         }
@@ -159,8 +159,8 @@ mod tests {
         LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
     };
 
-    fn sample_payload(task_policy: Vec<String>, exp: i64, risk_level: &str) -> LeasePayload {
-        LeasePayload {
+    fn sample_payload(task_policy: Vec<String>, exp: i64, risk_level: &str) -> Lp {
+        Lp {
             kind: LEASE_KIND_LICENSE.into(),
             license_key: "ABCD".into(),
             device_id: "dev-1".into(),

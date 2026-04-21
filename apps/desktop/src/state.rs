@@ -15,9 +15,22 @@ const COOKIE_DIR_POINTER_FILE: &str = "selected_config_dir.txt";
 const LICENSE_FILE_NAME: &str = "license.json";
 const LOGIN_WEBVIEW_DIR_NAME: &str = "login-webview";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+macro_rules! blank_debug_release {
+    ($t:ty) => {
+        #[cfg(not(debug_assertions))]
+        impl ::core::fmt::Debug for $t {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str("_")
+            }
+        }
+    };
+}
+blank_debug_release!(Slp);
+
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub struct StoredLicenseProfile {
+pub struct Slp {
     pub license_key: String,
     pub license_state: String,
     pub license_expires_at: Option<String>,
@@ -35,7 +48,7 @@ pub struct AppState {
     pub lease_verifier: LeaseVerifier,
     pub task_grant_cache: TaskGrantCache,
     pub runtime_license_state: Mutex<RuntimeState>,
-    pub license_profile: Mutex<StoredLicenseProfile>,
+    pub license_profile: Mutex<Slp>,
     /// 批量发货取消标志：由 `cancel_batch_delivery` 置 true，
     /// `batch_delivery` 进入循环前重置为 false。
     pub batch_delivery_cancel: Arc<AtomicBool>,
@@ -247,14 +260,14 @@ pub fn save_cookie_to_file(path: &Path, cookie_header: &str) -> std::io::Result<
     std::fs::write(path, cookie_header)
 }
 
-pub fn load_license_profile(app_home_dir: &Path) -> Option<StoredLicenseProfile> {
+pub fn load_license_profile(app_home_dir: &Path) -> Option<Slp> {
     let text = std::fs::read_to_string(license_profile_path(app_home_dir)).ok()?;
     serde_json::from_str(&text).ok()
 }
 
 pub fn save_license_profile(
     app_home_dir: &Path,
-    profile: &StoredLicenseProfile,
+    profile: &Slp,
 ) -> std::io::Result<()> {
     std::fs::create_dir_all(app_home_dir)?;
     let text = serde_json::to_string_pretty(profile)?;
@@ -399,7 +412,7 @@ mod tests {
     #[test]
     fn persists_license_profile_roundtrip() {
         let home = unique_temp_dir("license_home");
-        let profile = StoredLicenseProfile {
+        let profile = Slp {
             license_key: "TLS-TEST".into(),
             license_state: "active".into(),
             license_expires_at: Some("2026-05-01T00:00:00Z".into()),

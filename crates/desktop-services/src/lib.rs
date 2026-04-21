@@ -28,7 +28,7 @@ use crate::delivery_batch_runner::{
     run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem,
     BatchDeliveryReport, BatchDeliveryRuntimeGuard,
 };
-use api_contracts::RuntimeGrant;
+use api_contracts::Rg;
 use domain_core::{
     DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow,
 };
@@ -46,7 +46,7 @@ pub struct CookieProfile {
 pub struct ReviewQuery {
     pub days: u32,
     pub time_window: TimeWindow,
-    pub runtime_grant: Option<RuntimeGrant>,
+    pub runtime_grant: Option<Rg>,
 }
 
 pub trait ReviewSource {

@@ -45,7 +45,7 @@ pub async fn update_delivery(
 pub async fn batch_delivery(
     app: AppHandle,
     state: State<'_, AppState>,
-    items: Vec<BatchDeliveryInput>,
+    items: Vec<Bdi>,
 ) -> Result<BatchDeliveryOutput, AppError> {
     ensure_feature_authorized(&state, "发货功能").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_BATCH_DELIVERY).await?;
@@ -159,7 +159,7 @@ impl BatchDeliveryRuntimeGuard for StaticGrantGuard {
 }
 
 #[derive(serde::Deserialize)]
-pub struct BatchDeliveryInput {
+pub struct Bdi {
     pub order_id: String,
     pub tracking_number: String,
 }

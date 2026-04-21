@@ -8,7 +8,7 @@
 //! 命令层）负责读取 Token 后作为 `Option<&str>` 传入。这样 license-service
 //! 无需依赖任何 IO，方便纯函数测试。
 
-use api_contracts::{LeasePayload, LicenseState, RuntimeState};
+use api_contracts::{Lp, LicenseState, RuntimeState};
 use chrono::{DateTime, Utc};
 
 use crate::lease::{LeaseError, LeaseVerifier};
@@ -66,7 +66,7 @@ pub fn verify_stored_lease_local(
 }
 
 fn runtime_state_from_payload(
-    payload: LeasePayload,
+    payload: Lp,
     reason: LicenseState,
     status_hint: LicenseState,
 ) -> RuntimeState {

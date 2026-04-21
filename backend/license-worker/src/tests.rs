@@ -7,7 +7,7 @@
 //! 私有符号通过同一个模块传递"这种脆弱的耦合。
 
 use super::*;
-use api_contracts::{LicenseState, RuntimeGrant, LICENSE_TASK_REVIEW_FIND};
+use api_contracts::{LicenseState, Rg, LICENSE_TASK_REVIEW_FIND};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use chrono::Utc;
@@ -440,7 +440,7 @@ async fn async_runtime_json_router_uses_shared_repo_flow() {
     )
     .await
     .unwrap();
-    let grant_payload: RuntimeGrant = serde_json::from_str(&grant).unwrap();
+    let grant_payload: Rg = serde_json::from_str(&grant).unwrap();
     assert!(grant_payload.granted);
 }
 
@@ -484,7 +484,7 @@ async fn async_runtime_json_router_covers_verify_refresh_and_not_found() {
     )
     .await
     .unwrap();
-    let refreshed_payload: LeaseRefreshResponse = serde_json::from_str(&refreshed).unwrap();
+    let refreshed_payload: Lrr = serde_json::from_str(&refreshed).unwrap();
     assert!(refreshed_payload.success);
     assert!(!refreshed_payload.new_token.is_empty());
 
@@ -565,7 +565,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     )
     .await
     .unwrap();
-    let refreshed_payload: LeaseRefreshResponse = serde_json::from_str(&refreshed).unwrap();
+    let refreshed_payload: Lrr = serde_json::from_str(&refreshed).unwrap();
     assert!(!refreshed_payload.success);
     assert_eq!(refreshed_payload.message, "该卡密已被吊销");
 
@@ -578,7 +578,7 @@ async fn async_runtime_revoke_invalidates_verify_refresh_and_task_authorize() {
     )
     .await
     .unwrap();
-    let grant_payload: RuntimeGrant = serde_json::from_str(&grant).unwrap();
+    let grant_payload: Rg = serde_json::from_str(&grant).unwrap();
     assert!(!grant_payload.granted);
     assert_eq!(
         grant_payload.degraded_reason.as_deref(),

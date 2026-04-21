@@ -9,13 +9,13 @@
 //! - 公钥常量来自 `LICENSE_PUBLIC_KEY_B64`（M2-02），轮换密钥时只改一处。
 //!
 //! 与 `security_core::verify_lease_impl` 的关系：
-//! - 本模块是**纯 Rust API**，返回 `Result<LeasePayload, LeaseError>`，方便
+//! - 本模块是**纯 Rust API**，返回 `Result<Lp, LeaseError>`，方便
 //!   在 license-service 内部或 Tauri 命令里直接消费。
 //! - security-core 里的 FFI 版本面向 Python 桥接（legacy 兼容），两者共用
 //!   相同的语义，但不能简单互相调用——FFI 层把错误扁平化为 JSON，损失了
 //!   类型信息。
 
-use api_contracts::{LeasePayload, LEASE_KIND_LICENSE};
+use api_contracts::{Lp, LEASE_KIND_LICENSE};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -88,7 +88,7 @@ impl LeaseVerifier {
         expected_device_id: Option<&str>,
         now_epoch: i64,
         allow_expired: bool,
-    ) -> Result<LeasePayload, LeaseError> {
+    ) -> Result<Lp, LeaseError> {
         let (payload_b64, sig_b64) = split_token(token)?;
 
         verify_signature(&self.public_key, payload_b64, sig_b64)?;
@@ -141,7 +141,7 @@ fn verify_signature(
     Ok(())
 }
 
-fn decode_payload(payload_b64: &str) -> Result<LeasePayload, LeaseError> {
+fn decode_payload(payload_b64: &str) -> Result<Lp, LeaseError> {
     let bytes = URL_SAFE_NO_PAD
         .decode(payload_b64.as_bytes())
         .map_err(|e| LeaseError::InvalidFormat(format!("payload base64url 解码失败：{e}")))?;
@@ -202,7 +202,7 @@ pub enum RefreshError {
 /// 注意：本函数不做「写回 Keychain」与「事件推送」，这些是 Tauri 命令层的
 /// 职责（M2-06 + M2-08）。这里保持纯 async 逻辑方便单测。
 pub async fn refresh_lease_if_due<F, Fut>(
-    payload: &LeasePayload,
+    payload: &Lp,
     now_epoch: i64,
     refresher: F,
 ) -> Result<RefreshOutcome, RefreshError>
@@ -453,8 +453,8 @@ mod tests {
 
     // --- refresh_lease_if_due（M2-04） ---
 
-    fn sample_payload(renew_after: i64, exp: i64) -> LeasePayload {
-        LeasePayload {
+    fn sample_payload(renew_after: i64, exp: i64) -> Lp {
+        Lp {
             kind: LEASE_KIND_LICENSE.into(),
             license_key: "ABCD-EFGH".into(),
             device_id: "dev-1".into(),

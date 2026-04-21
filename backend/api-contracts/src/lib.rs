@@ -1,5 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+/// release 占位 Debug：避免二进制里残留 struct/字段名；dev build 仍走 derive(Debug)。
+/// 调用点 `{:?}` 依旧能编译，但 release 下输出统一是 "_"。
+macro_rules! blank_debug_release {
+    ($t:ty) => {
+        #[cfg(not(debug_assertions))]
+        impl ::core::fmt::Debug for $t {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str("_")
+            }
+        }
+    };
+}
+
+blank_debug_release!(Rg);
+blank_debug_release!(Lp);
+
 /// 授权校验结果的原因枚举（与 Python 协议 v3 的 `LicenseReason` 对齐）。
 ///
 /// JSON 形态始终为 snake_case。序列化用命名与 Python 版完全一致，历史枚举
@@ -79,9 +95,10 @@ pub struct LicenseLease {
     pub issued_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub struct RuntimeGrant {
+pub struct Rg {
     pub task_type: String,
     pub granted: bool,
     pub grant_id: String,
@@ -150,9 +167,10 @@ pub const LEASE_KIND_LICENSE: &str = "license_lease";
 /// 这是「**签名内容**」，与 `LicenseLease`（UI 展示层）不同——Worker 签发时
 /// 只会对本结构 canonical JSON 做 Ed25519 签名，客户端必须先验签再用此结构
 /// 的字段恢复 `RuntimeState`。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub struct LeasePayload {
+pub struct Lp {
     /// 固定为 `LEASE_KIND_LICENSE = "license_lease"`。其他值一律视为非法。
     pub kind: String,
     pub license_key: String,
@@ -171,7 +189,7 @@ pub struct LeasePayload {
     pub risk_level: String,
 }
 
-impl LeasePayload {
+impl Lp {
     /// 载荷 kind 是否合法。
     pub fn has_valid_kind(&self) -> bool {
         self.kind == LEASE_KIND_LICENSE
@@ -325,7 +343,7 @@ mod tests {
 
     #[test]
     fn lease_payload_roundtrips_through_json() {
-        let payload = LeasePayload {
+        let payload = Lp {
             kind: LEASE_KIND_LICENSE.into(),
             license_key: "ABCD-EFGH".into(),
             device_id: "dev-123".into(),
@@ -336,7 +354,7 @@ mod tests {
             risk_level: "low".into(),
         };
         let json_str = serde_json::to_string(&payload).unwrap();
-        let restored: LeasePayload = serde_json::from_str(&json_str).unwrap();
+        let restored: Lp = serde_json::from_str(&json_str).unwrap();
         assert_eq!(payload, restored);
         // 字段名 snake_case，避免 camelCase 漂移。
         assert!(json_str.contains("\"license_key\""));
@@ -346,7 +364,7 @@ mod tests {
 
     #[test]
     fn lease_payload_kind_validation_rejects_wrong_kind() {
-        let mut payload = LeasePayload::default();
+        let mut payload = Lp::default();
         payload.kind = "task_grant".into();
         assert!(!payload.has_valid_kind());
         payload.kind = LEASE_KIND_LICENSE.into();
@@ -355,12 +373,12 @@ mod tests {
 
     #[test]
     fn lease_payload_time_gates_track_exp_and_renew_after() {
-        let payload = LeasePayload {
+        let payload = Lp {
             kind: LEASE_KIND_LICENSE.into(),
             issued_at: 1000,
             renew_after: 2000,
             exp: 3000,
-            ..LeasePayload::default()
+            ..Lp::default()
         };
         assert!(payload.is_still_valid_at(2500));
         assert!(!payload.is_still_valid_at(3000));
@@ -415,7 +433,7 @@ mod tests {
 
     #[test]
     fn runtime_grant_serializes_and_supports_defaults() {
-        let grant = RuntimeGrant {
+        let grant = Rg {
             task_type: LICENSE_TASK_REVIEW_FIND.into(),
             granted: true,
             grant_id: "g-1".into(),

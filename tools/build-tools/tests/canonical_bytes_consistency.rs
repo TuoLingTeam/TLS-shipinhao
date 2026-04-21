@@ -6,9 +6,9 @@
 //! 历史签过的包也会集体不可验证。用本测试锁住字节串一致性。
 
 use api_contracts::{IntegrityManifest, IntegrityManifestFile};
-use security_core::integrity::{canonicalize_manifest, ManifestFile, ManifestPayload};
+use security_core::integrity::{canonicalize_manifest, Mf, ManifestPayload};
 
-fn fixture_files() -> (Vec<IntegrityManifestFile>, Vec<ManifestFile>) {
+fn fixture_files() -> (Vec<IntegrityManifestFile>, Vec<Mf>) {
     let api = vec![
         IntegrityManifestFile {
             path: "bin/app".into(),
@@ -21,7 +21,7 @@ fn fixture_files() -> (Vec<IntegrityManifestFile>, Vec<ManifestFile>) {
     ];
     let sec = api
         .iter()
-        .map(|f| ManifestFile {
+        .map(|f| Mf {
             path: f.path.clone(),
             sha256: f.sha256.clone(),
         })
