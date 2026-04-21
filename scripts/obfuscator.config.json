@@ -34,12 +34,12 @@
   "renameProperties": false,
   "identifierNamesGenerator": "hexadecimal",
 
-  "selfDefending": true,
-  "debugProtection": true,
-  "debugProtectionInterval": 4000,
+  "selfDefending": false,
+  "debugProtection": false,
   "disableConsoleOutput": false,
 
   "_note_renameGlobals": "renameGlobals=true 会重命名顶层 const / let / var，但可能破坏 Vite/ES module 导出；保守关闭",
   "_note_renameProperties": "renameProperties=true 会重命名对象 key，但 Tauri invoke(name) 依赖字符串名，Vue 组件 props 也依赖，必须关闭",
-  "_note_disableConsoleOutput": "开启 true 会吃掉 console.log/warn/error，线上排障不利；保持 false"
+  "_note_disableConsoleOutput": "开启 true 会吃掉 console.log/warn/error，线上排障不利；保持 false",
+  "_note_selfDefending_debugProtection": "两者内部会注入 new Function('debugger') / (function(){}).constructor(...) 形式的动态代码。Tauri 默认 CSP 为 script-src 'self'（无 'unsafe-eval'），在 Windows WebView2（Chromium）下会被严格拦截并导致 Vue 初始化抛错，出现页面部分空白；Mac WKWebView 对同规则宽松故症状不触发。关闭以保证跨平台一致可运行，反调试改由 Rust 端硬化兜底（remap/location-detail 等）。"
 }
