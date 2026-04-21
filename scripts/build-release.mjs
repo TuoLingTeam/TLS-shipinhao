@@ -45,7 +45,14 @@ function log(section, msg) {
 
 function run(cmd, opts = {}) {
   log("run", `${cmd}${opts.cwd ? ` (cwd=${relative(repoRoot, opts.cwd)})` : ""}`);
-  execSync(cmd, { stdio: "inherit", ...opts });
+  // Tauri CLI 的 --ci 只接受 true/false；若宿主 shell 已有 CI=1（部分 zsh 默认），
+  // 透传给子进程会让 cargo tauri build 直接报错。这里把 env 统一规整一遍。
+  const env = { ...process.env, ...(opts.env || {}) };
+  const ciRaw = (env.CI ?? "").toString().trim();
+  if (ciRaw && !/^(true|false)$/i.test(ciRaw)) {
+    env.CI = ciRaw === "0" ? "false" : "true";
+  }
+  execSync(cmd, { stdio: "inherit", ...opts, env });
 }
 
 function ensureDir(dir) {
