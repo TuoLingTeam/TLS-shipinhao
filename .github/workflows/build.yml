@@ -164,15 +164,14 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri app
+      - name: Build obfuscated release (frontend obfuscate + cargo tauri build)
         shell: pwsh
         env:
-          # CI 专用 release profile 覆盖：本地 Cargo.toml 仍保持 lto=true / codegen-units=1 的最高优化，
-          # CI 这边改用 thin LTO + 16 codegen-units，大幅压缩 Windows 编译时间，产物体积略增但无大影响。
+          # CI 专用 release profile 覆盖：本地 Cargo.toml 保持 lto=true / codegen-units=1 的最高优化；
+          # CI 改用 thin LTO + 16 codegen-units，显著压缩 Windows 编译时间，产物体积略增但无大影响。
           CARGO_PROFILE_RELEASE_LTO: thin
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-        run: cargo tauri build
-        working-directory: apps/desktop
+        run: node scripts/build-release.mjs
 
       - name: Upload Windows portable exe
         shell: pwsh
@@ -253,14 +252,13 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri app
+      - name: Build obfuscated release (frontend obfuscate + cargo tauri build)
         shell: bash
         env:
           # CI 专用 release profile 覆盖：与 Windows 同策略，本地 Cargo.toml 仍保持最高优化
           CARGO_PROFILE_RELEASE_LTO: thin
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-        run: cargo tauri build
-        working-directory: apps/desktop
+        run: node scripts/build-release.mjs
 
       - name: Upload macOS asset
         shell: bash
