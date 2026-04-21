@@ -9,6 +9,7 @@ import type {
   OrderSyncProgressEvent,
   OrderSyncResult,
 } from "./order.types";
+import { toErrorMessage } from "../shared/toErrorMessage";
 
 export function useOrder() {
   const store = useOrderStore();
@@ -79,7 +80,7 @@ export function useOrder() {
       await loadCacheStatus();
       return sync;
     } catch (e) {
-      store.error = typeof e === "string" ? e : String(e);
+      store.error = toErrorMessage(e);
       return null;
     } finally {
       store.loading = false;

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useDeliveryStore } from "./delivery.store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
+import { toErrorMessage } from "../shared/toErrorMessage";
 import type {
   BatchDeliveryProgressPayload,
   BatchDeliveryStep,
@@ -109,7 +110,7 @@ export function useDelivery() {
     try {
       await invoke<boolean>("cancel_batch_delivery");
     } catch (err) {
-      store.error = typeof err === "string" ? err : String(err);
+      store.error = toErrorMessage(err);
     }
   }
 

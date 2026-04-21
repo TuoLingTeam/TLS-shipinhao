@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toErrorMessage } from "../shared/toErrorMessage";
 
 interface UpdateInfo {
   app: string;
@@ -72,7 +73,7 @@ async function openExternal(url: string, slot: ExternalSlot) {
   try {
     await invoke("open_external_url", { url });
   } catch (err) {
-    openError.value = typeof err === "string" ? err : String(err);
+    openError.value = toErrorMessage(err);
   } finally {
     opening.value = null;
   }

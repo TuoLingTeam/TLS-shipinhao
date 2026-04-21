@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { computed, ref } from "vue";
+import { toErrorMessage } from "./toErrorMessage";
 
 export interface CookieHealthSnapshot {
   healthy: boolean;
@@ -38,7 +39,7 @@ export const useCookieHealthStore = defineStore("cookie-health", () => {
       const current = await invoke<CookieHealthSnapshot>("get_cookie_health");
       snapshot.value = current;
     } catch (err) {
-      error.value = typeof err === "string" ? err : String(err);
+      error.value = toErrorMessage(err);
     }
   }
 
@@ -50,7 +51,7 @@ export const useCookieHealthStore = defineStore("cookie-health", () => {
       const result = await invoke<CookieHealthSnapshot>("check_cookie_health");
       snapshot.value = result;
     } catch (err) {
-      error.value = typeof err === "string" ? err : String(err);
+      error.value = toErrorMessage(err);
     } finally {
       loading.value = false;
     }

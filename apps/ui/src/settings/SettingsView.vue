@@ -9,6 +9,7 @@ import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
+import { toErrorMessage } from "../shared/toErrorMessage";
 import { isSettingsSection } from "../layout/navigation";
 import type { SettingsSectionId } from "../layout/navigation";
 
@@ -86,7 +87,7 @@ async function loadCookieStatus() {
     cookieConfigured.value = status.configured;
     cookiePath.value = status.cookie_path;
   } catch (e) {
-    loadError.value = typeof e === "string" ? e : String(e);
+    loadError.value = toErrorMessage(e);
   }
 }
 
@@ -106,7 +107,7 @@ async function handlePickSaveDir() {
     const result = await invoke<{ selected: boolean; cookie_path: string }>("pick_cookie_save_dir");
     cookiePath.value = result.cookie_path;
   } catch (e) {
-    saveError.value = typeof e === "string" ? e : String(e);
+    saveError.value = toErrorMessage(e);
   } finally {
     pickDirLoading.value = false;
   }
@@ -166,7 +167,7 @@ async function handleSaveManualCookie() {
     flashSaveNotice("manual");
     manualCookie.value = "";
   } catch (e) {
-    saveError.value = typeof e === "string" ? e : String(e);
+    saveError.value = toErrorMessage(e);
   } finally {
     manualSaveLoading.value = false;
   }
@@ -179,7 +180,7 @@ async function handleOpenLogin() {
     await invoke("open_cookie_login");
     startCookiePoll();
   } catch (e) {
-    saveError.value = typeof e === "string" ? e : String(e);
+    saveError.value = toErrorMessage(e);
   } finally {
     loginLoading.value = false;
   }

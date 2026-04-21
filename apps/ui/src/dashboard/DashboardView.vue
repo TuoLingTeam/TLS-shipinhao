@@ -48,85 +48,104 @@ const lastSyncAt = computed(() => orderStore.cacheStatus?.last_sync_at ?? orderS
 const matchedReviewCount = computed(() => reviewStore.results.filter((item) => item.matched).length);
 const unmatchedReviewCount = computed(() => reviewStore.results.length - matchedReviewCount.value);
 
-const metrics = computed(() => [
-  {
-    key: "license",
-    label: "授权状态",
-    value: licenseText.value,
-    hint:
-      appStore.isLicensed
-        ? "已激活"
-        : daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value < 0
-          ? `已过期 ${Math.abs(daysUntilLicenseExpires.value)} 天`
-          : "请前往设置中心激活",
-    tone: licenseTone.value as Tone,
-  },
-  {
+interface MetricTile {
+  key: string;
+  label: string;
+  value: string;
+  hint: string;
+  tone: Tone;
+}
+
+const licenseMetric = computed<MetricTile>(() => ({
+  key: "license",
+  label: "授权状态",
+  value: licenseText.value,
+  hint: appStore.isLicensed
+    ? "已激活"
+    : daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value < 0
+      ? `已过期 ${Math.abs(daysUntilLicenseExpires.value)} 天`
+      : "请前往设置中心激活",
+  tone: licenseTone.value,
+}));
+
+const cookieMetric = computed<MetricTile>(() => {
+  const status = cookieHealth.status;
+  const lastCheckedAt = cookieHealth.snapshot.last_checked_at;
+  return {
     key: "cookie",
     label: "Cookie 状态",
     value:
-      cookieHealth.status === "healthy"
+      status === "healthy"
         ? "可用"
-        : cookieHealth.status === "unhealthy"
+        : status === "unhealthy"
           ? "已失效"
-          : cookieHealth.status === "unconfigured"
+          : status === "unconfigured"
             ? "未配置"
             : "待探测",
-    hint:
-      cookieHealth.snapshot.last_checked_at
-        ? `最近探测：${formatDateTime(cookieHealth.snapshot.last_checked_at)}`
-        : "启动后自动探测",
-    tone: (cookieHealth.status === "healthy"
-      ? "success"
-      : cookieHealth.status === "unhealthy"
-        ? "error"
-        : cookieHealth.status === "unconfigured"
-          ? "warn"
-          : "idle") as Tone,
-  },
-  {
-    key: "cache",
-    label: "最近 30 天缓存",
-    value: cacheCount.value > 0 ? String(cacheCount.value) : "--",
-    hint:
-      cacheCount.value === 0
-        ? "点击下方缓存同步建立本地订单副本"
-        : missingSegments.value > 0
-          ? `存在 ${missingSegments.value} 个缺口，建议同步补齐`
-          : lastSyncAt.value
-            ? `最近同步：${formatDateTime(lastSyncAt.value)}`
-            : "已建立，建议定期刷新",
-    tone: (cacheCount.value === 0
-      ? "warn"
+    hint: lastCheckedAt ? `最近探测：${formatDateTime(lastCheckedAt)}` : "启动后自动探测",
+    tone:
+      status === "healthy"
+        ? "success"
+        : status === "unhealthy"
+          ? "error"
+          : status === "unconfigured"
+            ? "warn"
+            : "idle",
+  };
+});
+
+const cacheMetric = computed<MetricTile>(() => ({
+  key: "cache",
+  label: "最近 30 天缓存",
+  value: cacheCount.value > 0 ? String(cacheCount.value) : "--",
+  hint:
+    cacheCount.value === 0
+      ? "点击下方缓存同步建立本地订单副本"
       : missingSegments.value > 0
-        ? "warn"
-        : "success") as Tone,
-  },
-  {
+        ? `存在 ${missingSegments.value} 个缺口，建议同步补齐`
+        : lastSyncAt.value
+          ? `最近同步：${formatDateTime(lastSyncAt.value)}`
+          : "已建立，建议定期刷新",
+  tone:
+    cacheCount.value === 0 ? "warn" : missingSegments.value > 0 ? "warn" : "success",
+}));
+
+const reviewMetric = computed<MetricTile>(() => {
+  const total = reviewStore.results.length;
+  return {
     key: "review",
     label: "评价匹配",
-    value: reviewStore.results.length > 0 ? `${matchedReviewCount.value}/${reviewStore.results.length}` : "--",
+    value: total > 0 ? `${matchedReviewCount.value}/${total}` : "--",
     hint:
-      reviewStore.results.length === 0
+      total === 0
         ? "未执行匹配"
         : unmatchedReviewCount.value > 0
           ? `${unmatchedReviewCount.value} 条待人工核实`
           : "全部匹配成功",
-    tone: (reviewStore.results.length === 0 ? "idle" : unmatchedReviewCount.value > 0 ? "warn" : "success") as Tone,
-  },
-  {
+    tone:
+      total === 0 ? "idle" : unmatchedReviewCount.value > 0 ? "warn" : "success",
+  };
+});
+
+const deliveryMetric = computed<MetricTile>(() => {
+  const progress = deliveryStore.batchProgress;
+  return {
     key: "delivery",
     label: "发货任务",
-    value: deliveryStore.batchProgress ? String(deliveryStore.batchProgress.totalCount) : "--",
-    hint: deliveryStore.batchProgress
-      ? `成功 ${deliveryStore.batchProgress.successCount} · 失败 ${deliveryStore.batchProgress.failureCount}`
+    value: progress ? String(progress.totalCount) : "--",
+    hint: progress
+      ? `成功 ${progress.successCount} · 失败 ${progress.failureCount}`
       : "本次启动尚未执行批量",
-    tone: (deliveryStore.batchProgress
-      ? deliveryStore.batchProgress.failureCount > 0
-        ? "warn"
-        : "success"
-      : "idle") as Tone,
-  },
+    tone: progress ? (progress.failureCount > 0 ? "warn" : "success") : "idle",
+  };
+});
+
+const metrics = computed<MetricTile[]>(() => [
+  licenseMetric.value,
+  cookieMetric.value,
+  cacheMetric.value,
+  reviewMetric.value,
+  deliveryMetric.value,
 ]);
 
 const alerts = computed(() => {

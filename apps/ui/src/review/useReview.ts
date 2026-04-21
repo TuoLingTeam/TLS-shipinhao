@@ -5,6 +5,7 @@ import { useOrderStore } from "../order/order.store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { useOrder } from "../order/useOrder";
 import type { OrderMatchResult, ReviewMatchResponse } from "./review.types";
+import { toErrorMessage } from "../shared/toErrorMessage";
 
 export function useReview() {
   const store = useReviewStore();
@@ -14,6 +15,27 @@ export function useReview() {
   const reviewInvoke = useTauriInvoke<ReviewMatchResponse>("find_reviews");
   const qualityRefundInvoke = useTauriInvoke<ReviewMatchResponse>("find_quality_refund_orders");
   const loading = computed(() => reviewInvoke.loading.value || qualityRefundInvoke.loading.value);
+
+  /**
+   * 从匹配结果中挑出可自动带入发货的订单号集合（已去重）。
+   *
+   * 差评模式（strictExactMatch）：仅选 strategy === "exact_match"（满分 100）的条目，
+   * 避免低置信度误发；品退模式：全量带入后端判定为 matched 的订单号。
+   */
+  function pickAutofillOrderIds(
+    results: OrderMatchResult[],
+    options: { strictExactMatch: boolean },
+  ): string[] {
+    const ids = results
+      .filter(
+        (item) =>
+          item.matched &&
+          item.order_id?.trim() &&
+          (!options.strictExactMatch || item.strategy === "exact_match"),
+      )
+      .map((item) => item.order_id.trim());
+    return Array.from(new Set(ids));
+  }
 
   function applyResults(
     payload: ReviewMatchResponse,
@@ -26,24 +48,9 @@ export function useReview() {
     store.cacheSyncPerformed = payload.cache_sync_performed;
     store.cacheSyncWrittenCount = payload.cache_sync_written_count;
 
-    // 差评模式：仅选 "exact_match"（满分 100）自动带入，避免低置信度误发
-    // 品退模式：接口直返订单号，全量带入
-    const autofillOrderIds =
-      source === "评价匹配"
-        ? payload.results
-            .filter(
-              (item) =>
-                item.matched &&
-                item.order_id?.trim() &&
-                item.strategy === "exact_match",
-            )
-            .map((item) => item.order_id.trim())
-        : payload.results
-            .filter((item) => item.matched && item.order_id?.trim())
-            .map((item) => item.order_id.trim());
-
-    // 去重：同一订单号只保留第一次
-    const uniqueOrderIds = Array.from(new Set(autofillOrderIds));
+    const uniqueOrderIds = pickAutofillOrderIds(payload.results, {
+      strictExactMatch: source === "评价匹配",
+    });
 
     if (uniqueOrderIds.length > 0) {
       deliveryStore.prefillOrders(uniqueOrderIds, source);
@@ -64,13 +71,13 @@ export function useReview() {
       if (payload) {
         applyResults(payload, "评价匹配");
         void Promise.all([loadRecentCache(), loadCacheStatus()]).catch((error) => {
-          orderStore.error = typeof error === "string" ? error : String(error);
+          orderStore.error = toErrorMessage(error);
         });
       } else {
         store.setError(reviewInvoke.error.value ?? "查找失败");
       }
     } catch (error) {
-      orderStore.error = typeof error === "string" ? error : String(error);
+      orderStore.error = toErrorMessage(error);
       store.setError(`差评匹配失败：${orderStore.error}`);
     } finally {
       store.setLoading(false);
@@ -97,13 +104,13 @@ export function useReview() {
         // 品退链路刷新轻量的缓存状态（订单计数/覆盖缺口）即可；
         // 完整订单列表由「订单管理」按需拉取，不在此链路触发，避免多余开销。
         void loadCacheStatus().catch((error) => {
-          orderStore.error = typeof error === "string" ? error : String(error);
+          orderStore.error = toErrorMessage(error);
         });
       } else {
         store.setError(qualityRefundInvoke.error.value ?? "获取品退订单失败");
       }
     } catch (error) {
-      orderStore.error = typeof error === "string" ? error : String(error);
+      orderStore.error = toErrorMessage(error);
       store.setError(`品退匹配失败：${orderStore.error}`);
     } finally {
       store.setLoading(false);

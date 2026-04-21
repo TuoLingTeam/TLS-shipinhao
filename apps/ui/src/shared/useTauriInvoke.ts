@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { toErrorMessage } from "./toErrorMessage";
 
 export function useTauriInvoke<T>(command: string) {
   const data = ref<T | null>(null);
@@ -14,7 +15,7 @@ export function useTauriInvoke<T>(command: string) {
       data.value = result;
       return result;
     } catch (e) {
-      error.value = typeof e === "string" ? e : String(e);
+      error.value = toErrorMessage(e);
       return null;
     } finally {
       loading.value = false;
