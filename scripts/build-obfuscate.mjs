@@ -26,7 +26,8 @@
 //   node scripts/build-obfuscate.mjs --skip-frontend  复用现有 apps/ui/dist
 // ========================================
 
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
+import { createRequire } from "node:module";
 import {
   mkdirSync,
   rmSync,
@@ -112,6 +113,12 @@ function run(cmd, opts = {}) {
 
 function ensureDir(d) {
   mkdirSync(d, { recursive: true });
+}
+
+/** 读取混淆配置，去掉 JSON 里以下划线开头的说明性字段（避免传入 obfuscate 报错） */
+function loadObfuscatorOptions() {
+  const raw = JSON.parse(readFileSync(OBFUSCATOR_CONFIG, "utf8"));
+  return Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("_")));
 }
 
 function cleanDir(d) {
@@ -214,6 +221,12 @@ function stage_obfuscateJs() {
   walk(distDir);
   log("obfuscate", `发现 ${jsFiles.length} 个 .js 文件待混淆`);
 
+  // Windows 上 spawnSync("pnpm", …) 往往找不到 pnpm.cmd，子进程静默失败且 stderr 为空。
+  // 直接从 apps/ui 解析依赖并调用 obfuscate API，与平台无关。
+  const requireUi = createRequire(join(REPO_ROOT, "apps", "ui", "package.json"));
+  const { obfuscate } = requireUi("javascript-obfuscator");
+  const obfuscatorOptions = loadObfuscatorOptions();
+
   let okCount = 0;
   let failCount = 0;
   let srcTotal = 0;
@@ -224,38 +237,11 @@ function stage_obfuscateJs() {
     const srcSize = statSync(f).size;
     const start = Date.now();
 
-    const result = spawnSync(
-      "pnpm",
-      [
-        "--filter",
-        "tls-shipinhao-ui",
-        "exec",
-        "javascript-obfuscator",
-        f,
-        "--output",
-        f,
-        "--config",
-        OBFUSCATOR_CONFIG,
-      ],
-      {
-        stdio: ["ignore", "pipe", "pipe"],
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        timeout: 180_000,
-      },
-    );
-    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-
-    if (result.status !== 0) {
-      const errHead = (result.stderr || "")
-        .split("\n")
-        .slice(0, 3)
-        .map((l) => `   ${l}`)
-        .join("\n");
-      log("obfuscate", `⚠️  失败(${elapsed}s)：${rel}`);
-      console.error(errHead);
-      failCount++;
-    } else {
+    try {
+      const code = readFileSync(f, "utf8");
+      const obfuscated = obfuscate(code, obfuscatorOptions);
+      writeFileSync(f, obfuscated.getObfuscatedCode(), "utf8");
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       const dstSize = statSync(f).size;
       srcTotal += srcSize;
       dstTotal += dstSize;
@@ -268,6 +254,11 @@ function stage_obfuscateJs() {
         `🔒 ${rel} ${formatKB(srcSize)} → ${formatKB(dstSize)} (${ratio}, ${elapsed}s)`,
       );
       okCount++;
+    } catch (err) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      log("obfuscate", `⚠️  失败(${elapsed}s)：${rel}`);
+      console.error(err?.stack || String(err));
+      failCount++;
     }
   }
 
