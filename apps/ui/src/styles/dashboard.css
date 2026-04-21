@@ -107,10 +107,17 @@
   opacity: 1;
 }
 
-/* 仪表盘：五个状态卡，按 tone 着色左上边框 */
+/* 仪表盘：三组卡片统一视觉节律。
+ * 目标：指标卡 / 快捷入口 / 底部元数据三组所有卡片使用同一个高度（7rem），
+ * 让整个仪表盘呈规整的等距网格感，不因内容多寡而有高度参差。
+ * 指标卡 space-between 让 header / value / hint 上中下均匀分布；
+ * 其余两组依赖内部 items-center / h-full 自行做垂直居中。
+ */
 .dashboard-metric-card {
   transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
   border-top: 3px solid transparent;
+  height: 9rem;
+  justify-content: space-between;
 }
 
 /* 较历史 compact 卡更「撑满」：控制主数字与辅文尺寸，避免沿用 .metric-value 2rem 在 5 列下过爆 */
@@ -182,7 +189,7 @@
     transform 200ms ease,
     box-shadow 220ms ease,
     border-color 220ms ease;
-  min-height: 4.25rem;
+  height: 5rem;
 }
 
 .dashboard-meta-card:hover {
@@ -259,15 +266,18 @@
   font-size: 0.88rem;
 }
 
-/* 仪表盘：快捷入口 2x2 卡片网格 —— 行高略压缩，行间 gap 由 Tailwind gap-y-* 控制 */
+/* 仪表盘：快捷入口 2x2 卡片网格。
+ * 统一卡高策略下不再用 1fr 动态分配行高，rows 按卡片固定高度自然展开。
+ */
 .dashboard-shortcuts-grid {
-  grid-template-rows: repeat(2, minmax(68px, 1fr));
+  grid-template-rows: repeat(2, auto);
 }
 
-/* 仪表盘：四个快捷入口，按业务域给图标上不同配色 */
+/* 仪表盘：四个快捷入口，按业务域给图标上不同配色。
+ * 与指标卡 / 元数据卡统一为 7rem，保持仪表盘整体卡片高度一致。
+ */
 .dashboard-shortcut {
-  min-height: 64px;
-  /* 去掉 max-height，让 shortcuts-grid 的 1fr rows 按剩余空间自动拉伸，避免仪表盘底部留空白 */
+  height: 7rem;
   padding: 0.5rem 0.7rem;
   transition: transform 180ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }

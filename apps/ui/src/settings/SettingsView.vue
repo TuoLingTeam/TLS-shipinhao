@@ -8,6 +8,7 @@ import { useAppStore } from "../app.store";
 import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
 import { useCookieHealthStore } from "../shared/cookieHealth";
+import { useRuntimeClock } from "../shared/useRuntimeClock";
 import { isSettingsSection } from "../layout/navigation";
 import type { SettingsSectionId } from "../layout/navigation";
 
@@ -20,6 +21,7 @@ const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
 const route = useRoute();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
+const { clockText, uptimeText } = useRuntimeClock();
 
 /** 最近一次成功保存来源：`auto`=登录窗口轮询；`manual`=手动粘贴后保存 */
 const saveNotice = ref<null | "auto" | "manual">(null);
@@ -344,6 +346,7 @@ onBeforeUnmount(() => {
         <p v-if="saveError" class="text-xs text-red-600">{{ saveError }}</p>
       </article>
 
+      <div class="settings-right-column flex min-h-0 min-w-0 flex-col gap-app">
       <article
         id="settings-section-license"
         data-testid="settings-section-license"
@@ -447,8 +450,17 @@ onBeforeUnmount(() => {
             <span class="settings-info-label">作者微信</span>
             <span class="settings-info-value settings-info-value--mono">{{ AUTHOR_WECHAT }}</span>
           </div>
+          <div class="settings-info-item" title="从本次启动到现在的累计运行时长">
+            <span class="settings-info-label">会话时长</span>
+            <span class="settings-info-value">{{ uptimeText }}</span>
+          </div>
+          <div class="settings-info-item" title="系统当前时间（每 30 秒刷新）">
+            <span class="settings-info-label">当前时间</span>
+            <span class="settings-info-value settings-info-value--mono">{{ clockText }}</span>
+          </div>
         </div>
       </article>
+      </div>
     </section>
   </div>
 </template>

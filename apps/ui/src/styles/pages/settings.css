@@ -335,35 +335,46 @@
   overflow-wrap: anywhere;
 }
 
-/* 设置布局：3 个独立卡片（Cookie / 授权 / 应用）平级排布
-   桌面双列：Cookie 在左、授权在右上、应用在右下；
-   单列布局下走 @media 重排成纵向堆叠（Cookie → 授权 → 应用）。 */
+/* 设置布局：左列 Cookie + 右列（授权 + 应用 flex column）。
+ * 改为 2 列 grid + 右列 flex：
+ * - layout 通过 flex-1 撑满 shell 高度，消除页面底部空白；
+ * - right-column 用 flex column 管理内部排布，应用信息卡 flex-grow 吸收剩余垂直空间，
+ *   让左右两侧视觉等高，同时不依赖 grid 跨行 min-content 的隐式分配。
+ * 单列布局（< 980px）在 @media 内重排成纵向堆叠（Cookie → 授权 → 应用）。 */
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  grid-template-areas:
-    "cookie license"
-    "cookie about";
-  /* 两行均按自身内容自然高度（不强制 1fr），防止右列在内容少时被拉高触发多余滚动；
-     Cookie 跨两行时高度 = license 行 + gap + about 行，textarea flex-1 吸收剩余空间不过度生长。 */
-  grid-template-rows: auto auto;
+  grid-template-areas: "cookie right";
+  grid-template-rows: minmax(0, 1fr);
   gap: 1.25rem;
   align-items: stretch;
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .settings-section-card--cookie {
   grid-area: cookie;
+  min-height: 0;
+}
+
+/* 右列：纵向堆叠授权与应用信息卡，允许应用信息卡向下扩展占据剩余空间 */
+.settings-right-column {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+  min-height: 0;
 }
 
 .settings-section-card--license {
-  grid-area: license;
+  flex: 0 0 auto;
   min-height: min-content;
 }
 
 .settings-section-card--about {
-  grid-area: about;
-  /* 最小=内容高度（防止被压断），默认 stretch 填满格子（与授权卡、左侧 Cookie 齐底） */
+  flex: 1 1 auto;
   min-height: min-content;
 }
 
@@ -847,12 +858,20 @@
     grid-template-columns: 1fr;
     grid-template-areas:
       "cookie"
-      "license"
-      "about";
+      "right";
     /* 单列布局按内容自然高度，由外层 main 接管滚动；
        不强制撑满，避免单卡内容少时被无意义拉伸 */
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
     min-height: auto;
+    flex: 0 0 auto;
+  }
+
+  /* 窄屏下右列收缩为按内容高度，避免 about 卡被无意义 flex-grow 拉伸 */
+  .settings-right-column {
+    min-height: 0;
+  }
+
+  .settings-section-card--about {
     flex: 0 0 auto;
   }
 }

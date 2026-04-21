@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/order.store";
@@ -12,6 +12,7 @@ import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/license.types";
 import { buildSettingsLocation } from "../layout/navigation";
 import { AUTHOR_WECHAT } from "../shared/brand";
+import { useRuntimeClock } from "../shared/useRuntimeClock";
 
 const appStore = useAppStore();
 const orderStore = useOrderStore();
@@ -246,42 +247,13 @@ const alertToneClass: Record<"warn" | "error", string> = {
   error: "dashboard-alert--error",
 };
 
-// Hero 的元数据 chip：版本 / 作者 / 本次启动时长 / 当前时间
-// 本次启动时长基于 appStartedAt（模块级常量）而非 onMounted 内的 ref，
-// 避免用户切换路由重新挂载时「已运行」被重置。
-const appStartedAt = new Date();
-const now = ref(new Date());
-let tickerTimer: ReturnType<typeof setInterval> | null = null;
-
-const clockText = computed(() => {
-  const hh = String(now.value.getHours()).padStart(2, "0");
-  const mm = String(now.value.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-});
-
-const uptimeText = computed(() => {
-  const diffMs = now.value.getTime() - appStartedAt.getTime();
-  const totalMin = Math.max(0, Math.floor(diffMs / 60_000));
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h > 0) return `已运行 ${h}h ${m}m`;
-  if (m > 0) return `已运行 ${m} 分钟`;
-  return `刚刚启动`;
-});
+// 启动时长与当前时钟抽到 useRuntimeClock：模块级 appStartedAt 让切换路由时「已运行」不被重置，
+// 同时通过引用计数共享单个定时器，避免仪表盘与设置页同时存在时跑重复的 setInterval。
+const { clockText, uptimeText } = useRuntimeClock();
 
 onMounted(async () => {
   void loadCacheStatus();
   void cookieHealth.refreshSilently();
-  tickerTimer = setInterval(() => {
-    now.value = new Date();
-  }, 30_000); // 半分钟粒度足够，避免频繁重渲染
-});
-
-onUnmounted(() => {
-  if (tickerTimer) {
-    clearInterval(tickerTimer);
-    tickerTimer = null;
-  }
 });
 </script>
 
@@ -358,7 +330,7 @@ onUnmounted(() => {
       </article>
     </div>
 
-    <section class="surface-panel dashboard-shortcuts-panel flex min-h-0 flex-1 flex-col p-3 lg:p-4">
+    <section class="surface-panel dashboard-shortcuts-panel flex min-h-0 shrink-0 flex-col p-3 lg:p-4">
       <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
         <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
         <span class="text-[11px] text-slate-400">一键直达核心业务</span>
@@ -366,7 +338,7 @@ onUnmounted(() => {
 
       <div
         data-testid="dashboard-shortcuts"
-        class="dashboard-shortcuts-grid subsystem-summary-strip grid flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:gap-x-5 sm:gap-y-4"
+        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-x-4 gap-y-3 sm:gap-x-5 sm:gap-y-4"
       >
         <RouterLink
           v-for="item in quickLinks"
