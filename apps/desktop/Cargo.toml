@@ -8,7 +8,7 @@ license.workspace = true
 tauri-build = { workspace = true, features = [] }
 
 [dependencies]
-tauri = { workspace = true, features = ["devtools"] }
+tauri = { workspace = true, features = [] }
 desktop-services = { path = "../../crates/desktop-services" }
 domain-core = { path = "../../crates/domain-core" }
 api-contracts = { path = "../../backend/api-contracts" }
