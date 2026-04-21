@@ -174,17 +174,37 @@ jobs:
         run: cargo tauri build
         working-directory: apps/desktop
 
-      - name: Upload Windows asset
+      - name: Upload Windows assets (installer + portable)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $version = "${{ needs.extract-version.outputs.app_version }}"
+
+          # 1) NSIS 安装版：target/release/bundle/nsis/*.exe
           $nsis = Get-ChildItem -Path "target/release/bundle/nsis/*.exe" -Recurse | Select-Object -First 1
           if ($nsis) {
             gh release upload $tag "$($nsis.FullName)#TLS-shipinhao-v$version-setup.exe" `
               --repo "${{ github.repository }}" --clobber
+          } else {
+            Write-Host "NSIS installer not found under target/release/bundle/nsis/"
+          }
+
+          # 2) 免安装便携版：Tauri 编译的原生 exe 位于 target/release/desktop.exe
+          #    Windows 10/11 自带 WebView2 Runtime 时可双击直接运行，无需安装
+          $portable = Get-ChildItem -Path "target/release/desktop.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $portable) {
+            # 回退：兜底按 productName 派生的可执行文件位置
+            $portable = Get-ChildItem -Path "target/release/*.exe" -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notlike "*_deps*" -and $_.Name -notlike "build-*" -and $_.Name -notmatch "^(cargo|rustc)" } |
+              Select-Object -First 1
+          }
+          if ($portable) {
+            gh release upload $tag "$($portable.FullName)#TLS-shipinhao-v$version-portable.exe" `
+              --repo "${{ github.repository }}" --clobber
+          } else {
+            Write-Host "Portable exe not found under target/release/"
           }
 
   build-macos:
