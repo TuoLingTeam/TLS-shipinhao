@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { BatchDeliveryStep } from "./delivery.types";
+import type { BatchDeliveryStep } from "./types";
 
 export interface BatchProgress {
   totalCount: number;

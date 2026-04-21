@@ -1,6 +1,6 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
-use crate::adapters::http_common::{build_client, build_weixin_shop_headers};
+use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
 use desktop_services::order_fetcher::{backoff_seconds, is_api_rate_limited, is_http_rate_limited};
 use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};

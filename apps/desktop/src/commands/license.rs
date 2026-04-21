@@ -1,4 +1,4 @@
-use crate::adapters::http_license_client::{
+use crate::adapters::license::{
     normalize_license_state, HttpLicenseClient, Lar,
 };
 use crate::app_settings::license_api_base_urls;

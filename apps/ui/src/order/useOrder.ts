@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useOrderStore } from "./order.store";
+import { useOrderStore } from "./store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { localDaysAgoStartIso, localYesterdayEndIso } from "../shared/format";
 import type {
@@ -8,7 +8,7 @@ import type {
   OrderCacheStatus,
   OrderSyncProgressEvent,
   OrderSyncResult,
-} from "./order.types";
+} from "./types";
 import { toErrorMessage } from "../shared/toErrorMessage";
 
 export function useOrder() {

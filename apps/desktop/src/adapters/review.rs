@@ -1,4 +1,4 @@
-use crate::adapters::http_common::{build_client, build_weixin_shop_headers};
+use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use desktop_services::order_fetcher::{
     backoff_seconds, is_api_rate_limited, is_http_rate_limited, RATE_LIMIT_RETRY_COUNT,
 };

@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Emitter, State};
 
-use crate::adapters::http_delivery_gateway::HttpDeliveryGateway;
+use crate::adapters::delivery::HttpDeliveryGateway;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::shared::require_cookie_credentials;
 use crate::error::AppError;

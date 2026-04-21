@@ -5,7 +5,7 @@ import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DeliveryView from "./DeliveryView.vue";
 import { useAppStore } from "../app.store";
-import { useDeliveryStore } from "./delivery.store";
+import { useDeliveryStore } from "./store";
 
 vi.mock("../delivery/useDelivery", () => ({
   useDelivery: () => ({

@@ -1,9 +1,9 @@
 use tauri::{AppHandle, State};
 
-use crate::adapters::http_order_search::parse_iso_window;
-use crate::adapters::http_order_search::HttpOrderCacheFinder;
-use crate::adapters::http_quality_refund_source::HttpQualityRefundSource;
-use crate::adapters::http_review_source::HttpReviewSource;
+use crate::adapters::order::parse_iso_window;
+use crate::adapters::order::HttpOrderCacheFinder;
+use crate::adapters::quality_refund::HttpQualityRefundSource;
+use crate::adapters::review::HttpReviewSource;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::order::{
     emit_order_sync_progress, mask_order_cache_error, recent_order_cache_status,

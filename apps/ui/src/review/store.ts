@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { OrderMatchResult, ReviewQuery } from "../review/review.types";
+import type { OrderMatchResult, ReviewQuery } from "./types";
 
 export type ReviewFetchMode = "bad_review" | "quality_refund";
 

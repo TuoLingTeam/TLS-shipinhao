@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useOrder } from "../order/useOrder";
-import { useOrderStore } from "../order/order.store";
+import { useOrderStore } from "../order/store";
 import { useAppStore } from "../app.store";
 import OrderSearchBar from "../order/OrderSearchBar.vue";
 import { formatCent } from "../shared/format";

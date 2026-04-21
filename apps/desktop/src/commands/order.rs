@@ -1,5 +1,5 @@
-use crate::adapters::http_order_search::{parse_iso_window, HttpOrderCacheFinder};
-use crate::adapters::sqlite_order_cache::SqliteOrderCache;
+use crate::adapters::order::{parse_iso_window, HttpOrderCacheFinder};
+use crate::adapters::order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::paths::{cache_data_dir, rich_order_cache_path};
 use crate::commands::shared::require_cookie_credentials;

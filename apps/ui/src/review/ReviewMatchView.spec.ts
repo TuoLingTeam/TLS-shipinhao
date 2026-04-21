@@ -6,7 +6,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import ReviewMatchView from "./ReviewMatchView.vue";
 import { routes } from "../routeRecords";
-import { useReviewStore } from "./review.store";
+import { useReviewStore } from "./store";
 
 describe("ReviewMatchView", () => {
   let pinia: Pinia;

@@ -1,4 +1,4 @@
-use crate::adapters::http_common::{build_client, build_weixin_shop_headers};
+use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, QualityRefundInfo, TimeWindow};
 use reqwest::header::HeaderMap;
 use serde_json::{json, Value};

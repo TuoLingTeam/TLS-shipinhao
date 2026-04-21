@@ -6,7 +6,7 @@ import { APP_VERSION, AUTHOR_WECHAT } from "../shared/brand";
 import { useLicense } from "../license/useLicense";
 import { useAppStore } from "../app.store";
 import { formatDateTime } from "../shared/format";
-import { LICENSE_STATE_LABELS } from "../license/license.types";
+import { LICENSE_STATE_LABELS } from "../license/types";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
 import { toErrorMessage } from "../shared/toErrorMessage";

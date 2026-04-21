@@ -5,9 +5,9 @@ import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardView from "./DashboardView.vue";
 import { useAppStore } from "../app.store";
-import { useDeliveryStore } from "../delivery/delivery.store";
-import { useOrderStore } from "../order/order.store";
-import { useReviewStore } from "../review/review.store";
+import { useDeliveryStore } from "../delivery/store";
+import { useOrderStore } from "../order/store";
+import { useReviewStore } from "../review/store";
 
 const { executeMock, loadCacheStatusMock, refreshSilentlyMock } = vi.hoisted(() => ({
   executeMock: vi.fn(async () => ({

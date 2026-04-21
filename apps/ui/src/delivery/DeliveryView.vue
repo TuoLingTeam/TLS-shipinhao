@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useDelivery } from "../delivery/useDelivery";
-import { useDeliveryStore } from "../delivery/delivery.store";
+import { useDeliveryStore } from "../delivery/store";
 import { useAppStore } from "../app.store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 

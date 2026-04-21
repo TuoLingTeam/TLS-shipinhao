@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useDeliveryStore } from "./delivery.store";
+import { useDeliveryStore } from "./store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { toErrorMessage } from "../shared/toErrorMessage";
 import type {
@@ -8,7 +8,7 @@ import type {
   BatchDeliveryStep,
   BatchDeliveryStepRaw,
   DeliveryUpdateResult,
-} from "./delivery.types";
+} from "./types";
 
 interface BatchResult {
   total_count: number;

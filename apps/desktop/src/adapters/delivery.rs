@@ -1,4 +1,4 @@
-use crate::adapters::http_common::{build_client, build_weixin_shop_headers};
+use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
 use desktop_services::delivery_update::{
     build_raw_update_delivery_payload, determine_delivery_override_from_raw_info,

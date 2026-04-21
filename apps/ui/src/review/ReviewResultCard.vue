@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { OrderMatchResult } from "./review.types";
+import type { OrderMatchResult } from "./types";
 import StatusBadge from "../shared/StatusBadge.vue";
 
 defineProps<{ result: OrderMatchResult }>();

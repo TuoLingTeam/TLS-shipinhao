@@ -5,7 +5,7 @@ import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrderSyncView from "./OrderSyncView.vue";
 import { useAppStore } from "../app.store";
-import { useOrderStore } from "./order.store";
+import { useOrderStore } from "./store";
 
 vi.mock("../order/useOrder", () => ({
   useOrder: () => ({

@@ -4,7 +4,7 @@ use reqwest::Url;
 use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-use crate::adapters::http_order_search::HttpOrderSearchClient;
+use crate::adapters::order::HttpOrderSearchClient;
 use crate::error::AppError;
 use crate::migration::{LegacyPythonMigrator, MigrationPaths, MigrationReport};
 use crate::state::{self, AppState, CookieHealthSnapshot};

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { MatchStrategy } from "./review.types";
+import type { MatchStrategy } from "./types";
 
 const props = defineProps<{
   strategy: MatchStrategy;

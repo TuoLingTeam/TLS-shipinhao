@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { OrderCacheEntry, OrderCacheStatus } from "../order/order.types";
+import type { OrderCacheEntry, OrderCacheStatus } from "./types";
 
 export const useOrderStore = defineStore("order", () => {
   const cachedOrders = ref<OrderCacheEntry[]>([]);

@@ -2,8 +2,8 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useReview } from "../review/useReview";
-import { useReviewStore } from "../review/review.store";
-import { useOrderStore } from "../order/order.store";
+import { useReviewStore } from "../review/store";
+import { useOrderStore } from "../order/store";
 import { useAppStore } from "../app.store";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";

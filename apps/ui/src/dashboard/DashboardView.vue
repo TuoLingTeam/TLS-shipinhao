@@ -2,14 +2,14 @@
 import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { useAppStore } from "../app.store";
-import { useOrderStore } from "../order/order.store";
-import { useReviewStore } from "../review/review.store";
-import { useDeliveryStore } from "../delivery/delivery.store";
+import { useOrderStore } from "../order/store";
+import { useReviewStore } from "../review/store";
+import { useDeliveryStore } from "../delivery/store";
 import { useOrder } from "../order/useOrder";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import AppNavIcon from "../layout/AppNavIcon.vue";
 import { formatDateTime } from "../shared/format";
-import { LICENSE_STATE_LABELS } from "../license/license.types";
+import { LICENSE_STATE_LABELS } from "../license/types";
 import { buildSettingsLocation } from "../layout/navigation";
 import { AUTHOR_WECHAT } from "../shared/brand";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
