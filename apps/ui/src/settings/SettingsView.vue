@@ -33,6 +33,11 @@ const pickDirLoading = ref(false);
 const manualCookie = ref("");
 const manualSaveLoading = ref(false);
 
+function handleClearManualCookie() {
+  manualCookie.value = "";
+  saveError.value = null;
+}
+
 const licenseKey = ref("");
 const licenseMessage = ref<string | null>(null);
 const licenseMessageType = ref<"success" | "error">("success");
@@ -224,7 +229,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="settings-view-shell flex flex-col gap-6 lg:gap-7">
+  <div class="settings-view-shell flex min-h-0 min-w-0 flex-col gap-6 lg:gap-7">
     <section
       data-testid="settings-panels"
       class="settings-layout"
@@ -256,20 +261,6 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="settings-cookie-body flex min-h-0 flex-1 flex-col">
-          <p class="settings-cookie-helper shrink-0">
-            两种方式任选其一：<strong>打开登录页</strong>后由应用自动检测并保存 Cookie；或在下方<strong>手动粘贴</strong>完整 Cookie 请求头后保存。
-          </p>
-
-          <div data-testid="settings-cookie-path" class="settings-cookie-path-box shrink-0">
-            <div class="settings-cookie-path-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
-              </svg>
-              保存位置
-            </div>
-            <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
-          </div>
-
           <div data-testid="settings-cookie-actions" class="settings-cookie-flows flex min-h-0 flex-1 flex-col">
             <div class="settings-cookie-subpanel settings-cookie-subpanel--auto shrink-0">
               <p class="settings-cookie-subpanel-title">方式一 · 浏览器登录（推荐）</p>
@@ -292,6 +283,15 @@ onBeforeUnmount(() => {
                   {{ pickDirLoading ? "选择中..." : "选择保存路径" }}
                 </button>
               </div>
+              <div data-testid="settings-cookie-path" class="settings-cookie-path-box shrink-0">
+                <div class="settings-cookie-path-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
+                  </svg>
+                  保存位置
+                </div>
+                <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
+              </div>
               <div v-if="saveNotice === 'auto'" class="settings-field-footer pt-0.5">
                 <span class="settings-inline-note is-success">Cookie 已自动保存</span>
               </div>
@@ -299,22 +299,30 @@ onBeforeUnmount(() => {
 
             <div class="settings-cookie-subpanel settings-cookie-subpanel--manual flex min-h-0 min-w-0 flex-1 flex-col">
               <p class="settings-cookie-subpanel-title shrink-0">方式二 · 手动粘贴</p>
-              <p class="settings-cookie-subpanel-hint shrink-0">适合已自行复制请求头、或自动链路无法完整拿到 Cookie 时使用。</p>
               <div class="settings-cookie-editor flex min-h-0 min-w-0 flex-1 flex-col">
-                <label class="field-label settings-cookie-manual-label shrink-0" for="settings-cookie-textarea">Cookie 请求头</label>
                 <textarea
                   id="settings-cookie-textarea"
                   v-model.trim="manualCookie"
                   data-testid="settings-cookie-textarea"
                   class="field-input field-textarea settings-cookie-textarea min-h-0 w-full min-w-0 flex-1 resize-y font-mono"
                   placeholder="粘贴浏览器中复制的完整 Cookie 请求头（含 biz_magic 等字段时将自动解析）"
+                  aria-label="Cookie 请求头"
                   spellcheck="false"
                   autocomplete="off"
                 />
-                <div class="settings-cookie-manual-actions shrink-0">
+                <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2 shrink-0">
                   <button
                     type="button"
-                    class="action-btn action-btn-secondary min-h-10 min-w-[9.5rem]"
+                    class="action-btn action-btn-ghost min-h-10"
+                    data-testid="settings-cookie-clear-manual"
+                    :disabled="manualSaveLoading || !manualCookie"
+                    @click="handleClearManualCookie"
+                  >
+                    清除 Cookie
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn action-btn-secondary min-h-10"
                     data-testid="settings-cookie-save-manual"
                     :disabled="manualSaveLoading"
                     @click="handleSaveManualCookie"
@@ -337,7 +345,7 @@ onBeforeUnmount(() => {
       <article
         id="settings-section-license"
         data-testid="settings-section-license"
-        class="surface-panel settings-section-card settings-section-card--license flex min-h-0 flex-col p-5 lg:p-6"
+        class="surface-panel settings-section-card settings-section-card--license flex flex-col p-5 lg:p-6"
         :class="{ 'is-active': activeSection === 'license' }"
       >
         <header class="settings-section-head shrink-0">
@@ -384,17 +392,17 @@ onBeforeUnmount(() => {
             placeholder="输入卡密"
             aria-label="卡密"
           />
-          <div class="settings-action-row settings-action-row--auto-width shrink-0 justify-end">
+          <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2 shrink-0">
             <button
               :disabled="activateLoading"
-              class="action-btn action-btn-primary min-h-10 w-auto min-w-[6.5rem] shrink-0 cursor-pointer px-5"
+              class="action-btn action-btn-primary min-h-10 cursor-pointer"
               @click="handleActivate"
             >
               {{ activateLoading ? "激活中..." : "立即激活" }}
             </button>
             <button
               :disabled="verifyLoading"
-              class="action-btn action-btn-secondary min-h-10 w-auto min-w-[6.5rem] shrink-0 cursor-pointer px-5"
+              class="action-btn action-btn-secondary min-h-10 cursor-pointer"
               @click="handleRefresh"
             >
               {{ verifyLoading ? "刷新中..." : "刷新状态" }}

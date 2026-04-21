@@ -257,6 +257,18 @@ textarea {
   box-shadow: var(--shadow-soft);
 }
 
+.action-btn-ghost {
+  color: #64748b;
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.action-btn-ghost:hover:not(:disabled) {
+  color: #1e293b;
+  border-color: rgba(100, 116, 139, 0.65);
+  background: rgba(248, 250, 252, 0.8);
+}
+
 .action-btn-success {
   color: white;
   background: linear-gradient(135deg, var(--color-success) 0%, var(--color-brand-deep) 100%);
@@ -526,10 +538,13 @@ textarea {
   flex-direction: column;
 }
 
+/* 与 Dashboard 一致：在 app-page-shell 固定高度内自滚动，避免横幅/多卡堆叠时底部被裁切 */
 .settings-view-shell {
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .settings-row-card {
@@ -859,13 +874,12 @@ textarea {
   grid-template-areas:
     "cookie license"
     "cookie about";
-  /* license 行按内容自然高度，about 行撑满剩余高度，cookie 跨两行自动等高 */
-  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  /* 两行均按自身内容自然高度（不强制 1fr），防止右列在内容少时被拉高触发多余滚动；
+     Cookie 跨两行时高度 = license 行 + gap + about 行，textarea flex-1 吸收剩余空间不过度生长。 */
+  grid-template-rows: auto auto;
   gap: 1.25rem;
   align-items: stretch;
-  /* 让 layout 撑满 view-shell 高度，避免主区域底部留大块空白 */
-  flex: 1 1 auto;
-  min-height: 100%;
+  width: 100%;
 }
 
 .settings-section-card--cookie {
@@ -874,10 +888,13 @@ textarea {
 
 .settings-section-card--license {
   grid-area: license;
+  min-height: min-content;
 }
 
 .settings-section-card--about {
   grid-area: about;
+  /* 最小=内容高度（防止被压断），默认 stretch 填满格子（与授权卡、左侧 Cookie 齐底） */
+  min-height: min-content;
 }
 
 /* 授权 / 应用信息卡的左边强调线沿用 cookie 卡的同色品牌色 */
@@ -1940,6 +1957,12 @@ textarea {
   .settings-row-body--cookie {
     flex: 0 0 auto !important;
     min-height: 0 !important;
+  }
+
+  /* 授权 / 应用：不要被「min-height:0 兜底」压扁，否则 surface 背景盖不住底部按钮区 */
+  .settings-section-card--license,
+  .settings-section-card--about {
+    min-height: min-content !important;
   }
 
   .delivery-main-grid,
