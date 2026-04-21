@@ -289,7 +289,7 @@ function formatReplyDeadline(value: string | null) {
                 <div class="font-semibold text-slate-800">{{ r.buyer_nickname || "-" }}</div>
               </td>
               <td v-if="!isQualityRefundMode" class="max-w-md px-3 py-2.5 sm:px-5 sm:py-3">
-                <div class="whitespace-pre-wrap break-all text-sm leading-6 text-slate-700 sm:text-[14.5px] sm:leading-[1.6]">
+                <div class="whitespace-pre-wrap break-all text-sm leading-6 text-slate-700">
                   {{ r.evaluation_content || "（无评价内容）" }}
                 </div>
               </td>
@@ -299,7 +299,7 @@ function formatReplyDeadline(value: string | null) {
                 </div>
               </td>
               <td class="px-3 py-2.5 sm:px-5 sm:py-3">
-                <div class="space-y-1 text-xs leading-5 text-slate-600">
+                <div class="space-y-1 text-sm leading-6 text-slate-600">
                   <div><span class="font-semibold text-slate-700">SKU：</span>{{ r.sku_name || r.sku_id || "-" }}</div>
                   <div>
                     <span class="font-semibold text-slate-700">商品ID：</span>
@@ -308,7 +308,7 @@ function formatReplyDeadline(value: string | null) {
                   <div v-if="r.product_name" class="text-slate-500">{{ r.product_name }}</div>
                 </div>
               </td>
-              <td class="px-3 py-2.5 font-mono text-xs text-slate-700 sm:px-5 sm:py-3">{{ displayId(r) }}</td>
+              <td class="px-3 py-2.5 font-mono text-sm text-slate-700 sm:px-5 sm:py-3">{{ displayId(r) }}</td>
               <td class="px-3 py-2.5 text-center sm:px-5 sm:py-3">
                 <div class="flex flex-col items-center gap-1.5">
                   <span

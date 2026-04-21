@@ -4,6 +4,9 @@
 .delivery-view {
   width: 100%;
   min-height: 0;
+  /* 内容超过可视高度时由 .delivery-view 自滚；保持两栏/双列输入布局不随窗口高度塌陷 */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .delivery-license-banner {

@@ -742,60 +742,12 @@ select.field-input--with-leading-icon {
   }
 }
 
-/*
- * 紧凑窗口兜底（任意一项触发即解除「flex:1 + min-height:0 强行撑满父高度」链路）：
- *   - 宽度  < 1024px → 窄屏，子元素折行后高度变长，必须让 main 滚动
- *   - 高度  < 720px  → 短屏，原本设计的「textarea 撑满父高度」会把其它块挤散，必须切回内容自然高度 + main 滚动
- *
- * 两条触发逻辑共享同一组重置规则。
- *
- * !important 用于压过 Tailwind v4 在 @layer utilities 内的 .h-full / .flex-1 等规则，
- * 因为页面根元素同时挂着 Tailwind 的 utility 类，必须强制覆盖才能让 height 真正 auto。
- *
- * 演进方向（优于本兜底）：
- * - DashboardView 已走 `overflow-y-auto` 自滚动模式，内容超高时自身滚动，不再依赖此 media query
- * - 后续重构 SettingsView / DeliveryView 时可参照同样路径，把 media query 依赖降到零；
- *   当前它们（尤其 DeliveryView 的两列 grid）直接切换会改变多块区域的滚动行为，风险大，暂保留
+/* 历史兜底 @media (max-width: 1023.98px), (max-height: 719.98px) 已下线：
+ * - Dashboard / Delivery / Settings 的视图容器都改为自己开 `overflow-y: auto`
+ * - 短视口 / 窄屏不再触发「切回内容自然高度 + main 滚动」的 !important 重置，
+ *   避免同一页面在 720/1024 两侧切换时布局发生明显跳变
+ * - 仍保留窄屏单列布局（settings-layout 在 max-width: 980px 内重排为 1 列）
  */
-@media (max-width: 1023.98px), (max-height: 719.98px) {
-  .settings-view-shell,
-  .delivery-view,
-  .delivery-workspace {
-    height: auto !important;
-    flex: 0 0 auto !important;
-    min-height: 0 !important;
-  }
-
-  .settings-layout,
-  .settings-workspace,
-  .settings-section-card,
-  .settings-row-card,
-  .settings-cookie-editor,
-  .settings-row-body,
-  .settings-row-body--cookie {
-    flex: 0 0 auto !important;
-    min-height: 0 !important;
-  }
-
-  /* 授权 / 应用：不要被「min-height:0 兜底」压扁，否则 surface 背景盖不住底部按钮区 */
-  .settings-section-card--license,
-  .settings-section-card--about {
-    min-height: min-content !important;
-  }
-
-  .delivery-main-grid,
-  .delivery-input-panel,
-  .delivery-progress-panel,
-  .delivery-input-column {
-    flex: 0 0 auto !important;
-    min-height: 0 !important;
-  }
-
-  .delivery-input-textarea {
-    flex: 0 0 auto !important;
-    min-height: 140px !important;
-  }
-}
 
 
 .app-shell {
