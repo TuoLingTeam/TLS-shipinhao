@@ -31,12 +31,13 @@ pub async fn set_cookie(
     cookie_header: String,
 ) -> Result<serde_json::Value, AppError> {
     let profile = parse_cookie_profile(cookie_header.trim());
-    let cookie_path = { state.cookie_path.lock().await.clone() };
 
+    // 与 AppState 锁序协议对齐：cookie_profile 优先于 cookie_path。
     {
         let mut current = state.cookie_profile.lock().await;
         *current = profile.clone();
     }
+    let cookie_path = { state.cookie_path.lock().await.clone() };
 
     state::save_cookie_to_file(&cookie_path, &profile.cookie_header)
         .map_err(|e| AppError::Message(format!("保存 Cookie 失败：{e}")))?;
@@ -322,12 +323,13 @@ pub async fn extract_cookie_from_login(
     }
 
     let profile = parse_cookie_profile(&cookie_header);
-    let cookie_path = { state.cookie_path.lock().await.clone() };
 
+    // 与 AppState 锁序协议对齐：cookie_profile 优先于 cookie_path。
     {
         let mut current = state.cookie_profile.lock().await;
         *current = profile.clone();
     }
+    let cookie_path = { state.cookie_path.lock().await.clone() };
 
     state::save_cookie_to_file(&cookie_path, &cookie_header)
         .map_err(|e| AppError::Message(format!("写入 Cookie 文件失败：{e}")))?;

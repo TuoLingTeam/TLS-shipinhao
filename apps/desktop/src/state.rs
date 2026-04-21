@@ -29,6 +29,20 @@ pub struct Slp {
 }
 
 /// Tauri 全局状态：Cookie / 授权信息在内存 + 磁盘双写。
+///
+/// ## 锁顺序协议（避免潜在死锁，新 handler 必须遵守）
+///
+/// 当一个函数需要**同时**持有多把下列 `Mutex`/`RwLock` 时，**必须按以下顺序获取**：
+///
+/// 1. `cookie_profile`
+/// 2. `cookie_path`
+/// 3. `runtime_license_state`
+/// 4. `license_profile`
+/// 5. `cookie_health`
+///
+/// 单锁持有或用 `{}` 显式作用域**串行**获取多把锁，无需顺序约束。
+/// 违反顺序短期可能靠 `{}` 立即释放规避，但一旦某处 await 点跨越
+/// guard 生命周期就会出现真实死锁——保险起见始终按此协议写。
 pub struct AppState {
     pub cookie_profile: Mutex<CookieProfile>,
     pub cookie_path: Mutex<PathBuf>,
