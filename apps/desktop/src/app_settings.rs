@@ -6,6 +6,7 @@
 /// 卡密验证后端（按顺序依次回退）。每次调用即时解密，避免在 static 区留下明文。
 pub fn license_api_base_urls() -> Vec<String> {
     vec![
+        obfstr::obfstr!("https://sphapi-cn.199908.top").to_string(),
         obfstr::obfstr!("https://sphapi.199908.top").to_string(),
         obfstr::obfstr!("https://sphapi.tuoling.ccwu.cc").to_string(),
         obfstr::obfstr!("https://sphapi.tuoling.eu.cc").to_string(),
