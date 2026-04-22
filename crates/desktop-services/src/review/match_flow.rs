@@ -127,14 +127,23 @@ pub fn match_single_evaluation(
         };
     };
 
-    let best_match = best_matches
+    let Some(best_match) = best_matches
         .into_iter()
         .find(|item| {
             item.score == best_key.score
                 && item.confirm_diff == best_key.confirm_diff
                 && item.time_diff == best_key.time_diff
         })
-        .expect("best match should exist");
+    else {
+        return SingleEvaluationMatch {
+            matched_order: None,
+            match_strategy: MatchStrategy::None,
+            match_score: 0,
+            match_reasons: Vec::new(),
+            candidate_count,
+            top_score,
+        };
+    };
 
     if best_match.score < crate::review_candidate_scoring::MATCH_MIN_SCORE {
         return SingleEvaluationMatch {

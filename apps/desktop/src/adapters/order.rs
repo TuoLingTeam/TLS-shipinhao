@@ -129,7 +129,7 @@ impl OrderRateLimitGate {
     ///   - 否则按 `backoff_seconds(attempt)` 计算 wait 秒数，更新 pause 与累计，
     ///     返回 `Scheduled(wait_secs)`。
     fn try_schedule_backoff(&self) -> BackoffSchedule {
-        let mut guard = self.pause_until.lock().expect("rate limit gate lock");
+        let mut guard = self.pause_until.lock().unwrap_or_else(|e| e.into_inner());
         let now = std::time::Instant::now();
 
         if *guard > now {
@@ -161,7 +161,7 @@ impl OrderRateLimitGate {
 
     async fn wait_if_needed(&self) {
         loop {
-            let until = *self.pause_until.lock().expect("rate limit gate lock");
+            let until = *self.pause_until.lock().unwrap_or_else(|e| e.into_inner());
             let now = std::time::Instant::now();
             if now >= until {
                 return;
@@ -330,10 +330,10 @@ async fn run_order_fetch_worker(
         );
 
         if !page_ui.is_empty() || !page_cache.is_empty() {
-            let mut ui_guard = ui_by_id.lock().expect("ui cache lock");
+            let mut ui_guard = ui_by_id.lock().unwrap_or_else(|e| e.into_inner());
             ui_guard.extend(page_ui);
             drop(ui_guard);
-            let mut cache_guard = cache_by_id.lock().expect("rich cache lock");
+            let mut cache_guard = cache_by_id.lock().unwrap_or_else(|e| e.into_inner());
             cache_guard.extend(page_cache);
         }
 
@@ -720,7 +720,7 @@ pub fn parse_iso_window(start_at: &str, end_at: &str) -> anyhow::Result<(i64, i6
 impl OrderRateLimitGate {
     /// 测试辅助：立即把 pause 窗口过期，以便模拟时间推进。
     fn force_expire_pause(&self) {
-        *self.pause_until.lock().expect("rate limit gate lock") = std::time::Instant::now();
+        *self.pause_until.lock().unwrap_or_else(|e| e.into_inner()) = std::time::Instant::now();
     }
 
     fn attempt_count(&self) -> u32 {
