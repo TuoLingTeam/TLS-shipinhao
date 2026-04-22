@@ -222,7 +222,7 @@ fn log_short_nickname_diagnostics(
         .iter()
         .take(DIAGNOSTIC_MAX_SAMPLES)
         .collect::<Vec<_>>();
-    top_three.sort_by(|a, b| b.score.cmp(&a.score));
+    top_three.sort_by_key(|item| std::cmp::Reverse(item.score));
     top_three.truncate(3);
 
     tracing::warn!(
