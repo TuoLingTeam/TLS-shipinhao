@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
         <div data-testid="settings-about-meta" class="settings-info-grid">
           <div class="settings-info-item">
             <span class="settings-info-label">版本</span>
-            <div class="min-w-0">
+            <div class="min-w-0 contents">
               <div v-if="updateCheck.hasUpdateAvailable" class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                 <button
                   type="button"
