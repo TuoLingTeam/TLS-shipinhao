@@ -7,7 +7,9 @@ compatibility_date = "2024-12-01"
 workers_dev = false
 
 routes = [
-  { pattern = "sphapi.199908.top/*", zone_name = "199908.top" }
+  { pattern = "sphapi.199908.top/*", zone_name = "199908.top" },
+  { pattern = "sphapi.tuoling.ccwu.cc/*", zone_name = "tuoling.ccwu.cc" },
+  { pattern = "sphapi.tuoling.eu.cc/*", zone_name = "tuoling.eu.cc" },
 ]
 
 [build]
