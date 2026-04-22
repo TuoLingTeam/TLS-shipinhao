@@ -175,8 +175,16 @@ pub async fn open_external_url(url: String) -> Result<(), AppError> {
 
         #[cfg(target_os = "windows")]
         {
+            // 默认 cmd.exe 是 console subsystem，Tauri GUI 进程没有宿主 console，
+            // spawn 时 Windows 会给它分配一个新的控制台窗口，于是 `start` 执行完
+            // cmd 退出的瞬间就会在屏幕上留下一个"黑色弹窗一闪即逝"。
+            // 用 CREATE_NO_WINDOW（0x0800_0000）抑制这个临时 console，不影响
+            // `start` 的功能——`start` 只是把 URL 交给默认浏览器处理。
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             std::process::Command::new("cmd")
                 .args(["/C", "start", "", &normalized])
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .map(|_| ())
                 .map_err(|err| format!("Windows start 调用失败：{err}"))
