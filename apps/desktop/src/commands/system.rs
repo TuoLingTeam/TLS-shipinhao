@@ -112,11 +112,8 @@ fn probe_cookie_via_quality_refund(
 ) -> CookieHealthSnapshot {
     use crate::adapters::quality_refund::HttpQualityRefundSource;
 
-    let source = HttpQualityRefundSource::new_with_grant(
-        cookie.to_string(),
-        magic.to_string(),
-        None,
-    );
+    let source =
+        HttpQualityRefundSource::new_with_grant(cookie.to_string(), magic.to_string(), None);
     let window = domain_core::TimeWindow {
         start_at: chrono::Utc::now().to_rfc3339(),
         end_at: chrono::Utc::now().to_rfc3339(),
