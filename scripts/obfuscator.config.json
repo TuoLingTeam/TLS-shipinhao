@@ -26,10 +26,9 @@
   "shuffleStringArray": true,
   "unicodeEscapeSequence": false,
 
-  "controlFlowFlattening": true,
-  "controlFlowFlatteningThreshold": 0.75,
-  "deadCodeInjection": true,
-  "deadCodeInjectionThreshold": 0.4,
+  "_note_cff_dci_off": "controlFlowFlattening / deadCodeInjection 会按 threshold 随机选择目标函数；一旦 AST 里某个关键函数（比如 Vue 3 runtime 的 setup 调用）被命中，会破坏 setup(props, ctx) 的 arity 让 ctx 变 undefined，触发 TypeError: Cannot destructure property 'slots' of undefined。seed 只能确定化伪随机序列，源码一改 AST 节点错位后依然会重新踩雷，因此直接关闭两者。逆向难度回退到 stringArray + compact + identifier 层面，仍然远高于 minify。",
+  "controlFlowFlattening": false,
+  "deadCodeInjection": false,
 
   "numbersToExpressions": true,
   "renameGlobals": false,
