@@ -199,10 +199,6 @@ pub struct SyncedOrderSnapshot {
 }
 
 impl HttpOrderSearchClient {
-    pub fn new(cookie_header: String, biz_magic: String) -> Self {
-        Self::new_with_grant(cookie_header, biz_magic, None)
-    }
-
     pub fn new_with_grant(
         cookie_header: String,
         biz_magic: String,
@@ -223,15 +219,6 @@ impl HttpOrderSearchClient {
             &self.biz_magic,
             self.grant_id.as_deref(),
         )
-    }
-
-    pub async fn fetch_order_snapshots_in_window(
-        &self,
-        start_unix: i64,
-        end_unix: i64,
-    ) -> anyhow::Result<SyncedOrderSnapshot> {
-        self.fetch_order_snapshots_in_window_parallel(start_unix, end_unix, 1)
-            .await
     }
 
     pub async fn fetch_order_snapshots_in_window_parallel(
