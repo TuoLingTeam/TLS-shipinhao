@@ -1,8 +1,8 @@
 # TLS-shipinhao
 
-微信小商店中差评订单查找与物流更新桌面工具。
+微信视频号小店中差评订单查找与物流更新桌面工具。
 
-当前主线技术栈：**Rust + Tauri 2 + Vue 3 + Tailwind CSS v4**。
+当前主线技术栈：**Rust + Tauri 2 + Vue 3 + Tailwind CSS v4**，授权后端运行在 **Cloudflare Workers + D1**。
 
 ## 功能概览
 
@@ -16,27 +16,31 @@
 
 ```text
 TLS-shipinhao/
-├── apps/                        # 当前正式应用层
-│   ├── desktop/                 # Tauri 桌面端（命令、适配器、状态、图标）
-│   ├── ui/                      # Vue 3 前端（Vite + Pinia + vue-router）
-├── backend/                     # 后端与共享实现
-│   ├── crates/                  # Rust 共享库与核心业务能力
+├── apps/                        # 应用层
+│   ├── desktop/                 # Tauri 2 桌面端（Rust 命令、适配器、状态、图标）
+│   └── ui/                      # Vue 3 前端（Vite 6 + Pinia + vue-router + Tailwind v4）
+├── crates/                      # 桌面共享 Rust 库
+│   ├── domain-core/             # 领域模型与错误类型
+│   ├── desktop-services/        # 订单缓存、同步、HTTP、SQLite 等业务服务
+│   └── security-core/           # 设备指纹、Lease 校验、完整性检查
+├── backend/                     # Cloudflare Worker 授权后端
+│   ├── api-contracts/           # 前后端共享 API 契约（serde 类型）
+│   ├── license-service/         # 授权域逻辑（Lease、卡密、本地验证）
+│   ├── license-worker/          # Rust → WASM Cloudflare Worker 入口
 │   ├── db/                      # D1 schema / migration
-│   ├── dist/                    # 发布元数据输出（如 version.json）
-│   ├── docs/                    # PRD、验收、性能、发布文档
-│   ├── src/                     # Worker 管理页与兼容壳
-│   ├── tests/                   # Rust / Python 回归测试与夹具
-│   ├── xtask/                   # 构建、manifest、性能、发布辅助命令
-│   ├── license-worker/          # Rust Cloudflare Worker 授权服务
-│   └── wrangler.toml            # Cloudflare Worker 生产部署入口
-├── backup/                      # 旧版 Python 资产备份（不参与当前主运行链路）
-│   ├── legacy-src/              # 旧版 Python 源码快照
-│   ├── legacy-runtime/          # 旧版运行时残留
-│   └── legacy-dist/             # 旧版编译产物 / 分发残留
-├── openspec/                    # 变更提案与迁移设计记录
+│   ├── scripts/                 # Worker 构建脚本
+│   └── wrangler.toml            # Worker 生产部署入口
+├── scripts/                     # 发版与构建脚本
+│   ├── build-obfuscate.mjs      # 混淆镜像构建（JS obfuscator + cargo tauri build）
+│   └── obfuscator.config.json   # javascript-obfuscator 配置
+├── tools/                       # 辅助工具
+│   ├── build-tools/             # 发版相关构建工具库
+│   └── xtask/                   # perf、release、bench 等辅助命令
+├── backup/                      # 旧版 Python 资产备份（不参与主线）
 ├── Cargo.toml                   # 顶层 Rust workspace
-├── package.json                 # 前端 / 桌面常用脚本入口
-└── .github/workflows/           # CI/CD 工作流
+├── package.json                 # pnpm 脚本入口
+├── pnpm-workspace.yaml          # pnpm workspace 配置
+└── .github/workflows/           # CI/CD（tag 触发桌面发版）
 ```
 
 ## 快速开始
@@ -123,22 +127,23 @@ backend/dist/release/version.json
 
 ## 后端部署
 
-生产部署入口位于：
-
-```text
-backend/wrangler.toml
-```
-
-常见操作：
+授权 Worker 部署入口位于 `backend/wrangler.toml`。
 
 ```bash
 cd backend
 npx wrangler deploy
 ```
 
-更详细的后端说明见：
-- [backend/README.md](backend/README.md)
-- [backend/license-worker/README.md](backend/license-worker/README.md)
+当前 Worker 路由：
+
+| 域名 | 加速方式 | 说明 |
+|---|---|---|
+| `sphapi-cn.199908.top` | EdgeOne 中国节点加速 | 国内用户首选 |
+| `sphapi.199908.top` | Cloudflare Worker 直连 | 主域名 |
+| `sphapi.tuoling.ccwu.cc` | Cloudflare Worker 直连 | 备用 |
+| `sphapi.tuoling.eu.cc` | Cloudflare Worker 直连 | 备用 |
+
+更详细的后端说明见 [backend/README.md](backend/README.md)。
 
 ## 备份目录说明
 
@@ -149,15 +154,9 @@ npx wrangler deploy
 
 这些目录**不是当前正式运行路径**。
 
-## 相关文档
-
-- 产品/任务卡片：`docs/`
-- 发布手册：`docs/operations/release-runbook.md`
-- 回归矩阵：`docs/reports/regression-matrix.md`
-- 变更设计：`openspec/changes/`
-
 ## 注意事项
 
-- 当前桌面图标资源位于 `apps/desktop/icons/`
-- 品牌图标来源已对齐旧版资源，并会打入 `.app` 包内
-- Cookie、迁移数据、旧版残留资产请不要再放回 `apps/` 主运行目录
+- 桌面图标资源位于 `apps/desktop/icons/`
+- JS 混淆配置已关闭 `controlFlowFlattening` / `deadCodeInjection` / `selfDefending` / `debugProtection`，避免破坏 Vue 3 runtime 或触发 Tauri CSP 拦截
+- Windows 下 `std::process::Command` 调用系统工具（如 `wmic`）需加 `CREATE_NO_WINDOW` 防止黑窗闪现
+- `backup/` 为旧版 Python 资产，不参与当前主运行链路
