@@ -2,7 +2,6 @@
 import { onMounted, onUnmounted } from "vue";
 import AppLayout from "./layout/AppLayout.vue";
 import MigrationBanner from "./migration/MigrationBanner.vue";
-import CookieHealthBanner from "./shared/CookieHealthBanner.vue";
 import { useLayout } from "./layout/useLayout";
 import { useUiScale } from "./layout/useUiScale";
 import { useCookieHealthStore } from "./shared/cookieHealth";
@@ -36,7 +35,6 @@ onUnmounted(() => {
   <div class="app-shell" :data-layout="mode">
     <AppLayout>
       <MigrationBanner />
-      <CookieHealthBanner />
     </AppLayout>
   </div>
 </template>
