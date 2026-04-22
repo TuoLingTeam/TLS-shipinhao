@@ -12,6 +12,7 @@
 //! 使用，应包在 `tokio::task::spawn_blocking` 里避免阻塞 reactor。
 
 use sha2::{Digest, Sha256};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::process::Command;
 use std::sync::OnceLock;
 
