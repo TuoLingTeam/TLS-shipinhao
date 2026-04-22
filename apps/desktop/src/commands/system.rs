@@ -4,7 +4,6 @@ use reqwest::Url;
 use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-use crate::adapters::order::HttpOrderSearchClient;
 use crate::error::AppError;
 use crate::migration::{LegacyPythonMigrator, MigrationPaths, MigrationReport};
 use crate::state::{self, AppState, CookieHealthSnapshot};
@@ -62,9 +61,9 @@ pub async fn get_cookie_status(state: State<'_, AppState>) -> Result<serde_json:
     }))
 }
 
-/// 对 Cookie 做一次轻量有效性探测：窗口极小的订单搜索请求。
+/// 对 Cookie 做一次轻量有效性探测：请求品退订单接口（POST 空 body，响应极快）。
 ///
-/// 探测失败会把结果落在 `AppState.cookie_health`，供其它命令和前端指示器共享。
+/// 探测结果落在 `AppState.cookie_health`，供其它命令和前端指示器共享。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn check_cookie_health(
     state: State<'_, AppState>,
@@ -93,19 +92,41 @@ pub async fn check_cookie_health(
         return Ok(snapshot);
     }
 
-    let end_unix = chrono::Utc::now().timestamp();
-    let start_unix = end_unix - 600; // 探测最近 10 分钟，保证体量极小。
-    let client = HttpOrderSearchClient::new(cookie, magic);
-    let probe = client
-        .fetch_order_snapshots_in_window(start_unix, end_unix)
-        .await;
+    let snapshot = tokio::task::spawn_blocking(move || {
+        probe_cookie_via_quality_refund(&cookie, &magic, configured, has_biz_magic, &now_rfc)
+    })
+    .await
+    .map_err(|e| AppError::Message(e.to_string()))?;
 
-    let snapshot = match probe {
+    let mut current = state.cookie_health.lock().await;
+    *current = snapshot.clone();
+    Ok(snapshot)
+}
+
+fn probe_cookie_via_quality_refund(
+    cookie: &str,
+    magic: &str,
+    configured: bool,
+    has_biz_magic: bool,
+    now_rfc: &str,
+) -> CookieHealthSnapshot {
+    use crate::adapters::quality_refund::HttpQualityRefundSource;
+
+    let source = HttpQualityRefundSource::new_with_grant(
+        cookie.to_string(),
+        magic.to_string(),
+        None,
+    );
+    let window = domain_core::TimeWindow {
+        start_at: chrono::Utc::now().to_rfc3339(),
+        end_at: chrono::Utc::now().to_rfc3339(),
+    };
+    match source.fetch_quality_refund_orders(&window) {
         Ok(_) => CookieHealthSnapshot {
             healthy: true,
             configured,
             has_biz_magic,
-            last_checked_at: Some(now_rfc),
+            last_checked_at: Some(now_rfc.to_string()),
             hint: Some("Cookie 可用".to_string()),
         },
         Err(err) => {
@@ -126,15 +147,11 @@ pub async fn check_cookie_health(
                 healthy: false,
                 configured,
                 has_biz_magic,
-                last_checked_at: Some(now_rfc),
+                last_checked_at: Some(now_rfc.to_string()),
                 hint: Some(hint),
             }
         }
-    };
-
-    let mut current = state.cookie_health.lock().await;
-    *current = snapshot.clone();
-    Ok(snapshot)
+    }
 }
 
 #[tauri::command(rename_all = "snake_case")]
