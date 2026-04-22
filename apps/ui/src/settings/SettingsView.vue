@@ -392,7 +392,7 @@ onBeforeUnmount(() => {
 
         <div
           data-testid="settings-license-actions"
-          class="settings-action-card settings-license-actions mt-2 flex flex-col gap-2"
+          class="settings-action-card settings-license-actions flex flex-col gap-2"
         >
           <input
             v-model.trim="licenseKey"
