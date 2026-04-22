@@ -1,3 +1,4 @@
+import type { Ref } from "vue";
 import { useAppStore } from "../app.store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
 import type { LicenseState } from "./types";
@@ -34,16 +35,39 @@ export function useLicense() {
     });
   }
 
+  // adapters/license.rs::activate 会把 "已在其他设备激活" 等非 active/renewal_due
+  // 的合法业务响应重包装成 LicenseHttpError::InvalidResponse，到 Tauri 层表现为
+  // rejected Promise；useTauriInvoke 只把错误写进 error ref、对调用方返回 null。
+  // 结果是 LicenseView/SettingsView 的 `if (result)` 静默吞掉提示。这里兜住：
+  // invoke reject 时重建成业务失败等价的 payload，上层显示逻辑不用再调整。
+  function wrapInvokeFailure(
+    errorRef: Ref<string | null>,
+    fallback: string,
+  ): LicensePayload {
+    const message = errorRef.value?.trim() || fallback;
+    return {
+      success: false,
+      message,
+      license_state: appStore.licenseState,
+    };
+  }
+
   async function activateLicense(licenseKey: string) {
     const result = await activate.execute({ license_key: licenseKey });
-    applyLicensePayload(result);
-    return result;
+    if (result) {
+      applyLicensePayload(result);
+      return result;
+    }
+    return wrapInvokeFailure(activate.error, "激活失败，请检查网络或稍后重试");
   }
 
   async function verifyLicense(licenseKey: string) {
     const result = await verify.execute({ license_key: licenseKey });
-    applyLicensePayload(result);
-    return result;
+    if (result) {
+      applyLicensePayload(result);
+      return result;
+    }
+    return wrapInvokeFailure(verify.error, "刷新失败，请检查网络或稍后重试");
   }
 
   async function loadStoredLicenseStatus() {
