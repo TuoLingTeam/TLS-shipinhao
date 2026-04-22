@@ -8,7 +8,6 @@ pub fn license_api_base_urls() -> Vec<String> {
     vec![
         obfstr::obfstr!("https://sphapi.199908.top").to_string(),
         obfstr::obfstr!("https://sphapi.tuoling.ccwu.cc").to_string(),
-        obfstr::obfstr!("https://sphapi.tuoling.us.ci").to_string(),
         obfstr::obfstr!("https://sphapi.tuoling.eu.cc").to_string(),
     ]
 }
