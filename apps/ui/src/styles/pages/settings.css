@@ -37,7 +37,9 @@
   gap: 1.25rem;
   align-items: stretch;
   width: 100%;
-  /* 作为 .settings-view-shell 的 flex 子项时撑满剩余高度，自身仍是 grid 容器 */
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
   flex: 1 1 auto;
   min-height: 0;
 }
