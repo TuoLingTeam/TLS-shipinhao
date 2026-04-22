@@ -13,22 +13,35 @@
 
 use sha2::{Digest, Sha256};
 use std::process::Command;
+use std::sync::OnceLock;
 
 /// 归一后设备 ID 的固定长度（hex 字符）。
 pub const DEVICE_ID_HEX_LEN: usize = 16;
+
+/// 进程生命周期内缓存原始指纹，避免每次调用都重新执行平台命令
+/// （Windows 下 wmic / powershell，macOS 下 ioreg，Linux 下 machine-id 读文件）。
+/// 修复 Windows 启动后"黑窗闪现"——每次 `get_device_id()` 都 spawn wmic，
+/// console subsystem 子进程会被系统分配 conhost 宿主，视觉上就是一次闪黑。
+static CACHED_RAW_FINGERPRINT: OnceLock<String> = OnceLock::new();
 
 /// 采集当前机器的原始指纹字符串。
 ///
 /// 成功时返回硬件序列号 / UUID / machine-id；任何采集失败都会回退到
 /// `fallback_fingerprint()`，保证返回非空。
+///
+/// 进程生命周期内只采集一次，后续调用直接命中 `OnceLock` 缓存。
 pub fn collect_raw_fingerprint() -> String {
-    if let Some(value) = platform_specific_fingerprint() {
-        let trimmed = value.trim();
-        if !trimmed.is_empty() {
-            return trimmed.to_string();
-        }
-    }
-    fallback_fingerprint()
+    CACHED_RAW_FINGERPRINT
+        .get_or_init(|| {
+            if let Some(value) = platform_specific_fingerprint() {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+            fallback_fingerprint()
+        })
+        .clone()
 }
 
 /// 当原生采集失败时使用的降级方案。
@@ -99,6 +112,12 @@ fn fingerprint_macos() -> Option<String> {
 #[cfg(target_os = "windows")]
 fn fingerprint_windows() -> Option<String> {
     // 优先 wmic（快），失败或被禁用回退 PowerShell。
+    // CREATE_NO_WINDOW（0x0800_0000）：wmic / powershell.exe 都是 console subsystem，
+    // Tauri GUI 进程没有宿主 console，默认 spawn 时 Windows 会为子进程分配新的
+    // conhost 窗口并一闪即逝；加此 flag 让子进程无窗运行，彻底消除"黑窗闪现"。
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
     const CANDIDATES: &[(&str, &[&str])] = &[
         ("wmic", &["csproduct", "get", "UUID"]),
         (
@@ -110,7 +129,11 @@ fn fingerprint_windows() -> Option<String> {
         ),
     ];
     for (program, args) in CANDIDATES {
-        if let Ok(output) = Command::new(program).args(args.iter().copied()).output() {
+        if let Ok(output) = Command::new(program)
+            .args(args.iter().copied())
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
             let text = String::from_utf8_lossy(&output.stdout);
             if let Some(uuid) = first_non_header_line(&text, "UUID") {
                 return Some(uuid);
