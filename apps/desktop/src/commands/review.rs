@@ -152,6 +152,148 @@ fn match_reviews_with_cache_records(
         .collect()
 }
 
+struct OrderCacheResult {
+    orders: Vec<CacheOrderRecord>,
+    warnings: Vec<String>,
+    cache_sync_performed: bool,
+    sync_written_count: usize,
+}
+
+fn read_orders_from_ready_cache(
+    app: &AppHandle,
+    start_unix: i64,
+    end_unix: i64,
+    coverage_start: i64,
+    coverage_end: i64,
+) -> Result<(Vec<CacheOrderRecord>, Vec<String>), AppError> {
+    emit_order_sync_progress(
+        app,
+        "review_query",
+        "read_cached_orders",
+        22,
+        "最近 30 天缓存完整，直接读取本地订单并进入评分匹配…",
+    );
+    let repository =
+        SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+            mask_order_cache_error(
+                "review_query.open_repository_cached_window",
+                None,
+                "订单缓存读取失败，请稍后重试",
+                error,
+            )
+        })?;
+    let (candidate_start, candidate_end) =
+        candidate_window_from_recent_cache(start_unix, end_unix, coverage_start, coverage_end);
+    let orders = repository
+        .fetch_orders_in_range(candidate_start, candidate_end)
+        .map_err(|error| {
+            mask_order_cache_error(
+                "review_query.fetch_orders_in_range_cached_window",
+                None,
+                "订单缓存读取失败，请稍后重试",
+                error,
+            )
+        })?;
+    Ok((orders, Vec::new()))
+}
+
+fn sync_and_read_orders(
+    app: &AppHandle,
+    cookie: String,
+    magic: String,
+    start_unix: i64,
+    end_unix: i64,
+    before_count: usize,
+    had_coverage: bool,
+) -> Result<OrderCacheResult, AppError> {
+    emit_order_sync_progress(
+        app,
+        "review_query",
+        "ensure_recent_cache",
+        18,
+        "正在补拉近 3 天订单缓存…",
+    );
+
+    let finder = HttpOrderCacheFinder::new(cookie, magic);
+    let repository =
+        SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+            mask_order_cache_error(
+                "review_query.open_repository_refresh_recent_cache",
+                None,
+                "订单缓存读取失败，请稍后重试",
+                error,
+            )
+        })?;
+    let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
+    let mut service = OrderSyncService::new(finder, repository);
+    let now = chrono::Utc::now();
+    let retention_start =
+        service.retention_start_timestamp(service.sync_now_timestamp(Some(now)));
+
+    let (orders, warnings) = if start_unix < retention_start {
+        service
+            .fetch_full_scan_orders(start_unix, Some(now))
+            .map_err(|error| {
+                mask_order_cache_error(
+                    "review_query.fetch_full_scan_orders",
+                    None,
+                    "订单缓存同步失败，请稍后重试",
+                    error,
+                )
+            })?
+    } else {
+        let (_, ensure_warnings, recent_start, recent_end) = service
+            .refresh_recent_incremental_cache(Some(now))
+            .map_err(|error| {
+                mask_order_cache_error(
+                    "review_query.refresh_recent_incremental_cache",
+                    None,
+                    "订单缓存同步失败，请稍后重试",
+                    error,
+                )
+            })?;
+        let repo = SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+            mask_order_cache_error(
+                "review_query.open_repository_recent_incremental",
+                None,
+                "订单缓存读取失败，请稍后重试",
+                error,
+            )
+        })?;
+        let (candidate_start, candidate_end) =
+            candidate_window_from_recent_cache(start_unix, end_unix, recent_start, recent_end);
+        let orders = repo
+            .fetch_orders_in_range(candidate_start, candidate_end)
+            .map_err(|error| {
+                mask_order_cache_error(
+                    "review_query.fetch_orders_in_range_recent_incremental",
+                    None,
+                    "订单缓存读取失败，请稍后重试",
+                    error,
+                )
+            })?;
+        (orders, ensure_warnings)
+    };
+
+    let status = recent_order_cache_status().map_err(|error| {
+        mask_order_cache_error(
+            "review_query.recent_order_cache_status_after_refresh",
+            None,
+            "订单缓存读取失败，请稍后重试",
+            error,
+        )
+    })?;
+    let sync_written_count = status.cached_order_count.saturating_sub(before_count);
+    let cache_sync_performed = sync_written_count > 0 || !had_coverage;
+
+    Ok(OrderCacheResult {
+        orders,
+        warnings,
+        cache_sync_performed,
+        sync_written_count,
+    })
+}
+
 fn run_review_match_flow(
     app: AppHandle,
     cookie: String,
@@ -178,145 +320,22 @@ fn run_review_match_flow(
         if !status.coverage_complete {
             return None;
         }
-        let coverage_start = status
-            .coverage_start
-            .as_deref()
-            .and_then(parse_iso_timestamp);
-        let coverage_end = status.coverage_end.as_deref().and_then(parse_iso_timestamp);
-        match (coverage_start, coverage_end) {
-            (Some(coverage_start), Some(coverage_end))
-                if start_unix >= coverage_start && end_unix <= coverage_end =>
-            {
-                Some((coverage_start, coverage_end))
-            }
+        let cs = status.coverage_start.as_deref().and_then(parse_iso_timestamp);
+        let ce = status.coverage_end.as_deref().and_then(parse_iso_timestamp);
+        match (cs, ce) {
+            (Some(cs), Some(ce)) if start_unix >= cs && end_unix <= ce => Some((cs, ce)),
             _ => None,
         }
     });
 
-    let mut cache_sync_performed = false;
-    let mut sync_written_count = 0usize;
-    let (orders, warnings) = if let Some((_coverage_start, coverage_end)) = cached_window_ready {
-        emit_order_sync_progress(
-            &app,
-            "review_query",
-            "read_cached_orders",
-            22,
-            "最近 30 天缓存完整，直接读取本地订单并进入评分匹配…",
-        );
-        let repository =
-            SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
-                mask_order_cache_error(
-                    "review_query.open_repository_cached_window",
-                    None,
-                    "订单缓存读取失败，请稍后重试",
-                    error,
-                )
-            })?;
-        let (candidate_start, candidate_end) =
-            candidate_window_from_recent_cache(start_unix, end_unix, _coverage_start, coverage_end);
-        let orders = repository
-            .fetch_orders_in_range(candidate_start, candidate_end)
-            .map_err(|error| {
-                mask_order_cache_error(
-                    "review_query.fetch_orders_in_range_cached_window",
-                    None,
-                    "订单缓存读取失败，请稍后重试",
-                    error,
-                )
-            })?;
-        (orders, Vec::new())
+    let cache_result = if let Some((cs, ce)) = cached_window_ready {
+        let (orders, warnings) =
+            read_orders_from_ready_cache(&app, start_unix, end_unix, cs, ce)?;
+        OrderCacheResult { orders, warnings, cache_sync_performed: false, sync_written_count: 0 }
     } else {
-        emit_order_sync_progress(
-            &app,
-            "review_query",
-            "ensure_recent_cache",
-            18,
-            "正在补拉近 3 天订单缓存…",
-        );
-
-        let finder = HttpOrderCacheFinder::new(cookie, magic);
-        let repository =
-            SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
-                mask_order_cache_error(
-                    "review_query.open_repository_refresh_recent_cache",
-                    None,
-                    "订单缓存读取失败，请稍后重试",
-                    error,
-                )
-            })?;
-        let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
-        let mut service = OrderSyncService::new(finder, repository);
-        let now = chrono::Utc::now();
-        let retention_start =
-            service.retention_start_timestamp(service.sync_now_timestamp(Some(now)));
-        let earliest = start_unix;
-        let (orders, warnings) = if earliest < retention_start {
-            let (orders, warnings) = service
-                .fetch_full_scan_orders(earliest, Some(now))
-                .map_err(|error| {
-                    mask_order_cache_error(
-                        "review_query.fetch_full_scan_orders",
-                        None,
-                        "订单缓存同步失败，请稍后重试",
-                        error,
-                    )
-                })?;
-            (orders, warnings)
-        } else {
-            let (_, ensure_warnings, recent_start, recent_end) = service
-                .refresh_recent_incremental_cache(Some(now))
-                .map_err(|error| {
-                    mask_order_cache_error(
-                        "review_query.refresh_recent_incremental_cache",
-                        None,
-                        "订单缓存同步失败，请稍后重试",
-                        error,
-                    )
-                })?;
-            let repository =
-                SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
-                    mask_order_cache_error(
-                        "review_query.open_repository_recent_incremental",
-                        None,
-                        "订单缓存读取失败，请稍后重试",
-                        error,
-                    )
-                })?;
-            let (candidate_start, candidate_end) =
-                candidate_window_from_recent_cache(start_unix, end_unix, recent_start, recent_end);
-            let orders = repository
-                .fetch_orders_in_range(candidate_start, candidate_end)
-                .map_err(|error| {
-                    mask_order_cache_error(
-                        "review_query.fetch_orders_in_range_recent_incremental",
-                        None,
-                        "订单缓存读取失败，请稍后重试",
-                        error,
-                    )
-                })?;
-            (orders, ensure_warnings)
-        };
-
-        let status = recent_order_cache_status().map_err(|error| {
-            mask_order_cache_error(
-                "review_query.recent_order_cache_status_after_refresh",
-                None,
-                "订单缓存读取失败，请稍后重试",
-                error,
-            )
-        })?;
-        let before_count = status_before
-            .as_ref()
-            .map(|item| item.cached_order_count)
-            .unwrap_or(0);
-        sync_written_count = status.cached_order_count.saturating_sub(before_count);
-        cache_sync_performed = sync_written_count > 0
-            || status_before.is_none()
-            || status_before
-                .as_ref()
-                .map(|item| !item.coverage_complete)
-                .unwrap_or(false);
-        (orders, warnings)
+        let before_count = status_before.as_ref().map(|s| s.cached_order_count).unwrap_or(0);
+        let had_coverage = status_before.as_ref().map(|s| s.coverage_complete).unwrap_or(false);
+        sync_and_read_orders(&app, cookie, magic, start_unix, end_unix, before_count, had_coverage)?
     };
 
     emit_order_sync_progress(
@@ -324,13 +343,10 @@ fn run_review_match_flow(
         "review_query",
         "match_reviews",
         76,
-        format!(
-            "订单缓存已就绪，正在对 {} 条差评执行评分匹配…",
-            evaluations.len()
-        ),
+        format!("订单缓存已就绪，正在对 {} 条差评执行评分匹配…", evaluations.len()),
     );
 
-    let results = match_reviews_with_cache_records(&evaluations, &orders);
+    let results = match_reviews_with_cache_records(&evaluations, &cache_result.orders);
     let status = recent_order_cache_status().map_err(|error| {
         mask_order_cache_error(
             "review_query.recent_order_cache_status_before_response",
@@ -350,11 +366,11 @@ fn run_review_match_flow(
 
     Ok(ReviewMatchResponse {
         results,
-        cache_warnings: warnings,
+        cache_warnings: cache_result.warnings,
         cache_coverage_start: status.coverage_start,
         cache_coverage_end: status.coverage_end,
-        cache_sync_performed,
-        cache_sync_written_count: sync_written_count,
+        cache_sync_performed: cache_result.cache_sync_performed,
+        cache_sync_written_count: cache_result.sync_written_count,
     })
 }
 

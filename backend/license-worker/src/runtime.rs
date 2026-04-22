@@ -382,6 +382,43 @@ async fn runtime_load_usable_license<R: AsyncRuntimeRepository + ?Sized>(
     Ok(Ok(record))
 }
 
+async fn validate_activation_key<R: AsyncRuntimeRepository + ?Sized>(
+    repo: &R,
+    normalized_key: &str,
+    device_id: &str,
+    device_fingerprint: &str,
+) -> anyhow::Result<Result<GeneratedKeyRecord, SignedLicenseApiResponse>> {
+    if !device_id_matches_fingerprint(device_id, device_fingerprint) {
+        return Ok(Err(signed_failure_response_for_record(
+            "设备凭证不自洽：device_id 与 device_fingerprint 不匹配，请重新激活",
+            LicenseState::DeviceMismatch,
+            None,
+        )));
+    }
+    let Some(key_record) = repo.load_generated_key(normalized_key).await? else {
+        return Ok(Err(signed_failure_response_for_record(
+            "该卡密不存在或已被吊销",
+            LicenseState::Revoked,
+            None,
+        )));
+    };
+    if key_record.status == GeneratedKeyStatus::Revoked {
+        return Ok(Err(signed_failure_response_for_record(
+            "该卡密已被吊销，无法使用",
+            LicenseState::Revoked,
+            None,
+        )));
+    }
+    if key_record.plan_days == 0 {
+        return Ok(Err(signed_failure_response_for_record(
+            "卡密无效：有效期异常",
+            LicenseState::Invalid,
+            None,
+        )));
+    }
+    Ok(Ok(key_record))
+}
+
 pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
     repo: &R,
     signer: &LeaseTokenSigner,
@@ -389,36 +426,12 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
     now: DateTime<Utc>,
 ) -> anyhow::Result<SignedLicenseApiResponse> {
     let normalized_key = normalize_key(&input.license_key);
-    // 闭合协议窗口：device_id 与 device_fingerprint 必须自洽，防止攻击者
-    // 用固定 device_id 提交不同 fingerprint 静默覆盖 D1 上已绑定的硬件指纹。
-    if !device_id_matches_fingerprint(&input.device_id, &input.device_fingerprint) {
-        return Ok(signed_failure_response_for_record(
-            "设备凭证不自洽：device_id 与 device_fingerprint 不匹配，请重新激活",
-            LicenseState::DeviceMismatch,
-            None,
-        ));
-    }
-    let Some(mut key_record) = repo.load_generated_key(&normalized_key).await? else {
-        return Ok(signed_failure_response_for_record(
-            "该卡密不存在或已被吊销",
-            LicenseState::Revoked,
-            None,
-        ));
+    let mut key_record = match validate_activation_key(
+        repo, &normalized_key, &input.device_id, &input.device_fingerprint,
+    ).await? {
+        Ok(record) => record,
+        Err(failure) => return Ok(failure),
     };
-    if key_record.status == GeneratedKeyStatus::Revoked {
-        return Ok(signed_failure_response_for_record(
-            "该卡密已被吊销，无法使用",
-            LicenseState::Revoked,
-            None,
-        ));
-    }
-    if key_record.plan_days == 0 {
-        return Ok(signed_failure_response_for_record(
-            "卡密无效：有效期异常",
-            LicenseState::Invalid,
-            None,
-        ));
-    }
 
     let now_iso_str = now_iso(now);
     let existing = repo.load_license(&normalized_key).await?;
@@ -457,11 +470,7 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
     };
 
     runtime_upsert_device_registration(
-        repo,
-        &normalized_key,
-        &input.device_id,
-        &input.device_fingerprint,
-        now,
+        repo, &normalized_key, &input.device_id, &input.device_fingerprint, now,
     )
     .await?;
     repo.append_audit_event(&AuditEvent {

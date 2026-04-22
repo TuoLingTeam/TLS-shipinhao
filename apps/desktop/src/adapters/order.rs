@@ -249,72 +249,20 @@ impl HttpOrderSearchClient {
         let mut tasks = tokio::task::JoinSet::new();
 
         for _ in 0..worker_count {
-            let client = self.client.clone();
-            let headers = self.build_headers();
-            let url = Arc::clone(&url);
-            let next_page = Arc::clone(&next_page);
-            let should_stop = Arc::clone(&should_stop);
-            let rate_limit_gate = Arc::clone(&rate_limit_gate);
-            let ui_by_id = Arc::clone(&ui_by_id);
-            let cache_by_id = Arc::clone(&cache_by_id);
-            let now_rfc = Arc::clone(&now_rfc);
-
-            tasks.spawn(async move {
-                loop {
-                    if should_stop.load(Ordering::Relaxed) {
-                        break Ok::<(), anyhow::Error>(());
-                    }
-
-                    let page = next_page.fetch_add(1, Ordering::Relaxed);
-                    let body = json!({
-                        "pageSize": ORDER_PAGE_SIZE,
-                        "nextKey": "",
-                        "orderStatus": "",
-                        "searchType": 0,
-                        "page": page,
-                    });
-
-                    let payload = post_order_search_with_retry_inner(
-                        &client,
-                        headers.clone(),
-                        &url,
-                        &body,
-                        Arc::clone(&rate_limit_gate),
-                    )
-                    .await?;
-                    let Some(list) = order_list_or_stop(&payload)? else {
-                        should_stop.store(true, Ordering::Relaxed);
-                        break Ok(());
-                    };
-
-                    let mut page_ui = HashMap::new();
-                    let mut page_cache = HashMap::new();
-                    let latest_on_page = merge_order_page(
-                        list,
-                        start_unix,
-                        end_unix,
-                        &now_rfc,
-                        now_epoch,
-                        &mut page_ui,
-                        &mut page_cache,
-                    );
-
-                    if !page_ui.is_empty() || !page_cache.is_empty() {
-                        let mut ui_guard = ui_by_id.lock().expect("ui cache lock");
-                        ui_guard.extend(page_ui);
-                        drop(ui_guard);
-                        let mut cache_guard = cache_by_id.lock().expect("rich cache lock");
-                        cache_guard.extend(page_cache);
-                    }
-
-                    if start_unix > 0 && latest_on_page > 0 && latest_on_page < start_unix {
-                        should_stop.store(true, Ordering::Relaxed);
-                        break Ok(());
-                    }
-
-                    tokio::time::sleep(FETCH_PAGE_INTERVAL).await;
-                }
-            });
+            tasks.spawn(run_order_fetch_worker(
+                self.client.clone(),
+                self.build_headers(),
+                Arc::clone(&url),
+                Arc::clone(&next_page),
+                Arc::clone(&should_stop),
+                Arc::clone(&rate_limit_gate),
+                Arc::clone(&ui_by_id),
+                Arc::clone(&cache_by_id),
+                Arc::clone(&now_rfc),
+                now_epoch,
+                start_unix,
+                end_unix,
+            ));
         }
 
         while let Some(result) = tasks.join_next().await {
@@ -329,6 +277,72 @@ impl HttpOrderSearchClient {
             .collect();
 
         Ok(SyncedOrderSnapshot { cache_records })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_order_fetch_worker(
+    client: reqwest::Client,
+    headers: HeaderMap,
+    url: Arc<String>,
+    next_page: Arc<AtomicI64>,
+    should_stop: Arc<AtomicBool>,
+    rate_limit_gate: Arc<OrderRateLimitGate>,
+    ui_by_id: Arc<Mutex<HashMap<String, OrderCacheEntry>>>,
+    cache_by_id: Arc<Mutex<HashMap<String, CacheOrderRecord>>>,
+    now_rfc: Arc<String>,
+    now_epoch: i64,
+    start_unix: i64,
+    end_unix: i64,
+) -> anyhow::Result<()> {
+    loop {
+        if should_stop.load(Ordering::Relaxed) {
+            break Ok(());
+        }
+
+        let page = next_page.fetch_add(1, Ordering::Relaxed);
+        let body = json!({
+            "pageSize": ORDER_PAGE_SIZE,
+            "nextKey": "",
+            "orderStatus": "",
+            "searchType": 0,
+            "page": page,
+        });
+
+        let payload = post_order_search_with_retry_inner(
+            &client,
+            headers.clone(),
+            &url,
+            &body,
+            Arc::clone(&rate_limit_gate),
+        )
+        .await?;
+        let Some(list) = order_list_or_stop(&payload)? else {
+            should_stop.store(true, Ordering::Relaxed);
+            break Ok(());
+        };
+
+        let mut page_ui = HashMap::new();
+        let mut page_cache = HashMap::new();
+        let latest_on_page = merge_order_page(
+            list, start_unix, end_unix, &now_rfc, now_epoch,
+            &mut page_ui, &mut page_cache,
+        );
+
+        if !page_ui.is_empty() || !page_cache.is_empty() {
+            let mut ui_guard = ui_by_id.lock().expect("ui cache lock");
+            ui_guard.extend(page_ui);
+            drop(ui_guard);
+            let mut cache_guard = cache_by_id.lock().expect("rich cache lock");
+            cache_guard.extend(page_cache);
+        }
+
+        if start_unix > 0 && latest_on_page > 0 && latest_on_page < start_unix {
+            should_stop.store(true, Ordering::Relaxed);
+            break Ok(());
+        }
+
+        tokio::time::sleep(FETCH_PAGE_INTERVAL).await;
     }
 }
 
