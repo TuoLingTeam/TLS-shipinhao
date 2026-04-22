@@ -94,6 +94,12 @@ jobs:
       - name: Build frontend
         run: pnpm --filter tls-shipinhao-ui build
 
+      - name: Rust format check
+        run: cargo fmt --workspace --check
+
+      - name: Rust clippy
+        run: cargo clippy --workspace -- -D warnings
+
       - name: Run Rust tests
         run: cargo test --workspace
 
