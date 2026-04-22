@@ -10,16 +10,22 @@ use serde_json::Value;
 
 /// 发货链路相关 URL：obfstr 编译期加密
 fn order_detail_url() -> String {
-    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail")
-        .to_string()
+    obfstr::obfstr!(
+        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/detail/cgi/orderDetail"
+    )
+    .to_string()
 }
 fn init_ship_data_url() -> String {
-    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/initShipData")
-        .to_string()
+    obfstr::obfstr!(
+        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/initShipData"
+    )
+    .to_string()
 }
 fn delivery_update_url() -> String {
-    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo")
-        .to_string()
+    obfstr::obfstr!(
+        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo"
+    )
+    .to_string()
 }
 fn order_list_referer() -> String {
     obfstr::obfstr!("https://store.weixin.qq.com/shop/order/list").to_string()
@@ -223,18 +229,16 @@ impl DeliveryGateway for HttpDeliveryGateway {
         let (old_info, old_waybill) = self.extract_delivery_info(&request.order_id)?;
 
         match self.do_update(&request.order_id, &request.tracking_number, &old_info, None) {
-            Ok(()) => {
-                return Ok(DeliveryUpdateResult {
-                    order_id: request.order_id.clone(),
-                    success: true,
-                    previous_waybill: if old_waybill.is_empty() {
-                        None
-                    } else {
-                        Some(old_waybill)
-                    },
-                    error_message: None,
-                });
-            }
+            Ok(()) => Ok(DeliveryUpdateResult {
+                order_id: request.order_id.clone(),
+                success: true,
+                previous_waybill: if old_waybill.is_empty() {
+                    None
+                } else {
+                    Some(old_waybill)
+                },
+                error_message: None,
+            }),
             Err(e) if is_delivery_mismatch_error(&e.to_string()) => {
                 if let Some(override_info) =
                     determine_delivery_override_from_raw_info(&request.tracking_number, &old_info)
@@ -256,21 +260,19 @@ impl DeliveryGateway for HttpDeliveryGateway {
                         error_message: None,
                     });
                 }
-                return Ok(DeliveryUpdateResult {
+                Ok(DeliveryUpdateResult {
                     order_id: request.order_id.clone(),
                     success: false,
                     previous_waybill: None,
                     error_message: Some("快递单号与物流商不匹配，且无法自动映射".to_string()),
-                });
+                })
             }
-            Err(e) => {
-                return Ok(DeliveryUpdateResult {
-                    order_id: request.order_id.clone(),
-                    success: false,
-                    previous_waybill: None,
-                    error_message: Some(e.to_string()),
-                });
-            }
+            Err(e) => Ok(DeliveryUpdateResult {
+                order_id: request.order_id.clone(),
+                success: false,
+                previous_waybill: None,
+                error_message: Some(e.to_string()),
+            }),
         }
     }
 }

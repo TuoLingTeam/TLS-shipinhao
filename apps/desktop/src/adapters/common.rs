@@ -3,7 +3,7 @@
 //! 原本 `http_review_source` / `http_quality_refund_source` / `http_delivery_gateway`
 //! / `http_order_search` 各自复制了一份 `build_headers` + `REQUEST_TIMEOUT_SECS`
 //! + `build_desktop_http_client(...)`，唯一差异只是 `Referer`。平台一改头字段，
-//! 就要同步改 4 份且容易漏。这里统一出来：
+//!   就要同步改 4 份且容易漏。这里统一出来：
 //!
 //! - [`REQUEST_TIMEOUT_SECS`]：桌面端出站 HTTP 的统一超时
 //! - [`build_client`]：封装 `desktop_services::http_client::build_desktop_http_client`

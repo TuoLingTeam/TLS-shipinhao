@@ -1,8 +1,8 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub fn first_non_empty<'a>(
-    data: &'a serde_json::Map<String, serde_json::Value>,
+pub fn first_non_empty(
+    data: &serde_json::Map<String, serde_json::Value>,
     keys: &[&str],
 ) -> serde_json::Value {
     for key in keys {

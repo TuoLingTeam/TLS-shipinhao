@@ -48,7 +48,7 @@ pub async fn fetch_latest_version_info(
     let client = crate::common::http_client::build_desktop_http_client(Duration::from_secs(
         UPDATE_REQUEST_TIMEOUT_SECS,
     ));
-    let response = client.get(&update_version_url()).send().await?;
+    let response = client.get(update_version_url()).send().await?;
 
     if !response.status().is_success() {
         return Err(UpdateError::HttpStatus(response.status()));

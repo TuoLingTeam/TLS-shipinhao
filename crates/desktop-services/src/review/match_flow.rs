@@ -127,14 +127,11 @@ pub fn match_single_evaluation(
         };
     };
 
-    let Some(best_match) = best_matches
-        .into_iter()
-        .find(|item| {
-            item.score == best_key.score
-                && item.confirm_diff == best_key.confirm_diff
-                && item.time_diff == best_key.time_diff
-        })
-    else {
+    let Some(best_match) = best_matches.into_iter().find(|item| {
+        item.score == best_key.score
+            && item.confirm_diff == best_key.confirm_diff
+            && item.time_diff == best_key.time_diff
+    }) else {
         return SingleEvaluationMatch {
             matched_order: None,
             match_strategy: MatchStrategy::None,

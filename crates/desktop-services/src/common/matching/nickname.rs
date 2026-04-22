@@ -18,7 +18,7 @@
 //! 也便于单元测试覆盖每个分支。
 
 use regex::Regex;
-use std::cmp::{max, min};
+use std::cmp::max;
 use std::sync::OnceLock;
 
 /// 匹配昵称尾部的数字尾巴。字符集覆盖 ASCII / 全角 / 上标 / 下标数字，以及任意 Unicode 空白。
@@ -33,7 +33,7 @@ pub fn clamp_percent(value: f64) -> i32 {
     if !value.is_finite() {
         return 0;
     }
-    min(100, max(0, value.round() as i32))
+    (value.round() as i32).clamp(0, 100)
 }
 
 /// 昵称相似度（0~100），完整保持 Python 版 `similarity_percent` 的行为。

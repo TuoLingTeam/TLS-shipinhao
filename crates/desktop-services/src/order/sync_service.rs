@@ -870,7 +870,10 @@ mod tests {
 
         let err = service.rebuild_cache(Some(now)).unwrap_err();
         let text = format!("{err:?}");
-        assert!(text.contains("风控限流拒绝请求"), "原始错误消息必须保留：{text}");
+        assert!(
+            text.contains("风控限流拒绝请求"),
+            "原始错误消息必须保留：{text}"
+        );
         assert!(
             text.contains("fetch cache orders"),
             "应带 sync_range 的 with_context 前缀：{text}",

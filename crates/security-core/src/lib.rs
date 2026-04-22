@@ -14,7 +14,7 @@ pub mod integrity;
 
 pub use device_id::{collect_raw_fingerprint, derive_device_id, get_device_id, DEVICE_ID_HEX_LEN};
 pub use integrity::{
-    validate_runtime_continuity, IntegrityError, Mf, ManifestPayload, Sm,
+    validate_runtime_continuity, IntegrityError, ManifestPayload, Mf, Sm,
     INTEGRITY_MANIFEST_FILE_NAME,
 };
 
@@ -250,14 +250,14 @@ pub extern "C" fn security_core_backend_name() -> *const c_char {
     BACKEND_NAME.as_ptr() as *const c_char
 }
 
+/// # Safety
+/// `ptr` 必须是 `security_core_*` 系列函数返回的有效指针，且只能释放一次。
 #[no_mangle]
-pub extern "C" fn security_core_free_string(ptr: *mut c_char) {
+pub unsafe extern "C" fn security_core_free_string(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
     }
-    unsafe {
-        drop(CString::from_raw(ptr));
-    }
+    drop(CString::from_raw(ptr));
 }
 
 #[no_mangle]

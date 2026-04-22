@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use api_contracts::{is_supported_task, Lp, RiskLevel, Rg};
+use api_contracts::{is_supported_task, Lp, Rg, RiskLevel};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 

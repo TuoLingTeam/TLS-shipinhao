@@ -12,15 +12,11 @@ pub struct BatchDeliveryItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum BatchDeliveryStepStatus {
+    #[default]
     Success,
     Failed,
-}
-
-impl Default for BatchDeliveryStepStatus {
-    fn default() -> Self {
-        Self::Success
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -316,11 +312,7 @@ mod tests {
         assert_eq!(report.success_count, 2);
         assert_eq!(report.failure_count, 0);
         assert_eq!(report.steps.len(), 2);
-        assert_eq!(
-            gateway.calls.len(),
-            2,
-            "取消后剩余条目不应被派发到 gateway"
-        );
+        assert_eq!(gateway.calls.len(), 2, "取消后剩余条目不应被派发到 gateway");
     }
 
     #[test]
@@ -365,13 +357,8 @@ mod tests {
         let items = vec![item("o-1", "t-1")];
         let mut gateway = FakeGateway::default();
         let mut guard = FakeRuntimeGuard::default();
-        let report = run_batch_delivery_with_hooks(
-            &items,
-            &mut gateway,
-            &mut guard,
-            |_, _| {},
-            || true,
-        );
+        let report =
+            run_batch_delivery_with_hooks(&items, &mut gateway, &mut guard, |_, _| {}, || true);
         assert!(report.stopped);
         assert_eq!(report.success_count, 0);
         assert_eq!(report.failure_count, 0);

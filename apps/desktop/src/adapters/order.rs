@@ -15,8 +15,10 @@ use std::time::Duration;
 
 /// 订单接口 URL / Referer：obfstr 编译期加密，二进制里 `strings` 扫不到原文
 fn order_search_url() -> String {
-    obfstr::obfstr!("https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch")
-        .to_string()
+    obfstr::obfstr!(
+        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/list/cgi/orderSearch"
+    )
+    .to_string()
 }
 fn order_list_referer() -> String {
     obfstr::obfstr!("https://store.weixin.qq.com/shop/order/list").to_string()
@@ -149,7 +151,8 @@ impl OrderRateLimitGate {
 
         *guard = now + Duration::from_secs(wait_secs);
         self.attempt.store(current_attempt + 1, Ordering::Relaxed);
-        self.total_wait_secs.store(total + wait_secs, Ordering::Relaxed);
+        self.total_wait_secs
+            .store(total + wait_secs, Ordering::Relaxed);
         BackoffSchedule::Scheduled(wait_secs)
     }
 
@@ -325,8 +328,13 @@ async fn run_order_fetch_worker(
         let mut page_ui = HashMap::new();
         let mut page_cache = HashMap::new();
         let latest_on_page = merge_order_page(
-            list, start_unix, end_unix, &now_rfc, now_epoch,
-            &mut page_ui, &mut page_cache,
+            list,
+            start_unix,
+            end_unix,
+            &now_rfc,
+            now_epoch,
+            &mut page_ui,
+            &mut page_cache,
         );
 
         if !page_ui.is_empty() || !page_cache.is_empty() {
@@ -775,11 +783,7 @@ mod tests {
             BackoffSchedule::Waiting(_) => (),
             other => panic!("同窗口内第二次应 Waiting，实际 {other:?}"),
         }
-        assert_eq!(
-            gate.attempt_count(),
-            1,
-            "并发调用不应重复消耗 attempt 配额"
-        );
+        assert_eq!(gate.attempt_count(), 1, "并发调用不应重复消耗 attempt 配额");
     }
 
     #[test]

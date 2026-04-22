@@ -95,7 +95,7 @@ jobs:
         run: pnpm --filter tls-shipinhao-ui build
 
       - name: Rust format check
-        run: cargo fmt --workspace --check
+        run: cargo fmt --all --check
 
       - name: Rust clippy
         run: cargo clippy --workspace -- -D warnings

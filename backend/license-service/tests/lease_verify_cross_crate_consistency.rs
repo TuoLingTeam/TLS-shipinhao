@@ -70,7 +70,9 @@ fn rust_outcome(
     allow_expired: bool,
 ) -> Result<(), LeaseError> {
     let verifier = LeaseVerifier::from_public_key_b64(vk).expect("vk must decode");
-    verifier.verify(token, device, now, allow_expired).map(|_| ())
+    verifier
+        .verify(token, device, now, allow_expired)
+        .map(|_| ())
 }
 
 #[test]
@@ -159,7 +161,10 @@ fn expired_token_accepted_when_allow_expired_true_on_both_paths() {
     let token = sign_token(&sk, &happy_payload("dev-1", 1_500));
 
     let (ffi_ok, ffi_reason) = ffi_outcome(&token, &vk, Some("dev-1"), 2_000, true);
-    assert!(ffi_ok, "allow_expired=true 时 FFI 应放行：reason={ffi_reason}");
+    assert!(
+        ffi_ok,
+        "allow_expired=true 时 FFI 应放行：reason={ffi_reason}"
+    );
     assert_eq!(ffi_reason, "ok");
 
     assert!(

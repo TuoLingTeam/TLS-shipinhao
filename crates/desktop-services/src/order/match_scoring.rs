@@ -135,6 +135,7 @@ pub fn compute_product_similarity(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_match_score(
     evaluation_buyer_nickname: Option<&str>,
     evaluation_product_id: Option<&str>,

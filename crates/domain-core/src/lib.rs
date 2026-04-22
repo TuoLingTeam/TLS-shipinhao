@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TaskKind {
+    #[default]
     ReviewFind,
     ReviewFullScan,
     QualityRefund,
@@ -43,40 +45,26 @@ impl AsRef<str> for TaskKind {
     }
 }
 
-impl Default for TaskKind {
-    fn default() -> Self {
-        Self::ReviewFind
-    }
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MatchSource {
     ExactOrderId,
     ReceiverAndTimeWindow,
     ReceiverAndAmount,
+    #[default]
     ManualFallback,
-}
-
-impl Default for MatchSource {
-    fn default() -> Self {
-        Self::ManualFallback
-    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MatchStrategy {
     ExactMatch,
     HighConfidence,
     ProbableMatch,
+    #[default]
     Fallback,
-}
-
-impl Default for MatchStrategy {
-    fn default() -> Self {
-        Self::Fallback
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

@@ -488,24 +488,25 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                 ORDER BY create_time DESC, order_id DESC
                 "#,
             )?;
-            let order_rows = order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
-                Ok(CacheOrderRecord {
-                    order_id: row.get(0)?,
-                    buyer_nickname: row.get(1)?,
-                    normalized_nickname: row.get(2)?,
-                    amount_cent: row.get(3)?,
-                    create_time: row.get(4)?,
-                    confirm_receipt_time: row.get(5)?,
-                    is_waybill_received: int_to_bool(row.get::<_, i64>(6)?),
-                    waybill_received_time: row.get(7)?,
-                    is_education_order: int_to_bool(row.get::<_, i64>(8)?),
-                    order_status: row.get(9)?,
-                    openid: row.get(10)?,
-                    raw_source: row.get(11)?,
-                    updated_at: row.get(12)?,
-                    products: Vec::new(),
-                })
-            })?;
+            let order_rows =
+                order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+                    Ok(CacheOrderRecord {
+                        order_id: row.get(0)?,
+                        buyer_nickname: row.get(1)?,
+                        normalized_nickname: row.get(2)?,
+                        amount_cent: row.get(3)?,
+                        create_time: row.get(4)?,
+                        confirm_receipt_time: row.get(5)?,
+                        is_waybill_received: int_to_bool(row.get::<_, i64>(6)?),
+                        waybill_received_time: row.get(7)?,
+                        is_education_order: int_to_bool(row.get::<_, i64>(8)?),
+                        order_status: row.get(9)?,
+                        openid: row.get(10)?,
+                        raw_source: row.get(11)?,
+                        updated_at: row.get(12)?,
+                        products: Vec::new(),
+                    })
+                })?;
             let mut orders = order_rows.collect::<rusqlite::Result<Vec<_>>>()?;
 
             let mut product_stmt = conn.prepare(

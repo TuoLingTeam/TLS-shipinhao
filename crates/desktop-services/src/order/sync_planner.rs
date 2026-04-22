@@ -39,8 +39,8 @@ pub fn incremental_refresh_start(end_timestamp: i64, state: Option<&SyncPlannerS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, FixedOffset, TimeZone, Utc};
     use crate::day_window::recent_day_range_timestamps;
+    use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 
     #[test]
     fn retention_start_uses_end_of_day_coverage_window() {

@@ -227,8 +227,7 @@ fn sync_and_read_orders(
     let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
     let mut service = OrderSyncService::new(finder, repository);
     let now = chrono::Utc::now();
-    let retention_start =
-        service.retention_start_timestamp(service.sync_now_timestamp(Some(now)));
+    let retention_start = service.retention_start_timestamp(service.sync_now_timestamp(Some(now)));
 
     let (orders, warnings) = if start_unix < retention_start {
         service
@@ -320,7 +319,10 @@ fn run_review_match_flow(
         if !status.coverage_complete {
             return None;
         }
-        let cs = status.coverage_start.as_deref().and_then(parse_iso_timestamp);
+        let cs = status
+            .coverage_start
+            .as_deref()
+            .and_then(parse_iso_timestamp);
         let ce = status.coverage_end.as_deref().and_then(parse_iso_timestamp);
         match (cs, ce) {
             (Some(cs), Some(ce)) if start_unix >= cs && end_unix <= ce => Some((cs, ce)),
@@ -329,13 +331,31 @@ fn run_review_match_flow(
     });
 
     let cache_result = if let Some((cs, ce)) = cached_window_ready {
-        let (orders, warnings) =
-            read_orders_from_ready_cache(&app, start_unix, end_unix, cs, ce)?;
-        OrderCacheResult { orders, warnings, cache_sync_performed: false, sync_written_count: 0 }
+        let (orders, warnings) = read_orders_from_ready_cache(&app, start_unix, end_unix, cs, ce)?;
+        OrderCacheResult {
+            orders,
+            warnings,
+            cache_sync_performed: false,
+            sync_written_count: 0,
+        }
     } else {
-        let before_count = status_before.as_ref().map(|s| s.cached_order_count).unwrap_or(0);
-        let had_coverage = status_before.as_ref().map(|s| s.coverage_complete).unwrap_or(false);
-        sync_and_read_orders(&app, cookie, magic, start_unix, end_unix, before_count, had_coverage)?
+        let before_count = status_before
+            .as_ref()
+            .map(|s| s.cached_order_count)
+            .unwrap_or(0);
+        let had_coverage = status_before
+            .as_ref()
+            .map(|s| s.coverage_complete)
+            .unwrap_or(false);
+        sync_and_read_orders(
+            &app,
+            cookie,
+            magic,
+            start_unix,
+            end_unix,
+            before_count,
+            had_coverage,
+        )?
     };
 
     emit_order_sync_progress(
@@ -343,7 +363,10 @@ fn run_review_match_flow(
         "review_query",
         "match_reviews",
         76,
-        format!("订单缓存已就绪，正在对 {} 条差评执行评分匹配…", evaluations.len()),
+        format!(
+            "订单缓存已就绪，正在对 {} 条差评执行评分匹配…",
+            evaluations.len()
+        ),
     );
 
     let results = match_reviews_with_cache_records(&evaluations, &cache_result.orders);
@@ -395,8 +418,8 @@ pub async fn find_reviews(
     tokio::task::spawn_blocking(move || {
         run_review_match_flow(app, creds.cookie, creds.magic, query)
     })
-        .await
-        .map_err(|e| AppError::Message(e.to_string()))?
+    .await
+    .map_err(|e| AppError::Message(e.to_string()))?
 }
 
 #[tauri::command(rename_all = "snake_case")]

@@ -7,11 +7,11 @@
 //! 私有符号通过同一个模块传递"这种脆弱的耦合。
 
 use super::*;
+use crate::runtime::{device_id_matches_fingerprint, now_iso};
 use api_contracts::{LicenseState, Rg, LICENSE_TASK_REVIEW_FIND};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use chrono::Utc;
-use crate::runtime::{device_id_matches_fingerprint, now_iso};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use ed25519_dalek::SigningKey;
 use license_service::LeaseVerifier;
@@ -101,10 +101,7 @@ impl AsyncRuntimeRepository for Repo {
             .cloned())
     }
 
-    async fn save_device_registration(
-        &self,
-        record: &DeviceRegistration,
-    ) -> anyhow::Result<()> {
+    async fn save_device_registration(&self, record: &DeviceRegistration) -> anyhow::Result<()> {
         self.registrations.lock().unwrap().insert(
             (record.license_key.clone(), record.device_id.clone()),
             record.clone(),
@@ -610,7 +607,10 @@ async fn admin_revoke_json_reuses_runtime_revoke_flow_without_device_id() {
     let revoked_payload: SignedLicenseApiResponse = serde_json::from_str(&revoked).unwrap();
     assert!(revoked_payload.success);
     assert_eq!(revoked_payload.license_state, LicenseState::Revoked);
-    assert_eq!(revoked_payload.device_id.as_deref(), Some("858c06cf9c505c9f"));
+    assert_eq!(
+        revoked_payload.device_id.as_deref(),
+        Some("858c06cf9c505c9f")
+    );
 
     let verified = handle_async_runtime_json(
         &repo,
@@ -970,10 +970,7 @@ async fn task_authorize_rejects_after_license_is_revoked() {
 #[test]
 fn device_id_matches_fingerprint_accepts_canonical_pair() {
     // "fp-1" 的 SHA-256 前 8 字节是 858c06cf9c505c9f
-    assert!(device_id_matches_fingerprint(
-        "858c06cf9c505c9f",
-        "fp-1"
-    ));
+    assert!(device_id_matches_fingerprint("858c06cf9c505c9f", "fp-1"));
     // 大小写 / 前后空白均容忍
     assert!(device_id_matches_fingerprint(
         "  858C06CF9C505C9F  ",
@@ -1033,11 +1030,7 @@ async fn runtime_activate_rejects_mismatched_device_id_fingerprint() {
 
     // 确认 D1 侧未创建任何污染数据
     assert!(
-        repo.licenses
-            .lock()
-            .unwrap()
-            .get("TLS-TEST")
-            .is_none(),
+        repo.licenses.lock().unwrap().get("TLS-TEST").is_none(),
         "未通过自洽校验的激活不应写入 activations"
     );
     assert!(

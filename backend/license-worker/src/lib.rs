@@ -42,8 +42,7 @@ mod admin;
 
 pub use messages::{
     parse_route, route_request, route_requires_signer, AdminRevokeRequest, LeaseRefreshRequest,
-    Lrr, LeaseRevokeRequest, SignedLicenseApiResponse, TaskAuthorizeRequest,
-    WorkerRoute,
+    LeaseRevokeRequest, Lrr, SignedLicenseApiResponse, TaskAuthorizeRequest, WorkerRoute,
 };
 pub use runtime::{
     admin_auth_error_contract, handle_admin_revoke_json, handle_async_runtime_json,

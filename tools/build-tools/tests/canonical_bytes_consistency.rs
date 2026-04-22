@@ -6,7 +6,7 @@
 //! 历史签过的包也会集体不可验证。用本测试锁住字节串一致性。
 
 use api_contracts::{IntegrityManifest, IntegrityManifestFile};
-use security_core::integrity::{canonicalize_manifest, Mf, ManifestPayload};
+use security_core::integrity::{canonicalize_manifest, ManifestPayload, Mf};
 
 fn fixture_files() -> (Vec<IntegrityManifestFile>, Vec<Mf>) {
     let api = vec![

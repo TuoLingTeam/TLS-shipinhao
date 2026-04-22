@@ -34,14 +34,15 @@ pub fn build_candidate_index_keys(
     sku_name: &str,
 ) -> Vec<String> {
     let mut keys = Vec::new();
-    for candidate in [
+    for key in [
         build_product_id_key(&evaluation_context.product_id, &evaluation_context.sku_id),
         build_product_value_key(&evaluation_context.product_name, sku_name),
-    ] {
-        if let Some(key) = candidate {
-            if !keys.contains(&key) {
-                keys.push(key);
-            }
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !keys.contains(&key) {
+            keys.push(key);
         }
     }
     keys
@@ -50,15 +51,16 @@ pub fn build_candidate_index_keys(
 pub fn build_product_sku_index(orders: &[CandidateOrder]) -> ProductIndex {
     let mut index = ProductIndex::new();
     for order in orders.iter().cloned() {
-        for key in [
+        for index_key in [
             build_product_id_key(&order.product_id, &order.sku_id),
             build_product_value_key(&order.product_name, &order.sale_param),
-        ] {
-            if let Some(index_key) = key {
-                index.entry(index_key).or_default().push(IndexedOrder {
-                    order: order.clone(),
-                });
-            }
+        ]
+        .into_iter()
+        .flatten()
+        {
+            index.entry(index_key).or_default().push(IndexedOrder {
+                order: order.clone(),
+            });
         }
     }
     index

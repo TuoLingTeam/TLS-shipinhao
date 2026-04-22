@@ -19,9 +19,9 @@
 //! `use license_worker::…`）不变。
 
 use api_contracts::{
-    Lp, LicenseLease, LicenseState, RiskLevel, Rg, LEASE_KIND_LICENSE,
-    LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE, LICENSE_TASK_QUALITY_REFUND,
-    LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
+    LicenseLease, LicenseState, Lp, Rg, RiskLevel, LEASE_KIND_LICENSE, LICENSE_TASK_BATCH_DELIVERY,
+    LICENSE_TASK_CACHE_MANAGE, LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND,
+    LICENSE_TASK_REVIEW_FULL_SCAN,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -34,7 +34,7 @@ use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::messages::{
-    parse_route, AdminRevokeRequest, LeaseRefreshRequest, Lrr, LeaseRevokeRequest,
+    parse_route, AdminRevokeRequest, LeaseRefreshRequest, LeaseRevokeRequest, Lrr,
     SignedLicenseApiResponse, TaskAuthorizeRequest, WorkerRoute,
 };
 use crate::LeaseTokenSigner;
@@ -427,8 +427,13 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
 ) -> anyhow::Result<SignedLicenseApiResponse> {
     let normalized_key = normalize_key(&input.license_key);
     let mut key_record = match validate_activation_key(
-        repo, &normalized_key, &input.device_id, &input.device_fingerprint,
-    ).await? {
+        repo,
+        &normalized_key,
+        &input.device_id,
+        &input.device_fingerprint,
+    )
+    .await?
+    {
         Ok(record) => record,
         Err(failure) => return Ok(failure),
     };
@@ -470,7 +475,11 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
     };
 
     runtime_upsert_device_registration(
-        repo, &normalized_key, &input.device_id, &input.device_fingerprint, now,
+        repo,
+        &normalized_key,
+        &input.device_id,
+        &input.device_fingerprint,
+        now,
     )
     .await?;
     repo.append_audit_event(&AuditEvent {

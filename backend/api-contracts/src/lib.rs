@@ -25,9 +25,11 @@ blank_debug_release!(Lp);
 /// 收到历史数据里的 `"active"` 仍能反序列化。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum LicenseState {
     /// 已授权；JSON 形态为 `"active"`（兼容历史），同时接受 `"ok"`。
     #[serde(alias = "ok")]
+    #[default]
     Active,
     /// 卡密未激活 / 未找到本地 Lease。
     NotFound,
@@ -49,12 +51,6 @@ pub enum LicenseState {
     Compromised,
 }
 
-impl Default for LicenseState {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
 /// 允许在离线模式下继续使用的状态集合（与 Python 版 `_ALLOWED_LOCAL_REASONS` 对齐）。
 ///
 /// 命中这些状态时，客户端无需强制联网校验即可让用户继续使用功能。
@@ -69,16 +65,12 @@ impl LicenseState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum RiskLevel {
+    #[default]
     Low,
     Medium,
     High,
-}
-
-impl Default for RiskLevel {
-    fn default() -> Self {
-        Self::Low
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

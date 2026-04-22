@@ -23,9 +23,7 @@ pub(crate) async fn require_cookie_credentials(
 ) -> Result<CookieCredentials, AppError> {
     let cookie_profile = state.cookie_profile.lock().await;
     if cookie_profile.cookie_header.is_empty() {
-        return Err(AppError::Message(
-            "请先在设置中配置 Cookie".to_string(),
-        ));
+        return Err(AppError::Message("请先在设置中配置 Cookie".to_string()));
     }
     Ok(CookieCredentials {
         cookie: cookie_profile.cookie_header.clone(),

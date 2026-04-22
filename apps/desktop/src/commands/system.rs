@@ -267,8 +267,8 @@ pub async fn open_cookie_login(
         }));
     }
 
-    let login_url =
-        Url::parse(&store_login_url()).map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
+    let login_url = Url::parse(&store_login_url())
+        .map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
     let data_dir = state::login_webview_data_dir(&state.app_home_dir);
 
     WebviewWindowBuilder::new(

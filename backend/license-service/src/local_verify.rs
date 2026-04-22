@@ -8,7 +8,7 @@
 //! 命令层）负责读取 Token 后作为 `Option<&str>` 传入。这样 license-service
 //! 无需依赖任何 IO，方便纯函数测试。
 
-use api_contracts::{Lp, LicenseState, RuntimeState};
+use api_contracts::{LicenseState, Lp, RuntimeState};
 use chrono::{DateTime, Utc};
 
 use crate::lease::{LeaseError, LeaseVerifier};

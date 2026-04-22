@@ -1,10 +1,8 @@
-use crate::adapters::license::{
-    normalize_license_state, HttpLicenseClient, Lar,
-};
+use crate::adapters::license::{normalize_license_state, HttpLicenseClient, Lar};
 use crate::app_settings::license_api_base_urls;
 use crate::error::AppError;
 use crate::state::{self, AppState, Slp};
-use api_contracts::{Lp, LicenseState, RiskLevel, Rg, RuntimeState};
+use api_contracts::{LicenseState, Lp, Rg, RiskLevel, RuntimeState};
 use license_service::{authorize_task_local, lease::RefreshOutcome};
 use tauri::State;
 
@@ -281,10 +279,7 @@ fn task_requires_remote_authorization(task_type: &str) -> bool {
     )
 }
 
-pub async fn authorize_runtime_task(
-    state: &AppState,
-    task_type: &str,
-) -> Result<Rg, AppError> {
+pub async fn authorize_runtime_task(state: &AppState, task_type: &str) -> Result<Rg, AppError> {
     ensure_runtime_integrity(state).await?;
     let _ = refresh_runtime_license_if_needed(state).await;
     let now_epoch = chrono::Utc::now().timestamp();
@@ -341,7 +336,12 @@ pub async fn activate_license(
         .map_err(|e| AppError::Message(e.to_string()))?;
 
     let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
-    let lease_expires_at = state.runtime_license_state.lock().await.lease_expires_at.clone();
+    let lease_expires_at = state
+        .runtime_license_state
+        .lock()
+        .await
+        .lease_expires_at
+        .clone();
 
     Ok(serde_json::json!({
         "success": resp.success,
@@ -371,7 +371,12 @@ pub async fn verify_license(
         .map_err(|e| AppError::Message(e.to_string()))?;
 
     let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
-    let lease_expires_at = state.runtime_license_state.lock().await.lease_expires_at.clone();
+    let lease_expires_at = state
+        .runtime_license_state
+        .lock()
+        .await
+        .lease_expires_at
+        .clone();
 
     Ok(serde_json::json!({
         "success": resp.success,
@@ -394,10 +399,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<serde_json
     Ok(build_license_status_payload(&profile, &runtime))
 }
 
-async fn persist_license_profile(
-    state: &AppState,
-    profile: Slp,
-) -> Result<(), AppError> {
+async fn persist_license_profile(state: &AppState, profile: Slp) -> Result<(), AppError> {
     {
         let mut current = state.license_profile.lock().await;
         *current = profile.clone();
@@ -411,10 +413,7 @@ fn current_timestamp() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-fn build_license_status_payload(
-    profile: &Slp,
-    runtime: &RuntimeState,
-) -> serde_json::Value {
+fn build_license_status_payload(profile: &Slp, runtime: &RuntimeState) -> serde_json::Value {
     let license_key = if runtime.license_key.trim().is_empty() {
         profile.license_key.clone()
     } else {

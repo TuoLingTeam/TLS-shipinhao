@@ -132,10 +132,7 @@ fn read_manifest_file(path: &Path) -> Result<String, IntegrityError> {
     }
 }
 
-fn verify_manifest_signature(
-    public_key: &VerifyingKey,
-    signed: &Sm,
-) -> Result<(), IntegrityError> {
+fn verify_manifest_signature(public_key: &VerifyingKey, signed: &Sm) -> Result<(), IntegrityError> {
     if signed.signature.trim().is_empty() {
         return Err(IntegrityError::InvalidManifest("signature 为空".into()));
     }

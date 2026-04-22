@@ -383,7 +383,7 @@ impl ReviewSource for HttpReviewSource {
 
             if let Some(total) = resp.get("totalCnt").and_then(Value::as_i64) {
                 let total = total.max(0) as usize;
-                let total_pages = (total + EVALUATION_PAGE_SIZE - 1) / EVALUATION_PAGE_SIZE;
+                let total_pages = total.div_ceil(EVALUATION_PAGE_SIZE);
                 max_pages = EVALUATION_MAX_PAGES.min(total_pages.max(1));
             }
 
@@ -442,7 +442,7 @@ impl HttpReviewSource {
 
             if let Some(total) = resp.get("totalCnt").and_then(Value::as_i64) {
                 let total = total.max(0) as usize;
-                let total_pages = (total + EVALUATION_PAGE_SIZE - 1) / EVALUATION_PAGE_SIZE;
+                let total_pages = total.div_ceil(EVALUATION_PAGE_SIZE);
                 max_pages = EVALUATION_MAX_PAGES.min(total_pages.max(1));
             }
 

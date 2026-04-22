@@ -270,10 +270,7 @@ pub fn load_license_profile(app_home_dir: &Path) -> Option<Slp> {
     serde_json::from_str(&text).ok()
 }
 
-pub fn save_license_profile(
-    app_home_dir: &Path,
-    profile: &Slp,
-) -> std::io::Result<()> {
+pub fn save_license_profile(app_home_dir: &Path, profile: &Slp) -> std::io::Result<()> {
     std::fs::create_dir_all(app_home_dir)?;
     let text = serde_json::to_string_pretty(profile)?;
     std::fs::write(license_profile_path(app_home_dir), text)
