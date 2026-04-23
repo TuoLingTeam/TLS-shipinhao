@@ -107,6 +107,13 @@ export const useDeliveryStore = defineStore("delivery", () => {
     batchProgress.value = null;
   }
 
+  function resetForStoreSwitch() {
+    loading.value = false;
+    error.value = null;
+    batchProgress.value = null;
+    clearPrefillOrder();
+  }
+
   return {
     loading,
     error,
@@ -121,5 +128,6 @@ export const useDeliveryStore = defineStore("delivery", () => {
     finalizeBatch,
     markCancelRequested,
     resetBatch,
+    resetForStoreSwitch,
   };
 });

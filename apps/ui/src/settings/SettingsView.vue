@@ -9,6 +9,7 @@ import { formatDateTime } from "../shared/format";
 import { LICENSE_STATE_LABELS } from "../license/types";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
+import { useStoreContextStore } from "../shared/storeContext";
 import { useUpdateCheckStore } from "../shared/updateCheck";
 import { toErrorMessage } from "../shared/toErrorMessage";
 import { isSettingsSection } from "../layout/navigation";
@@ -21,6 +22,7 @@ const COOKIE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
+const storeContext = useStoreContextStore();
 const updateCheck = useUpdateCheckStore();
 const route = useRoute();
 const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
@@ -30,11 +32,7 @@ const { clockText, uptimeText } = useRuntimeClock();
 const saveNotice = ref<null | "auto" | "manual">(null);
 const saveError = ref<string | null>(null);
 const loadError = ref<string | null>(null);
-const hasBizMagic = ref(false);
-const cookieConfigured = ref(false);
-const cookiePath = ref("");
 const loginLoading = ref(false);
-const pickDirLoading = ref(false);
 const manualCookie = ref("");
 const manualSaveLoading = ref(false);
 
@@ -53,7 +51,15 @@ const activeSection = computed<SettingsSectionId>(() => {
 });
 
 const currentStateText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? "未知状态");
-const cookiePathText = computed(() => cookiePath.value || "未设置保存目录");
+const cookiePathText = computed(() => storeContext.cookiePath || "当前店铺尚未写入 Cookie 文件");
+const activeStoreNameText = computed(() => storeContext.activeStore?.store_name ?? "尚未识别店铺");
+const activeStoreIdText = computed(() => storeContext.activeStore?.store_id ?? "未生成");
+const storeSelectorDisabled = computed(
+  () => storeContext.busy || loginLoading.value || manualSaveLoading.value,
+);
+const storeCountText = computed(() =>
+  storeContext.stores.length > 0 ? `已识别 ${storeContext.stores.length} 家店铺` : "暂无已识别店铺",
+);
 // 卡密有效期：100 年级别的硬过期；Lease TTL：3 天级别的短效 Token，到期需联网续约
 const licenseExpiresText = computed(() => formatDateTime(appStore.licenseExpiresAt));
 const leaseExpiresText = computed(() => formatDateTime(appStore.leaseExpiresAt));
@@ -80,14 +86,7 @@ async function refreshCookieHealth() {
 async function loadCookieStatus() {
   loadError.value = null;
   try {
-    const status = await invoke<{
-      configured: boolean;
-      has_biz_magic: boolean;
-      cookie_path: string;
-    }>("get_cookie_status");
-    hasBizMagic.value = status.has_biz_magic;
-    cookieConfigured.value = status.configured;
-    cookiePath.value = status.cookie_path;
+    await storeContext.refresh();
   } catch (e) {
     loadError.value = toErrorMessage(e);
   }
@@ -102,30 +101,17 @@ function flashSaveNotice(kind: "auto" | "manual") {
   }, 2200);
 }
 
-async function handlePickSaveDir() {
-  pickDirLoading.value = true;
-  saveError.value = null;
-  try {
-    const result = await invoke<{ selected: boolean; cookie_path: string }>("pick_cookie_save_dir");
-    cookiePath.value = result.cookie_path;
-  } catch (e) {
-    saveError.value = toErrorMessage(e);
-  } finally {
-    pickDirLoading.value = false;
-  }
-}
-
 async function tryExtractCookieOnce() {
   try {
-    const result = await invoke<{
+    const previousStoreId = storeContext.activeStore?.store_id ?? null;
+    await invoke<{
       success: boolean;
       biz_magic: string | null;
       cookie_header: string;
       cookie_path: string;
+      store: { store_id: string; store_name: string };
     }>("extract_cookie_from_login");
-    cookiePath.value = result.cookie_path;
-    hasBizMagic.value = Boolean(result.biz_magic);
-    cookieConfigured.value = true;
+    await storeContext.refreshAfterCookieUpdate(previousStoreId);
     return true;
   } catch {
     // 登录尚未完成或窗口已关闭：保持轮询继续，由调用方控制超时
@@ -163,9 +149,9 @@ async function handleSaveManualCookie() {
   manualSaveLoading.value = true;
   saveError.value = null;
   try {
+    const previousStoreId = storeContext.activeStore?.store_id ?? null;
     await invoke("set_cookie", { cookie_header: raw });
-    await loadCookieStatus();
-    await refreshCookieHealth();
+    await storeContext.refreshAfterCookieUpdate(previousStoreId);
     flashSaveNotice("manual");
     manualCookie.value = "";
   } catch (e) {
@@ -185,6 +171,29 @@ async function handleOpenLogin() {
     saveError.value = toErrorMessage(e);
   } finally {
     loginLoading.value = false;
+  }
+}
+
+async function handleRefreshStoreStatus() {
+  saveError.value = null;
+  await Promise.all([loadCookieStatus(), refreshCookieHealth(), storeContext.refreshOrderCacheStatus()]);
+}
+
+async function handleSelectStore(event: Event) {
+  const target = event.target as HTMLSelectElement | null;
+  const nextStoreId = target?.value?.trim() ?? "";
+  if (!target || !nextStoreId || nextStoreId === storeContext.activeStoreId) {
+    return;
+  }
+  saveError.value = null;
+  try {
+    const result = await storeContext.selectStore(nextStoreId);
+    if (!result) {
+      target.value = storeContext.activeStoreId;
+    }
+  } catch (e) {
+    target.value = storeContext.activeStoreId;
+    saveError.value = toErrorMessage(e);
   }
 }
 
@@ -261,17 +270,67 @@ onBeforeUnmount(() => {
               <h3 class="settings-section-title">Cookie 配置</h3>
             </div>
           </div>
-          <div v-if="!cookieConfigured || !hasBizMagic" class="subsystem-chipbar">
-            <span v-if="!cookieConfigured" class="subsystem-chip subsystem-chip--warn">未配置</span>
-            <span v-if="!hasBizMagic" class="subsystem-chip subsystem-chip--warn">待识别 biz_magic</span>
+          <div v-if="!storeContext.cookieConfigured || !storeContext.hasBizMagic" class="subsystem-chipbar">
+            <span v-if="!storeContext.cookieConfigured" class="subsystem-chip subsystem-chip--warn">未配置</span>
+            <span v-if="!storeContext.hasBizMagic" class="subsystem-chip subsystem-chip--warn">待识别 biz_magic</span>
           </div>
         </header>
 
         <div class="settings-cookie-body flex min-h-0 flex-1 flex-col">
+          <div class="settings-info-grid settings-info-grid--single shrink-0">
+            <div class="settings-info-item">
+              <span class="settings-info-label">当前店铺</span>
+              <div data-testid="settings-active-store" class="min-w-0">
+                <div class="settings-info-value">{{ activeStoreNameText }}</div>
+                <div
+                  data-testid="settings-active-store-id"
+                  class="settings-info-value settings-info-value--mono mt-1"
+                >
+                  {{ activeStoreIdText }}
+                </div>
+              </div>
+            </div>
+            <div class="settings-info-item">
+              <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <span class="settings-info-label">切换店铺</span>
+                <span class="settings-badge" :class="storeContext.hasStores ? 'is-positive' : 'is-muted'">
+                  {{ storeCountText }}
+                </span>
+              </div>
+              <label class="field-affix field-affix--leading mt-1">
+                <svg class="field-affix-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 7.5h16" />
+                  <path d="M5 7.5 6.6 4.8A1.5 1.5 0 0 1 7.9 4h8.2a1.5 1.5 0 0 1 1.29.8L19 7.5" />
+                  <rect x="4" y="7.5" width="16" height="12.5" rx="2.5" />
+                  <path d="M8 12h8" />
+                  <path d="M8 15.5h5" />
+                </svg>
+                <select
+                  data-testid="settings-store-selector"
+                  aria-label="选择当前店铺"
+                  class="field-input field-input--with-leading-icon min-h-[40px] w-full min-w-0"
+                  :value="storeContext.activeStoreId"
+                  :disabled="storeSelectorDisabled || !storeContext.hasStores"
+                  @change="handleSelectStore"
+                >
+                  <option value="" disabled>
+                    {{ storeContext.hasStores ? "选择当前店铺" : "暂无已识别店铺" }}
+                  </option>
+                  <option v-for="store in storeContext.stores" :key="store.store_id" :value="store.store_id">
+                    {{ store.store_name }}
+                  </option>
+                </select>
+              </label>
+              <p class="settings-cookie-subpanel-hint mt-2">
+                切换后会自动切到该店铺绑定的 Cookie 与订单缓存文件，订单/查评/发货页面会同步清空旧店铺内存态。
+              </p>
+            </div>
+          </div>
+
           <div data-testid="settings-cookie-actions" class="settings-cookie-flows flex min-h-0 flex-1 flex-col">
             <div class="settings-cookie-subpanel settings-cookie-subpanel--auto shrink-0">
               <p class="settings-cookie-subpanel-title">方式一 · 浏览器登录（推荐）</p>
-              <p class="settings-cookie-subpanel-hint">在弹出窗口完成登录后，应用会轮询并写入 Cookie；可用下方「选择保存路径」调整落盘目录。</p>
+              <p class="settings-cookie-subpanel-hint">在弹出窗口完成登录后，应用会自动识别店铺并把 Cookie 写入对应店铺目录。</p>
               <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2">
                 <button
                   type="button"
@@ -284,10 +343,10 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="action-btn action-btn-secondary min-h-10"
-                  :disabled="pickDirLoading"
-                  @click="handlePickSaveDir"
+                  :disabled="storeContext.loading"
+                  @click="handleRefreshStoreStatus"
                 >
-                  {{ pickDirLoading ? "选择中..." : "选择保存路径" }}
+                  {{ storeContext.loading ? "刷新中..." : "刷新店铺状态" }}
                 </button>
               </div>
               <div data-testid="settings-cookie-path" class="settings-cookie-path-box shrink-0">
@@ -295,7 +354,7 @@ onBeforeUnmount(() => {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
                     <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.5 1.8h9.3a1.5 1.5 0 0 1 1.5 1.5v7.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5Z" />
                   </svg>
-                  保存位置
+                  当前 Cookie 文件
                 </div>
                 <div class="settings-cookie-path-value font-mono">{{ cookiePathText }}</div>
               </div>
@@ -331,7 +390,7 @@ onBeforeUnmount(() => {
                     type="button"
                     class="action-btn action-btn-secondary min-h-10"
                     data-testid="settings-cookie-save-manual"
-                    :disabled="manualSaveLoading"
+                    :disabled="manualSaveLoading || storeContext.busy"
                     @click="handleSaveManualCookie"
                   >
                     {{ manualSaveLoading ? "保存中..." : "保存手动 Cookie" }}

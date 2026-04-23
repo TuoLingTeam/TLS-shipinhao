@@ -36,6 +36,19 @@ export const useReviewStore = defineStore("review", () => {
     lastMode.value = mode;
   }
 
+  function reset() {
+    results.value = [];
+    loading.value = false;
+    error.value = null;
+    lastQuery.value = null;
+    lastMode.value = "bad_review";
+    cacheWarnings.value = [];
+    cacheCoverageStart.value = null;
+    cacheCoverageEnd.value = null;
+    cacheSyncPerformed.value = false;
+    cacheSyncWrittenCount.value = 0;
+  }
+
   return {
     results,
     loading,
@@ -52,5 +65,6 @@ export const useReviewStore = defineStore("review", () => {
     setError,
     setLastQuery,
     setLastMode,
+    reset,
   };
 });

@@ -14,6 +14,20 @@ const { invokeMock } = vi.hoisted(() => ({
         configured: true,
         has_biz_magic: true,
         cookie_path: "/tmp/cookie.txt",
+        active_store: {
+          store_id: "wx61f28d69d9174ddf",
+          store_name: "精选内衣店",
+        },
+        stores: [
+          {
+            store_id: "wx61f28d69d9174ddf",
+            store_name: "精选内衣店",
+          },
+          {
+            store_id: "wx9b7e1d2233445566",
+            store_name: "运动好物店",
+          },
+        ],
       };
     }
 
@@ -76,13 +90,16 @@ describe("SettingsView", () => {
     expect(wrapper.find('[data-testid="settings-cookie-textarea"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="settings-cookie-save-manual"]').text()).toContain("保存手动 Cookie");
     expect(wrapper.get('[data-testid="settings-cookie-path"]').text()).toContain("/tmp/cookie.txt");
+    expect(wrapper.get('[data-testid="settings-active-store"]').text()).toContain("精选内衣店");
+    expect(wrapper.get('[data-testid="settings-active-store-id"]').text()).toContain("wx61f28d69d9174ddf");
+    expect(wrapper.get('[data-testid="settings-store-selector"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-info-grid");
-    // 方式一：打开登录页 / 选择保存路径（1x2） + 方式二：清除 Cookie / 保存手动 Cookie（1x2）
+    // 方式一：打开登录页 / 刷新店铺状态（1x2） + 方式二：清除 Cookie / 保存手动 Cookie（1x2）
     const actionsHost = wrapper.get('[data-testid="settings-cookie-actions"]');
     expect(actionsHost.find(".settings-action-buttons-grid--1x2").exists()).toBe(true);
     expect(actionsHost.findAll("button").length).toBe(4);
     expect(actionsHost.text()).toContain("打开登录页");
-    expect(actionsHost.text()).toContain("选择保存路径");
+    expect(actionsHost.text()).toContain("刷新店铺状态");
     expect(actionsHost.text()).toContain("清除 Cookie");
     expect(actionsHost.text()).toContain("保存手动 Cookie");
     // 授权信息走单列 grid
@@ -91,6 +108,8 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("方式一");
     expect(wrapper.text()).toContain("方式二");
+    expect(wrapper.text()).toContain("切换店铺");
+    expect(wrapper.text()).toContain("已识别 2 家店铺");
     expect(wrapper.text()).toContain("应用信息");
     expect(wrapper.text()).toContain("状态");
     expect(wrapper.text()).toContain("作者微信");
