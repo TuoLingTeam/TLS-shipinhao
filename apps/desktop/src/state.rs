@@ -14,6 +14,9 @@ const COOKIE_FILE_NAME: &str = "cookie.txt";
 const COOKIE_DIR_POINTER_FILE: &str = "selected_config_dir.txt";
 const LICENSE_FILE_NAME: &str = "license.json";
 const LOGIN_WEBVIEW_DIR_NAME: &str = "login-webview";
+const STORE_REGISTRY_FILE_NAME: &str = "store-registry.json";
+const STORES_DIR_NAME: &str = "stores";
+const STORE_META_FILE_NAME: &str = "meta.json";
 
 use api_contracts::blank_debug_release;
 blank_debug_release!(Slp);
@@ -28,22 +31,71 @@ pub struct Slp {
     pub last_verified_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct StoreMeta {
+    pub store_id: String,
+    pub store_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct StoreRegistry {
+    pub active_store_id: Option<String>,
+    #[serde(default)]
+    pub stores: Vec<StoreMeta>,
+}
+
+impl StoreRegistry {
+    pub fn active_store(&self) -> Option<StoreMeta> {
+        let active_store_id = self.active_store_id.as_deref()?;
+        self.find_store(active_store_id)
+    }
+
+    pub fn find_store(&self, store_id: &str) -> Option<StoreMeta> {
+        self.stores
+            .iter()
+            .find(|store| store.store_id == store_id)
+            .cloned()
+    }
+
+    pub fn upsert_store(&mut self, store: StoreMeta) -> bool {
+        if let Some(existing) = self
+            .stores
+            .iter_mut()
+            .find(|existing| existing.store_id == store.store_id)
+        {
+            existing.store_name = store.store_name;
+            false
+        } else {
+            self.stores.push(store);
+            true
+        }
+    }
+
+    pub fn set_active_store(&mut self, store_id: impl Into<String>) {
+        self.active_store_id = Some(store_id.into());
+    }
+}
+
 /// Tauri 全局状态：Cookie / 授权信息在内存 + 磁盘双写。
 ///
 /// ## 锁顺序协议（避免潜在死锁，新 handler 必须遵守）
 ///
 /// 当一个函数需要**同时**持有多把下列 `Mutex`/`RwLock` 时，**必须按以下顺序获取**：
 ///
-/// 1. `cookie_profile`
-/// 2. `cookie_path`
-/// 3. `runtime_license_state`
-/// 4. `license_profile`
-/// 5. `cookie_health`
+/// 1. `store_registry`
+/// 2. `cookie_profile`
+/// 3. `cookie_path`
+/// 4. `runtime_license_state`
+/// 5. `license_profile`
+/// 6. `cookie_health`
 ///
 /// 单锁持有或用 `{}` 显式作用域**串行**获取多把锁，无需顺序约束。
 /// 违反顺序短期可能靠 `{}` 立即释放规避，但一旦某处 await 点跨越
 /// guard 生命周期就会出现真实死锁——保险起见始终按此协议写。
 pub struct AppState {
+    pub store_registry: Mutex<StoreRegistry>,
     pub cookie_profile: Mutex<CookieProfile>,
     pub cookie_path: Mutex<PathBuf>,
     pub app_home_dir: PathBuf,
@@ -75,6 +127,7 @@ impl AppState {
     pub fn new() -> Self {
         let app_home_dir = app_home_dir();
         let device_id = security_core::get_device_id();
+        let store_registry = load_store_registry(&app_home_dir).unwrap_or_default();
         let lease_store = init_default_store(&app_home_dir, &device_id);
         let lease_verifier =
             LeaseVerifier::new().unwrap_or_else(|err| panic!("授权公钥加载失败：{err}"));
@@ -102,21 +155,13 @@ impl AppState {
             } else {
                 runtime_license_state
             };
-        let cookie_path = resolve_cookie_path(&app_home_dir);
+        let cookie_path = resolve_store_cookie_path(&app_home_dir, &store_registry)
+            .unwrap_or_else(|| resolve_cookie_path(&app_home_dir));
         let profile = load_cookie_from_file(&cookie_path);
         let license_profile = load_license_profile(&app_home_dir).unwrap_or_default();
-        let cookie_health = CookieHealthSnapshot {
-            healthy: false,
-            configured: !profile.cookie_header.is_empty(),
-            has_biz_magic: profile.biz_magic.is_some(),
-            last_checked_at: None,
-            hint: if profile.cookie_header.is_empty() {
-                Some("尚未配置 Cookie".to_string())
-            } else {
-                Some("尚未探测".to_string())
-            },
-        };
+        let cookie_health = cookie_health_from_profile(&profile);
         Self {
+            store_registry: Mutex::new(store_registry),
             cookie_profile: Mutex::new(profile),
             cookie_path: Mutex::new(cookie_path),
             app_home_dir,
@@ -143,6 +188,10 @@ pub fn login_webview_data_dir(app_home_dir: &Path) -> PathBuf {
     app_home_dir.join(LOGIN_WEBVIEW_DIR_NAME)
 }
 
+pub fn store_login_webview_data_dir(app_home_dir: &Path, store_id: &str) -> PathBuf {
+    store_dir(app_home_dir, store_id).join(LOGIN_WEBVIEW_DIR_NAME)
+}
+
 pub fn find_integrity_manifest_path(app_home_dir: &Path) -> Option<PathBuf> {
     let mut candidates = Vec::new();
     candidates.push(app_home_dir.to_path_buf());
@@ -164,6 +213,26 @@ pub fn find_integrity_manifest_path(app_home_dir: &Path) -> Option<PathBuf> {
 
 pub fn cookie_path_in_dir(dir: &Path) -> PathBuf {
     dir.join(COOKIE_FILE_NAME)
+}
+
+pub fn store_registry_path(app_home_dir: &Path) -> PathBuf {
+    app_home_dir.join(STORE_REGISTRY_FILE_NAME)
+}
+
+pub fn stores_root(app_home_dir: &Path) -> PathBuf {
+    app_home_dir.join(STORES_DIR_NAME)
+}
+
+pub fn store_dir(app_home_dir: &Path, store_id: &str) -> PathBuf {
+    stores_root(app_home_dir).join(store_id.trim())
+}
+
+pub fn store_cookie_path(app_home_dir: &Path, store_id: &str) -> PathBuf {
+    store_dir(app_home_dir, store_id).join(COOKIE_FILE_NAME)
+}
+
+pub fn store_meta_path(app_home_dir: &Path, store_id: &str) -> PathBuf {
+    store_dir(app_home_dir, store_id).join(STORE_META_FILE_NAME)
 }
 
 fn cookie_dir_pointer_path(app_home_dir: &Path) -> PathBuf {
@@ -195,6 +264,11 @@ pub fn load_user_cookie_dir(app_home_dir: &Path) -> Option<PathBuf> {
 }
 
 pub fn resolve_cookie_path(app_home_dir: &Path) -> PathBuf {
+    let store_registry = load_store_registry(app_home_dir).unwrap_or_default();
+    if let Some(path) = resolve_store_cookie_path(app_home_dir, &store_registry) {
+        return path;
+    }
+
     if let Some(saved_dir) = load_user_cookie_dir(app_home_dir) {
         return cookie_path_in_dir(&saved_dir);
     }
@@ -223,12 +297,20 @@ pub fn resolve_cookie_path(app_home_dir: &Path) -> PathBuf {
     cookie_path_in_dir(app_home_dir)
 }
 
+pub fn resolve_store_cookie_path(
+    app_home_dir: &Path,
+    store_registry: &StoreRegistry,
+) -> Option<PathBuf> {
+    let active_store = store_registry.active_store()?;
+    Some(store_cookie_path(app_home_dir, &active_store.store_id))
+}
+
 fn parse_biz_magic(cookie_header: &str) -> Option<String> {
     let profile = parse_cookie_profile(cookie_header);
     profile.biz_magic
 }
 
-fn load_cookie_from_file(path: &Path) -> CookieProfile {
+pub fn load_cookie_from_file(path: &Path) -> CookieProfile {
     match std::fs::read_to_string(path) {
         Ok(content) => {
             let cookie_header = content.trim().to_string();
@@ -258,11 +340,47 @@ fn load_cookie_from_file(path: &Path) -> CookieProfile {
     }
 }
 
+pub fn cookie_health_from_profile(profile: &CookieProfile) -> CookieHealthSnapshot {
+    CookieHealthSnapshot {
+        healthy: false,
+        configured: !profile.cookie_header.is_empty(),
+        has_biz_magic: profile.biz_magic.is_some(),
+        last_checked_at: None,
+        hint: if profile.cookie_header.is_empty() {
+            Some("尚未配置 Cookie".to_string())
+        } else {
+            Some("尚未探测".to_string())
+        },
+    }
+}
+
 pub fn save_cookie_to_file(path: &Path, cookie_header: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, cookie_header)
+}
+
+pub fn load_store_registry(app_home_dir: &Path) -> Option<StoreRegistry> {
+    let text = std::fs::read_to_string(store_registry_path(app_home_dir)).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+pub fn save_store_registry(app_home_dir: &Path, registry: &StoreRegistry) -> anyhow::Result<()> {
+    std::fs::create_dir_all(app_home_dir)?;
+    let text = serde_json::to_string_pretty(registry)?;
+    std::fs::write(store_registry_path(app_home_dir), text)?;
+    Ok(())
+}
+
+pub fn save_store_meta(app_home_dir: &Path, store: &StoreMeta) -> anyhow::Result<()> {
+    let path = store_meta_path(app_home_dir, &store.store_id);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let text = serde_json::to_string_pretty(store)?;
+    std::fs::write(path, text)?;
+    Ok(())
 }
 
 pub fn load_license_profile(app_home_dir: &Path) -> Option<Slp> {
@@ -518,5 +636,44 @@ mod tests {
         let manifest = home.join(security_core::INTEGRITY_MANIFEST_FILE_NAME);
         std::fs::write(&manifest, "{}").unwrap();
         assert_eq!(find_integrity_manifest_path(&home), Some(manifest));
+    }
+
+    #[test]
+    fn store_registry_roundtrip_persists_active_store() {
+        let home = unique_temp_dir("store_registry_home");
+        let registry = StoreRegistry {
+            active_store_id: Some("wx61f28d69d9174ddf".into()),
+            stores: vec![StoreMeta {
+                store_id: "wx61f28d69d9174ddf".into(),
+                store_name: "精选内衣店".into(),
+            }],
+        };
+
+        save_store_registry(&home, &registry).unwrap();
+        let loaded = load_store_registry(&home).expect("saved registry");
+
+        assert_eq!(loaded, registry);
+        assert_eq!(
+            loaded.active_store().expect("active store").store_name,
+            "精选内衣店"
+        );
+    }
+
+    #[test]
+    fn resolve_cookie_path_prefers_active_store_cookie_file() {
+        let home = unique_temp_dir("store_cookie_home");
+        let registry = StoreRegistry {
+            active_store_id: Some("wx61f28d69d9174ddf".into()),
+            stores: vec![StoreMeta {
+                store_id: "wx61f28d69d9174ddf".into(),
+                store_name: "精选内衣店".into(),
+            }],
+        };
+        save_store_registry(&home, &registry).unwrap();
+
+        assert_eq!(
+            resolve_cookie_path(&home),
+            store_cookie_path(&home, "wx61f28d69d9174ddf")
+        );
     }
 }

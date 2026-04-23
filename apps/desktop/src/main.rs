@@ -64,6 +64,8 @@ fn main() {
             commands::system::check_for_update,
             commands::system::set_cookie,
             commands::system::get_cookie_status,
+            commands::system::get_store_registry,
+            commands::system::select_store,
             commands::system::check_cookie_health,
             commands::system::get_cookie_health,
             commands::system::open_external_url,

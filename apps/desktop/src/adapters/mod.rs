@@ -6,3 +6,4 @@ pub mod order_cache;
 pub mod quality_refund;
 pub mod review;
 pub mod secure_storage;
+pub mod store;

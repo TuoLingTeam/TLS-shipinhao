@@ -505,6 +505,7 @@ mod tests {
 
     fn test_state(device_id: &str, store: Arc<dyn SecretStore>, public_key_b64: &str) -> AppState {
         AppState {
+            store_registry: Mutex::new(crate::state::StoreRegistry::default()),
             cookie_profile: Mutex::new(Default::default()),
             cookie_path: Mutex::new(PathBuf::from(".")),
             app_home_dir: std::env::temp_dir(),

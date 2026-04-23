@@ -4,9 +4,10 @@ use reqwest::Url;
 use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::adapters::store::HttpStoreProfileClient;
 use crate::error::AppError;
 use crate::migration::{LegacyPythonMigrator, MigrationPaths, MigrationReport};
-use crate::state::{self, AppState, CookieHealthSnapshot};
+use crate::state::{self, AppState, CookieHealthSnapshot, StoreMeta, StoreRegistry};
 
 /// 小店登录页 URL：obfstr 编译期加密，避免二进制里 strings 直接扫到域名
 fn store_login_url() -> String {
@@ -21,6 +22,68 @@ pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
         .map_err(|e| AppError::Message(format!("检查更新失败：{e}")))
 }
 
+async fn identify_store_from_cookie(
+    cookie_header: &str,
+) -> Result<(desktop_services::CookieProfile, StoreMeta), AppError> {
+    let profile = parse_cookie_profile(cookie_header.trim());
+    if profile.cookie_header.is_empty() {
+        return Err(AppError::Message("请粘贴完整 Cookie 后再保存".to_string()));
+    }
+
+    let client = HttpStoreProfileClient::new(
+        profile.cookie_header.clone(),
+        profile.biz_magic.clone().unwrap_or_default(),
+    );
+    let identity = client
+        .fetch_store_identity()
+        .await
+        .map_err(|error| AppError::Message(format!("识别当前店铺失败：{error}")))?;
+    Ok((
+        profile,
+        StoreMeta {
+            store_id: identity.store_id,
+            store_name: identity.store_name,
+        },
+    ))
+}
+
+async fn activate_store_cookie(
+    state: &AppState,
+    store: StoreMeta,
+    profile: desktop_services::CookieProfile,
+) -> Result<(std::path::PathBuf, bool), AppError> {
+    let cookie_path = state::store_cookie_path(&state.app_home_dir, &store.store_id);
+    state::save_cookie_to_file(&cookie_path, &profile.cookie_header)
+        .map_err(|e| AppError::Message(format!("保存店铺 Cookie 失败：{e}")))?;
+    state::save_store_meta(&state.app_home_dir, &store)
+        .map_err(|e| AppError::Message(format!("保存店铺信息失败：{e}")))?;
+
+    let (registry_snapshot, created) = {
+        let mut registry = state.store_registry.lock().await;
+        let created = registry.find_store(&store.store_id).is_none();
+        registry.upsert_store(store.clone());
+        registry.set_active_store(store.store_id.clone());
+        (registry.clone(), created)
+    };
+    state::save_store_registry(&state.app_home_dir, &registry_snapshot)
+        .map_err(|e| AppError::Message(format!("保存店铺注册表失败：{e}")))?;
+
+    {
+        let mut current = state.cookie_profile.lock().await;
+        *current = profile.clone();
+    }
+    {
+        let mut current_path = state.cookie_path.lock().await;
+        *current_path = cookie_path.clone();
+    }
+    {
+        let mut current_health = state.cookie_health.lock().await;
+        *current_health = state::cookie_health_from_profile(&profile);
+    }
+
+    Ok((cookie_path, created))
+}
+
 // NOTE: get_app_info / get_ui_scale / set_ui_scale 已删除，前端改走本地 brand 常量 + localStorage，
 // 不再需要 Tauri 中转；UI 缩放阈值 const 与 clamp 辅助同步清理，收缩 invoke / 代码面。
 
@@ -29,28 +92,23 @@ pub async fn set_cookie(
     state: State<'_, AppState>,
     cookie_header: String,
 ) -> Result<serde_json::Value, AppError> {
-    let profile = parse_cookie_profile(cookie_header.trim());
-
-    // 与 AppState 锁序协议对齐：cookie_profile 优先于 cookie_path。
-    {
-        let mut current = state.cookie_profile.lock().await;
-        *current = profile.clone();
-    }
-    let cookie_path = { state.cookie_path.lock().await.clone() };
-
-    state::save_cookie_to_file(&cookie_path, &profile.cookie_header)
-        .map_err(|e| AppError::Message(format!("保存 Cookie 失败：{e}")))?;
+    let (profile, store) = identify_store_from_cookie(&cookie_header).await?;
+    let (cookie_path, created) =
+        activate_store_cookie(&state, store.clone(), profile.clone()).await?;
 
     Ok(serde_json::json!({
         "success": true,
         "biz_magic": profile.biz_magic,
         "cookie_path": cookie_path.display().to_string(),
+        "store": store,
+        "created": created,
     }))
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_cookie_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
-    let profile = state.cookie_profile.lock().await;
+    let registry = state.store_registry.lock().await.clone();
+    let profile = state.cookie_profile.lock().await.clone();
     let cookie_path = state.cookie_path.lock().await.clone();
     let health = state.cookie_health.lock().await.clone();
     Ok(serde_json::json!({
@@ -58,6 +116,59 @@ pub async fn get_cookie_status(state: State<'_, AppState>) -> Result<serde_json:
         "has_biz_magic": profile.biz_magic.is_some(),
         "cookie_path": cookie_path.display().to_string(),
         "health": health,
+        "active_store": registry.active_store(),
+        "stores": registry.stores,
+    }))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_store_registry(state: State<'_, AppState>) -> Result<StoreRegistry, AppError> {
+    Ok(state.store_registry.lock().await.clone())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn select_store(
+    state: State<'_, AppState>,
+    store_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let selected_store = {
+        let registry = state.store_registry.lock().await;
+        registry.find_store(store_id.trim()).ok_or_else(|| {
+            AppError::Message("未找到指定店铺，请重新保存该店铺 Cookie".to_string())
+        })?
+    };
+
+    let registry_snapshot = {
+        let mut registry = state.store_registry.lock().await;
+        registry.set_active_store(selected_store.store_id.clone());
+        registry.clone()
+    };
+    state::save_store_registry(&state.app_home_dir, &registry_snapshot)
+        .map_err(|e| AppError::Message(format!("切换当前店铺失败：{e}")))?;
+
+    let cookie_path = state::store_cookie_path(&state.app_home_dir, &selected_store.store_id);
+    let profile = state::load_cookie_from_file(&cookie_path);
+    let health = state::cookie_health_from_profile(&profile);
+
+    {
+        let mut current = state.cookie_profile.lock().await;
+        *current = profile.clone();
+    }
+    {
+        let mut current_path = state.cookie_path.lock().await;
+        *current_path = cookie_path.clone();
+    }
+    {
+        let mut current_health = state.cookie_health.lock().await;
+        *current_health = health;
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "store": selected_store,
+        "configured": !profile.cookie_header.is_empty(),
+        "has_biz_magic": profile.biz_magic.is_some(),
+        "cookie_path": cookie_path.display().to_string(),
     }))
 }
 
@@ -220,51 +331,11 @@ pub async fn open_external_url(url: String) -> Result<(), AppError> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn pick_cookie_save_dir(
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<serde_json::Value, AppError> {
-    let default_dir = {
-        let current_path = state.cookie_path.lock().await.clone();
-        current_path
-            .parent()
-            .map(|path| path.to_path_buf())
-            .unwrap_or_else(|| state.app_home_dir.clone())
-    };
-
-    let selected_dir = tokio::task::spawn_blocking(move || {
-        rfd::FileDialog::new()
-            .set_directory(default_dir)
-            .pick_folder()
-    })
-    .await
-    .map_err(|e| AppError::Message(format!("打开目录选择器失败：{e}")))?;
-
-    let Some(selected_dir) = selected_dir else {
-        let cookie_path = state.cookie_path.lock().await.clone();
-        return Ok(serde_json::json!({
-            "selected": false,
-            "cookie_path": cookie_path.display().to_string(),
-        }));
-    };
-
-    state::save_user_cookie_dir(&state.app_home_dir, &selected_dir)
-        .map_err(|e| AppError::Message(format!("记录 Cookie 保存目录失败：{e}")))?;
-
-    let new_cookie_path = state::cookie_path_in_dir(&selected_dir);
-    let current_profile = state.cookie_profile.lock().await.clone();
-    if !current_profile.cookie_header.is_empty() {
-        state::save_cookie_to_file(&new_cookie_path, &current_profile.cookie_header)
-            .map_err(|e| AppError::Message(format!("同步 Cookie 到新目录失败：{e}")))?;
-    }
-
-    {
-        let mut current_path = state.cookie_path.lock().await;
-        *current_path = new_cookie_path.clone();
-    }
-
-    Ok(serde_json::json!({
-        "selected": true,
-        "cookie_path": new_cookie_path.display().to_string(),
-    }))
+    Err(AppError::Message(
+        "多店铺模式下将按店铺自动管理 Cookie 文件，不再支持手动选择保存路径".to_string(),
+    ))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -283,7 +354,13 @@ pub async fn open_cookie_login(
 
     let login_url = Url::parse(&store_login_url())
         .map_err(|e| AppError::Message(format!("登录地址无效：{e}")))?;
-    let data_dir = state::login_webview_data_dir(&state.app_home_dir);
+    let data_dir = {
+        let registry = state.store_registry.lock().await.clone();
+        registry
+            .active_store()
+            .map(|store| state::store_login_webview_data_dir(&state.app_home_dir, &store.store_id))
+            .unwrap_or_else(|| state::login_webview_data_dir(&state.app_home_dir))
+    };
 
     WebviewWindowBuilder::new(
         &app,
@@ -344,23 +421,17 @@ pub async fn extract_cookie_from_login(
         ));
     }
 
-    let profile = parse_cookie_profile(&cookie_header);
-
-    // 与 AppState 锁序协议对齐：cookie_profile 优先于 cookie_path。
-    {
-        let mut current = state.cookie_profile.lock().await;
-        *current = profile.clone();
-    }
-    let cookie_path = { state.cookie_path.lock().await.clone() };
-
-    state::save_cookie_to_file(&cookie_path, &cookie_header)
-        .map_err(|e| AppError::Message(format!("写入 Cookie 文件失败：{e}")))?;
+    let (profile, store) = identify_store_from_cookie(&cookie_header).await?;
+    let (cookie_path, created) =
+        activate_store_cookie(&state, store.clone(), profile.clone()).await?;
 
     Ok(serde_json::json!({
         "success": true,
         "biz_magic": profile.biz_magic,
         "cookie_header": cookie_header,
         "cookie_path": cookie_path.display().to_string(),
+        "store": store,
+        "created": created,
     }))
 }
 
