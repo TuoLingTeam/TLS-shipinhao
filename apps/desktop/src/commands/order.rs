@@ -1,8 +1,7 @@
 use crate::adapters::order::{parse_iso_window, HttpOrderCacheFinder};
 use crate::adapters::order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
-use crate::commands::paths::{cache_data_dir, rich_order_cache_path};
-use crate::commands::shared::require_cookie_credentials;
+use crate::commands::shared::{current_store_paths, require_store_runtime_context};
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_CACHE_MANAGE;
@@ -14,6 +13,7 @@ use desktop_services::order_sync_service::{
 };
 use domain_core::{OrderCacheEntry, TimeWindow};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
@@ -107,9 +107,10 @@ pub(crate) fn emit_order_sync_progress(
     );
 }
 
-pub(crate) fn recent_order_cache_status() -> anyhow::Result<OrderCacheStatus> {
-    let rich_cache_path = rich_order_cache_path();
-    let repository = SqliteOrderCacheRepository::open(&rich_cache_path)?;
+pub(crate) fn recent_order_cache_status(
+    rich_cache_path: &Path,
+) -> anyhow::Result<OrderCacheStatus> {
+    let repository = SqliteOrderCacheRepository::open(rich_cache_path)?;
     repository.initialize()?;
     let count = repository.count_orders()?;
     let state = repository.get_state(ORDER_CACHE_SCOPE)?;
@@ -143,11 +144,14 @@ pub(crate) fn recent_order_cache_status() -> anyhow::Result<OrderCacheStatus> {
     })
 }
 
-fn write_lightweight_recent_cache() -> anyhow::Result<Vec<OrderCacheEntry>> {
+fn write_lightweight_recent_cache(
+    data_dir: &Path,
+    rich_cache_path: &Path,
+) -> anyhow::Result<Vec<OrderCacheEntry>> {
     use desktop_services::OrderCacheStore;
 
     let status_window = recent_window();
-    let repository = SqliteOrderCacheRepository::open(&rich_order_cache_path())?;
+    let repository = SqliteOrderCacheRepository::open(rich_cache_path)?;
     repository.initialize()?;
     let (start_unix, end_unix) = parse_iso_window(&status_window.start_at, &status_window.end_at)?;
     let orders = repository.fetch_orders_in_range(start_unix, end_unix)?;
@@ -163,22 +167,25 @@ fn write_lightweight_recent_cache() -> anyhow::Result<Vec<OrderCacheEntry>> {
         })
         .collect::<Vec<_>>();
 
-    let cache = SqliteOrderCache::new(cache_data_dir());
+    let cache = SqliteOrderCache::new(data_dir.to_path_buf());
     cache.save_orders(&light_entries)?;
     Ok(light_entries)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn load_order_cache(
+    state: State<'_, AppState>,
     start_at: String,
     end_at: String,
 ) -> Result<Vec<OrderCacheEntry>, AppError> {
     let log_start_at = start_at.clone();
     let log_end_at = end_at.clone();
     let window = TimeWindow { start_at, end_at };
+    let store_paths = current_store_paths(&state).await;
+    let data_dir = store_paths.data_dir;
     tokio::task::spawn_blocking(move || {
         use desktop_services::OrderCacheStore;
-        let cache = SqliteOrderCache::new(cache_data_dir());
+        let cache = SqliteOrderCache::new(data_dir);
         cache.load_recent_orders(&window)
     })
     .await
@@ -194,8 +201,12 @@ pub async fn load_order_cache(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_order_cache_status() -> Result<OrderCacheStatus, AppError> {
-    tokio::task::spawn_blocking(recent_order_cache_status)
+pub async fn get_order_cache_status(
+    state: State<'_, AppState>,
+) -> Result<OrderCacheStatus, AppError> {
+    let store_paths = current_store_paths(&state).await;
+    let rich_cache_path = store_paths.rich_order_cache_path;
+    tokio::task::spawn_blocking(move || recent_order_cache_status(&rich_cache_path))
         .await
         .map_err(|e| AppError::Message(e.to_string()))?
         .map_err(AppError::Internal)
@@ -211,9 +222,13 @@ pub async fn sync_recent_order_cache(
 ) -> Result<OrderSyncResult, AppError> {
     ensure_feature_authorized(&state, "订单同步").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_CACHE_MANAGE).await?;
-    let creds = require_cookie_credentials(&state).await?;
-    let cookie = creds.cookie;
-    let magic = creds.magic;
+    let context = require_store_runtime_context(&state).await?;
+    let crate::commands::shared::StoreRuntimeContext {
+        cookie,
+        magic,
+        data_dir,
+        rich_order_cache_path: rich_cache_path,
+    } = context;
 
     emit_order_sync_progress(
         &app,
@@ -226,15 +241,14 @@ pub async fn sync_recent_order_cache(
     let app_clone = app.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<OrderSyncResult, AppError> {
         let finder = HttpOrderCacheFinder::new_with_grant(cookie, magic, Some(grant.grant_id));
-        let repository =
-            SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
-                mask_order_cache_error(
-                    "sync_recent_order_cache.open_repository",
-                    None,
-                    "订单缓存同步失败，请稍后重试",
-                    error,
-                )
-            })?;
+        let repository = SqliteOrderCacheRepository::open(&rich_cache_path).map_err(|error| {
+            mask_order_cache_error(
+                "sync_recent_order_cache.open_repository",
+                None,
+                "订单缓存同步失败，请稍后重试",
+                error,
+            )
+        })?;
         let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
         let (written, warnings, coverage_start, coverage_end) = service
@@ -256,14 +270,15 @@ pub async fn sync_recent_order_cache(
             "近 30 天（不含今天）富缓存已更新，正在刷新订单列表视图…",
         );
 
-        let light_entries = write_lightweight_recent_cache().map_err(|error| {
-            mask_order_cache_error(
-                "sync_recent_order_cache.write_lightweight_recent_cache",
-                None,
-                "订单缓存同步失败，请稍后重试",
-                error,
-            )
-        })?;
+        let light_entries =
+            write_lightweight_recent_cache(&data_dir, &rich_cache_path).map_err(|error| {
+                mask_order_cache_error(
+                    "sync_recent_order_cache.write_lightweight_recent_cache",
+                    None,
+                    "订单缓存同步失败，请稍后重试",
+                    error,
+                )
+            })?;
         emit_order_sync_progress(
             &app_clone,
             "manual",

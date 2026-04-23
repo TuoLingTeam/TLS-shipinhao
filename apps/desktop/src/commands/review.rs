@@ -8,8 +8,7 @@ use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized
 use crate::commands::order::{
     emit_order_sync_progress, mask_order_cache_error, recent_order_cache_status,
 };
-use crate::commands::paths::rich_order_cache_path;
-use crate::commands::shared::require_cookie_credentials;
+use crate::commands::shared::{require_cookie_credentials, require_store_runtime_context};
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::{LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND};
@@ -24,6 +23,7 @@ use desktop_services::review_match_flow::{
 use desktop_services::ReviewQuery;
 use domain_core::{MatchSource, MatchStrategy as ApiMatchStrategy, OrderMatchResult, TimeWindow};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 fn parse_iso_timestamp(value: &str) -> Option<i64> {
@@ -161,6 +161,7 @@ struct OrderCacheResult {
 
 fn read_orders_from_ready_cache(
     app: &AppHandle,
+    rich_order_cache_path: &Path,
     start_unix: i64,
     end_unix: i64,
     coverage_start: i64,
@@ -173,15 +174,14 @@ fn read_orders_from_ready_cache(
         22,
         "最近 30 天缓存完整，直接读取本地订单并进入评分匹配…",
     );
-    let repository =
-        SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
-            mask_order_cache_error(
-                "review_query.open_repository_cached_window",
-                None,
-                "订单缓存读取失败，请稍后重试",
-                error,
-            )
-        })?;
+    let repository = SqliteOrderCacheRepository::open(rich_order_cache_path).map_err(|error| {
+        mask_order_cache_error(
+            "review_query.open_repository_cached_window",
+            None,
+            "订单缓存读取失败，请稍后重试",
+            error,
+        )
+    })?;
     let (candidate_start, candidate_end) =
         candidate_window_from_recent_cache(start_unix, end_unix, coverage_start, coverage_end);
     let orders = repository
@@ -201,6 +201,7 @@ fn sync_and_read_orders(
     app: &AppHandle,
     cookie: String,
     magic: String,
+    rich_order_cache_path: &Path,
     start_unix: i64,
     end_unix: i64,
     before_count: usize,
@@ -215,15 +216,14 @@ fn sync_and_read_orders(
     );
 
     let finder = HttpOrderCacheFinder::new(cookie, magic);
-    let repository =
-        SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
-            mask_order_cache_error(
-                "review_query.open_repository_refresh_recent_cache",
-                None,
-                "订单缓存读取失败，请稍后重试",
-                error,
-            )
-        })?;
+    let repository = SqliteOrderCacheRepository::open(rich_order_cache_path).map_err(|error| {
+        mask_order_cache_error(
+            "review_query.open_repository_refresh_recent_cache",
+            None,
+            "订单缓存读取失败，请稍后重试",
+            error,
+        )
+    })?;
     let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
     let mut service = OrderSyncService::new(finder, repository);
     let now = chrono::Utc::now();
@@ -251,7 +251,7 @@ fn sync_and_read_orders(
                     error,
                 )
             })?;
-        let repo = SqliteOrderCacheRepository::open(&rich_order_cache_path()).map_err(|error| {
+        let repo = SqliteOrderCacheRepository::open(rich_order_cache_path).map_err(|error| {
             mask_order_cache_error(
                 "review_query.open_repository_recent_incremental",
                 None,
@@ -274,7 +274,7 @@ fn sync_and_read_orders(
         (orders, ensure_warnings)
     };
 
-    let status = recent_order_cache_status().map_err(|error| {
+    let status = recent_order_cache_status(rich_order_cache_path).map_err(|error| {
         mask_order_cache_error(
             "review_query.recent_order_cache_status_after_refresh",
             None,
@@ -297,6 +297,7 @@ fn run_review_match_flow(
     app: AppHandle,
     cookie: String,
     magic: String,
+    rich_order_cache_path: PathBuf,
     query: ReviewQuery,
 ) -> Result<ReviewMatchResponse, AppError> {
     let (start_unix, end_unix) =
@@ -314,7 +315,7 @@ fn run_review_match_flow(
         .fetch_evaluation_records(&query)
         .map_err(AppError::Internal)?;
 
-    let status_before = recent_order_cache_status().ok();
+    let status_before = recent_order_cache_status(&rich_order_cache_path).ok();
     let cached_window_ready = status_before.as_ref().and_then(|status| {
         if !status.coverage_complete {
             return None;
@@ -331,7 +332,14 @@ fn run_review_match_flow(
     });
 
     let cache_result = if let Some((cs, ce)) = cached_window_ready {
-        let (orders, warnings) = read_orders_from_ready_cache(&app, start_unix, end_unix, cs, ce)?;
+        let (orders, warnings) = read_orders_from_ready_cache(
+            &app,
+            &rich_order_cache_path,
+            start_unix,
+            end_unix,
+            cs,
+            ce,
+        )?;
         OrderCacheResult {
             orders,
             warnings,
@@ -351,6 +359,7 @@ fn run_review_match_flow(
             &app,
             cookie,
             magic,
+            &rich_order_cache_path,
             start_unix,
             end_unix,
             before_count,
@@ -370,7 +379,7 @@ fn run_review_match_flow(
     );
 
     let results = match_reviews_with_cache_records(&evaluations, &cache_result.orders);
-    let status = recent_order_cache_status().map_err(|error| {
+    let status = recent_order_cache_status(&rich_order_cache_path).map_err(|error| {
         mask_order_cache_error(
             "review_query.recent_order_cache_status_before_response",
             None,
@@ -407,7 +416,13 @@ pub async fn find_reviews(
 ) -> Result<ReviewMatchResponse, AppError> {
     ensure_feature_authorized(&state, "评价管理").await?;
     let grant = authorize_runtime_task(&state, LICENSE_TASK_REVIEW_FIND).await?;
-    let creds = require_cookie_credentials(&state).await?;
+    let context = require_store_runtime_context(&state).await?;
+    let crate::commands::shared::StoreRuntimeContext {
+        cookie,
+        magic,
+        data_dir: _,
+        rich_order_cache_path,
+    } = context;
 
     let query = ReviewQuery {
         days,
@@ -416,7 +431,7 @@ pub async fn find_reviews(
     };
 
     tokio::task::spawn_blocking(move || {
-        run_review_match_flow(app, creds.cookie, creds.magic, query)
+        run_review_match_flow(app, cookie, magic, rich_order_cache_path, query)
     })
     .await
     .map_err(|e| AppError::Message(e.to_string()))?

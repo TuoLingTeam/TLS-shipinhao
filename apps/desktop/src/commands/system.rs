@@ -57,29 +57,23 @@ async fn activate_store_cookie(
         .map_err(|e| AppError::Message(format!("保存店铺 Cookie 失败：{e}")))?;
     state::save_store_meta(&state.app_home_dir, &store)
         .map_err(|e| AppError::Message(format!("保存店铺信息失败：{e}")))?;
+    let health = state::cookie_health_from_profile(&profile);
 
     let (registry_snapshot, created) = {
         let mut registry = state.store_registry.lock().await;
+        let mut current = state.cookie_profile.lock().await;
+        let mut current_path = state.cookie_path.lock().await;
+        let mut current_health = state.cookie_health.lock().await;
         let created = registry.find_store(&store.store_id).is_none();
         registry.upsert_store(store.clone());
         registry.set_active_store(store.store_id.clone());
+        *current = profile.clone();
+        *current_path = cookie_path.clone();
+        *current_health = health;
         (registry.clone(), created)
     };
     state::save_store_registry(&state.app_home_dir, &registry_snapshot)
         .map_err(|e| AppError::Message(format!("保存店铺注册表失败：{e}")))?;
-
-    {
-        let mut current = state.cookie_profile.lock().await;
-        *current = profile.clone();
-    }
-    {
-        let mut current_path = state.cookie_path.lock().await;
-        *current_path = cookie_path.clone();
-    }
-    {
-        let mut current_health = state.cookie_health.lock().await;
-        *current_health = state::cookie_health_from_profile(&profile);
-    }
 
     Ok((cookie_path, created))
 }
@@ -138,30 +132,23 @@ pub async fn select_store(
         })?
     };
 
-    let registry_snapshot = {
-        let mut registry = state.store_registry.lock().await;
-        registry.set_active_store(selected_store.store_id.clone());
-        registry.clone()
-    };
-    state::save_store_registry(&state.app_home_dir, &registry_snapshot)
-        .map_err(|e| AppError::Message(format!("切换当前店铺失败：{e}")))?;
-
     let cookie_path = state::store_cookie_path(&state.app_home_dir, &selected_store.store_id);
     let profile = state::load_cookie_from_file(&cookie_path);
     let health = state::cookie_health_from_profile(&profile);
 
-    {
+    let registry_snapshot = {
+        let mut registry = state.store_registry.lock().await;
         let mut current = state.cookie_profile.lock().await;
-        *current = profile.clone();
-    }
-    {
         let mut current_path = state.cookie_path.lock().await;
-        *current_path = cookie_path.clone();
-    }
-    {
         let mut current_health = state.cookie_health.lock().await;
+        registry.set_active_store(selected_store.store_id.clone());
+        *current = profile.clone();
+        *current_path = cookie_path.clone();
         *current_health = health;
-    }
+        registry.clone()
+    };
+    state::save_store_registry(&state.app_home_dir, &registry_snapshot)
+        .map_err(|e| AppError::Message(format!("切换当前店铺失败：{e}")))?;
 
     Ok(serde_json::json!({
         "success": true,
