@@ -197,6 +197,9 @@ fn read_orders_from_ready_cache(
     Ok((orders, Vec::new()))
 }
 
+// 参数略超 clippy 默认阈值（8/7）：每一个都是同步 + 读取合并流程里的独立上下文，
+// 打包成 struct 会让调用点语义变绕且无复用价值，短期内显式抑制
+#[allow(clippy::too_many_arguments)]
 fn sync_and_read_orders(
     app: &AppHandle,
     cookie: String,

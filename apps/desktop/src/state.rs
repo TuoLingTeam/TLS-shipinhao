@@ -243,6 +243,9 @@ fn license_profile_path(app_home_dir: &Path) -> PathBuf {
     app_home_dir.join(LICENSE_FILE_NAME)
 }
 
+// 历史遗留：用户自定义 cookie 目录的保存路径。当前多店铺（store registry）机制
+// 已替代此流程，仅测试代码还在用；保留函数作为 fallback 入口，用 allow 抑制 dead_code。
+#[allow(dead_code)]
 pub fn save_user_cookie_dir(app_home_dir: &Path, selected_dir: &Path) -> std::io::Result<()> {
     let selected_dir = selected_dir.expand_home()?.canonicalize()?;
     std::fs::create_dir_all(&selected_dir)?;
@@ -465,6 +468,8 @@ pub fn validate_integrity_if_present(manifest_path: Option<&Path>) -> Result<(),
     .map_err(|err| err.to_string())
 }
 
+// 仅被 save_user_cookie_dir 内部使用；后者本身已标 allow(dead_code)，此 trait 同步 allow
+#[allow(dead_code)]
 trait ExpandHome {
     fn expand_home(&self) -> std::io::Result<PathBuf>;
 }
