@@ -1,11 +1,13 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { LicenseState } from "./license/types";
-import { APP_VERSION } from "./shared/brand";
+import { APP_VERSION, fetchAppVersion } from "./shared/brand";
 
 export const useAppStore = defineStore("app", () => {
   const licenseState = ref<LicenseState>("invalid");
   const isLicensed = ref(false);
+  // 初始为 Vite 编译期注入值（package.json 快照），在 main.ts 启动时通过
+  // initAppVersion() 从 Tauri runtime 覆盖为 tauri.conf.json 的真实版本。
   const appVersion = ref(APP_VERSION);
   const licenseKey = ref("");
   // 卡密硬过期：通常 100 年，UI 标签「卡密有效期」。后端来自 REST 响应的 license_expires_at。
@@ -34,6 +36,10 @@ export const useAppStore = defineStore("app", () => {
     lastVerifiedAt.value = payload.last_verified_at ?? null;
   }
 
+  async function initAppVersion() {
+    appVersion.value = await fetchAppVersion();
+  }
+
   return {
     licenseState,
     isLicensed,
@@ -44,5 +50,6 @@ export const useAppStore = defineStore("app", () => {
     lastVerifiedAt,
     setLicenseState,
     setLicenseInfo,
+    initAppVersion,
   };
 });

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
-import { APP_VERSION, AUTHOR_WECHAT } from "../shared/brand";
+import { AUTHOR_WECHAT } from "../shared/brand";
 import { useLicense } from "../license/useLicense";
 import { useAppStore } from "../app.store";
 import { formatDateTime } from "../shared/format";
@@ -505,7 +505,7 @@ onBeforeUnmount(() => {
                   class="settings-info-value settings-info-value--mono min-w-0 cursor-pointer truncate text-left font-semibold text-emerald-800 underline decoration-emerald-600/45 underline-offset-2 hover:text-emerald-900"
                   :title="
                     [
-                      `当前 v${APP_VERSION || appStore.appVersion}`,
+                      `当前 v${appStore.appVersion}`,
                       updateCheck.isSnoozed ? `顶部提示已暂停至 ${updateCheck.snoozeUntilText}` : '',
                       '打开下载页',
                     ]
@@ -526,7 +526,7 @@ onBeforeUnmount(() => {
                   恢复
                 </button>
               </div>
-              <span v-else class="settings-info-value settings-info-value--mono">v{{ APP_VERSION || appStore.appVersion }}</span>
+              <span v-else class="settings-info-value settings-info-value--mono">v{{ appStore.appVersion }}</span>
               <p v-if="updateCheck.downloadActionError" class="mt-0.5 truncate text-[11px] text-red-600" :title="updateCheck.downloadActionError">
                 {{ updateCheck.downloadActionError }}
               </p>
