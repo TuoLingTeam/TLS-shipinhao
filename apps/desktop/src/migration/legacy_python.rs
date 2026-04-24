@@ -186,6 +186,11 @@ impl LegacyPythonMigrator {
 
     fn resolve_order_cache_source_root(&self) -> Option<PathBuf> {
         let destination = self.paths.cache_root.join(ORDER_CACHE_FILES[0]);
+        // 目标已存在 → 视为"已迁移完成"，不再扫源，幂等性保证
+        // 与 runtime_file_source 的目标检查对称
+        if destination.exists() {
+            return None;
+        }
         [
             self.paths.legacy_root.clone(),
             self.paths.misplaced_runtime_root.clone(),
