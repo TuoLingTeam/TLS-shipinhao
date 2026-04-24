@@ -1,6 +1,6 @@
 {
   "productName": "驼铃·视频小店差评处理",
-  "version": "5.0.1",
+  "version": "5.0.2",
   "identifier": "com.tls.shipinhao",
   "build": {
     "frontendDist": "../ui/dist",
