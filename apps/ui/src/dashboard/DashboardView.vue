@@ -326,7 +326,7 @@ onMounted(async () => {
 
     <div
       data-testid="dashboard-metrics"
-      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 lg:gap-4 xl:grid-cols-5 items-stretch"
+      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 lg:gap-app xl:grid-cols-5 items-stretch"
     >
       <article
         v-for="metric in metrics"
@@ -353,7 +353,7 @@ onMounted(async () => {
     </div>
 
     <section class="surface-panel dashboard-shortcuts-panel flex min-h-0 shrink-0 flex-col p-3 lg:p-4">
-      <div class="subsystem-section-header mb-2.5 flex items-center gap-2">
+      <div class="subsystem-section-header mb-3 flex items-center gap-2">
         <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
         <span class="text-[11px] text-slate-400">一键直达核心业务</span>
       </div>
@@ -366,7 +366,7 @@ onMounted(async () => {
           v-for="item in quickLinks"
           :key="item.title"
           :to="item.to"
-          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-2.5 overflow-hidden sm:gap-3"
+          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-3 overflow-hidden sm:gap-3"
           :class="shortcutClass[item.tone]"
         >
           <div class="dashboard-shortcut-icon" aria-hidden="true">
@@ -389,7 +389,7 @@ onMounted(async () => {
     <!-- 底部元数据卡片：版本 / 作者微信 / 查看教程 / 当前时间 -->
     <section
       data-testid="dashboard-meta-cards"
-      class="dashboard-meta-cards grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4"
+      class="dashboard-meta-cards grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-app"
       aria-label="运行时元数据"
     >
       <article class="surface-panel dashboard-meta-card dashboard-meta-card--version flex items-center gap-3 p-3">

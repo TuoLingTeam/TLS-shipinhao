@@ -155,7 +155,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.55rem;
-  margin-top: 0.75rem;
+  margin-top: var(--spacing-stack);
 }
 
 .delivery-action-bar > .action-btn {
@@ -310,7 +310,7 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: var(--spacing-inline);
   font-size: 0.83rem;
   letter-spacing: -0.005em;
 }

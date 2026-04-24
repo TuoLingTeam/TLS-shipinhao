@@ -48,7 +48,7 @@ const statCards = computed(() => [
       </div>
     </div>
 
-    <div class="mt-6 grid grid-cols-1 gap-app lg:grid-cols-3">
+    <div class="mt-app grid grid-cols-1 gap-app lg:grid-cols-3">
       <article
         v-for="card in statCards"
         :key="card.label"
@@ -60,7 +60,7 @@ const statCards = computed(() => [
       </article>
     </div>
 
-    <div class="mt-4 rounded-[22px] border border-slate-200/80 bg-slate-50 px-4 py-4">
+    <div class="mt-app rounded-[22px] border border-slate-200/80 bg-slate-50 px-4 py-4">
       <div class="flex flex-col gap-app sm:flex-row sm:items-center sm:justify-between">
         <span class="text-sm font-semibold text-slate-700">覆盖区间</span>
         <span class="text-sm text-slate-600">

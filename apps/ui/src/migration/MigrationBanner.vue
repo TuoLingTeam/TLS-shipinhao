@@ -90,7 +90,7 @@ onMounted(async () => {
           备份目录：<span class="font-mono">{{ report.backup_dir }}</span>
         </div>
 
-        <div v-if="expanded && report.errors.length" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+        <div v-if="expanded && report.errors.length" class="mt-app rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
           <div class="font-semibold">迁移提示</div>
           <ul class="mt-2 space-y-app">
             <li v-for="item in report.errors" :key="`${item.step}-${item.message}`">

@@ -29,7 +29,7 @@ withDefaults(
       </div>
     </div>
 
-    <div class="mt-6 flex min-h-0 flex-1 flex-col space-y-app">
+    <div class="mt-app flex min-h-0 flex-1 flex-col space-y-app">
       <div class="h-12 animate-pulse rounded-2xl bg-slate-100"></div>
       <div class="grid grid-cols-1 gap-app lg:grid-cols-3">
         <div class="h-28 animate-pulse rounded-3xl bg-slate-100"></div>

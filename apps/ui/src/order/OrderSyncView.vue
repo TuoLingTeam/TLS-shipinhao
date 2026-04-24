@@ -155,7 +155,7 @@ onMounted(async () => {
   <div class="order-sync-view flex min-h-0 flex-1 flex-col gap-app">
     <section
       data-testid="order-hero-shell"
-      class="hero-panel subsystem-hero order-hero-shell relative flex shrink-0 flex-col gap-2.5 overflow-hidden p-3 lg:p-3.5"
+      class="hero-panel subsystem-hero order-hero-shell relative flex shrink-0 flex-col gap-3 overflow-hidden p-3 lg:p-3.5"
     >
       <div class="pointer-events-none absolute -right-20 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.38),transparent_72%)]"></div>
 

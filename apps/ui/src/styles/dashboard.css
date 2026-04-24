@@ -11,9 +11,10 @@
  * / delivery）目前在 main.css 中穿插分布较广，强行拆分会打乱 cascade，暂保留。
  */
 
-/* 仪表盘三组卡片固定高度变量：集中此处便于调整阶梯节奏。 */
+/* 仪表盘三组卡片固定高度变量：集中此处便于调整阶梯节奏。
+ * metric 8rem / shortcut 7rem / meta 5rem，相邻档位 1–2rem 递减，视觉层级分明 */
 :root {
-  --dashboard-card-h-metric: 9rem;
+  --dashboard-card-h-metric: 8rem;
   --dashboard-card-h-shortcut: 7rem;
   --dashboard-card-h-meta: 5rem;
 }
@@ -450,7 +451,7 @@
 }
 
 .dashboard-workflow-status {
-  margin-top: 0.5rem;
+  margin-top: var(--spacing-inline);
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;

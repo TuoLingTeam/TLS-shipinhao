@@ -49,7 +49,7 @@ const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-bran
         </div>
       </div>
 
-      <div class="mt-5 space-y-app">
+      <div class="mt-app space-y-app">
         <div>
           <label class="field-label">卡密</label>
           <input v-model.trim="licenseKey" class="field-input" placeholder="输入卡密" />
@@ -64,14 +64,14 @@ const stateTone = computed(() => (appStore.isLicensed ? 'bg-brand-soft text-bran
         </div>
       </div>
 
-      <div v-if="message" class="mt-5 soft-alert" :class="messageType === 'success' ? 'success' : 'error'">
+      <div v-if="message" class="mt-app soft-alert" :class="messageType === 'success' ? 'success' : 'error'">
         {{ message }}
       </div>
     </section>
 
     <section class="surface-panel p-5 lg:p-6">
       <h2 class="text-xl font-semibold tracking-tight text-slate-900">授权快照</h2>
-      <div class="mt-5 space-y-app text-sm">
+      <div class="mt-app space-y-app text-sm">
         <div class="flex justify-between rounded-2xl bg-slate-50 px-4 py-3">
           <span class="text-slate-500">状态</span>
           <span class="font-semibold text-slate-900">{{ currentStateText }}</span>

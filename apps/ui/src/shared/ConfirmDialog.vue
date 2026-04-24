@@ -23,7 +23,7 @@ defineEmits<{
       <div class="bg-white rounded-lg shadow-xl p-6 w-96 max-w-[90vw]">
         <h3 class="text-lg font-semibold text-slate-800">{{ title }}</h3>
         <p class="mt-2 text-sm text-slate-600">{{ message }}</p>
-        <div class="mt-5 flex justify-end gap-app">
+        <div class="mt-app flex justify-end gap-app">
           <button
             class="px-4 py-1.5 text-sm border border-slate-300 rounded text-slate-600 hover:bg-slate-50 transition-colors"
             @click="$emit('cancel')"

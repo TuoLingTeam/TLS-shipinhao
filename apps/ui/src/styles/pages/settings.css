@@ -112,7 +112,7 @@
 }
 
 .settings-section-card--license {
-  gap: 0.75rem;
+  gap: var(--spacing-stack);
   border-left-color: rgba(5, 150, 105, 0.85); /* 绿色：授权主题 */
 }
 
@@ -206,7 +206,7 @@
 .settings-cookie-body {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--spacing-stack);
 }
 
 /* Cookie 卡：自动 / 手动 双路径分区，避免长表单与按钮挤在同一视觉平面。
@@ -215,7 +215,7 @@
 .settings-cookie-flows {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--spacing-stack);
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
@@ -424,7 +424,7 @@
 .settings-action-buttons-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--spacing-inline);
 }
 
 /* Cookie 卡内 2 个核心按钮：1x2 水平等宽 */

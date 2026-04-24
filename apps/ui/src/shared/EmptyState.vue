@@ -23,12 +23,12 @@ defineEmits<{ action: [] }>();
         <path d="M4 17.5h10" />
       </svg>
     </div>
-    <div class="mt-5 text-lg font-semibold text-slate-800">{{ title }}</div>
+    <div class="mt-app text-lg font-semibold text-slate-800">{{ title }}</div>
     <div v-if="description" class="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">{{ description }}</div>
     <slot name="action">
       <button
         v-if="$slots.default"
-        class="action-btn action-btn-primary mx-auto mt-6"
+        class="action-btn action-btn-primary mx-auto mt-app"
         @click="$emit('action')"
       >
         <slot />
