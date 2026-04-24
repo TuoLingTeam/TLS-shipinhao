@@ -190,11 +190,18 @@ pub async fn check_cookie_health(
         return Ok(snapshot);
     }
 
+    let probe_started = std::time::Instant::now();
     let snapshot = tokio::task::spawn_blocking(move || {
         probe_cookie_via_quality_refund(&cookie, &magic, configured, has_biz_magic, &now_rfc)
     })
     .await
     .map_err(|e| AppError::Message(e.to_string()))?;
+    tracing::info!(
+        target: "cookie_probe",
+        duration_ms = probe_started.elapsed().as_millis() as u64,
+        healthy = snapshot.healthy,
+        "cookie probe finished"
+    );
 
     let mut current = state.cookie_health.lock().await;
     *current = snapshot.clone();
@@ -212,12 +219,8 @@ fn probe_cookie_via_quality_refund(
 
     let source =
         HttpQualityRefundSource::new_with_grant(cookie.to_string(), magic.to_string(), None);
-    let window = domain_core::TimeWindow {
-        start_at: chrono::Utc::now().to_rfc3339(),
-        end_at: chrono::Utc::now().to_rfc3339(),
-    };
-    match source.fetch_quality_refund_orders(&window) {
-        Ok(_) => CookieHealthSnapshot {
+    match source.probe() {
+        Ok(()) => CookieHealthSnapshot {
             healthy: true,
             configured,
             has_biz_magic,

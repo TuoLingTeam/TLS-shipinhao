@@ -66,6 +66,21 @@ impl HttpQualityRefundSource {
         Ok(resp)
     }
 
+    /// 轻量 Cookie 探测：仅发 1 次 POST 空 body，只判定业务 code 是否为 0，不解析 items。
+    ///
+    /// 用于「Cookie 健康探测」场景，比 [`fetch_quality_refund_orders`] 快：
+    /// - 跳过 GET 尝试（GET 并非"空 body 极快"的那个路径）
+    /// - 跳过 items 解析与 parse_quality_refund_record 循环
+    ///
+    /// 只在 code == 0 时返回 Ok(())，其余任意结果都 Err（交由调用方转换为失效提示）。
+    pub fn probe(&self) -> anyhow::Result<()> {
+        let payload = self.request_sync(reqwest::Method::POST)?;
+        match payload.get("code").and_then(Value::as_i64) {
+            Some(0) => Ok(()),
+            other => anyhow::bail!("品退探测失败 code={other:?} payload={payload}"),
+        }
+    }
+
     pub fn fetch_quality_refund_orders(
         &self,
         window: &TimeWindow,
