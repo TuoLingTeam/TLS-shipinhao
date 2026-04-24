@@ -21,14 +21,17 @@
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
+  /* settings-layout 通过 height: 100% 撑满 shell，为 Cookie 卡 textarea 提供确定的可分配空间 */
+  display: flex;
+  flex-direction: column;
 }
 
 /* ============ 主布局 ============
- * 左列 Cookie + 右列（授权 + 应用 flex column）：
- * - layout 通过 flex-1 撑满 shell 高度，消除页面底部空白；
- * - right-column 用 flex column 管理内部排布，应用信息卡 flex-grow 吸收剩余垂直空间，
- *   让左右两侧视觉等高，同时不依赖 grid 跨行 min-content 的隐式分配。
- * 单列布局（< 1024px，即 max-width: 1023px）在 @media 内重排成纵向堆叠（Cookie → 授权 → 应用）。 */
+ * 左列 Cookie + 右列（授权 + 应用）：
+ * - layout 通过 flex:1 + grid-template-rows: 1fr 撑满 shell 可用高度，得到确定的行高；
+ * - Cookie 卡默认 stretch 到该行高，内部 flex 链路把剩余空间分配给方式二 textarea（吃满底部）；
+ * - 右列 align-self: start 按内容自然高度，下方留白交给整页 shell（更饱满但不过度拉伸 about 卡）。
+ * 单列布局（< 1024px）在 @media 内重排成纵向堆叠（Cookie → 授权 → 应用）。 */
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -45,27 +48,24 @@
 
 .settings-section-card--cookie {
   grid-area: cookie;
+  /* 允许内部 flex:1 链路生效（min-h:0 打破 flex 子项最小内容高度约束） */
   min-height: 0;
 }
 
-/* 右列：纵向堆叠授权与应用信息卡，允许应用信息卡向下扩展占据剩余空间 */
+/* 右列：授权与应用信息卡按自然高度纵向堆叠；
+ * align-self: start 避免被 layout 的 stretch 拉伸，保证没有多余下方空白。 */
 .settings-right-column {
   grid-area: right;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   min-width: 0;
-  min-height: 0;
+  align-self: start;
 }
 
-.settings-section-card--license {
-  flex: 0 0 auto;
-  min-height: min-content;
-}
-
+.settings-section-card--license,
 .settings-section-card--about {
-  flex: 1 1 auto;
-  min-height: min-content;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1023px) {
@@ -74,20 +74,10 @@
     grid-template-areas:
       "cookie"
       "right";
-    /* 单列布局按内容自然高度，由外层 main 接管滚动；
-       不强制撑满，避免单卡内容少时被无意义拉伸 */
+    /* 单列布局下改为按内容自然高度，交由外层 main 接管整页滚动 */
     grid-template-rows: auto auto;
+    flex: 0 0 auto;
     min-height: auto;
-    flex: 0 0 auto;
-  }
-
-  /* 窄屏下右列收缩为按内容高度，避免 about 卡被无意义 flex-grow 拉伸 */
-  .settings-right-column {
-    min-height: 0;
-  }
-
-  .settings-section-card--about {
-    flex: 0 0 auto;
   }
 
   .settings-section-head {
@@ -113,11 +103,54 @@
   }
 }
 
-/* 授权 / 应用信息卡的左边强调线沿用 cookie 卡的同色品牌色 */
+/* 三张卡片的左边强调线按主题色差异化，与 header badge 形成统一色系 */
+.settings-section-card--cookie {
+  border-left-color: rgba(234, 88, 12, 0.85); /* 橘色：Cookie 主题 */
+  box-shadow:
+    0 18px 44px -32px rgba(234, 88, 12, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.settings-section-card--license {
+  gap: 0.75rem;
+  border-left-color: rgba(5, 150, 105, 0.85); /* 绿色：授权主题 */
+}
+
+.settings-section-card--about {
+  border-left-color: rgba(100, 116, 139, 0.75); /* 灰色：中性信息 */
+  box-shadow:
+    0 18px 44px -32px rgba(71, 85, 105, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+@media (min-width: 1024px) {
+  .settings-section-card--license {
+    gap: 0.78rem;
+  }
+}
+
+/* 当用户通过侧边导航进入某个 section 时，加强左边强调线与浮起阴影（沿用各卡自己的主题色） */
 .settings-section-card.is-active {
-  border-left-color: rgba(5, 150, 105, 0.7);
   box-shadow:
     0 22px 48px -32px rgba(5, 150, 105, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.settings-section-card--cookie.is-active {
+  border-left-color: rgba(234, 88, 12, 1);
+  box-shadow:
+    0 22px 48px -32px rgba(234, 88, 12, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.settings-section-card--license.is-active {
+  border-left-color: rgba(5, 150, 105, 1);
+}
+
+.settings-section-card--about.is-active {
+  border-left-color: rgba(71, 85, 105, 1);
+  box-shadow:
+    0 22px 48px -32px rgba(71, 85, 105, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
@@ -173,27 +206,29 @@
 .settings-cookie-body {
   display: flex;
   flex-direction: column;
-  gap: 0.95rem;
+  gap: 0.75rem;
 }
 
-/* Cookie 卡：自动 / 手动 双路径分区，避免长表单与按钮挤在同一视觉平面 */
+/* Cookie 卡：自动 / 手动 双路径分区，避免长表单与按钮挤在同一视觉平面。
+ * 通过 flex:1 + min-h:0 链路把纵向剩余高度交给方式二的 textarea。
+ * gap 与 subpanel padding 都压到紧凑量级，最大化方式二 textarea 的可用空间。 */
 .settings-cookie-flows {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
-  /* 与 .settings-cookie-body 的 flex-1 配合，把纵向剩余高度交给「方式二」文本域 */
   min-height: 0;
+  flex: 1 1 auto;
 }
 
 .settings-cookie-subpanel {
   border-radius: 12px;
   border: 1px solid rgba(167, 243, 208, 0.5);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(240, 253, 244, 0.35) 100%);
-  padding: 0.95rem 1.05rem;
+  padding: 0.72rem 0.88rem;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.48rem;
   min-width: 0;
 }
 
@@ -220,12 +255,14 @@
 .settings-cookie-editor {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  flex: 1;
+  gap: 0.45rem;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
 .settings-cookie-textarea {
+  /* 最小 4.5rem 兜底，flex:1 + min-h:0 让其在 Cookie 卡剩余空间内自动撑满；
+   * 用户可用 resize-y 手动拖拽到更大。 */
   min-height: 4.5rem;
   font-size: 0.78rem;
   line-height: 1.45;
@@ -234,8 +271,8 @@
 .settings-cookie-path-box {
   display: flex;
   flex-direction: column;
-  gap: 0.38rem;
-  padding: 0.62rem 0.85rem;
+  gap: 0.3rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 12px;
   border: 1px solid rgba(167, 243, 208, 0.55);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(240, 253, 244, 0.5) 100%);
@@ -262,22 +299,42 @@
 
 /* ============ 授权 / 应用 信息网格 ============ */
 
-/* 2x2 紧凑网格（授权信息卡用 --single 修饰切换到单列；应用信息卡默认 2x2） */
+/* 2 列紧凑网格：应用信息卡默认 2 列；授权信息卡用 --single 变为单列 4 行（更饱满）。
+ * gap 0.55rem 在「紧凑」与「视觉呼吸」之间取平衡，避免信息项粘连过密。 */
 .settings-info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.52rem;
+  gap: 0.55rem;
 }
 
 .settings-info-grid--single {
   grid-template-columns: 1fr;
 }
 
+/* ============ Cookie 卡店铺信息组合块 ============
+ * 精简版：以 selector 作为主操作入口（selector 自己显示当前店铺名），
+ * 下方小字展示 store_id 和简短说明，不再左右分栏平铺两份信息。
+ * 相比分栏版节省纵向高度，也消除了「当前店铺 + 切换店铺」两份 label 的视觉冗余。 */
+.settings-store-combo {
+  padding: 0.6rem 0.78rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(240, 253, 244, 0.35) 100%);
+  border-color: rgba(167, 243, 208, 0.55);
+  gap: 0.42rem;
+}
+
+.settings-store-combo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
 .settings-info-item {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  padding: 0.48rem 0.62rem;
+  padding: 0.45rem 0.65rem;
   border-radius: 10px;
   border: 1px solid rgba(226, 232, 240, 0.88);
   background: rgba(248, 250, 252, 0.74);
@@ -285,11 +342,13 @@
 }
 
 .settings-info-label {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #94a3b8;
+  line-height: 1.3;
 }
 
 .settings-info-value {
@@ -314,10 +373,12 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 0.38rem 0.72rem;
-  font-size: 0.74rem;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.68rem;
   font-weight: 700;
+  letter-spacing: 0.01em;
   white-space: nowrap;
+  line-height: 1.2;
 }
 
 .settings-badge.is-positive {
@@ -351,8 +412,8 @@
 .settings-action-card {
   display: flex;
   flex-direction: column;
-  gap: 0.72rem;
-  padding: 0.92rem 1rem;
+  gap: 0.58rem;
+  padding: 0.78rem 0.9rem;
   border-radius: 16px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   background: rgba(255, 255, 255, 0.84);

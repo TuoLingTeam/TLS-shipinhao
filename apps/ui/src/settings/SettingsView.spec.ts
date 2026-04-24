@@ -102,13 +102,14 @@ describe("SettingsView", () => {
     expect(actionsHost.text()).toContain("刷新店铺状态");
     expect(actionsHost.text()).toContain("清除 Cookie");
     expect(actionsHost.text()).toContain("保存手动 Cookie");
-    // 授权信息走单列 grid
+    // 授权信息走单列 4 行（右列视觉饱满）；Cookie 卡的店铺信息精简为 settings-store-combo 区块
     expect(wrapper.find(".settings-info-grid--single").exists()).toBe(true);
+    expect(wrapper.find(".settings-store-combo").exists()).toBe(true);
     expect(wrapper.text()).toContain("授权信息");
     expect(wrapper.text()).toContain("Cookie 配置");
     expect(wrapper.text()).toContain("方式一");
     expect(wrapper.text()).toContain("方式二");
-    expect(wrapper.text()).toContain("切换店铺");
+    expect(wrapper.text()).toContain("当前店铺");
     expect(wrapper.text()).toContain("已识别 2 家店铺");
     expect(wrapper.text()).toContain("应用信息");
     expect(wrapper.text()).toContain("状态");

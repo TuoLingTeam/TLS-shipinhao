@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="settings-view-shell flex min-h-0 min-w-0 flex-col gap-6 lg:gap-7">
+  <div class="settings-view-shell flex min-w-0 flex-col gap-6 lg:gap-7">
     <section
       data-testid="settings-panels"
       class="settings-layout"
@@ -253,9 +253,9 @@ onBeforeUnmount(() => {
       <article
         id="settings-section-cookie"
         data-testid="settings-section-cookie"
-        class="surface-panel settings-section-card settings-section-card--cookie flex min-h-0 h-full flex-col p-5 lg:p-6"
+        class="surface-panel settings-section-card settings-section-card--cookie flex min-h-0 flex-col p-5 lg:p-6"
       >
-        <header class="settings-section-head shrink-0">
+        <header class="settings-section-head">
           <div class="flex min-w-0 items-start gap-3">
             <span class="settings-card-badge settings-card-badge--cookie" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -277,54 +277,45 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="settings-cookie-body flex min-h-0 flex-1 flex-col">
-          <div class="settings-info-grid settings-info-grid--single shrink-0">
-            <div class="settings-info-item">
+          <div class="settings-info-item settings-store-combo shrink-0">
+            <div class="settings-store-combo-head">
               <span class="settings-info-label">当前店铺</span>
-              <div data-testid="settings-active-store" class="min-w-0">
-                <div class="settings-info-value">{{ activeStoreNameText }}</div>
-                <div
-                  data-testid="settings-active-store-id"
-                  class="settings-info-value settings-info-value--mono mt-1"
-                >
-                  {{ activeStoreIdText }}
-                </div>
-              </div>
+              <span class="settings-badge" :class="storeContext.hasStores ? 'is-positive' : 'is-muted'">
+                {{ storeCountText }}
+              </span>
             </div>
-            <div class="settings-info-item">
-              <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <span class="settings-info-label">切换店铺</span>
-                <span class="settings-badge" :class="storeContext.hasStores ? 'is-positive' : 'is-muted'">
-                  {{ storeCountText }}
-                </span>
-              </div>
-              <label class="field-affix field-affix--leading mt-1">
-                <svg class="field-affix-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M4 7.5h16" />
-                  <path d="M5 7.5 6.6 4.8A1.5 1.5 0 0 1 7.9 4h8.2a1.5 1.5 0 0 1 1.29.8L19 7.5" />
-                  <rect x="4" y="7.5" width="16" height="12.5" rx="2.5" />
-                  <path d="M8 12h8" />
-                  <path d="M8 15.5h5" />
-                </svg>
-                <select
-                  data-testid="settings-store-selector"
-                  aria-label="选择当前店铺"
-                  class="field-input field-input--with-leading-icon min-h-[40px] w-full min-w-0"
-                  :value="storeContext.activeStoreId"
-                  :disabled="storeSelectorDisabled || !storeContext.hasStores"
-                  @change="handleSelectStore"
+            <label data-testid="settings-active-store" class="field-affix field-affix--leading">
+              <svg class="field-affix-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 7.5h16" />
+                <path d="M5 7.5 6.6 4.8A1.5 1.5 0 0 1 7.9 4h8.2a1.5 1.5 0 0 1 1.29.8L19 7.5" />
+                <rect x="4" y="7.5" width="16" height="12.5" rx="2.5" />
+                <path d="M8 12h8" />
+                <path d="M8 15.5h5" />
+              </svg>
+              <select
+                data-testid="settings-store-selector"
+                aria-label="选择当前店铺"
+                class="field-input field-input--with-leading-icon min-h-[38px] w-full min-w-0"
+                :value="storeContext.activeStoreId"
+                :disabled="storeSelectorDisabled || !storeContext.hasStores"
+                @change="handleSelectStore"
+              >
+                <option value="" disabled>
+                  {{ storeContext.hasStores ? "选择当前店铺" : "暂无已识别店铺" }}
+                </option>
+                <option
+                  v-for="store in storeContext.stores"
+                  :key="store.store_id"
+                  :value="store.store_id"
+                  :data-testid="store.store_id === storeContext.activeStoreId ? 'settings-active-store-id' : undefined"
                 >
-                  <option value="" disabled>
-                    {{ storeContext.hasStores ? "选择当前店铺" : "暂无已识别店铺" }}
-                  </option>
-                  <option v-for="store in storeContext.stores" :key="store.store_id" :value="store.store_id">
-                    {{ store.store_name }}
-                  </option>
-                </select>
-              </label>
-              <p class="settings-cookie-subpanel-hint mt-2">
-                切换后会自动切到该店铺绑定的 Cookie 与订单缓存文件，订单/查评/发货页面会同步清空旧店铺内存态。
-              </p>
-            </div>
+                  {{ store.store_name }}（{{ store.store_id }}）
+                </option>
+              </select>
+            </label>
+            <p class="settings-cookie-subpanel-hint">
+              切换后会自动切到对应 Cookie 与订单缓存；订单 / 查评 / 发货页面会清空旧店铺内存态。
+            </p>
           </div>
 
           <div data-testid="settings-cookie-actions" class="settings-cookie-flows flex min-h-0 flex-1 flex-col">
@@ -408,14 +399,14 @@ onBeforeUnmount(() => {
         <p v-if="saveError" class="text-xs text-red-600">{{ saveError }}</p>
       </article>
 
-      <div class="settings-right-column flex min-h-0 min-w-0 flex-col gap-app">
+      <div class="settings-right-column flex min-w-0 flex-col gap-app">
       <article
         id="settings-section-license"
         data-testid="settings-section-license"
-        class="surface-panel settings-section-card settings-section-card--license flex flex-col p-5 lg:p-6"
+        class="surface-panel settings-section-card settings-section-card--license flex flex-col p-4 lg:p-5"
         :class="{ 'is-active': activeSection === 'license' }"
       >
-        <header class="settings-section-head shrink-0">
+        <header class="settings-section-head">
           <div class="flex min-w-0 items-start gap-3">
             <span class="settings-card-badge settings-card-badge--license" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -430,7 +421,7 @@ onBeforeUnmount(() => {
           <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
         </header>
 
-        <div class="settings-info-grid settings-info-grid--single shrink-0">
+        <div class="settings-info-grid settings-info-grid--single">
           <div class="settings-info-item" title="卡密自身的有效期，到期后卡密将失效">
             <span class="settings-info-label">卡密有效期</span>
             <span class="settings-info-value">{{ licenseExpiresText }}</span>
@@ -459,7 +450,7 @@ onBeforeUnmount(() => {
             placeholder="输入卡密"
             aria-label="卡密"
           />
-          <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2 shrink-0">
+          <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2">
             <button
               :disabled="activateLoading"
               class="action-btn action-btn-primary min-h-10 cursor-pointer"
