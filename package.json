@@ -4,6 +4,7 @@
     "dev": "pnpm --filter tls-shipinhao-ui dev",
     "build": "pnpm --filter tls-shipinhao-ui build",
     "lint": "pnpm --filter tls-shipinhao-ui lint",
+    "verify": "./scripts/verify.sh",
     "tauri:dev": "./scripts/tauri_dev.sh",
     "tauri:build": "cd apps/desktop && cargo tauri build -b app",
     "release:build": "node scripts/build-release.mjs",
@@ -11,6 +12,10 @@
     "release:build:deep": "node scripts/build-obfuscate.mjs",
     "release:build:deep:mirror-only": "node scripts/build-obfuscate.mjs --skip-build",
     "worker:deploy": "cd backend && npx wrangler deploy",
-    "worker:deploy:preview": "cd backend && npx wrangler versions upload"
+    "worker:deploy:preview": "cd backend && npx wrangler versions upload",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }

@@ -1,0 +1,4 @@
+# Husky 9 pre-push hook：每次 git push（含 tag push）前自动跑 verify
+# 失败则阻止推送，避免再用 force-push tag 来修 CI。
+# 跳过方式（慎用）：git push --no-verify
+./scripts/verify.sh
