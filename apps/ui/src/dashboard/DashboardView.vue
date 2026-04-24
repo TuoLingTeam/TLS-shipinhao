@@ -152,9 +152,9 @@ const metrics = computed<MetricTile[]>(() => [
 
 const alerts = computed(() => {
   const items: { key: string; text: string; to: RouteLocationRaw; tone: "warn" | "error" }[] = [];
-  if (!appStore.isLicensed) {
-    items.push({ key: "license-invalid", text: "授权尚未激活，所有业务功能已暂停", to: buildSettingsLocation("license"), tone: "error" });
-  } else if ((daysUntilLicenseExpires.value ?? Infinity) <= 7) {
+  // 未激活状态已由顶部栏「授权」chip 与状态卡片「授权状态」双重展示，不再单独弹出横幅。
+  // 仅保留「即将到期 / 已过期」的续费提醒，这类信息是顶部栏 chip 无法传达的。
+  if (appStore.isLicensed && (daysUntilLicenseExpires.value ?? Infinity) <= 7) {
     const days = daysUntilLicenseExpires.value ?? 0;
     items.push({
       key: "license-renewal",
@@ -332,7 +332,7 @@ onMounted(async () => {
         v-for="metric in metrics"
         :key="metric.key"
         data-testid="dashboard-metric-tile"
-        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[6.25rem] flex-col gap-1.5 overflow-hidden p-3 transition-all sm:min-h-[6.5rem] sm:gap-2 lg:min-h-[7rem] lg:gap-2.5 lg:p-4"
+        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-2.5 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-3"
         :class="metricAccentClass[metric.tone]"
       >
         <div class="flex items-start justify-between gap-2">

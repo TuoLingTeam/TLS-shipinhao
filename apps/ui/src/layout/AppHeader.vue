@@ -74,7 +74,7 @@ async function handleStoreSelect(event: Event) {
       <div class="flex min-w-0 shrink-0 flex-nowrap items-center gap-app overflow-x-auto">
         <label
           v-if="storeContext.hasStores"
-          class="field-affix field-affix--leading min-w-[220px] shrink-0 border border-slate-200/85 bg-white/92 sm:min-w-[240px]"
+          class="field-affix field-affix--leading min-w-[220px] shrink-0 sm:min-w-[240px]"
           :title="`${storeContext.activeStoreName} · ${storeContext.activeStoreId || '未识别店铺 ID'}`"
         >
           <svg class="field-affix-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
