@@ -12,6 +12,7 @@
 //! - 单步失败不致命：写入 `errors` 后继续，上层选择如何告知用户
 //! - 备份目录 `<backup_root>/<yyyy-mm-dd>/` 先写入副本再迁移，确保失败可回滚
 
+use crate::state;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -24,6 +25,11 @@ const ORDER_CACHE_FILES: &[&str] = &[
     "order_cache.sqlite3",
     "order_cache.sqlite3-wal",
     "order_cache.sqlite3-shm",
+];
+const RUNTIME_HOME_FILES: &[(&str, &str)] = &[
+    ("cookie.txt", "migrate_cookie"),
+    ("license.json", "migrate_license"),
+    ("selected_config_dir.txt", "migrate_config_pointer"),
 ];
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -58,34 +64,51 @@ impl MigrationReport {
 /// 单元测试用 `with_roots` 注入临时目录。
 #[derive(Debug, Clone)]
 pub struct MigrationPaths {
+    /// Python 旧版遗留目录：主要作为历史订单缓存来源。
     pub legacy_root: PathBuf,
-    pub new_root: PathBuf,
+    /// 当前桌面端真正读取 Cookie / 授权 / 店铺注册表的目录。
+    pub runtime_root: PathBuf,
+    /// 历史错误迁移落点：旧版本曾把 Cookie / 授权错误写到这里。
+    pub misplaced_runtime_root: PathBuf,
+    /// 当前全局订单缓存目录（无 active store 时的 fallback）。
+    pub cache_root: PathBuf,
     pub backup_root: PathBuf,
 }
 
 impl MigrationPaths {
     /// 生产默认路径：
-    /// - macOS / Linux：`~/.tls-shipinhao` → `$HOME/.local/share/TLS-shipinhao`（Linux）
-    ///   或 `~/Library/Application Support/TLS-shipinhao`（macOS）
-    /// - Windows：`%USERPROFILE%\.tls-shipinhao` → `%LOCALAPPDATA%\TLS-shipinhao`
+    /// - 订单缓存：`~/.tls-shipinhao/order_cache.sqlite3` → `$LOCALAPPDATA/TLS-shipinhao`
+    /// - Cookie / 授权 / 配置指针：若历史版本误落到 `$LOCALAPPDATA/TLS-shipinhao`，
+    ///   则回迁到当前运行时目录 `~/.tls-shipinhao`
     pub fn default_platform() -> anyhow::Result<Self> {
         let home = dirs::home_dir().context("无法解析用户 home 目录")?;
         let legacy_root = home.join(LEGACY_DIR_NAME);
         let data_local = dirs::data_local_dir().context("无法解析 data_local_dir")?;
-        let new_root = data_local.join("TLS-shipinhao");
-        let backup_root = new_root.join(BACKUP_DIR_NAME);
+        let runtime_root = state::app_home_dir();
+        let cache_root = data_local.join("TLS-shipinhao");
+        let backup_root = runtime_root.join(BACKUP_DIR_NAME);
         Ok(Self {
             legacy_root,
-            new_root,
+            runtime_root,
+            misplaced_runtime_root: cache_root.clone(),
+            cache_root,
             backup_root,
         })
     }
 
     #[cfg(test)]
-    pub fn with_roots(legacy_root: PathBuf, new_root: PathBuf, backup_root: PathBuf) -> Self {
+    pub fn with_roots(
+        legacy_root: PathBuf,
+        runtime_root: PathBuf,
+        misplaced_runtime_root: PathBuf,
+        cache_root: PathBuf,
+        backup_root: PathBuf,
+    ) -> Self {
         Self {
             legacy_root,
-            new_root,
+            runtime_root,
+            misplaced_runtime_root,
+            cache_root,
             backup_root,
         }
     }
@@ -113,7 +136,11 @@ impl LegacyPythonMigrator {
 
     pub fn run(&self) -> MigrationReport {
         let mut report = MigrationReport::default();
-        if !self.paths.legacy_root.exists() {
+        let cache_needs_migration = self.resolve_order_cache_source_root().is_some();
+        let runtime_files_need_migration = RUNTIME_HOME_FILES
+            .iter()
+            .any(|(file_name, _)| self.runtime_file_source(file_name).is_some());
+        if !cache_needs_migration && !runtime_files_need_migration {
             return report;
         }
         report.legacy_detected = true;
@@ -125,17 +152,29 @@ impl LegacyPythonMigrator {
         }
         report.backup_dir = Some(backup_dir.to_string_lossy().into_owned());
 
-        if let Err(err) = std::fs::create_dir_all(&self.paths.new_root) {
-            report.push_error("setup_new_root", err);
+        if let Err(err) = std::fs::create_dir_all(&self.paths.runtime_root) {
+            report.push_error("setup_runtime_root", err);
+            return report;
+        }
+        if let Err(err) = std::fs::create_dir_all(&self.paths.cache_root) {
+            report.push_error("setup_cache_root", err);
             return report;
         }
 
         report.cache_migrated = self.migrate_order_cache(&backup_dir, &mut report);
-        report.cookie_migrated =
-            self.migrate_single_file("cookie.txt", &backup_dir, &mut report, "migrate_cookie");
-        report.license_migrated =
-            self.migrate_single_file("license.json", &backup_dir, &mut report, "migrate_license");
-        report.config_pointer_migrated = self.migrate_single_file(
+        report.cookie_migrated = self.migrate_runtime_home_file(
+            "cookie.txt",
+            &backup_dir,
+            &mut report,
+            "migrate_cookie",
+        );
+        report.license_migrated = self.migrate_runtime_home_file(
+            "license.json",
+            &backup_dir,
+            &mut report,
+            "migrate_license",
+        );
+        report.config_pointer_migrated = self.migrate_runtime_home_file(
             "selected_config_dir.txt",
             &backup_dir,
             &mut report,
@@ -145,13 +184,44 @@ impl LegacyPythonMigrator {
         report
     }
 
+    fn resolve_order_cache_source_root(&self) -> Option<PathBuf> {
+        let destination = self.paths.cache_root.join(ORDER_CACHE_FILES[0]);
+        [
+            self.paths.legacy_root.clone(),
+            self.paths.misplaced_runtime_root.clone(),
+        ]
+        .into_iter()
+        .find(|root| {
+            let source = root.join(ORDER_CACHE_FILES[0]);
+            source.exists() && source != destination
+        })
+    }
+
+    fn runtime_file_source(&self, file_name: &str) -> Option<PathBuf> {
+        let destination = self.paths.runtime_root.join(file_name);
+        if destination.exists() {
+            return None;
+        }
+
+        [
+            self.paths.misplaced_runtime_root.clone(),
+            self.paths.legacy_root.clone(),
+        ]
+        .into_iter()
+        .map(|root| root.join(file_name))
+        .find(|source| source.exists() && *source != destination)
+    }
+
     /// 返回 true 当且仅当主 `.sqlite3` 文件成功迁移（-wal / -shm 为可选附件）。
     fn migrate_order_cache(&self, backup_dir: &Path, report: &mut MigrationReport) -> bool {
+        let Some(source_root) = self.resolve_order_cache_source_root() else {
+            return false;
+        };
         let mut main_file_migrated = false;
         for file_name in ORDER_CACHE_FILES {
             let outcome = copy_with_backup(
-                &self.paths.legacy_root.join(file_name),
-                &self.paths.new_root.join(file_name),
+                &source_root.join(file_name),
+                &self.paths.cache_root.join(file_name),
                 &backup_dir.join(file_name),
             );
             match outcome {
@@ -179,16 +249,19 @@ impl LegacyPythonMigrator {
         main_file_migrated
     }
 
-    fn migrate_single_file(
+    fn migrate_runtime_home_file(
         &self,
         file_name: &str,
         backup_dir: &Path,
         report: &mut MigrationReport,
         step_prefix: &str,
     ) -> bool {
+        let Some(source_path) = self.runtime_file_source(file_name) else {
+            return false;
+        };
         match copy_with_backup(
-            &self.paths.legacy_root.join(file_name),
-            &self.paths.new_root.join(file_name),
+            &source_path,
+            &self.paths.runtime_root.join(file_name),
             &backup_dir.join(file_name),
         ) {
             FileOutcome::Migrated => true,
@@ -262,9 +335,17 @@ mod tests {
 
     fn setup_paths(root: &Path) -> MigrationPaths {
         let legacy = root.join("legacy");
-        let new_root = root.join("new");
-        let backup = new_root.join("legacy_backup");
-        MigrationPaths::with_roots(legacy, new_root, backup)
+        let runtime_root = root.join("runtime");
+        let misplaced_runtime_root = root.join("misplaced-runtime");
+        let cache_root = root.join("cache");
+        let backup = runtime_root.join("legacy_backup");
+        MigrationPaths::with_roots(
+            legacy,
+            runtime_root,
+            misplaced_runtime_root,
+            cache_root,
+            backup,
+        )
     }
 
     fn write(path: &Path, contents: &str) {
@@ -297,13 +378,13 @@ mod tests {
             "sqlite-main",
         );
         write(&paths.legacy_root.join("order_cache.sqlite3-wal"), "wal");
-        write(&paths.legacy_root.join("cookie.txt"), "cookie");
+        write(&paths.misplaced_runtime_root.join("cookie.txt"), "cookie");
         write(
-            &paths.legacy_root.join("license.json"),
+            &paths.misplaced_runtime_root.join("license.json"),
             "{\"plan\":\"basic\"}",
         );
         write(
-            &paths.legacy_root.join("selected_config_dir.txt"),
+            &paths.misplaced_runtime_root.join("selected_config_dir.txt"),
             "/old/path",
         );
 
@@ -320,10 +401,10 @@ mod tests {
         );
 
         assert_eq!(
-            read(&paths.new_root.join("order_cache.sqlite3")),
+            read(&paths.cache_root.join("order_cache.sqlite3")),
             "sqlite-main"
         );
-        assert_eq!(read(&paths.new_root.join("cookie.txt")), "cookie");
+        assert_eq!(read(&paths.runtime_root.join("cookie.txt")), "cookie");
 
         let backup_dir = paths.backup_root.join("2026-04-17");
         assert_eq!(
@@ -342,21 +423,20 @@ mod tests {
             &paths.legacy_root.join("order_cache.sqlite3"),
             "legacy-data",
         );
-        write(&paths.new_root.join("order_cache.sqlite3"), "existing-data");
+        write(
+            &paths.cache_root.join("order_cache.sqlite3"),
+            "existing-data",
+        );
 
         let report = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-17").run();
-        assert!(report.legacy_detected);
+        assert!(!report.legacy_detected);
         assert!(!report.cache_migrated);
         // 必须保留新库原数据不被覆盖
         assert_eq!(
-            read(&paths.new_root.join("order_cache.sqlite3")),
+            read(&paths.cache_root.join("order_cache.sqlite3")),
             "existing-data"
         );
-        assert!(report
-            .errors
-            .iter()
-            .any(|e| e.step.starts_with("migrate_order_cache")
-                && e.message.contains("目标文件已存在")));
+        assert!(report.errors.is_empty());
     }
 
     #[test]
@@ -364,7 +444,10 @@ mod tests {
         let tmp = tempdir().unwrap();
         let paths = setup_paths(tmp.path());
         // 只有 cookie 是 legacy 文件，order_cache 不存在 → 跳过但不失败
-        write(&paths.legacy_root.join("cookie.txt"), "cookie-data");
+        write(
+            &paths.misplaced_runtime_root.join("cookie.txt"),
+            "cookie-data",
+        );
 
         let report = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-17").run();
         assert!(report.legacy_detected);
@@ -375,14 +458,14 @@ mod tests {
             "缺文件不应产生错误：{:?}",
             report.errors
         );
-        assert_eq!(read(&paths.new_root.join("cookie.txt")), "cookie-data");
+        assert_eq!(read(&paths.runtime_root.join("cookie.txt")), "cookie-data");
     }
 
     #[test]
     fn backup_dir_uses_today_subfolder() {
         let tmp = tempdir().unwrap();
         let paths = setup_paths(tmp.path());
-        write(&paths.legacy_root.join("cookie.txt"), "x");
+        write(&paths.misplaced_runtime_root.join("cookie.txt"), "x");
 
         let report = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-17").run();
         let expected = paths.backup_root.join("2026-04-17");
@@ -394,14 +477,35 @@ mod tests {
     fn running_twice_is_idempotent_because_destination_exists() {
         let tmp = tempdir().unwrap();
         let paths = setup_paths(tmp.path());
-        write(&paths.legacy_root.join("cookie.txt"), "v1");
+        write(&paths.misplaced_runtime_root.join("cookie.txt"), "v1");
 
         let first = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-17").run();
         assert!(first.cookie_migrated);
 
-        // 第二次：旧目录仍有文件，但新目录已有同名文件，应跳过而不覆盖
+        // 第二次：遗留文件仍在，但运行时目录已有同名文件，不应再重复提示 legacy
         let second = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-18").run();
+        assert!(!second.legacy_detected);
         assert!(!second.cookie_migrated);
-        assert_eq!(read(&paths.new_root.join("cookie.txt")), "v1");
+        assert_eq!(read(&paths.runtime_root.join("cookie.txt")), "v1");
+    }
+
+    #[test]
+    fn current_runtime_home_is_not_misclassified_as_legacy_cookie_source() {
+        let tmp = tempdir().unwrap();
+        let shared_root = tmp.path().join("shared-home");
+        let paths = MigrationPaths::with_roots(
+            shared_root.clone(),
+            shared_root.clone(),
+            tmp.path().join("misplaced-runtime"),
+            tmp.path().join("cache"),
+            shared_root.join("legacy_backup"),
+        );
+        write(&paths.runtime_root.join("cookie.txt"), "already-live");
+
+        let report = LegacyPythonMigrator::with_today(paths.clone(), "2026-04-17").run();
+
+        assert!(!report.legacy_detected);
+        assert!(!report.cookie_migrated);
+        assert_eq!(read(&paths.runtime_root.join("cookie.txt")), "already-live");
     }
 }
