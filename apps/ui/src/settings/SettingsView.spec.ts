@@ -92,7 +92,7 @@ describe("SettingsView", () => {
     expect(wrapper.get('[data-testid="settings-cookie-path"]').text()).toContain("/tmp/cookie.txt");
     expect(wrapper.get('[data-testid="settings-active-store"]').text()).toContain("精选内衣店");
     expect(wrapper.get('[data-testid="settings-active-store-id"]').text()).toContain("wx61f28d69d9174ddf");
-    expect(wrapper.get('[data-testid="settings-store-selector"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="settings-store-selector"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="settings-about-meta"]').classes()).toContain("settings-info-grid");
     // 方式一：打开登录页 / 刷新店铺状态（1x2） + 方式二：清除 Cookie / 保存手动 Cookie（1x2）
     const actionsHost = wrapper.get('[data-testid="settings-cookie-actions"]');
