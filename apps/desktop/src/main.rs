@@ -10,7 +10,7 @@ mod state;
 use desktop_services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
 use security_core::get_device_id;
 use state::AppState;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 /// 初始化全局 tracing 订阅器：
 /// - 默认级别 `info`，尊重 `RUST_LOG` 环境变量（例如
@@ -33,6 +33,13 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState::new())
         .setup(|app| {
+            // 主窗口标题运行时派生版本号：tauri.conf.json 里只保留产品名，
+            // 这里拼 " {version}"，升级时只改 version 字段即可同步标题栏。
+            let version = app.package_info().version.to_string();
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_title(&format!("驼铃·视频小店差评处理 {version}"));
+            }
+
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(UPDATE_CHECK_DELAY_MS)).await;
