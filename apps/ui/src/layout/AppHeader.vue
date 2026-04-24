@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from "vue-router";
 import { computed } from "vue";
+import { storeToRefs } from "pinia";
 import { useAppStore } from "../app.store";
 import { useUiScale } from "../layout/useUiScale";
 import { useCookieHealthStore } from "../shared/cookieHealth";
@@ -12,18 +13,34 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
+/** 顶栏与仪表盘共用 cookie 状态；用 ref 追踪避免嵌套 computed 在部分运行时依赖丢失（如 Windows WebView2）。 */
+const { status: cookieStatus, snapshot: cookieSnapshot } = storeToRefs(cookieHealth);
 const storeContext = useStoreContextStore();
 
 const pageMeta = computed(() => pageMetaMap[(route.name as PageName) || "dashboard"] ?? pageMetaMap.dashboard);
 const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
 const { scalePercent, increment, decrement, reset } = useUiScale();
 
+/** 与 main.css 中 .status-dot.success|warn|error 对齐；用字符串 :class 与授权芯片一致，避免对象形式偶发不合并。 */
+const cookieDotModifier = computed(() => {
+  switch (cookieStatus.value) {
+    case "healthy":
+      return "success";
+    case "unhealthy":
+      return "error";
+    case "unconfigured":
+      return "warn";
+    default:
+      return "";
+  }
+});
+
 const cookieChip = computed(() => {
-  switch (cookieHealth.status) {
+  switch (cookieStatus.value) {
     case "healthy":
       return { label: "Cookie 正常", tone: "success", hint: "Cookie 已主动探测可用" };
     case "unhealthy":
-      return { label: "Cookie 失效", tone: "error", hint: cookieHealth.snapshot.hint ?? "请重新登录" };
+      return { label: "Cookie 失效", tone: "error", hint: cookieSnapshot.value.hint ?? "请重新登录" };
     case "unconfigured":
       return { label: "未配置 Cookie", tone: "warn", hint: "请前往设置中心完成登录" };
     default:
@@ -32,7 +49,7 @@ const cookieChip = computed(() => {
 });
 
 function handleCookieChipClick() {
-  if (cookieHealth.status === "healthy" || cookieHealth.status === "unknown") {
+  if (cookieStatus.value === "healthy" || cookieStatus.value === "unknown") {
     void cookieHealth.probe();
     return;
   }
@@ -121,14 +138,7 @@ async function handleStoreSelect(event: Event) {
           :title="cookieChip.hint"
           @click="handleCookieChipClick"
         >
-          <span
-            class="status-dot"
-            :class="{
-              success: cookieChip.tone === 'success',
-              warn: cookieChip.tone === 'warn',
-              error: cookieChip.tone === 'error',
-            }"
-          ></span>
+          <span class="status-dot" :class="cookieDotModifier"></span>
           <div class="text-[13px] font-semibold text-slate-700">{{ cookieChip.label }}</div>
         </button>
         <button type="button" class="status-chip shrink-0 cursor-pointer transition hover:border-brand-tint hover:bg-white" @click="handleLicenseChipClick">
