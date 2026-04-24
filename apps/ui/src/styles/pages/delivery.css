@@ -66,6 +66,75 @@
   gap: 0.35rem;
 }
 
+/* 两列输入框上方的 label：状态 badge 紧贴"订单号 / 快递单号"文字右侧，留一点呼吸间距 */
+.delivery-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.delivery-field-label-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  letter-spacing: -0.005em;
+}
+
+/* 行数状态胶囊：默认淡灰，输入后切到品牌绿柔色，与页面整体 pill 设计语言一致 */
+.delivery-field-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  padding: 0.2rem 0.58rem 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.85);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 6px 16px -14px rgba(15, 23, 42, 0.16);
+  transition:
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    box-shadow var(--motion-mid) ease;
+}
+
+.delivery-field-count-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.delivery-field-count-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  min-width: 0.9em;
+  text-align: center;
+  color: inherit;
+}
+
+.delivery-field-count-unit {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.delivery-field-count--active {
+  background: rgba(5, 150, 105, 0.12);
+  border-color: rgba(5, 150, 105, 0.28);
+  color: var(--color-brand-deep);
+  box-shadow: 0 8px 20px -14px rgba(5, 150, 105, 0.35);
+}
+
+.delivery-field-count--active .delivery-field-count-dot {
+  opacity: 0.9;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.14);
+}
+
 .delivery-input-textarea {
   flex: 1 1 auto;
   min-height: 120px;

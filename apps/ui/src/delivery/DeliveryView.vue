@@ -128,9 +128,16 @@ function handleClearInputs() {
           class="delivery-workspace mt-app grid flex-1 min-h-0 grid-cols-1 gap-app md:grid-cols-2"
         >
           <div class="delivery-input-column">
-            <label class="field-label flex items-center justify-between">
-              <span>订单号</span>
-              <span class="text-[11px] font-medium text-slate-400">{{ orderIdLines.length }} 行</span>
+            <label class="field-label delivery-field-label">
+              <span class="delivery-field-label-title">订单号</span>
+              <span
+                class="delivery-field-count"
+                :class="{ 'delivery-field-count--active': orderIdLines.length > 0 }"
+              >
+                <span class="delivery-field-count-dot" aria-hidden="true"></span>
+                <span class="delivery-field-count-num">{{ orderIdLines.length }}</span>
+                <span class="delivery-field-count-unit">行</span>
+              </span>
             </label>
             <textarea
               v-model="orderIdsText"
@@ -140,9 +147,16 @@ function handleClearInputs() {
           </div>
 
           <div class="delivery-input-column">
-            <label class="field-label flex items-center justify-between">
-              <span>快递单号</span>
-              <span class="text-[11px] font-medium text-slate-400">{{ trackingNumberLines.length }} 行</span>
+            <label class="field-label delivery-field-label">
+              <span class="delivery-field-label-title">快递单号</span>
+              <span
+                class="delivery-field-count"
+                :class="{ 'delivery-field-count--active': trackingNumberLines.length > 0 }"
+              >
+                <span class="delivery-field-count-dot" aria-hidden="true"></span>
+                <span class="delivery-field-count-num">{{ trackingNumberLines.length }}</span>
+                <span class="delivery-field-count-unit">行</span>
+              </span>
             </label>
             <textarea
               v-model="trackingNumbersText"
