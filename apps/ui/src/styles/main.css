@@ -1,11 +1,14 @@
 @import "tailwindcss";
 
+/*
+ * 3 档间距 scale（在 Raw CSS 中通过 var 引用；Vue class 用原生数字类）：
+ *   inline (0.5rem) —— 图标 / chip / badge 横向并排
+ *   stack  (0.75rem) —— 卡片内部纵向堆叠 label → value → hint
+ *   app    (1rem)  —— 页面 / 卡片区块之间的主节奏（历史沿用）
+ * 细粒度细节（gap-0.5 / gap-1 / gap-1.5 以及 0.35rem / 0.42rem 等精调值）
+ * 不进入 scale，保留原字面值。
+ */
 @theme {
-  /* 3 档间距 scale：集中管理全站节奏，避免 gap-*/space-y-*/m*-* 散落字面值。
-   *   inline  → 图标/chip/badge 横向并排（如 "订单 5 · 快递 5" 的点分隔节奏）
-   *   stack   → 卡片内部纵向堆叠（label → value → hint 三行节奏）
-   *   app     → 页面/卡片区块之间的主节奏（历史沿用）
-   * 细粒度细节（gap-0.5 / gap-1 / gap-1.5）不进入 scale，保留原字面值。 */
   --spacing-inline: 0.5rem;
   --spacing-stack: 0.75rem;
   --spacing-app: 1rem;
