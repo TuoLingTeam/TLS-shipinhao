@@ -96,7 +96,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "api-contracts"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "build-tools"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -906,7 +906,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -939,7 +939,7 @@ dependencies = [
 
 [[package]]
 name = "desktop-services"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "domain-core"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "api-contracts",
  "serde",
@@ -2440,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "license-service"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -2458,7 +2458,7 @@ dependencies = [
 
 [[package]]
 name = "license-worker"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "anyhow",
  "api-contracts",
@@ -3999,7 +3999,7 @@ dependencies = [
 
 [[package]]
 name = "security_core"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "api-contracts",
  "base64 0.22.1",
@@ -6497,7 +6497,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
