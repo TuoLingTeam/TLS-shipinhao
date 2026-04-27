@@ -1,12 +1,18 @@
 name: Tauri Desktop Release
 
 # 仅在以下两种情况触发桌面构建（Windows + macOS runner 成本高，按分钟 2× / 10× 扣费）：
-#   1. 打 tag `v*`（推荐方式：`git tag v5.2.0 && git push --tags` 一次性产出两平台安装包）
+#   1. 打 tag `v*`（推荐方式：`git tag v5.2.0 && git push --tags`，默认仅产出 Windows 便携包）
 #   2. 手动 workflow_dispatch 触发
 # 日常 push main 不再触发 Desktop 构建，改由开发者本地验证；发版时打 tag 集中构建。
 
 on:
   workflow_dispatch:
+    inputs:
+      build_macos:
+        description: '是否启用 macOS 构建（默认关闭以节省资源）'
+        required: false
+        type: boolean
+        default: false
   push:
     tags:
       - 'v*'
@@ -184,7 +190,8 @@ jobs:
           # CI 改用 thin LTO + 16 codegen-units，显著压缩 Windows 编译时间，产物体积略增但无大影响。
           CARGO_PROFILE_RELEASE_LTO: thin
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-          TLS_WEBVIEW2_FIXED_RUNTIME_DIR: .tools/webview2-runtime
+          # Windows 发布仅需便携包，跳过 bundle（NSIS/MSI）以节省构建资源。
+          TLS_TAURI_NO_BUNDLE: "1"
         run: node scripts/build-obfuscate.mjs
 
       - name: Upload Windows obfuscated dist (diag)
@@ -196,7 +203,7 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-      - name: Upload Windows installer
+      - name: Upload Windows portable
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -204,33 +211,23 @@ jobs:
           $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $version = "${{ needs.extract-version.outputs.app_version }}"
           # 深混脚本 build-obfuscate.mjs 会把产物统一收集到 dist/release/
-          # Windows 正式分发必须上传 NSIS 安装包，它会自动补齐 WebView2 Runtime。
-          $installer = Get-ChildItem -Path "dist/release/*windows-setup*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $installer) {
-            # 兜底：若未来修改了收集命名，再去 Tauri bundle/nsis 里查一遍
-            $installer = Get-ChildItem -Path "TLS-shipinhao-release/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          # Windows 仅分发便携包。
+          $portable = Get-ChildItem -Path "dist/release/*portable*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $portable) {
+            # 兜底：--no-bundle 下主程序会直接输出 desktop.exe
+            $portable = Get-ChildItem -Path "TLS-shipinhao-release/target/release/desktop.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           }
-          if ($installer) {
-            gh release upload $tag "$($installer.FullName)#TLS-shipinhao-v$version-windows-setup.exe" `
+          if ($portable) {
+            gh release upload $tag "$($portable.FullName)#TLS-shipinhao-v$version.exe" `
               --repo "${{ github.repository }}" --clobber
           } else {
-            throw "Windows NSIS installer not found under dist/release/ or TLS-shipinhao-release/target/release/bundle/nsis/"
-          }
-
-          $portableDir = "dist/release/TLS-shipinhao-portable"
-          $portableRuntime = Join-Path $portableDir "WebView2Runtime"
-          $portableZip = "dist/release/TLS-shipinhao-v$version-portable-webview2.zip"
-          if (Test-Path $portableRuntime) {
-            if (Test-Path $portableZip) { Remove-Item $portableZip -Force }
-            Compress-Archive -Path "$portableDir/*" -DestinationPath $portableZip -Force
-            gh release upload $tag "$portableZip#TLS-shipinhao-v$version-portable-webview2.zip" `
-              --repo "${{ github.repository }}" --clobber
-          } else {
-            Write-Warning "Portable WebView2 runtime not found at $portableRuntime; skip portable-webview2 zip upload."
+            throw "Windows portable exe not found under dist/release/ or TLS-shipinhao-release/target/release/"
           }
 
   build-macos:
     name: Build macOS
+    # 保留 macOS 构建配置，但默认关闭：仅手动触发且显式开启时运行。
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_macos == true }}
     runs-on: macos-latest
     needs: [extract-version, prepare-release]
     permissions:

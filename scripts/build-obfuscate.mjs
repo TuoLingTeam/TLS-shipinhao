@@ -334,10 +334,13 @@ rustflags = [
 function stage_buildTauri() {
   const desktopDir = join(OUT_DIR, "apps", "desktop");
   const mirrorTarget = join(OUT_DIR, "target");
-  log("tauri", `cargo tauri build (cwd=${relative(REPO_ROOT, desktopDir)})`);
+  const noBundle =
+    process.env.TLS_TAURI_NO_BUNDLE === "1" || process.env.TLS_WINDOWS_PORTABLE_ONLY === "1";
+  const tauriCmd = noBundle ? "cargo tauri build --no-bundle" : "cargo tauri build";
+  log("tauri", `${tauriCmd} (cwd=${relative(REPO_ROOT, desktopDir)})`);
   // - CARGO_TARGET_DIR：强制 target 落在镜像内，不污染源码根
   // - RUSTC_BOOTSTRAP=1：允许 stable rustc 使用 -Z unstable flag（本项目用到 -Z location-detail=none）
-  run("cargo tauri build", {
+  run(tauriCmd, {
     cwd: desktopDir,
     env: {
       CARGO_TARGET_DIR: mirrorTarget,
