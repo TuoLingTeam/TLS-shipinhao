@@ -28,7 +28,60 @@ fn init_tracing() {
         .try_init();
 }
 
+#[cfg(windows)]
+fn configure_portable_webview2_runtime() {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    if std::env::var_os("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER").is_some() {
+        return;
+    }
+
+    let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+    else {
+        return;
+    };
+
+    let runtime_root = exe_dir.join("WebView2Runtime");
+    let mut candidates = vec![
+        runtime_root.clone(),
+        runtime_root.join("FixedVersionRuntime"),
+    ];
+    if let Ok(entries) = std::fs::read_dir(&runtime_root) {
+        candidates.extend(
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir()),
+        );
+    }
+
+    if let Some(runtime_dir) = candidates
+        .iter()
+        .find(|dir| dir.join("msedgewebview2.exe").is_file())
+    {
+        for sid in ["*S-1-15-2-2:(OI)(CI)(RX)", "*S-1-15-2-1:(OI)(CI)(RX)"] {
+            let _ = std::process::Command::new("icacls")
+                .arg(runtime_dir)
+                .arg("/grant")
+                .arg(sid)
+                .creation_flags(CREATE_NO_WINDOW)
+                .status();
+        }
+
+        // WebView2Loader reads this before creating the first WebView2 environment.
+        std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", runtime_dir);
+    }
+}
+
+#[cfg(not(windows))]
+fn configure_portable_webview2_runtime() {}
+
 fn main() {
+    configure_portable_webview2_runtime();
     init_tracing();
     tauri::Builder::default()
         .manage(AppState::new())

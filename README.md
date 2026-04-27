@@ -89,22 +89,29 @@ pnpm lint
 cargo test --workspace -- --nocapture
 ```
 
-### 桌面端打包（Mac 默认输出 `.app`）
+### 桌面端打包
 
 ```bash
 pnpm tauri:build
 ```
 
 当前默认行为：
-- 执行 `cd apps/desktop && cargo tauri build -b app`
-- 默认生成 **Mac `.app`**，不默认生成 `.dmg`
+- 执行 `cd apps/desktop && cargo tauri build`
+- macOS 默认生成 `.dmg`
+- Windows 默认生成 NSIS 安装包，并在安装阶段自动补齐 WebView2 Runtime
 
 ## 构建产物
 
 ### Mac 桌面应用
 
 ```text
-target/release/bundle/macos/驼铃·视频小店差评处理.app
+target/release/bundle/dmg/*.dmg
+```
+
+### Windows 安装包
+
+```text
+target/release/bundle/nsis/*.exe
 ```
 
 ### Rust 可执行文件
@@ -112,6 +119,26 @@ target/release/bundle/macos/驼铃·视频小店差评处理.app
 ```text
 target/release/desktop
 ```
+
+Windows 端请优先分发 NSIS 安装包，不要把 `target/release/desktop.exe` 作为正式用户包；便携 exe 无法替用户安装 WebView2，缺少 Runtime 的机器会在启动时弹出错误提示。
+
+### Windows 便携包内置 WebView2
+
+如确需免安装便携包，可使用 Microsoft WebView2 Fixed Version Runtime：
+
+```bash
+TLS_WEBVIEW2_FIXED_RUNTIME_DIR=/path/to/fixed-runtime pnpm release:build:deep
+```
+
+构建脚本会生成：
+
+```text
+dist/release/TLS-shipinhao-portable/
+├── TLS-shipinhao.exe
+└── WebView2Runtime/
+```
+
+`TLS-shipinhao.exe` 启动时会优先探测同目录下的 `WebView2Runtime`，并通过 `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` 指向其中包含 `msedgewebview2.exe` 的目录。该模式不需要安装 WebView2，但包体会明显增大；Windows 10 + WebView2 Fixed Runtime 120+ 还需要确保运行时目录具备应用容器读取权限。
 
 ### 发布元数据
 

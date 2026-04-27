@@ -16,6 +16,7 @@ build/
 
 # Downloaded files
 .tools/
+vendor/webview2-runtime/
 downloaded_invoices/*.pdf
 test_output/
 test_qr/

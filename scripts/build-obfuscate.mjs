@@ -69,6 +69,9 @@ const ROOT_DIRS = [".cargo"];
 const OBFUSCATOR_CONFIG = join(REPO_ROOT, "scripts", "obfuscator.config.json");
 const UI_DIST_SRC = join(REPO_ROOT, "apps", "ui", "dist");
 const RELEASE_OUT = join(REPO_ROOT, "dist", "release");
+const WEBVIEW2_RUNTIME_SOURCE = process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR
+  ? resolve(process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR)
+  : join(REPO_ROOT, "vendor", "webview2-runtime");
 
 // 复制源码时的过滤清单（basename 粒度，避免把构建产物 / 运行时文件带进镜像）
 // 注意：不要把 "dist" 加进来，否则 copyTree(apps/ui/dist, ...) 会因源路径 basename=dist 被整体排除
@@ -144,6 +147,18 @@ function copyTree(src, dst) {
 
 function formatKB(bytes) {
   return (bytes / 1024).toFixed(1) + "KB";
+}
+
+function findFixedWebview2Runtime(dir) {
+  if (!existsSync(dir)) return null;
+  if (existsSync(join(dir, "msedgewebview2.exe"))) return dir;
+  for (const entry of readdirSync(dir)) {
+    const candidate = join(dir, entry);
+    if (statSync(candidate).isDirectory() && existsSync(join(candidate, "msedgewebview2.exe"))) {
+      return dir;
+    }
+  }
+  return null;
 }
 
 // ========================================
@@ -334,7 +349,31 @@ function stage_buildTauri() {
 // 阶段 8：收集产物
 function stage_collectArtifacts() {
   cleanDir(RELEASE_OUT);
+  const portableExe = join(OUT_DIR, "target", "release", "desktop.exe");
+  if (existsSync(portableExe)) {
+    const portableDir = join(RELEASE_OUT, "TLS-shipinhao-portable");
+    ensureDir(portableDir);
+    cpSync(portableExe, join(portableDir, "TLS-shipinhao.exe"));
+
+    const runtimeDir = findFixedWebview2Runtime(WEBVIEW2_RUNTIME_SOURCE);
+    if (runtimeDir) {
+      cpSync(runtimeDir, join(portableDir, "WebView2Runtime"), { recursive: true });
+      log("collect", `✓ ${relative(REPO_ROOT, portableDir)}（含 Fixed WebView2 Runtime）`);
+    } else {
+      log(
+        "collect",
+        `未找到 Fixed WebView2 Runtime，跳过便携版内置运行时：${relative(REPO_ROOT, WEBVIEW2_RUNTIME_SOURCE)}`,
+      );
+    }
+  }
+
   const sources = [
+    // Windows 安装包：安装阶段会根据 tauri.conf.json 补齐 WebView2 Runtime。
+    {
+      fromDir: join(OUT_DIR, "target", "release", "bundle", "nsis"),
+      match: /\.exe$/,
+      name: "TLS-shipinhao-windows-setup.exe",
+    },
     // Windows 便携 exe
     {
       from: join(OUT_DIR, "target", "release", "desktop.exe"),
@@ -362,7 +401,7 @@ function stage_collectArtifacts() {
       for (const entry of readdirSync(s.fromDir)) {
         if (s.match && !s.match.test(entry)) continue;
         const src = join(s.fromDir, entry);
-        const dst = join(RELEASE_OUT, entry);
+        const dst = join(RELEASE_OUT, s.name || entry);
         cpSync(src, dst, { recursive: true });
         log("collect", `✓ ${relative(REPO_ROOT, dst)}`);
       }

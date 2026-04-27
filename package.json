@@ -6,7 +6,7 @@
     "lint": "pnpm --filter tls-shipinhao-ui lint",
     "verify": "./scripts/verify.sh",
     "tauri:dev": "./scripts/tauri_dev.sh",
-    "tauri:build": "cd apps/desktop && cargo tauri build -b app",
+    "tauri:build": "cd apps/desktop && cargo tauri build",
     "release:build": "node scripts/build-release.mjs",
     "release:build:plain": "node scripts/build-release.mjs --no-obfuscate",
     "release:build:deep": "node scripts/build-obfuscate.mjs",
