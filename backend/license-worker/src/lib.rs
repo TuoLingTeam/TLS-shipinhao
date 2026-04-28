@@ -198,14 +198,27 @@ mod cloudflare_entry {
                 {
                     Ok(payload) => payload,
                     Err(err) if route == WorkerRoute::LeaseRevoke => {
-                        let (status, message) = revoke_error_contract(&err.to_string());
+                        let err_text = err.to_string();
+                        let (status, message) = revoke_error_contract(&err_text);
+                        // Cloudflare console 分级：吊销路径已经把对外文案脱敏在
+                        // revoke_error_contract，这里再补一条 warn 给运维定位
+                        // （只进 wrangler tail，不改 HTTP 响应字段）
+                        worker::console_warn!(
+                            "[lease/revoke] runtime error → status={status}, root={err_text}"
+                        );
                         return Response::from_json(&serde_json::json!({
                             "success": false,
                             "message": message,
                         }))
                         .map(|resp| resp.with_status(status));
                     }
-                    Err(err) => return Err(worker_error(err)),
+                    Err(err) => {
+                        // 业务路径失败（activate/verify/refresh/task_authorize）：
+                        // 维持「以 worker::Error 形式继续上抛」的对外契约，但补 warn
+                        // 让运维能从 wrangler tail 看到 root cause 而不仅是兜底 200。
+                        worker::console_warn!("[runtime] route={route:?} error={err}");
+                        return Err(worker_error(err));
+                    }
                 };
                 if route == WorkerRoute::LeaseRevoke {
                     response_from_revoke_payload(&payload)
@@ -219,9 +232,13 @@ mod cloudflare_entry {
 
     #[event(fetch)]
     pub async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
-        route_fetch(req, env)
-            .await
-            .or_else(|_| Response::ok(compatibility_payload("/error")))
+        route_fetch(req, env).await.or_else(|err| {
+            // 顶层兜底：HTTP 响应仍走 200 + compatibility_payload 不变，避免破坏
+            // 客户端的兼容握手；同时把错误以 console_error 形式记录到 Cloudflare
+            // 日志（wrangler tail / Logpush），用于事后分级排障。
+            worker::console_error!("[fetch] route_fetch failed before HTTP shaping: {err}");
+            Response::ok(compatibility_payload("/error"))
+        })
     }
 }
 
