@@ -911,6 +911,7 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "api-contracts",
+ "async-trait",
  "base64 0.22.1",
  "chrono",
  "desktop-services",
@@ -943,6 +944,7 @@ version = "5.0.3"
 dependencies = [
  "anyhow",
  "api-contracts",
+ "async-trait",
  "chrono",
  "domain-core",
  "obfstr",
