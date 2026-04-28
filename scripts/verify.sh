@@ -32,8 +32,8 @@ node scripts/check-license-state-sync.mjs
 pretty_step 3 5 "Rust 格式检查 (cargo fmt --all --check)"
 cargo fmt --all --check
 
-pretty_step 4 5 "Rust clippy 严格模式 (cargo clippy --workspace -- -D warnings)"
-cargo clippy --workspace --quiet -- -D warnings
+pretty_step 4 5 "Rust clippy 严格模式 (cargo clippy --workspace --all-targets -- -D warnings)"
+cargo clippy --workspace --all-targets --quiet -- -D warnings
 
 pretty_step 5 5 "Rust 单元测试 (cargo test --workspace)"
 cargo test --workspace --quiet

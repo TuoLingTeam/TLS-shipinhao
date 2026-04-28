@@ -558,7 +558,7 @@ mod tests {
         assert!(matches!(result, Err(FetchError::Stopped)));
         // 至少发生过一次调用（触发了第一次退避），但不会耗尽 3 次重试。
         let calls = call_count.load(Ordering::SeqCst);
-        assert!(calls >= 1 && calls <= RATE_LIMIT_RETRY_COUNT);
+        assert!((1..=RATE_LIMIT_RETRY_COUNT).contains(&calls));
     }
 
     #[tokio::test(start_paused = true)]

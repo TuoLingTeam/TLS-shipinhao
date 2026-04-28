@@ -407,7 +407,7 @@ mod tests {
     #[test]
     fn token_without_dot_returns_invalid_format() {
         let verifier =
-            LeaseVerifier::from_public_key_b64(&URL_SAFE_NO_PAD.encode(&[1u8; 32])).unwrap();
+            LeaseVerifier::from_public_key_b64(&URL_SAFE_NO_PAD.encode([1u8; 32])).unwrap();
         let err = verifier.verify("nodot", None, 0, false).unwrap_err();
         match err {
             LeaseError::InvalidFormat(msg) => assert!(msg.contains("分隔符")),
@@ -418,7 +418,7 @@ mod tests {
     #[test]
     fn empty_token_segments_return_invalid_format() {
         let verifier =
-            LeaseVerifier::from_public_key_b64(&URL_SAFE_NO_PAD.encode(&[1u8; 32])).unwrap();
+            LeaseVerifier::from_public_key_b64(&URL_SAFE_NO_PAD.encode([1u8; 32])).unwrap();
         let err = verifier.verify(".sig", None, 0, false).unwrap_err();
         assert!(matches!(err, LeaseError::InvalidFormat(_)));
 
