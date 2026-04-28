@@ -25,6 +25,10 @@ chrono = { workspace = true }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 rusqlite = { workspace = true }
+# B3 LeaseVerifier 哨兵需要在 release 主路径上构造 base64url(s)，因此
+# 从 dev-dependencies 提升到主依赖。版本与 license-service 系列内部使用
+# 的 base64 0.22 对齐，编译产物不会因此重复链接。
+base64 = "0.22"
 dirs = "6"
 rfd = "0.15"
 keyring = "3"
@@ -33,7 +37,6 @@ rand = "0.8"
 obfstr = { workspace = true }
 
 [dev-dependencies]
-base64 = "0.22"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 tempfile = "3"
 tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }
