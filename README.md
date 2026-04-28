@@ -135,6 +135,9 @@ pnpm --filter tls-shipinhao-ui test:e2e:headed
 `apps/ui/e2e/license-ipc.spec.ts` 在浏览器内注入最小 `__TAURI_INTERNALS__` mock，
 覆盖设置页「模拟激活 → 已激活」展示链，不启动真实桌面壳。
 
+**L4-4（真 Tauri E2E）**：需 `tauri-driver` / WebDriver 等驱动真实 WebView2/WKWebView，
+环境与 CI 成本高；当前仍以 Playwright + `vite preview` 为回归入口，真壳 E2E 单列 backlog。
+
 **`cargo audit`（L4-5 策略）**：CI `test` job 已安装并执行 `cargo audit`，当前为
 `continue-on-error: true`。RustSec 数据库与传递依赖会不定期出现 **未修复** 或
 **误报** advisory，直接改成阻塞会导致主干频繁不可用；**维持非阻塞**、由维护者
