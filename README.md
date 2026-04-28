@@ -74,6 +74,19 @@ pnpm tauri:dev
 - 启动 `apps/ui` 的 Vite 开发服务
 - 启动 `apps/desktop` 的 Tauri 桌面壳
 
+### 调试与 Devtools
+
+本项目使用 Vue 3 + Pinia + Vue Router，开发期建议挂上以下工具提升调试效率：
+
+| 工具 | 用途 | 安装 / 启用 |
+|---|---|---|
+| **Vue Devtools** | 组件树、props/state 实时预览、router 路由调试 | Chrome / Edge / Firefox 应用商店搜「Vue.js devtools」(>= v6 支持 Vue 3)；Tauri 内 webview 也可启用，需在 dev 模式下右键「检查」打开 DevTools |
+| **Pinia 调试** | store 的 mutation 时间线、state diff、action 重放 | Vue Devtools 内置 Pinia 面板，无需额外安装 |
+| **Vite HMR Overlay** | 模板/类型错误覆盖层 | 默认开启，无需配置 |
+| **Tauri DevTools** | 主进程 ↔ 前端 IPC 调用追踪 | macOS / Windows 在 dev 模式下右键 webview 点击「检查」即可；release 包默认禁用 |
+
+> Tip：Tauri 2 webview 在 macOS 默认禁用了右键菜单，本项目通过 `tauri.conf.json` 在 dev 模式下放开。如果右键无响应，确认当前是 `pnpm tauri:dev` 启动而非打包后的产物。
+
 ## 常用命令
 
 ### 前端
