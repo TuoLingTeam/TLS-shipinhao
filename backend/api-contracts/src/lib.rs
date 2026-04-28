@@ -426,8 +426,10 @@ mod tests {
 
     #[test]
     fn lease_payload_kind_validation_rejects_wrong_kind() {
-        let mut payload = Lp::default();
-        payload.kind = "task_grant".into();
+        let mut payload = Lp {
+            kind: "task_grant".into(),
+            ..Lp::default()
+        };
         assert!(!payload.has_valid_kind());
         payload.kind = LEASE_KIND_LICENSE.into();
         assert!(payload.has_valid_kind());

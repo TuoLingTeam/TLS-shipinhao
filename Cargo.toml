@@ -18,6 +18,27 @@ version = "5.0.3"
 license = "Proprietary"
 authors = ["TLS-801"]
 
+# workspace 级 lint 框架（Rust 1.74+）。各成员 crate 在自己的 Cargo.toml 加
+# [lints] workspace = true 即可继承本段配置；当前阶段我们只把 rustc 与 clippy
+# 的部分默认 warn 显式化作为「事实源」，确保后续渐进加严时只改本处即可。
+#
+# 升级策略：
+# 1. 任何新启用的 deny 级 lint 必须先在所有现成 crate 上跑通（pnpm lint:rust）
+# 2. 新 crate 默认 [lints] workspace = true，必要时显式 allow
+# 3. 风险大的 clippy::pedantic 子集（如 unwrap_used）暂保持默认 allow，等
+#    专项 PR 收敛 unwrap 后再升级
+[workspace.lints.rust]
+unused_imports = "warn"
+dead_code = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+# 维持默认严格度，仅显式开几个高信噪比项；继续不开 pedantic / nursery / restriction
+# 大类，避免一次性引入海量 warning 把 CI -D warnings 直接打红。
+needless_borrow = "warn"
+redundant_clone = "warn"
+unnecessary_wraps = "warn"
+
 [workspace.dependencies]
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
