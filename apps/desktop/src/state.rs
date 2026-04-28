@@ -2,12 +2,38 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+
 use crate::adapters::secure_storage::{init_default_store, SecretStore, StorageError};
 use api_contracts::{LicenseState, RuntimeState};
 use desktop_services::{parse_cookie_profile, CookieProfile};
 use license_service::{verify_stored_lease_local, LeaseVerifier, TaskGrantCache};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+
+/// 当 `LeaseVerifier::new()` 解析编译期公钥失败（极端场景：二进制被局部
+/// 篡改 / strip 出错把常量打坏）时，我们不再让应用直接 panic 退出，而是
+/// 用一个**已知不可能匹配真实签名的哨兵公钥**构造 verifier，并在启动时
+/// 立刻把 RuntimeState 置为 `Compromised`，让 UI 显示「完整性损坏」并禁
+/// 用业务功能。哨兵公钥用 `[1u8; 32]` —— 这是 lease.rs 既有测试已验证
+/// 能 ed25519 from_bytes 解码的字节序列；使用它的好处是「编译期可计算
+/// base64」、「真实签名永远校验失败」。
+fn init_lease_verifier_or_sentinel() -> (LeaseVerifier, bool) {
+    match LeaseVerifier::new() {
+        Ok(verifier) => (verifier, false),
+        Err(err) => {
+            tracing::error!(
+                target: "state.lease_verifier",
+                "授权公钥加载失败，启用 Compromised 哨兵：{err}"
+            );
+            let sentinel_b64 = URL_SAFE_NO_PAD.encode([1u8; 32]);
+            let sentinel = LeaseVerifier::from_public_key_b64(&sentinel_b64)
+                .expect("哨兵公钥 [1u8;32] 必须能解析（ed25519 已知有效点）");
+            (sentinel, true)
+        }
+    }
+}
 
 const APP_HOME_DIR_NAME: &str = ".tls-shipinhao";
 const COOKIE_FILE_NAME: &str = "cookie.txt";
@@ -129,8 +155,7 @@ impl AppState {
         let device_id = security_core::get_device_id();
         let store_registry = load_store_registry(&app_home_dir).unwrap_or_default();
         let lease_store = init_default_store(&app_home_dir, &device_id);
-        let lease_verifier =
-            LeaseVerifier::new().unwrap_or_else(|err| panic!("授权公钥加载失败：{err}"));
+        let (lease_verifier, verifier_compromised) = init_lease_verifier_or_sentinel();
         let integrity_manifest_path = find_integrity_manifest_path(&app_home_dir);
         let runtime_license_state = load_runtime_state_from_store(
             lease_store.as_ref(),
@@ -142,6 +167,17 @@ impl AppState {
             tracing::warn!("启动时恢复本地 Lease 失败，降级为 invalid：{err}");
             RuntimeState::reason_only(LicenseState::Invalid)
         });
+        let runtime_license_state = if verifier_compromised {
+            RuntimeState {
+                reason: LicenseState::Compromised,
+                status_hint: LicenseState::Compromised,
+                compromised: true,
+                runtime_backend: "rust".to_string(),
+                ..runtime_license_state
+            }
+        } else {
+            runtime_license_state
+        };
         let runtime_license_state =
             if let Err(err) = validate_integrity_if_present(integrity_manifest_path.as_deref()) {
                 tracing::error!("启动时完整性校验失败：{err}");
@@ -643,6 +679,30 @@ mod tests {
     #[test]
     fn validate_integrity_if_present_allows_missing_manifest() {
         assert!(validate_integrity_if_present(None).is_ok());
+    }
+
+    #[test]
+    fn init_lease_verifier_succeeds_with_real_constant() {
+        // 正常路径：编译期常量正确，verifier 构造成功，第二个返回值 false
+        let (_verifier, compromised) = init_lease_verifier_or_sentinel();
+        assert!(
+            !compromised,
+            "LICENSE_PUBLIC_KEY_B64 正确时不应进入哨兵分支"
+        );
+    }
+
+    #[test]
+    fn lease_verifier_sentinel_fingerprint_rejects_real_signatures() {
+        // 哨兵公钥（[1u8;32]）与生产签名永远不匹配；任意 Token 都应校验失败而非 panic。
+        let sentinel_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([1u8; 32]);
+        let sentinel = LeaseVerifier::from_public_key_b64(&sentinel_b64)
+            .expect("[1u8;32] 必须能解析为合法 ed25519 公钥");
+        let probe_token = "AAAA.AAAA";
+        let result = sentinel.verify(probe_token, None, 0, true);
+        assert!(
+            result.is_err(),
+            "哨兵 verifier 不能让任意 token 通过签名校验"
+        );
     }
 
     #[test]
