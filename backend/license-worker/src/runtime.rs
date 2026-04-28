@@ -179,7 +179,7 @@ fn signed_success_response_for_record(
         renew_after: Some(lease.renew_after.clone()),
         issued_at: Some(lease.issued_at.clone()),
         license_status: Some(state),
-        task_policy: Some(lease.task_policy.clone()),
+        task_policy: Some(lease.task_policy),
     })
 }
 

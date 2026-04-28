@@ -95,7 +95,7 @@ fn tampered_signature_rejected_by_both_paths() {
     let (sk, vk) = generate_keypair();
     let token = sign_token(&sk, &happy_payload("dev-1", i64::MAX));
     // 把签名最后一个字符替换为其它字符，使 Ed25519 校验失败
-    let mut tampered = token.clone();
+    let mut tampered = token;
     tampered.pop();
     tampered.push('X');
 

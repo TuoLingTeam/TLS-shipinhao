@@ -138,7 +138,7 @@ mod tests {
     fn builds_index_and_collects_deduplicated_candidates() {
         let a = order("o1", "默认规格");
         let b = order("o2", "默认规格");
-        let index = build_product_sku_index(&[a.clone(), b.clone()]);
+        let index = build_product_sku_index(&[a, b]);
         let candidates = collect_candidate_orders(&index, &context(), "默认规格");
         assert_eq!(candidates.len(), 2);
         assert_eq!(candidates[0].order_id, "o1");

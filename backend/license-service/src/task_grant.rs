@@ -235,7 +235,7 @@ mod tests {
         let payload = sample_payload(vec![LICENSE_TASK_REVIEW_FIND.into()], i64::MAX, "low");
         let grant =
             authorize_task_local(&payload, LICENSE_TASK_REVIEW_FIND, 1_000, || "g".into()).unwrap();
-        cache.put(grant.clone());
+        cache.put(grant);
 
         // 29 分钟 59 秒内命中缓存
         let hit = cache

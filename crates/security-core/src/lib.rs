@@ -257,7 +257,9 @@ pub unsafe extern "C" fn security_core_free_string(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
     }
-    drop(CString::from_raw(ptr));
+    unsafe {
+        drop(CString::from_raw(ptr));
+    }
 }
 
 #[no_mangle]
