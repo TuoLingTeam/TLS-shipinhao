@@ -1,10 +1,10 @@
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
+use async_trait::async_trait;
 use desktop_services::order_fetcher::{
     backoff_seconds, is_api_rate_limited, is_http_rate_limited, RATE_LIMIT_RETRY_COUNT,
 };
 use desktop_services::review_batch_match::EvaluationRecord;
 use desktop_services::review_match_flow::{is_evaluation_replyable, reply_deadline};
-use async_trait::async_trait;
 use desktop_services::ReviewQuery;
 use desktop_services::ReviewSource;
 use domain_core::{MatchSource, MatchStrategy, OrderMatchResult};
@@ -345,10 +345,7 @@ fn first_non_empty_string(value: &Value, keys: &[&str]) -> String {
 
 #[async_trait]
 impl ReviewSource for HttpReviewSource {
-    async fn fetch_reviews(
-        &self,
-        query: &ReviewQuery,
-    ) -> anyhow::Result<Vec<OrderMatchResult>> {
+    async fn fetch_reviews(&self, query: &ReviewQuery) -> anyhow::Result<Vec<OrderMatchResult>> {
         let start_ts = Self::parse_timestamp(&query.time_window.start_at);
         let end_ts = Self::parse_timestamp(&query.time_window.end_at);
 
