@@ -4,6 +4,11 @@
 //! 通过 obfstr 编译期加密 + 运行时 XOR 解码，`strings` 扫不到原文。
 
 /// 卡密验证后端（按顺序依次回退）。每次调用即时解密，避免在 static 区留下明文。
+///
+/// **变更须同步**：调整本数组（新增 / 删除 / 重排）时按 README 的
+/// 「新增 / 调整备用域名检查清单」三步同步完成，包括客户端 obfstr、
+/// `backend/wrangler.toml` 路由、对应 DNS / 加速接入。漏任一步会出现
+/// 客户端能配但边缘没绑（或反向）的运维盲区。
 pub fn license_api_base_urls() -> Vec<String> {
     vec![
         obfstr::obfstr!("https://sphapi-cn.199908.top").to_string(),

@@ -226,6 +226,7 @@ Cloudflare 判 1014（unknown host），或 Worker 绑了路由却没人调。�
 ## 注意事项
 
 - 桌面图标资源位于 `apps/desktop/icons/`
-- JS 混淆配置已关闭 `controlFlowFlattening` / `deadCodeInjection` / `selfDefending` / `debugProtection`，避免破坏 Vue 3 runtime 或触发 Tauri CSP 拦截
+- JS 混淆配置已关闭 `controlFlowFlattening` / `deadCodeInjection` / `selfDefending` / `debugProtection`，避免破坏 Vue 3 runtime 或触发 Tauri CSP 拦截。**详细原因与触发的真实故障链路**见 [`scripts/obfuscator.config.json`](scripts/obfuscator.config.json) 中 `_note_cff_dci_off` 字段；**不要**为「更难被反混淆」打开这两个开关，否则下次发版会以非常间歇且难复现的方式炸掉
 - Windows 下 `std::process::Command` 调用系统工具（如 `wmic`）需加 `CREATE_NO_WINDOW` 防止黑窗闪现
 - `backup/` 为旧版 Python 资产，不参与当前主运行链路
+- 新增 / 调整授权 Worker 域名前请通读上文「新增 / 调整备用域名检查清单」，避免客户端 `apps/desktop/src/app_settings.rs::license_api_base_urls` 与 `backend/wrangler.toml` 路由对不上
