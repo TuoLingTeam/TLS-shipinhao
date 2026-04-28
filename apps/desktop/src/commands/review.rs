@@ -457,17 +457,11 @@ pub async fn find_quality_refund_orders(
         runtime_grant: Some(grant.clone()),
     };
 
-    let results = tokio::task::spawn_blocking(move || {
-        let source = HttpQualityRefundSource::new_with_grant(
-            creds.cookie,
-            creds.magic,
-            Some(grant.grant_id),
-        );
-        source.fetch_quality_refund_orders(&query.time_window)
-    })
-    .await
-    .map_err(|e| AppError::Message(e.to_string()))?
-    .map_err(AppError::Internal)?;
+    let results =
+        HttpQualityRefundSource::new_with_grant(creds.cookie, creds.magic, Some(grant.grant_id))
+            .fetch_quality_refund_orders(&query.time_window)
+            .await
+            .map_err(AppError::Internal)?;
 
     Ok(ReviewMatchResponse {
         results,

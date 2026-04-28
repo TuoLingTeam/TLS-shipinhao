@@ -38,8 +38,10 @@
 //! 2. **硬约束**：外网请求必须继续走本模块的 [`build_desktop_http_client`]，
 //!    禁止新增绕过 UA 策略的裸 `Client::new()`。
 //! 3. **建议迁移顺序**（每步独立 `cargo test --workspace` + 手工点验相关页）：
-//!    - 先 `store` / `quality_refund` 等 `spawn_blocking` 链较短的模块；
-//!    - `order` / `review` 与深度阻塞包装最后迁移。
+//!    - `quality_refund`：`HttpQualityRefundSource` 已改为纯 `async`，不再
+//!      `thread::spawn` + `Handle::block_on`（L4-2 首期落地）。
+//!    - 继续 `store`（已是 async 客户端）及其它仍含阻塞包装的模块；
+//!    - `order` / `review` 与深度 `spawn_blocking` 包装最后迁移。
 //! 4. **完成定义**：目标路径上可删除 `std::thread::spawn + Handle::block_on`
 //!    的双层线程包装；`#[tauri::command]` 的 JSON 契约保持不变。
 

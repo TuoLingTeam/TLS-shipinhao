@@ -1,4 +1,5 @@
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
+use anyhow::Context;
 use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, QualityRefundInfo, TimeWindow};
 use reqwest::header::HeaderMap;
 use serde_json::{json, Value};
@@ -43,27 +44,26 @@ impl HttpQualityRefundSource {
         )
     }
 
-    fn request_sync(&self, method: reqwest::Method) -> anyhow::Result<Value> {
-        let rt = tokio::runtime::Handle::current();
+    async fn request(&self, method: reqwest::Method) -> anyhow::Result<Value> {
         let headers = self.build_headers();
-        let client = self.client.clone();
         let url = format!("{}?token=&lang=zh_CN", quality_refund_order_url());
-
-        let resp = std::thread::spawn(move || {
-            rt.block_on(async move {
-                let builder = client.request(method.clone(), &url).headers(headers);
-                let response = if method == reqwest::Method::POST {
-                    builder.json(&json!({})).send().await?
-                } else {
-                    builder.send().await?
-                };
-                response.json::<Value>().await
-            })
-        })
-        .join()
-        .map_err(|_| anyhow::anyhow!("品退请求线程崩溃"))??;
-
-        Ok(resp)
+        let response = if method == reqwest::Method::POST {
+            self.client
+                .request(method, &url)
+                .headers(headers)
+                .json(&json!({}))
+                .send()
+                .await
+                .context("品退 POST 请求")?
+        } else {
+            self.client
+                .request(method, &url)
+                .headers(headers)
+                .send()
+                .await
+                .context("品退 GET 请求")?
+        };
+        response.json::<Value>().await.context("品退响应 JSON")
     }
 
     /// 轻量 Cookie 探测：仅发 1 次 POST 空 body，只判定业务 code 是否为 0，不解析 items。
@@ -73,15 +73,15 @@ impl HttpQualityRefundSource {
     /// - 跳过 items 解析与 parse_quality_refund_record 循环
     ///
     /// 只在 code == 0 时返回 Ok(())，其余任意结果都 Err（交由调用方转换为失效提示）。
-    pub fn probe(&self) -> anyhow::Result<()> {
-        let payload = self.request_sync(reqwest::Method::POST)?;
+    pub async fn probe(&self) -> anyhow::Result<()> {
+        let payload = self.request(reqwest::Method::POST).await?;
         match payload.get("code").and_then(Value::as_i64) {
             Some(0) => Ok(()),
             other => anyhow::bail!("品退探测失败 code={other:?} payload={payload}"),
         }
     }
 
-    pub fn fetch_quality_refund_orders(
+    pub async fn fetch_quality_refund_orders(
         &self,
         window: &TimeWindow,
     ) -> anyhow::Result<Vec<OrderMatchResult>> {
@@ -91,7 +91,7 @@ impl HttpQualityRefundSource {
         let mut errors = Vec::new();
 
         for method in methods {
-            match self.request_sync(method.clone()) {
+            match self.request(method.clone()).await {
                 Ok(payload) => {
                     if payload.get("code").and_then(Value::as_i64) != Some(0) {
                         errors.push(format!("{method} API错误: {payload}"));
