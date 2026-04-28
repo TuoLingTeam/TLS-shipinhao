@@ -132,6 +132,15 @@ pnpm --filter tls-shipinhao-ui test:e2e:headed
 骨架仅验证「构建产物能起 + 主要路由能渲染 + 不出现 404」三条粗粒度路径，
 不替代 Vitest 单测对业务逻辑的覆盖；后续按需扩 spec。
 
+`apps/ui/e2e/license-ipc.spec.ts` 在浏览器内注入最小 `__TAURI_INTERNALS__` mock，
+覆盖设置页「模拟激活 → 已激活」展示链，不启动真实桌面壳。
+
+**`cargo audit`（L4-5 策略）**：CI `test` job 已安装并执行 `cargo audit`，当前为
+`continue-on-error: true`。RustSec 数据库与传递依赖会不定期出现 **未修复** 或
+**误报** advisory，直接改成阻塞会导致主干频繁不可用；**维持非阻塞**、由维护者
+定期阅读日志并择机升级依赖。若连续多个版本周期内本地与 CI 均报告 **0 vulnerabilities**，
+可将该两步的 `continue-on-error` 去掉改为硬门禁。
+
 ### 桌面端打包
 
 ```bash

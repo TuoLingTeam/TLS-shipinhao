@@ -109,9 +109,10 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace
 
-      # 非阻塞的依赖漏洞扫描：只在 CI 日志里曝光问题，不阻塞发版。
-      # `cargo audit` 用 RustSec advisory db；遇到新增 advisory 时
-      # 维护者应在下一轮迭代手动跟进升级，而不是被 CI 直接打红。
+      # L4-5：`cargo audit` 用 RustSec advisory db。传递依赖 / 未修复条目
+      # 会间歇性出现；若改为阻塞，主干易被外部数据库更新「误伤」。
+      # 因此保持 `continue-on-error: true`，由维护者定期读日志并升级；
+      # 若连续多周 `cargo audit` 均为 0 vuln，再移除 continue-on-error。
       - name: Install cargo-audit
         run: cargo install --locked cargo-audit
         continue-on-error: true
