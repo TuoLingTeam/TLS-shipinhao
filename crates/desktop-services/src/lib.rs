@@ -24,11 +24,8 @@ pub use review::index as review_index;
 pub use review::match_flow as review_match_flow;
 pub use review::matcher_helpers as review_matcher_helpers;
 
-use crate::delivery_batch_runner::{
-    run_batch_delivery, BatchDeliveryGateway as DeliveryBatchGateway, BatchDeliveryItem,
-    BatchDeliveryReport, BatchDeliveryRuntimeGuard,
-};
 use api_contracts::Rg;
+use async_trait::async_trait;
 use domain_core::{
     DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow,
 };
@@ -49,8 +46,12 @@ pub struct ReviewQuery {
     pub runtime_grant: Option<Rg>,
 }
 
-pub trait ReviewSource {
-    fn fetch_reviews(&self, query: &ReviewQuery) -> anyhow::Result<Vec<OrderMatchResult>>;
+/// 评价数据源。L4-2 第三期改为 async_trait：上游 `commands::find_reviews` 与
+/// `run_review_match_flow` 已是 async fn，HTTP 拉取链路一并 await 化，删除
+/// 历史上 `Handle::block_on` 桥接的 sync trait 薄壳。
+#[async_trait]
+pub trait ReviewSource: Send + Sync {
+    async fn fetch_reviews(&self, query: &ReviewQuery) -> anyhow::Result<Vec<OrderMatchResult>>;
 }
 
 pub trait OrderCacheStore {
@@ -58,64 +59,14 @@ pub trait OrderCacheStore {
     fn save_orders(&self, orders: &[OrderCacheEntry]) -> anyhow::Result<()>;
 }
 
-pub trait DeliveryGateway {
-    fn update_delivery(
+/// 物流更新单条入口。L4-2 第三期改为 async_trait：命令层 `update_delivery`
+/// 与 batch 调度循环统一走 async，删除 `Handle::block_on` 桥接。
+#[async_trait]
+pub trait DeliveryGateway: Send + Sync {
+    async fn update_delivery(
         &self,
         request: &DeliveryUpdateRequest,
     ) -> anyhow::Result<DeliveryUpdateResult>;
-}
-
-pub struct DesktopServices<R, C, D> {
-    review_source: R,
-    cache_store: C,
-    delivery_gateway: D,
-}
-
-impl<R, C, D> DesktopServices<R, C, D>
-where
-    R: ReviewSource,
-    C: OrderCacheStore,
-    D: DeliveryGateway,
-{
-    pub fn new(review_source: R, cache_store: C, delivery_gateway: D) -> Self {
-        Self {
-            review_source,
-            cache_store,
-            delivery_gateway,
-        }
-    }
-
-    pub fn find_reviews(&self, query: &ReviewQuery) -> anyhow::Result<Vec<OrderMatchResult>> {
-        self.review_source.fetch_reviews(query)
-    }
-
-    pub fn refresh_cache(
-        &self,
-        window: &TimeWindow,
-        orders: &[OrderCacheEntry],
-    ) -> anyhow::Result<Vec<OrderCacheEntry>> {
-        self.cache_store.save_orders(orders)?;
-        self.cache_store.load_recent_orders(window)
-    }
-
-    pub fn update_delivery(
-        &self,
-        request: &DeliveryUpdateRequest,
-    ) -> anyhow::Result<DeliveryUpdateResult> {
-        self.delivery_gateway.update_delivery(request)
-    }
-}
-
-pub fn run_batch_delivery_flow<G, RG>(
-    items: &[BatchDeliveryItem],
-    gateway: &mut G,
-    runtime_guard: &mut RG,
-) -> anyhow::Result<BatchDeliveryReport>
-where
-    G: DeliveryBatchGateway,
-    RG: BatchDeliveryRuntimeGuard,
-{
-    Ok(run_batch_delivery(items, gateway, runtime_guard))
 }
 
 pub fn parse_cookie_profile(cookie_header: &str) -> CookieProfile {

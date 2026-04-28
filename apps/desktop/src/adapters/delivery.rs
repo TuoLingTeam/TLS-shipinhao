@@ -1,4 +1,5 @@
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
+use async_trait::async_trait;
 use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
 use desktop_services::delivery_update::{
     build_raw_update_delivery_payload, determine_delivery_override_from_raw_info,
@@ -273,14 +274,15 @@ fn old_waybill_from_raw_delivery_info(info: &Value) -> String {
         .to_string()
 }
 
+#[async_trait]
 impl DeliveryGateway for HttpDeliveryGateway {
-    fn update_delivery(
+    async fn update_delivery(
         &self,
         request: &DeliveryUpdateRequest,
     ) -> anyhow::Result<DeliveryUpdateResult> {
-        // 同步 trait 入口：在 `tokio::task::spawn_blocking` 阻塞线程上 `block_on` 异步实现，
-        // 行为与 async 版完全一致，省去原 `std::thread::spawn` 的二次线程开销。
-        tokio::runtime::Handle::current().block_on(self.update_delivery_async(request))
+        // L4-2 第三期：trait 已 async 化，直接复用 inherent async 实现，
+        // 不再需要 `Handle::block_on` 桥接。
+        self.update_delivery_async(request).await
     }
 }
 

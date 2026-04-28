@@ -4,6 +4,7 @@ use desktop_services::order_fetcher::{
 };
 use desktop_services::review_batch_match::EvaluationRecord;
 use desktop_services::review_match_flow::{is_evaluation_replyable, reply_deadline};
+use async_trait::async_trait;
 use desktop_services::ReviewQuery;
 use desktop_services::ReviewSource;
 use domain_core::{MatchSource, MatchStrategy, OrderMatchResult};
@@ -342,8 +343,12 @@ fn first_non_empty_string(value: &Value, keys: &[&str]) -> String {
         .unwrap_or_default()
 }
 
+#[async_trait]
 impl ReviewSource for HttpReviewSource {
-    fn fetch_reviews(&self, query: &ReviewQuery) -> anyhow::Result<Vec<OrderMatchResult>> {
+    async fn fetch_reviews(
+        &self,
+        query: &ReviewQuery,
+    ) -> anyhow::Result<Vec<OrderMatchResult>> {
         let start_ts = Self::parse_timestamp(&query.time_window.start_at);
         let end_ts = Self::parse_timestamp(&query.time_window.end_at);
 
@@ -363,7 +368,7 @@ impl ReviewSource for HttpReviewSource {
                 "visibleType": 0,
             });
 
-            let resp = self.post_json_sync(&body)?;
+            let resp = self.post_json(&body).await?;
 
             if resp.get("code").and_then(Value::as_i64) != Some(0) {
                 anyhow::bail!("评价 API 错误：{}", resp);
