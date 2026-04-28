@@ -410,17 +410,17 @@ impl CacheOrderFinder for HttpOrderCacheFinder {
 
         let start = earliest_time.max(create_time_start);
         let end = create_time_end;
-        let rt = tokio::runtime::Runtime::new()?;
         let client = HttpOrderSearchClient::new_with_grant(
             self.cookie_header.clone(),
             self.biz_magic.clone(),
             self.grant_id.clone(),
         );
-        let snapshot = rt.block_on(client.fetch_order_snapshots_in_window_parallel(
-            start,
-            end,
-            cache_fetch_worker_count(),
-        ))?;
+        // 同步 trait 入口由命令层 `tokio::task::spawn_blocking` 调度，可直接复用宿主
+        // tokio runtime 的 `Handle`；避免每次拉取窗口都新建 `Runtime` 造成的反应器/IO
+        // 资源重复初始化。
+        let snapshot = tokio::runtime::Handle::current().block_on(
+            client.fetch_order_snapshots_in_window_parallel(start, end, cache_fetch_worker_count()),
+        )?;
 
         Ok(CacheFetchResult {
             windows: vec![SyncWindowOrders {

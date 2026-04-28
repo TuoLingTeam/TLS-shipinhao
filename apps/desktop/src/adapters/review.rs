@@ -131,61 +131,55 @@ impl HttpReviewSource {
         )
     }
 
+    /// 同步包装：在 `tokio::task::spawn_blocking` 阻塞线程内 `block_on` 一次异步实现，
+    /// 替代历史上的 `std::thread::spawn + Handle::block_on` 双层包装。
     fn post_json_sync(&self, body: &Value) -> anyhow::Result<Value> {
-        let rt = tokio::runtime::Handle::current();
+        tokio::runtime::Handle::current().block_on(self.post_json(body))
+    }
+
+    async fn post_json(&self, body: &Value) -> anyhow::Result<Value> {
         let headers = self.build_headers();
-        let client = self.client.clone();
         let url = format!("{}?token=&lang=zh_CN", evaluation_search_url());
-        let body = body.clone();
 
-        let resp = std::thread::spawn(move || {
-            rt.block_on(async {
-                retry_review_request(|| {
-                    let client = client.clone();
-                    let headers = headers.clone();
-                    let url = url.clone();
-                    let body = body.clone();
-                    async move {
-                        let response =
-                            match client.post(&url).headers(headers).json(&body).send().await {
-                                Ok(response) => response,
-                                Err(error) if is_temporary_review_error(&error) => {
-                                    return Ok(ReviewRequestOutcome::Retry(
-                                        ReviewRetryReason::TemporaryFailure,
-                                    ));
-                                }
-                                Err(error) => return Err(error.into()),
-                            };
-
-                        let status_code = response.status().as_u16();
-                        if is_http_rate_limited(status_code) {
-                            return Ok(ReviewRequestOutcome::Retry(
-                                ReviewRetryReason::RateLimited { api_level: false },
-                            ));
-                        }
-                        if is_temporary_review_status(status_code) {
-                            return Ok(ReviewRequestOutcome::Retry(
-                                ReviewRetryReason::TemporaryFailure,
-                            ));
-                        }
-
-                        let payload = response.json::<Value>().await?;
-                        if is_api_rate_limited(&payload) {
-                            return Ok(ReviewRequestOutcome::Retry(
-                                ReviewRetryReason::RateLimited { api_level: true },
-                            ));
-                        }
-
-                        Ok(ReviewRequestOutcome::Ready(payload))
+        retry_review_request(|| {
+            let client = self.client.clone();
+            let headers = headers.clone();
+            let url = url.clone();
+            let body = body.clone();
+            async move {
+                let response = match client.post(&url).headers(headers).json(&body).send().await {
+                    Ok(response) => response,
+                    Err(error) if is_temporary_review_error(&error) => {
+                        return Ok(ReviewRequestOutcome::Retry(
+                            ReviewRetryReason::TemporaryFailure,
+                        ));
                     }
-                })
-                .await
-            })
-        })
-        .join()
-        .map_err(|_| anyhow::anyhow!("请求线程崩溃"))??;
+                    Err(error) => return Err(error.into()),
+                };
 
-        Ok(resp)
+                let status_code = response.status().as_u16();
+                if is_http_rate_limited(status_code) {
+                    return Ok(ReviewRequestOutcome::Retry(
+                        ReviewRetryReason::RateLimited { api_level: false },
+                    ));
+                }
+                if is_temporary_review_status(status_code) {
+                    return Ok(ReviewRequestOutcome::Retry(
+                        ReviewRetryReason::TemporaryFailure,
+                    ));
+                }
+
+                let payload = response.json::<Value>().await?;
+                if is_api_rate_limited(&payload) {
+                    return Ok(ReviewRequestOutcome::Retry(
+                        ReviewRetryReason::RateLimited { api_level: true },
+                    ));
+                }
+
+                Ok(ReviewRequestOutcome::Ready(payload))
+            }
+        })
+        .await
     }
 
     fn parse_timestamp(ts_str: &str) -> i64 {

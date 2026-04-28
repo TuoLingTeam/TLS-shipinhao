@@ -32,13 +32,10 @@ pub async fn update_delivery(
         tracking_number,
         carrier_code,
     };
-    tokio::task::spawn_blocking(move || {
-        use desktop_services::DeliveryGateway;
-        gateway.update_delivery(&request)
-    })
-    .await
-    .map_err(|e| AppError::Message(e.to_string()))?
-    .map_err(AppError::Internal)
+    gateway
+        .update_delivery_async(&request)
+        .await
+        .map_err(AppError::Internal)
 }
 
 #[tauri::command(rename_all = "snake_case")]

@@ -61,58 +61,49 @@ impl HttpDeliveryGateway {
         )
     }
 
-    fn post_json_sync(&self, url: &str, body: &Value) -> anyhow::Result<Value> {
-        let rt = tokio::runtime::Handle::current();
-        let headers = self.build_headers();
-        let client = self.client.clone();
+    async fn post_json(&self, url: &str, body: &Value) -> anyhow::Result<Value> {
         let url = format!("{}?token=&lang=zh_CN", url);
-        let body = body.clone();
-
-        let resp = std::thread::spawn(move || {
-            rt.block_on(async {
-                client
-                    .post(&url)
-                    .headers(headers)
-                    .json(&body)
-                    .send()
-                    .await?
-                    .json::<Value>()
-                    .await
-            })
-        })
-        .join()
-        .map_err(|_| anyhow::anyhow!("请求线程崩溃"))??;
-
+        let resp = self
+            .client
+            .post(&url)
+            .headers(self.build_headers())
+            .json(body)
+            .send()
+            .await?
+            .json::<Value>()
+            .await?;
         Ok(resp)
     }
 
-    fn fetch_init_ship_data(&self, order_id: &str) -> anyhow::Result<Value> {
+    async fn fetch_init_ship_data(&self, order_id: &str) -> anyhow::Result<Value> {
         let body = serde_json::json!({"id": order_id});
-        let resp = self.post_json_sync(&init_ship_data_url(), &body)?;
+        let resp = self.post_json(&init_ship_data_url(), &body).await?;
         ensure_payload_success(&resp, "发货初始化接口返回失败")?;
         Ok(resp)
     }
 
-    fn fetch_order_detail(&self, order_id: &str) -> anyhow::Result<Value> {
+    async fn fetch_order_detail(&self, order_id: &str) -> anyhow::Result<Value> {
         let body = serde_json::json!({"id": order_id});
-        let resp = self.post_json_sync(&order_detail_url(), &body)?;
+        let resp = self.post_json(&order_detail_url(), &body).await?;
         ensure_payload_success(&resp, "订单详情接口返回失败")?;
         Ok(resp)
     }
 
-    fn extract_delivery_info(&self, order_id: &str) -> anyhow::Result<(Value, String)> {
-        let init_result = self
-            .fetch_init_ship_data(order_id)
-            .and_then(|payload| extract_raw_delivery_product_info_from_init_ship_data(&payload));
+    async fn extract_delivery_info(&self, order_id: &str) -> anyhow::Result<(Value, String)> {
+        let init_result = match self.fetch_init_ship_data(order_id).await {
+            Ok(payload) => extract_raw_delivery_product_info_from_init_ship_data(&payload),
+            Err(err) => Err(err),
+        };
         match init_result {
             Ok(info) => {
                 let old_waybill = old_waybill_from_raw_delivery_info(&info);
                 Ok((info, old_waybill))
             }
             Err(init_err) if is_missing_snapshot_error(&init_err) => {
-                let detail_result = self.fetch_order_detail(order_id).and_then(|payload| {
-                    extract_raw_delivery_product_info_from_order_detail(&payload)
-                });
+                let detail_result = match self.fetch_order_detail(order_id).await {
+                    Ok(payload) => extract_raw_delivery_product_info_from_order_detail(&payload),
+                    Err(err) => Err(err),
+                };
                 match detail_result {
                     Ok(info) => {
                         let old_waybill = old_waybill_from_raw_delivery_info(&info);
@@ -128,7 +119,7 @@ impl HttpDeliveryGateway {
         }
     }
 
-    fn do_update(
+    async fn do_update(
         &self,
         order_id: &str,
         tracking_number: &str,
@@ -147,8 +138,69 @@ impl HttpDeliveryGateway {
             old_info,
             delivery_override.as_ref(),
         )?;
-        let resp = self.post_json_sync(&delivery_update_url(), &body)?;
+        let resp = self.post_json(&delivery_update_url(), &body).await?;
         check_update_response(&resp)
+    }
+
+    /// 真正执行单条物流更新的 async 入口。命令层 `update_delivery` 直接 `await` 它；
+    /// `DeliveryGateway` / `BatchDeliveryGateway` 同步 trait 实现走 `Handle::block_on`
+    /// 复用同一份业务逻辑，避免重复维护。
+    pub async fn update_delivery_async(
+        &self,
+        request: &DeliveryUpdateRequest,
+    ) -> anyhow::Result<DeliveryUpdateResult> {
+        let (old_info, old_waybill) = self.extract_delivery_info(&request.order_id).await?;
+
+        match self
+            .do_update(&request.order_id, &request.tracking_number, &old_info, None)
+            .await
+        {
+            Ok(()) => Ok(DeliveryUpdateResult {
+                order_id: request.order_id.clone(),
+                success: true,
+                previous_waybill: empty_to_none(old_waybill),
+                error_message: None,
+            }),
+            Err(e) if is_delivery_mismatch_error(&e.to_string()) => {
+                if let Some(override_info) =
+                    determine_delivery_override_from_raw_info(&request.tracking_number, &old_info)
+                {
+                    self.do_update(
+                        &request.order_id,
+                        &request.tracking_number,
+                        &old_info,
+                        Some((&override_info.delivery_id, &override_info.delivery_name)),
+                    )
+                    .await?;
+                    return Ok(DeliveryUpdateResult {
+                        order_id: request.order_id.clone(),
+                        success: true,
+                        previous_waybill: empty_to_none(old_waybill),
+                        error_message: None,
+                    });
+                }
+                Ok(DeliveryUpdateResult {
+                    order_id: request.order_id.clone(),
+                    success: false,
+                    previous_waybill: None,
+                    error_message: Some("快递单号与物流商不匹配，且无法自动映射".to_string()),
+                })
+            }
+            Err(e) => Ok(DeliveryUpdateResult {
+                order_id: request.order_id.clone(),
+                success: false,
+                previous_waybill: None,
+                error_message: Some(e.to_string()),
+            }),
+        }
+    }
+}
+
+fn empty_to_none(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
     }
 }
 
@@ -226,54 +278,9 @@ impl DeliveryGateway for HttpDeliveryGateway {
         &self,
         request: &DeliveryUpdateRequest,
     ) -> anyhow::Result<DeliveryUpdateResult> {
-        let (old_info, old_waybill) = self.extract_delivery_info(&request.order_id)?;
-
-        match self.do_update(&request.order_id, &request.tracking_number, &old_info, None) {
-            Ok(()) => Ok(DeliveryUpdateResult {
-                order_id: request.order_id.clone(),
-                success: true,
-                previous_waybill: if old_waybill.is_empty() {
-                    None
-                } else {
-                    Some(old_waybill)
-                },
-                error_message: None,
-            }),
-            Err(e) if is_delivery_mismatch_error(&e.to_string()) => {
-                if let Some(override_info) =
-                    determine_delivery_override_from_raw_info(&request.tracking_number, &old_info)
-                {
-                    self.do_update(
-                        &request.order_id,
-                        &request.tracking_number,
-                        &old_info,
-                        Some((&override_info.delivery_id, &override_info.delivery_name)),
-                    )?;
-                    return Ok(DeliveryUpdateResult {
-                        order_id: request.order_id.clone(),
-                        success: true,
-                        previous_waybill: if old_waybill.is_empty() {
-                            None
-                        } else {
-                            Some(old_waybill)
-                        },
-                        error_message: None,
-                    });
-                }
-                Ok(DeliveryUpdateResult {
-                    order_id: request.order_id.clone(),
-                    success: false,
-                    previous_waybill: None,
-                    error_message: Some("快递单号与物流商不匹配，且无法自动映射".to_string()),
-                })
-            }
-            Err(e) => Ok(DeliveryUpdateResult {
-                order_id: request.order_id.clone(),
-                success: false,
-                previous_waybill: None,
-                error_message: Some(e.to_string()),
-            }),
-        }
+        // 同步 trait 入口：在 `tokio::task::spawn_blocking` 阻塞线程上 `block_on` 异步实现，
+        // 行为与 async 版完全一致，省去原 `std::thread::spawn` 的二次线程开销。
+        tokio::runtime::Handle::current().block_on(self.update_delivery_async(request))
     }
 }
 
@@ -288,7 +295,8 @@ impl BatchDeliveryGateway for HttpDeliveryGateway {
             tracking_number: tracking_number.to_string(),
             carrier_code: String::new(),
         };
-        let result = self.update_delivery(&request)?;
+        let result =
+            tokio::runtime::Handle::current().block_on(self.update_delivery_async(&request))?;
         if result.success {
             Ok(result.previous_waybill)
         } else {

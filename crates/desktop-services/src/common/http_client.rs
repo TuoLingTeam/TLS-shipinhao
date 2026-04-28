@@ -40,8 +40,17 @@
 //! 3. **建议迁移顺序**（每步独立 `cargo test --workspace` + 手工点验相关页）：
 //!    - `quality_refund`：`HttpQualityRefundSource` 已改为纯 `async`，不再
 //!      `thread::spawn` + `Handle::block_on`（L4-2 首期落地）。
-//!    - 继续 `store`（已是 async 客户端）及其它仍含阻塞包装的模块；
-//!    - `order` / `review` 与深度 `spawn_blocking` 包装最后迁移。
+//!    - `store`：本就是 async 客户端，命令层直接 `.await`，无需迁移。
+//!    - `delivery`：`HttpDeliveryGateway` 全部内部方法改为 `async`，新增
+//!      `update_delivery_async` 供命令层直接 `.await`；同步 `DeliveryGateway` /
+//!      `BatchDeliveryGateway` trait 实现仅作 `Handle::block_on` 薄壳，
+//!      `commands::update_delivery` 已不再 `spawn_blocking`（L4-2 第二期）。
+//!    - `review`：`HttpReviewSource::post_json` 改为 `async`，同步 `post_json_sync`
+//!      退化为 `Handle::block_on(post_json)` 薄壳，去掉双层线程包装；命令层
+//!      `find_reviews` 仍走 `spawn_blocking`（内含 SQLite + license 同步逻辑）。
+//!    - `order`：`HttpOrderCacheFinder::get_orders_for_cache` 不再 `Runtime::new()`，
+//!      改为 `Handle::current().block_on`，避免重复初始化反应器；命令层
+//!      `sync_recent_order_cache` 同样保留 `spawn_blocking`。
 //! 4. **完成定义**：目标路径上可删除 `std::thread::spawn + Handle::block_on`
 //!    的双层线程包装；`#[tauri::command]` 的 JSON 契约保持不变。
 
