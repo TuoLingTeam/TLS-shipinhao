@@ -101,17 +101,16 @@ pub async fn set_cookie(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_cookie_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
-    let registry = state.store_registry.lock().await.clone();
-    let profile = state.cookie_profile.lock().await.clone();
-    let cookie_path = state.cookie_path.lock().await.clone();
-    let health = state.cookie_health.lock().await.clone();
+    // 四锁快照集中到 helper，锁顺序与 AppState 顶部协议对齐；命令体内
+    // 仅做字段映射，便于审阅。
+    let snapshot = crate::commands::shared::cookie_status_snapshot(&state).await;
     Ok(serde_json::json!({
-        "configured": !profile.cookie_header.is_empty(),
-        "has_biz_magic": profile.biz_magic.is_some(),
-        "cookie_path": cookie_path.display().to_string(),
-        "health": health,
-        "active_store": registry.active_store(),
-        "stores": registry.stores,
+        "configured": !snapshot.profile.cookie_header.is_empty(),
+        "has_biz_magic": snapshot.profile.biz_magic.is_some(),
+        "cookie_path": snapshot.cookie_path.display().to_string(),
+        "health": snapshot.health,
+        "active_store": snapshot.registry.active_store(),
+        "stores": snapshot.registry.stores,
     }))
 }
 

@@ -5,7 +5,8 @@
 
 use crate::commands::paths::{cache_data_dir_for_store, rich_order_cache_path_for_store};
 use crate::error::AppError;
-use crate::state::AppState;
+use crate::state::{AppState, CookieHealthSnapshot, StoreRegistry};
+use desktop_services::CookieProfile;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
@@ -84,4 +85,41 @@ pub(crate) async fn require_store_runtime_context(
         data_dir: paths.data_dir,
         rich_order_cache_path: paths.rich_order_cache_path,
     })
+}
+
+/// 仅用于 `get_cookie_status` 命令的「Cookie 状态四锁快照」。
+///
+/// 字段已脱出对应 `Mutex`：
+/// - registry：当前店铺注册表 + 活跃店铺
+/// - profile：cookie_header + biz_magic
+/// - cookie_path：当前 cookie 文件磁盘路径
+/// - health：cookie 健康度快照
+///
+/// 历史实现把这四把锁分别按需克隆在命令体内，时间序列上多个 lock().await
+/// 之间可能被别的命令插入修改。重构后仍**不**承诺事务一致（事务一致需要
+/// 长持锁，会显著加大死锁风险），但把锁顺序从 system::get_cookie_status
+/// 体内移到 helper 内部，与 AppState 顶部的「锁顺序协议」对齐为单点事实源。
+pub(crate) struct CookieStatusSnapshot {
+    pub(crate) registry: StoreRegistry,
+    pub(crate) profile: CookieProfile,
+    pub(crate) cookie_path: PathBuf,
+    pub(crate) health: CookieHealthSnapshot,
+}
+
+/// 一次按 `store_registry -> cookie_profile -> cookie_path -> cookie_health`
+/// 顺序拿四把锁、克隆 + 立即释放。
+///
+/// 不同字段间仍是「尽力而为」一致性（与重构前等价）；如果业务需要事务级
+/// 快照，应另外评估是否值得引入复合锁。
+pub(crate) async fn cookie_status_snapshot(state: &State<'_, AppState>) -> CookieStatusSnapshot {
+    let registry = state.store_registry.lock().await.clone();
+    let profile = state.cookie_profile.lock().await.clone();
+    let cookie_path = state.cookie_path.lock().await.clone();
+    let health = state.cookie_health.lock().await.clone();
+    CookieStatusSnapshot {
+        registry,
+        profile,
+        cookie_path,
+        health,
+    }
 }
