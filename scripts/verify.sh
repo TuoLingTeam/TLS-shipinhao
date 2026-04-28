@@ -23,16 +23,19 @@ pretty_step() {
   fi
 }
 
-pretty_step 1 4 "前端类型检查 (vue-tsc --noEmit)"
+pretty_step 1 5 "前端类型检查 (vue-tsc --noEmit)"
 pnpm --filter tls-shipinhao-ui exec vue-tsc --noEmit
 
-pretty_step 2 4 "Rust 格式检查 (cargo fmt --all --check)"
+pretty_step 2 5 "LicenseState SSoT 一致性 (check:license-state)"
+node scripts/check-license-state-sync.mjs
+
+pretty_step 3 5 "Rust 格式检查 (cargo fmt --all --check)"
 cargo fmt --all --check
 
-pretty_step 3 4 "Rust clippy 严格模式 (cargo clippy --workspace -- -D warnings)"
+pretty_step 4 5 "Rust clippy 严格模式 (cargo clippy --workspace -- -D warnings)"
 cargo clippy --workspace --quiet -- -D warnings
 
-pretty_step 4 4 "Rust 单元测试 (cargo test --workspace)"
+pretty_step 5 5 "Rust 单元测试 (cargo test --workspace)"
 cargo test --workspace --quiet
 
 ts_end=$(date +%s)
