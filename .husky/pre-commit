@@ -1,0 +1,6 @@
+# Husky 9 pre-commit hook：每次 git commit 前跑最快速的类型检查，
+# 防止"明显的类型错误"被提交进 PR。
+# - 仅跑前端 vue-tsc（pnpm run lint:ui），通常 2-3s 完成
+# - 重的 fmt/clippy/test --workspace 留给 pre-push 的 verify.sh
+# - 跳过方式（慎用）：git commit --no-verify
+pnpm run lint:ui
