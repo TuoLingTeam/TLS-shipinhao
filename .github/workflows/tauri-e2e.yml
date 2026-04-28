@@ -1,0 +1,97 @@
+name: Tauri E2E (real shell)
+
+# L4-4：真壳 E2E（WebdriverIO + tauri-driver）。在 GitHub Actions 上跑会触发
+# 一次完整 cargo tauri build + tauri-driver 安装，单次约 10~20 min，因此 **仅
+# workflow_dispatch 手动触发**，不挂 push / PR；如要绑 PR，请按
+# `e2e-tauri/README.md` 中 CI 接入小节加 `paths` 过滤。
+on:
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: "Cargo 构建 profile（release 接近线上；dev 可加速但不代表生产）"
+        required: false
+        type: choice
+        default: release
+        options:
+          - release
+          - dev
+
+permissions:
+  contents: read
+
+jobs:
+  tauri-e2e-linux:
+    name: Tauri E2E (Linux + webkit2gtk)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps (Linux GUI + WebDriver)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            webkit2gtk-driver \
+            xvfb
+
+      - name: Install tauri-driver
+        run: cargo install --locked tauri-driver
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --filter tls-shipinhao-ui build
+
+      - name: Build desktop (cargo, no bundle)
+        working-directory: apps/desktop
+        run: |
+          if [ "${{ inputs.build_profile }}" = "dev" ]; then
+            cargo build
+          else
+            cargo build --release
+          fi
+
+      - name: Install e2e-tauri deps (npm, isolated)
+        working-directory: e2e-tauri
+        run: npm install
+
+      - name: Run Tauri E2E smoke
+        working-directory: e2e-tauri
+        env:
+          # dev profile 时被测二进制位于 target/debug/，覆盖 wdio.conf.ts 默认路径
+          TAURI_E2E_BIN: ${{ inputs.build_profile == 'dev' && '../target/debug/desktop' || '../target/release/desktop' }}
+        run: xvfb-run --auto-servernum npm test
+
+      - name: Upload wdio logs (diag)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-e2e-wdio-logs
+          path: |
+            e2e-tauri/.wdio-logs/**
+            e2e-tauri/screenshots/**
+          retention-days: 7
+          if-no-files-found: ignore

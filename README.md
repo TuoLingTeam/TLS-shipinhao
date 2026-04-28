@@ -137,8 +137,13 @@ pnpm --filter tls-shipinhao-ui test:e2e:headed
 `apps/ui/e2e/license-ipc.spec.ts` 在浏览器内注入最小 `__TAURI_INTERNALS__` mock，
 覆盖设置页「模拟激活 → 已激活」展示链，不启动真实桌面壳。
 
-**L4-4（真 Tauri E2E）**：需 `tauri-driver` / WebDriver 等驱动真实 WebView2/WKWebView，
-环境与 CI 成本高；当前仍以 Playwright + `vite preview` 为回归入口，真壳 E2E 单列 backlog。
+**L4-4（真 Tauri E2E，骨架已就绪）**：`e2e-tauri/`（脱离 pnpm workspace 的独立
+npm 包）已完成骨架，包含 WebdriverIO + `tauri-driver` 配置、Linux/Windows 平台
+矩阵、smoke spec 与故障排查指南，详见 [`e2e-tauri/README.md`](./e2e-tauri/README.md)。
+GitHub Actions workflow `Tauri E2E (real shell)` 仅 `workflow_dispatch` 手动
+触发（每次会跑一次完整 cargo tauri build + tauri-driver 安装，约 10–20 min）。
+macOS 因 Apple WKWebView 无官方 WebDriver 驱动**不支持**，本地仍走
+`pnpm test:e2e:web` 的 Playwright + IPC mock 回归路径。
 
 **`cargo audit`（L4-5 策略）**：CI `test` job 已安装并执行 `cargo audit`，当前为
 `continue-on-error: true`。RustSec 数据库与传递依赖会不定期出现 **未修复** 或

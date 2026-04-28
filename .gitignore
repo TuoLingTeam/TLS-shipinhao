@@ -83,6 +83,12 @@ image/
 # Rust
 target/
 
+# Tauri 真壳 E2E（L4-4）独立 npm 包：本目录脱离 pnpm-workspace，自有 node_modules
+e2e-tauri/node_modules/
+e2e-tauri/.wdio-logs/
+e2e-tauri/screenshots/
+e2e-tauri/allure-results/
+
 # Tauri / Vue frontend
 apps/ui/dist/
 apps/ui/node_modules/
