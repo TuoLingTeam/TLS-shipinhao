@@ -83,10 +83,25 @@ pnpm build
 pnpm lint
 ```
 
-### Rust 测试
+### 测试
 
 ```bash
-cargo test --workspace -- --nocapture
+pnpm test               # 等价于 test:ui + test:rust，串行执行
+pnpm test:ui            # 仅前端 Vitest（apps/ui/src 下 14+ 个 .spec.ts）
+pnpm test:ui:watch      # 前端 Vitest watch 模式
+pnpm test:rust          # 仅 Rust workspace 单测
+cargo test --workspace -- --nocapture   # 直跑（看完整输出）
+```
+
+可选：本地查看覆盖率（CI 不强制，按需安装）
+
+```bash
+# Rust 端：cargo install cargo-llvm-cov
+cargo llvm-cov --workspace --html
+
+# 前端：apps/ui 当前未集成 @vitest/coverage-v8，按需添加 dev 依赖后再启用
+# pnpm --filter tls-shipinhao-ui add -D @vitest/coverage-v8
+# pnpm --filter tls-shipinhao-ui exec vitest run --coverage
 ```
 
 ### 桌面端打包
