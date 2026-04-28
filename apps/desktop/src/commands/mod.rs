@@ -19,6 +19,19 @@
 //! 1. 在对应子模块写 `#[tauri::command]` 函数，返回 `Result<T, AppError>`
 //! 2. 到 `apps/desktop/src/main.rs` 的 `tauri::generate_handler![...]` 注册
 //! 3. 若要做统一 Cookie / license 前置校验，从 `shared` 引用 helper，不要重复代码
+//!
+//! ## 多锁交互注意事项
+//!
+//! 命令实现里若**同时**持有多把 `AppState` 上的 `Mutex` / `RwLock`，必须按
+//! `crate::state::AppState` 文档顶部声明的「锁顺序协议」获取，否则会引入
+//! 跨命令的潜在死锁（例如 `cookie_profile` → `store_registry` 的逆序）。
+//!
+//! 参考实现：
+//! - 取一组 store + cookie 快照：`shared::require_store_runtime_context`
+//! - 读授权 runtime / profile：`license::get_license_status`
+//!
+//! Code review 时请把"是否按锁顺序协议获取多锁"作为必查项，不要在新 handler
+//! 里复制其他模块的局部加锁顺序——以 `state.rs` 顶部的协议为唯一事实源。
 
 pub mod delivery;
 pub mod license;
