@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "lint": "vue-tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --exclude '**/e2e/**'",
+    "test:watch": "vitest --exclude '**/e2e/**'",
+    "test:coverage": "vitest run --coverage --exclude '**/e2e/**'",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },
