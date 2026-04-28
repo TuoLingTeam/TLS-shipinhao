@@ -39,6 +39,8 @@ screenshot.png
 *.swp
 *.swo
 *~
+# VSCode / Cursor 多根工作区配置：每个开发者本地相邻仓库布局不同，不入仓库
+*.code-workspace
 
 # PyInstaller
 *.spec
