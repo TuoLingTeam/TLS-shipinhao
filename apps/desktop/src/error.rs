@@ -35,6 +35,8 @@ impl From<String> for AppError {
 /// - 取 root cause 文本（避免暴露完整 anyhow context chain）
 /// - 替换绝对路径前缀（`/Users/...` / `/home/...` / `C:\...`）为 `<path>`
 /// - 替换 Rust 源码行号引用（`xxx.rs:NN`）为 `<loc>`
+/// - 替换以 SQL 关键字开头的整条语句残片为 `<sql>`（防 rusqlite 等
+///   把 `INSERT INTO orders (...) VALUES (...)` 顺带包进 anyhow 错误）
 /// - 截断到 280 字符（足够说明，不再放整段堆栈）
 ///
 /// 完整原文仍由 tracing 在调用方记录到日志，运维侧定位不受影响。
@@ -56,12 +58,79 @@ fn sanitize_user_message(err: &anyhow::Error) -> String {
         }
         text.push(ch);
     }
-    let mut sanitized = strip_source_locations(&text);
+    let with_loc = strip_source_locations(&text);
+    let with_sql = strip_sql_statements(&with_loc);
+    let mut sanitized = with_sql;
     if sanitized.chars().count() > 280 {
         let truncated: String = sanitized.chars().take(280).collect();
         sanitized = format!("{truncated}…");
     }
     sanitized
+}
+
+/// 把 SQL 语句残片整体替换为 `<sql>`。
+///
+/// 仅在以下任一开头作为「语句起点」识别（不区分大小写）：
+/// `SELECT ` / `INSERT INTO ` / `UPDATE ` / `DELETE FROM ` / `CREATE TABLE `
+/// / `ALTER TABLE ` / `DROP TABLE `
+///
+/// 起点要求：要么是字符串首位，要么前面是空白 / `(` / `:`，避免误伤业务名词
+/// 中包含「Update」等子串的描述（这些不会以独立 token 形式紧跟空格）。
+/// 终点：到下一个 `;` 或换行或全文结束为止；这是保守做法，对单语句错误最适用。
+fn strip_sql_statements(input: &str) -> String {
+    const KEYWORDS: &[&str] = &[
+        "SELECT ",
+        "INSERT INTO ",
+        "UPDATE ",
+        "DELETE FROM ",
+        "CREATE TABLE ",
+        "ALTER TABLE ",
+        "DROP TABLE ",
+    ];
+    let lower = input.to_ascii_lowercase();
+    let mut out = String::with_capacity(input.len());
+    // 用字节索引推进，但写出按 char 切片避免破坏 UTF-8。
+    let mut i = 0;
+    while i < input.len() {
+        let mut matched_kw_len: Option<usize> = None;
+        for kw in KEYWORDS {
+            let kw_lower = kw.to_ascii_lowercase();
+            if lower[i..].starts_with(&kw_lower) {
+                let start_ok = i == 0
+                    || matches!(
+                        input.as_bytes()[i - 1],
+                        b' ' | b'\t' | b'(' | b':' | b'\n' | b'\r'
+                    );
+                if start_ok {
+                    matched_kw_len = Some(kw.len());
+                    break;
+                }
+            }
+        }
+        if matched_kw_len.is_some() {
+            out.push_str("<sql>");
+            let mut j = i;
+            while j < input.len() {
+                let b = input.as_bytes()[j];
+                if b == b';' || b == b'\n' {
+                    break;
+                }
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+        // 取从 i 开始的下一个完整 char（按 UTF-8 边界推进）
+        let next_char = input[i..].chars().next();
+        match next_char {
+            Some(ch) => {
+                out.push(ch);
+                i += ch.len_utf8();
+            }
+            None => break,
+        }
+    }
+    out
 }
 
 fn looks_like_path_start(prefix: &str) -> bool {
@@ -175,6 +244,31 @@ mod tests {
             "应截断到 ~280 字符: {}",
             json.chars().count()
         );
+    }
+
+    #[test]
+    fn internal_variant_strips_sql_statement_residue() {
+        let error: AppError = anyhow::anyhow!(
+            "rusqlite execute failed: INSERT INTO orders (id, payload) VALUES (1, 'top secret')"
+        )
+        .into();
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(json.contains("<sql>"), "应替换 SQL 残片为 <sql>: {json}");
+        assert!(!json.contains("INSERT INTO"), "原 SQL 不应出现：{json}");
+        assert!(!json.contains("orders (id"), "SQL 字段不应出现：{json}");
+    }
+
+    #[test]
+    fn internal_variant_does_not_strip_select_in_business_text() {
+        // "Selectable" 出现在 sentence 中且不是 SQL 起点（不带空格 token 边界）
+        // 不应被误判为 SQL。
+        let error: AppError = anyhow::anyhow!("Selectable rows are zero, please retry").into();
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(
+            !json.contains("<sql>"),
+            "Selectable 不应触发 SQL 脱敏：{json}"
+        );
+        assert!(json.contains("Selectable"));
     }
 
     #[test]
