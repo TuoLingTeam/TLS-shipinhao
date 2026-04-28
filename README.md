@@ -102,6 +102,19 @@ pnpm tauri:build
 
 ## 构建产物
 
+### 发版命令 → 中间目录 / 最终产物对照
+
+| 命令 | 入口脚本 | 中间镜像 / 缓存 | 最终产物目录 | 适用场景 |
+|---|---|---|---|---|
+| `pnpm tauri:build` | `apps/desktop` 内 `cargo tauri build` | 无（在源码 `target/` 内编译） | `target/release/bundle/{dmg,nsis,...}` | 本地直建，不混淆 |
+| `pnpm release:build` | `scripts/build-release.mjs` | `build/obfuscated-ui/`（前端混淆中转） | `dist/release/` + `target/release/bundle/...` | 轻量发版，源树内打包 |
+| `pnpm release:build:plain` | `scripts/build-release.mjs --no-obfuscate` | 同上但跳过 JS 混淆 | 同上 | 快速本地预览混淆前包形态 |
+| `pnpm release:build:deep` | `scripts/build-obfuscate.mjs` | `TLS-shipinhao-release/`（整树镜像 + JS 深混 + rustflags 重写） | `dist/release/` 内最终安装包 / 便携 exe / dmg | 正式发版主路径 |
+| `pnpm release:build:deep:mirror-only` | 同上 + `--skip-build` | 仅生成 `TLS-shipinhao-release/` 镜像，不调 `cargo tauri build` | 无最终产物 | 验证镜像内容是否干净 |
+| `pnpm worker:deploy` | `cd backend && npx wrangler deploy` | `backend/build/` | Cloudflare 边缘 | 授权 Worker 上线 |
+
+`TLS-shipinhao-release/` 是 `build-obfuscate.mjs` 全量重建的镜像，**禁止手动修改**——任何对它的改动都会在下次发版被覆盖。
+
 ### Mac 桌面应用
 
 ```text
