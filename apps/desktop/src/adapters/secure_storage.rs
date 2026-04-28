@@ -291,9 +291,7 @@ pub fn init_default_store(runtime_dir: &Path, device_id: &str) -> Arc<dyn Secret
             Arc::new(store)
         }
         Err(err) => {
-            tracing::warn!(
-                "Keychain 不可用，回退到加密文件：{err}（file={ENCRYPTED_FILE_NAME}）"
-            );
+            tracing::warn!("Keychain 不可用，回退到加密文件：{err}（file={ENCRYPTED_FILE_NAME}）");
             Arc::new(EncryptedFileSecretStore::new(runtime_dir, device_id))
         }
     }
