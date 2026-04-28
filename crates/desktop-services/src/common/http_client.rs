@@ -16,8 +16,8 @@
 //!
 //! ## 同步边界说明
 //!
-//! 这里返回的是 **异步** `reqwest::Client`。`apps/desktop/src/adapters/http_*.rs`
-//! 的多数方法位于 `ReviewSource` / `DeliveryGateway` 等**同步 trait** 内部，
+//! 这里返回的是 **异步** `reqwest::Client`。`apps/desktop/src/adapters/` 下
+//! `review` / `delivery` / `order` 等模块的多数方法位于**同步 trait** 内部，
 //! 而 Tauri 命令层本身是 `async fn`。目前的执行链路是：
 //!
 //! 1. `#[tauri::command] async fn ...` 接到前端请求
@@ -30,6 +30,18 @@
 //! 未来若把 trait 切换为 `async_trait` 或迁移到 `reqwest::blocking::Client`，
 //! 便能去掉 `std::thread::spawn + Handle::block_on` 包装层。当前保留现状以锁住
 //! 生产可用性，不在 slop 清理期动。
+//!
+//! ## L4-2 执行清单（`H4` / async trait 化，按序 PR，零业务契约变更）
+//!
+//! 1. **盘点**：凡持有 `reqwest::Client` 的适配器：`store`、`review`、`order`、
+//!    `delivery`、`quality_refund`、`license`；统一入口见 `adapters/common.rs`。
+//! 2. **硬约束**：外网请求必须继续走本模块的 [`build_desktop_http_client`]，
+//!    禁止新增绕过 UA 策略的裸 `Client::new()`。
+//! 3. **建议迁移顺序**（每步独立 `cargo test --workspace` + 手工点验相关页）：
+//!    - 先 `store` / `quality_refund` 等 `spawn_blocking` 链较短的模块；
+//!    - `order` / `review` 与深度阻塞包装最后迁移。
+//! 4. **完成定义**：目标路径上可删除 `std::thread::spawn + Handle::block_on`
+//!    的双层线程包装；`#[tauri::command]` 的 JSON 契约保持不变。
 
 use std::time::Duration;
 
