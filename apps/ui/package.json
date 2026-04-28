@@ -11,6 +11,7 @@
     "test:watch": "vitest --exclude '**/e2e/**'",
     "test:coverage": "vitest run --coverage --exclude '**/e2e/**'",
     "test:e2e": "playwright test",
+    "test:e2e:web": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {

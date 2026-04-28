@@ -122,8 +122,10 @@ cargo llvm-cov --workspace --html
 # 仅首次：下载 Chromium 浏览器二进制
 pnpm --filter tls-shipinhao-ui exec playwright install chromium
 
-# 启动 vite preview + 跑冒烟 spec（apps/ui/e2e/smoke.spec.ts）
+# 启动 vite preview + 跑冒烟 spec（apps/ui/e2e/*.spec.ts）
 pnpm test:e2e
+# 与上一行等价，显式强调「仅 WebView 预览 / IPC mock」，非真 Tauri 壳
+pnpm test:e2e:web
 
 # 调试模式（headed + DevTools）
 pnpm --filter tls-shipinhao-ui test:e2e:headed
