@@ -414,11 +414,19 @@ fn current_timestamp() -> String {
 }
 
 fn build_license_status_payload(profile: &Slp, runtime: &RuntimeState) -> serde_json::Value {
-    let license_key = if runtime.license_key.trim().is_empty() {
-        profile.license_key.clone()
+    // 这里的「二选一」字段一律先用 &str 借用挑出胜者，最后由 serde_json::json!
+    // 统一接管所有权（每个字段恰好 1 次 to_owned），避免分支内提前 clone 再传给
+    // json! 时多复制一次的额外开销。函数语义与历史实现完全等价：
+    // - 优先级与 trim 判空规则不变
+    // - needs_restore / license_state 的判定条件未改
+    // - 输出 JSON 字段集合、字段类型（字符串 / null / bool）一一对应
+
+    let license_key: &str = if runtime.license_key.trim().is_empty() {
+        profile.license_key.as_str()
     } else {
-        runtime.license_key.clone()
+        runtime.license_key.as_str()
     };
+
     // 半孤立场景：本地 license.json 还有卡密，但 Keychain/加密文件里的 Lease 丢失
     // （用户换机、清理系统密钥环、或凭据存储回退路径变更等）。此时若仍返回
     // `invalid` / `not_found`，UI 只能展示"未激活 / 未发现租约"，既无法引导用户
@@ -431,7 +439,7 @@ fn build_license_status_payload(profile: &Slp, runtime: &RuntimeState) -> serde_
             LicenseState::NotFound | LicenseState::Invalid
         );
 
-    let license_state = if matches!(runtime.reason, LicenseState::NotFound)
+    let license_state: String = if matches!(runtime.reason, LicenseState::NotFound)
         && runtime.license_key.trim().is_empty()
         && profile.license_key.trim().is_empty()
     {
@@ -441,24 +449,34 @@ fn build_license_status_payload(profile: &Slp, runtime: &RuntimeState) -> serde_
     } else {
         state::runtime_state_to_license_state(runtime)
     };
-    let license_expires_at = if runtime.license_expires_at.trim().is_empty() {
-        profile.license_expires_at.clone()
+
+    // license_expires_at：runtime 优先；为空时回退 profile 中的 Option<String>。
+    // 这里直接借用 profile 的 Option<&str>，避免在「runtime 为空 + profile 也为空」
+    // 的常见路径上做一次 String::clone。
+    let license_expires_at: Option<&str> = if runtime.license_expires_at.trim().is_empty() {
+        profile.license_expires_at.as_deref()
     } else {
-        Some(runtime.license_expires_at.clone())
+        Some(runtime.license_expires_at.as_str())
     };
-    let last_verified_at = profile
+
+    // last_verified_at：profile 优先，但需要过滤掉「全空白」串；runtime 兜底。
+    // 用 &str 串接，最终由 json! 一次性归一为 Value::String / Value::Null。
+    let last_verified_at: Option<&str> = profile
         .last_verified_at
-        .clone()
+        .as_deref()
         .filter(|value| !value.trim().is_empty())
         .or_else(|| {
-            (!runtime.last_verify_at.trim().is_empty()).then(|| runtime.last_verify_at.clone())
+            let r = runtime.last_verify_at.as_str();
+            (!r.trim().is_empty()).then_some(r)
         });
 
-    let lease_expires_at = if runtime.lease_expires_at.trim().is_empty() {
+    // lease_expires_at：保持「空串 → null」的对外契约不变；非空借用 runtime 字符串。
+    let lease_expires_at: serde_json::Value = if runtime.lease_expires_at.trim().is_empty() {
         serde_json::Value::Null
     } else {
         serde_json::Value::String(runtime.lease_expires_at.clone())
     };
+
     serde_json::json!({
         "configured": !license_key.is_empty(),
         "license_key": license_key,
