@@ -56,6 +56,30 @@ pub enum LicenseState {
 /// 命中这些状态时，客户端无需强制联网校验即可让用户继续使用功能。
 pub const ALLOWED_LOCAL_STATES: &[LicenseState] = &[LicenseState::Active, LicenseState::RenewalDue];
 
+/// `LicenseState` 在跨端协议（HTTP / IPC）中的 serde label 全集。
+///
+/// 这是「LicenseState 序列化形态」的单点事实源（SSoT）：
+/// - 后端测试 [`tests::license_state_serde_labels_cover_all_variants`]
+///   保证此常量与 `serde_json::to_string` 的实际取值一一对应；
+/// - 前端 `apps/ui/src/license/types.ts::LicenseState` 与
+///   `LICENSE_STATE_LABELS` 与本常量逐项对齐，新增/重命名变体时
+///   两端必须同步。
+///
+/// **顺序与 [`LicenseState`] 的变体声明顺序一致**，便于人工 diff 时一眼看出
+/// 增删项。
+pub const LICENSE_STATE_SERDE_LABELS: &[&str] = &[
+    "active",
+    "not_found",
+    "invalid",
+    "expired",
+    "device_mismatch",
+    "reactivation_required",
+    "revoked",
+    "online_refresh_required",
+    "renewal_due",
+    "compromised",
+];
+
 impl LicenseState {
     /// 判断当前状态是否允许离线继续使用。
     pub fn is_locally_allowed(self) -> bool {
@@ -299,6 +323,50 @@ mod tests {
             let s = serde_json::to_string(&state).unwrap();
             assert_eq!(s, expected, "{state:?} 必须序列化为 {expected}");
         }
+    }
+
+    #[test]
+    fn license_state_serde_labels_cover_all_variants() {
+        // 把 LICENSE_STATE_SERDE_LABELS 与 LicenseState 所有变体的实际序列化输出
+        // 做集合对比；任一边漏写新变体或重命名 label 都会立刻在这里炸出来。
+        // 所有变体（与定义顺序一致）。
+        let all: &[LicenseState] = &[
+            LicenseState::Active,
+            LicenseState::NotFound,
+            LicenseState::Invalid,
+            LicenseState::Expired,
+            LicenseState::DeviceMismatch,
+            LicenseState::ReactivationRequired,
+            LicenseState::Revoked,
+            LicenseState::OnlineRefreshRequired,
+            LicenseState::RenewalDue,
+            LicenseState::Compromised,
+        ];
+        let serialized: Vec<String> = all
+            .iter()
+            .map(|s| {
+                serde_json::to_string(s)
+                    .unwrap()
+                    .trim_matches('"')
+                    .to_string()
+            })
+            .collect();
+        let labels: Vec<&str> = LICENSE_STATE_SERDE_LABELS.to_vec();
+
+        let serialized_set: std::collections::BTreeSet<&str> =
+            serialized.iter().map(|s| s.as_str()).collect();
+        let labels_set: std::collections::BTreeSet<&str> = labels.iter().copied().collect();
+        assert_eq!(
+            serialized_set, labels_set,
+            "LICENSE_STATE_SERDE_LABELS 必须覆盖且只覆盖 LicenseState 的所有 serde 取值"
+        );
+
+        // 数量一致 → 无重复（serde 不会同 label 映射多变体，多余检查兜底）。
+        assert_eq!(
+            LICENSE_STATE_SERDE_LABELS.len(),
+            all.len(),
+            "LICENSE_STATE_SERDE_LABELS 长度必须等于 LicenseState 变体数（无重复、无遗漏）"
+        );
     }
 
     #[test]
