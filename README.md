@@ -170,7 +170,21 @@ npx wrangler deploy
 | `sphapi.tuoling.ccwu.cc` | Cloudflare Worker 直连 | 备用 |
 | `sphapi.tuoling.eu.cc` | Cloudflare Worker 直连 | 备用 |
 
-更详细的后端说明见 [backend/README.md](backend/README.md)。
+### 新增 / 调整备用域名检查清单
+
+`apps/desktop/src/app_settings.rs::license_api_base_urls` 与上方路由表是同一份
+策略的「客户端视角」与「边缘视角」，任一处漂移都会让客户端配了域名却被
+Cloudflare 判 1014（unknown host），或 Worker 绑了路由却没人调。新增 / 调整
+任一备用域名时按以下三步同步执行：
+
+1. **客户端**：编辑 `apps/desktop/src/app_settings.rs::license_api_base_urls`，
+   用 `obfstr::obfstr!("...")` 包裹新 URL 加入返回数组（顺序代表优先级）。
+2. **Cloudflare 路由**：在 `backend/wrangler.toml` 增补 `routes = [{ pattern = "...", custom_domain = true }]`，
+   再 `cd backend && npx wrangler deploy` 让边缘绑定生效。
+3. **DNS / 加速层**：把新域名 CNAME / 接入到对应加速通道（EdgeOne / Cloudflare），
+   在浏览器手动访问 `https://<新域名>/` 确认返回授权服务的健康响应而非默认页。
+
+完成后回到本表格末尾追加一行，让运营同学也能看到当前期望的域名拓扑。
 
 ## 备份目录说明
 

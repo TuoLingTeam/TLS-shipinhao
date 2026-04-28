@@ -333,7 +333,7 @@ pub fn load_cookie_from_file(path: &Path) -> CookieProfile {
             let biz_magic = parse_biz_magic(&cookie_header);
             tracing::debug!(
                 target: "state.cookie.load",
-                path = %path.display(),
+                file = %path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
                 biz_magic = if biz_magic.is_some() { "extracted" } else { "missing" },
                 "从磁盘加载 Cookie",
             );
@@ -345,7 +345,7 @@ pub fn load_cookie_from_file(path: &Path) -> CookieProfile {
         Err(_) => {
             tracing::debug!(
                 target: "state.cookie.load",
-                path = %path.display(),
+                file = %path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
                 "Cookie 文件不存在，返回空 CookieProfile",
             );
             CookieProfile::default()

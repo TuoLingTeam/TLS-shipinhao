@@ -62,7 +62,14 @@ where
         match op(url).await {
             DomainAttempt::Final(result) => return result,
             DomainAttempt::Network(msg) => {
-                tracing::warn!("授权域名 {url} 网络失败：{msg}");
+                // 日志只打 host（fallback 到原 URL）：备域拓扑算运营敏感信息，
+                // 排障所需的「哪个 host 不通」由 host 已经能区分；具体路径如
+                // /api/activate 在调用方自有日志中按需补全。
+                let host_label = reqwest::Url::parse(url)
+                    .ok()
+                    .and_then(|u| u.host_str().map(str::to_owned))
+                    .unwrap_or_else(|| url.clone());
+                tracing::warn!("授权域名 {host_label} 网络失败：{msg}");
                 last_network_err = Some(msg);
                 continue;
             }

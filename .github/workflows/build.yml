@@ -109,6 +109,17 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace
 
+      # 非阻塞的依赖漏洞扫描：只在 CI 日志里曝光问题，不阻塞发版。
+      # `cargo audit` 用 RustSec advisory db；遇到新增 advisory 时
+      # 维护者应在下一轮迭代手动跟进升级，而不是被 CI 直接打红。
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+        continue-on-error: true
+
+      - name: Cargo audit (non-blocking)
+        run: cargo audit
+        continue-on-error: true
+
   prepare-release:
     name: Prepare GitHub Release
     runs-on: ubuntu-latest
