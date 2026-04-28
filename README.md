@@ -103,6 +103,22 @@ pnpm test:ui:coverage
 cargo llvm-cov --workspace --html
 ```
 
+前端冒烟 E2E（Playwright，仅本地，CI 默认不跑）：
+
+```bash
+# 仅首次：下载 Chromium 浏览器二进制
+pnpm --filter tls-shipinhao-ui exec playwright install chromium
+
+# 启动 vite preview + 跑冒烟 spec（apps/ui/e2e/smoke.spec.ts）
+pnpm test:e2e
+
+# 调试模式（headed + DevTools）
+pnpm --filter tls-shipinhao-ui test:e2e:headed
+```
+
+骨架仅验证「构建产物能起 + 主要路由能渲染 + 不出现 404」三条粗粒度路径，
+不替代 Vitest 单测对业务逻辑的覆盖；后续按需扩 spec。
+
 ### 桌面端打包
 
 ```bash

@@ -12,6 +12,7 @@
     "test:ui": "pnpm --filter tls-shipinhao-ui test",
     "test:ui:watch": "pnpm --filter tls-shipinhao-ui test:watch",
     "test:ui:coverage": "pnpm --filter tls-shipinhao-ui test:coverage",
+    "test:e2e": "pnpm --filter tls-shipinhao-ui test:e2e",
     "test:rust": "cargo test --workspace --quiet",
     "verify": "./scripts/verify.sh",
     "tauri:dev": "./scripts/tauri_dev.sh",
