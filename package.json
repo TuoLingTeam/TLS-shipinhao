@@ -15,6 +15,8 @@
     "test:ui:coverage": "pnpm --filter tls-shipinhao-ui test:coverage",
     "test:e2e": "pnpm --filter tls-shipinhao-ui test:e2e",
     "test:e2e:web": "pnpm --filter tls-shipinhao-ui test:e2e:web",
+    "test:e2e:tauri": "node scripts/run-tauri-e2e.mjs",
+    "test:e2e:tauri:headless": "TAURI_E2E_HEADLESS=1 node scripts/run-tauri-e2e.mjs",
     "test:rust": "cargo test --workspace --quiet",
     "verify": "./scripts/verify.sh",
     "tauri:dev": "./scripts/tauri_dev.sh",

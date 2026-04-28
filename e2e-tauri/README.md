@@ -56,6 +56,12 @@ npm test
 npm run test:ci   # 等价于 xvfb-run -a wdio run wdio.conf.ts
 ```
 
+> 也可以从仓库根使用统一入口：
+> - `pnpm test:e2e:tauri`：自动判定平台。macOS 会打印降级提示并 exit 0；
+>   Linux/Windows 自动 `cd e2e-tauri && npm install && npm test`。
+> - `pnpm test:e2e:tauri:headless`：等价于上面但通过 `xvfb-run` 走无头链路。
+> - 入口脚本：`scripts/run-tauri-e2e.mjs`。
+
 `wdio.conf.ts` 的 `onPrepare` 会自动 spawn `tauri-driver` 子进程，结束时
 `onComplete` 收尾，无需手动管理。如需对接外部已运行的 driver，设置
 `SKIP_TAURI_DRIVER=1` 即可禁用自动 spawn。

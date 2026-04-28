@@ -56,6 +56,9 @@ export const config: Options.Testrunner = {
     timeout: 60_000,
   },
 
+  // wdio v9 默认通过 tsx 直接加载 `.ts`，不再需要 v8 时代的 `autoCompileOpts`
+  // / `ts-node` 配置；此处保持空白即可。
+
   onPrepare() {
     if (process.env.SKIP_TAURI_DRIVER === "1") {
       return;
@@ -71,13 +74,5 @@ export const config: Options.Testrunner = {
 
   onComplete() {
     tauriDriver?.kill();
-  },
-
-  autoCompileOpts: {
-    autoCompile: true,
-    tsNodeOpts: {
-      project: "./tsconfig.json",
-      transpileOnly: true,
-    },
   },
 };
