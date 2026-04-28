@@ -93,15 +93,14 @@ pnpm test:rust          # 仅 Rust workspace 单测
 cargo test --workspace -- --nocapture   # 直跑（看完整输出）
 ```
 
-可选：本地查看覆盖率（CI 不强制，按需安装）
+本地查看覆盖率（CI 不强制阈值）：
 
 ```bash
-# Rust 端：cargo install cargo-llvm-cov
-cargo llvm-cov --workspace --html
+# 前端：已集成 @vitest/coverage-v8，直接调脚本即可，输出在 apps/ui/coverage/
+pnpm test:ui:coverage
 
-# 前端：apps/ui 当前未集成 @vitest/coverage-v8，按需添加 dev 依赖后再启用
-# pnpm --filter tls-shipinhao-ui add -D @vitest/coverage-v8
-# pnpm --filter tls-shipinhao-ui exec vitest run --coverage
+# Rust：按需 cargo install cargo-llvm-cov
+cargo llvm-cov --workspace --html
 ```
 
 ### 桌面端打包
