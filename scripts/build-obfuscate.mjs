@@ -50,6 +50,7 @@ const REPO_ROOT = resolve(__dirname, "..");
 const OUT_DIR = join(REPO_ROOT, "TLS-shipinhao-release");
 
 // Rust workspace 成员（保持与根 Cargo.toml 一致，漏一个 cargo 会报错）
+// 实际值通过 verifyWorkspaceMembers() 在启动期与根 Cargo.toml 校验，避免漂移。
 const RUST_MEMBER_DIRS = [
   "apps/desktop",
   "backend/api-contracts",
@@ -61,6 +62,47 @@ const RUST_MEMBER_DIRS = [
   "tools/build-tools",
   "tools/xtask",
 ];
+
+/**
+ * 解析根 Cargo.toml 的 [workspace].members 列表。
+ * 用极简正则即可，因为我们只关心 `members = [ "...", "..." ]` 这一段。
+ * 故意不引第三方 toml 解析器，避免给镜像构建添加新依赖。
+ */
+function parseCargoMembers(cargoTomlPath) {
+  const text = readFileSync(cargoTomlPath, "utf8");
+  const match = text.match(/\[workspace\][\s\S]*?members\s*=\s*\[([\s\S]*?)\]/);
+  if (!match) {
+    throw new Error(`未在 ${cargoTomlPath} 中识别到 [workspace].members 段`);
+  }
+  return match[1]
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith("#"))
+    .map((s) => s.replace(/^["']|["']$/g, ""));
+}
+
+/**
+ * 启动期校验：脚本硬编码的 RUST_MEMBER_DIRS 必须与根 Cargo.toml 的 members
+ * 完全一致（顺序不限）。新增/重命名 crate 时漏改任一处会立即在镜像构建第 0
+ * 阶段失败，避免拖到 cargo build 才暴露。
+ */
+function verifyWorkspaceMembers() {
+  const cargoMembers = parseCargoMembers(join(REPO_ROOT, "Cargo.toml"));
+  const cargoSet = new Set(cargoMembers);
+  const scriptSet = new Set(RUST_MEMBER_DIRS);
+  const missingInScript = [...cargoSet].filter((m) => !scriptSet.has(m));
+  const missingInCargo = [...scriptSet].filter((m) => !cargoSet.has(m));
+  if (missingInScript.length > 0 || missingInCargo.length > 0) {
+    const lines = [
+      "RUST_MEMBER_DIRS 与根 Cargo.toml [workspace].members 不一致：",
+      missingInScript.length > 0 ? `  脚本里缺少：${missingInScript.join(", ")}` : null,
+      missingInCargo.length > 0 ? `  Cargo.toml 里缺少：${missingInCargo.join(", ")}` : null,
+      "请同步两边后再运行深度混淆构建。",
+    ].filter(Boolean);
+    throw new Error(lines.join("\n"));
+  }
+  log("verify", `✓ workspace members 一致（${cargoMembers.length} 个）`);
+}
 
 // workspace 根必需的 manifest（不复制就没法构建）
 const ROOT_FILES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"];
@@ -426,6 +468,7 @@ const skipBuild = args.has("--skip-build");
     `OUT_DIR=${relative(REPO_ROOT, OUT_DIR)} skipFrontend=${skipFrontend} skipBuild=${skipBuild}`,
   );
 
+  verifyWorkspaceMembers();
   stage_clean();
   if (!skipFrontend) {
     stage_buildFrontend();

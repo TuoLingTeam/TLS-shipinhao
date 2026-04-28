@@ -243,8 +243,18 @@ fn license_profile_path(app_home_dir: &Path) -> PathBuf {
     app_home_dir.join(LICENSE_FILE_NAME)
 }
 
-// 历史遗留：用户自定义 cookie 目录的保存路径。当前多店铺（store registry）机制
-// 已替代此流程，仅测试代码还在用；保留函数作为 fallback 入口，用 allow 抑制 dead_code。
+// 历史遗留：用户自定义 cookie 目录的保存路径。
+//
+// 现状（保留理由）：
+// - 生产路径已被多店铺 store registry 取代，运行时不再调用本函数。
+// - 仍保留 `pub fn` 形态是因为 `load_user_cookie_dir` + `resolve_cookie_path`
+//   还会读旧 pointer 文件做 cookie 路径回退（迁移期老用户机器上残留），写入侧
+//   只在 `#[cfg(test)]` 下被回归测试触发，证明读写 pair 行为一致。
+// - 完全删除会丢掉读写对称的回归保护；改为 `#[cfg(test)]` 又会让外部
+//   `pub fn` 在 release 下消失，扰动 cargo doc 与潜在的迁移脚本调用。
+//
+// 因此保留 `#[allow(dead_code)]` 抑制 release 警告即可；新代码请勿在生产路径
+// 调用本函数，应通过 `StoreRegistry` API 维护 cookie 目录。
 #[allow(dead_code)]
 pub fn save_user_cookie_dir(app_home_dir: &Path, selected_dir: &Path) -> std::io::Result<()> {
     let selected_dir = selected_dir.expand_home()?.canonicalize()?;

@@ -47,6 +47,11 @@ pub enum DomainAttempt<R> {
 /// - `Network` 累积 `last_network_err` 并尝试下一个。
 /// - 所有域名都是 `Network` → 返回 `AllDomainsFailed(last_error)`。
 /// - `urls` 为空 → 返回 `AllDomainsFailed("")`。
+///
+/// **不要在其他模块自写 `for url in urls { ... }` 形式的多域名重试环**：
+/// 一旦容灾策略（重试条件、错误归类、日志格式）出现两套实现，授权链路上的
+/// 故障定位会立刻退化。新增 HTTP 调用时优先复用本函数，必要时扩展
+/// `DomainAttempt` 而不是开新分支。
 pub async fn try_each_domain<R, F, Fut>(urls: &[String], mut op: F) -> Result<R, LicenseHttpError>
 where
     F: FnMut(&str) -> Fut,
