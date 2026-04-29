@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
+
+// 仪表盘冗余横幅已移除（2026-04）：5 个状态卡片自身的 tone + hint 已能完整
+// 表达「续费提醒 / Cookie 失效 / 缓存缺口 / 批量发货失败」等异常，独立横幅
+// 与卡片内容重复。原 alerts computed 中的语义按下表合入对应卡片：
+//   - 续费提醒 → licenseMetric.hint
+//   - Cookie 失效 / 未配置 → cookieMetric.hint
+//   - 缓存缺口 → cacheMetric.hint（原本就在）
+//   - 批量发货失败 → deliveryMetric.hint
+// hero 横幅的「有 N 项需要处理」改为基于 metrics tone 数计算。
 import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/store";
 import { useReviewStore } from "../review/store";
@@ -58,21 +67,37 @@ interface MetricTile {
   tone: Tone;
 }
 
-const licenseMetric = computed<MetricTile>(() => ({
-  key: "license",
-  label: "授权状态",
-  value: licenseText.value,
-  hint: appStore.isLicensed
-    ? "已激活"
-    : daysUntilLicenseExpires.value !== null && daysUntilLicenseExpires.value < 0
-      ? `已过期 ${Math.abs(daysUntilLicenseExpires.value)} 天`
-      : "请前往设置中心激活",
-  tone: licenseTone.value,
-}));
+const licenseMetric = computed<MetricTile>(() => {
+  const days = daysUntilLicenseExpires.value;
+  const hint = (() => {
+    if (!appStore.isLicensed) {
+      return days !== null && days < 0
+        ? `已过期 ${Math.abs(days)} 天，请前往设置中心续费`
+        : "请前往设置中心激活";
+    }
+    if (days !== null && days < 0) {
+      return `授权已过期 ${Math.abs(days)} 天，请尽快续费`;
+    }
+    if (days !== null && days <= 7) {
+      return `授权将在 ${days} 天后到期，建议提前续费`;
+    }
+    return "已激活";
+  })();
+  return { key: "license", label: "授权状态", value: licenseText.value, hint, tone: licenseTone.value };
+});
 
 const cookieMetric = computed<MetricTile>(() => {
   const status = cookieHealth.status;
   const lastCheckedAt = cookieHealth.snapshot.last_checked_at;
+  const hint = (() => {
+    if (status === "unhealthy") {
+      return cookieHealth.snapshot.hint || "Cookie 已失效，请重新登录小店";
+    }
+    if (status === "unconfigured") {
+      return "尚未配置，前往设置中心完成登录";
+    }
+    return lastCheckedAt ? `最近探测：${formatDateTime(lastCheckedAt)}` : "启动后自动探测";
+  })();
   return {
     key: "cookie",
     label: "Cookie 状态",
@@ -84,7 +109,7 @@ const cookieMetric = computed<MetricTile>(() => {
           : status === "unconfigured"
             ? "未配置"
             : "待探测",
-    hint: lastCheckedAt ? `最近探测：${formatDateTime(lastCheckedAt)}` : "启动后自动探测",
+    hint,
     tone:
       status === "healthy"
         ? "success"
@@ -131,13 +156,18 @@ const reviewMetric = computed<MetricTile>(() => {
 
 const deliveryMetric = computed<MetricTile>(() => {
   const progress = deliveryStore.batchProgress;
+  const hint = (() => {
+    if (!progress) return "本次启动尚未执行批量";
+    if (!progress.running && progress.failureCount > 0) {
+      return `本次失败 ${progress.failureCount} 条，前往批量发货查看明细`;
+    }
+    return `成功 ${progress.successCount} · 失败 ${progress.failureCount}`;
+  })();
   return {
     key: "delivery",
     label: "发货任务",
     value: progress ? String(progress.totalCount) : "--",
-    hint: progress
-      ? `成功 ${progress.successCount} · 失败 ${progress.failureCount}`
-      : "本次启动尚未执行批量",
+    hint,
     tone: progress ? (progress.failureCount > 0 ? "warn" : "success") : "idle",
   };
 });
@@ -149,53 +179,6 @@ const metrics = computed<MetricTile[]>(() => [
   reviewMetric.value,
   deliveryMetric.value,
 ]);
-
-const alerts = computed(() => {
-  const items: { key: string; text: string; to: RouteLocationRaw; tone: "warn" | "error" }[] = [];
-  // 未激活状态已由顶部栏「授权」chip 与状态卡片「授权状态」双重展示，不再单独弹出横幅。
-  // 仅保留「即将到期 / 已过期」的续费提醒，这类信息是顶部栏 chip 无法传达的。
-  if (appStore.isLicensed && (daysUntilLicenseExpires.value ?? Infinity) <= 7) {
-    const days = daysUntilLicenseExpires.value ?? 0;
-    items.push({
-      key: "license-renewal",
-      text: days < 0 ? `授权已过期 ${Math.abs(days)} 天，请尽快续费` : `授权将在 ${days} 天后到期，建议提前续费`,
-      to: buildSettingsLocation("license"),
-      tone: days < 0 ? "error" : "warn",
-    });
-  }
-  if (cookieHealth.status === "unhealthy") {
-    items.push({
-      key: "cookie-unhealthy",
-      text: cookieHealth.snapshot.hint || "Cookie 可能已失效，请重新登录小店",
-      to: buildSettingsLocation("cookie"),
-      tone: "error",
-    });
-  } else if (cookieHealth.status === "unconfigured") {
-    items.push({
-      key: "cookie-missing",
-      text: "尚未配置 Cookie，前往设置中心完成登录后才可一键发货",
-      to: buildSettingsLocation("cookie"),
-      tone: "warn",
-    });
-  }
-  if (missingSegments.value > 0) {
-    items.push({
-      key: "cache-gap",
-      text: `订单缓存存在 ${missingSegments.value} 个覆盖缺口，建议立即同步以保障评分匹配效果`,
-      to: "/order",
-      tone: "warn",
-    });
-  }
-  if (deliveryStore.batchProgress && deliveryStore.batchProgress.failureCount > 0 && !deliveryStore.batchProgress.running) {
-    items.push({
-      key: "delivery-failed",
-      text: `最近一批批量发货有 ${deliveryStore.batchProgress.failureCount} 条失败，点击查看明细并重试`,
-      to: "/delivery",
-      tone: "warn",
-    });
-  }
-  return items;
-});
 
 const quickLinks: readonly {
   to: RouteLocationRaw;
@@ -257,16 +240,13 @@ const todayText = computed(() =>
 );
 
 const heroSummaryText = computed(() => {
-  const pendingCount = alerts.value.length;
+  // 计数依据：5 个状态卡片中 tone 为 warn / error 的数量。idle（待更新）不计入，
+  // 那是首次启动还没数据的中性状态，并非"待处理"。
+  const pendingCount = metrics.value.filter((m) => m.tone === "warn" || m.tone === "error").length;
   if (pendingCount === 0) return "运营状态整体健康，可直接进入业务流程";
   if (pendingCount === 1) return "有 1 项需要处理，建议先清理再开始业务";
   return `有 ${pendingCount} 项需要处理，建议先清理再开始业务`;
 });
-
-const alertToneClass: Record<"warn" | "error", string> = {
-  warn: "dashboard-alert--warn",
-  error: "dashboard-alert--error",
-};
 
 // 当前时钟抽到 useRuntimeClock；会话时长已迁至设置页，底部元数据卡改为「查看教程」。
 const { clockText } = useRuntimeClock();
@@ -296,32 +276,6 @@ onMounted(async () => {
           <span>{{ heroSummaryText }}</span>
         </div>
       </div>
-    </section>
-
-    <section v-if="alerts.length > 0" class="dashboard-alerts flex shrink-0 flex-col gap-2">
-      <RouterLink
-        v-for="alert in alerts"
-        :key="alert.key"
-        :to="alert.to"
-        class="dashboard-alert group flex items-center gap-3 rounded-[14px] border px-3 py-2 transition-all hover:-translate-y-px hover:shadow-sm"
-        :class="alertToneClass[alert.tone]"
-      >
-        <span class="dashboard-alert-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[14px] w-[14px]">
-            <path d="M12 9v4" />
-            <path d="M12 17.02.01" />
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-          </svg>
-        </span>
-        <span class="min-w-0 flex-1 truncate text-[13px] font-semibold">{{ alert.text }}</span>
-        <span class="dashboard-alert-cta shrink-0 text-[11px] font-bold tracking-wide">
-          前往处理
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="ml-0.5 inline h-3 w-3 transition-transform group-hover:translate-x-0.5">
-            <path d="M5 12h14" />
-            <path d="m12 5 7 7-7 7" />
-          </svg>
-        </span>
-      </RouterLink>
     </section>
 
     <div
