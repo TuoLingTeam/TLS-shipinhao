@@ -261,7 +261,7 @@ onMounted(async () => {
 
 <template>
   <div class="dashboard-view flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto pr-0.5 lg:gap-6">
-    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-4 lg:p-5">
+    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-3 lg:p-4">
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
@@ -286,7 +286,7 @@ onMounted(async () => {
         v-for="metric in metrics"
         :key="metric.key"
         data-testid="dashboard-metric-tile"
-        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-2.5 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-3"
+        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-3 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-4"
         :class="metricAccentClass[metric.tone]"
       >
         <div class="flex items-start justify-between gap-2">
