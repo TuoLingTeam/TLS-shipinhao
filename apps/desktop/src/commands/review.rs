@@ -215,7 +215,7 @@ fn sync_and_read_orders(
         "review_query",
         "ensure_window_covered",
         18,
-        "正在按选择范围补齐订单缓存缺口…",
+        "正在按近 30 天范围补齐订单缓存缺口…",
     );
 
     let finder = HttpOrderCacheFinder::new(cookie, magic);
@@ -230,7 +230,8 @@ fn sync_and_read_orders(
     let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
     let mut service = OrderSyncService::new(finder, repository);
     let now = chrono::Utc::now();
-    let retention_start = service.retention_start_timestamp(service.sync_now_timestamp(Some(now)));
+    let sync_now = service.sync_now_timestamp(Some(now));
+    let retention_start = service.retention_start_timestamp(sync_now);
 
     let (orders, warnings) = if start_unix < retention_start {
         service
@@ -244,8 +245,12 @@ fn sync_and_read_orders(
                 )
             })?
     } else {
+        // 评价匹配候选必须用「完整近 30 天订单池」：query 只决定拉哪段评价，
+        // 订单则覆盖整个 retention 范围。target_end 取 max(query_end, sync_now)
+        // 以兼容用户选「今天」的场景，让今天的订单也被纳入缓存。
+        let target_end = end_unix.max(sync_now);
         let (_, ensure_warnings, candidate_start, candidate_end) = service
-            .ensure_window_covered(start_unix, end_unix, Some(now))
+            .ensure_window_covered(retention_start, target_end, Some(now))
             .map_err(|error| {
                 mask_order_cache_error(
                     "review_query.ensure_window_covered",
