@@ -12,7 +12,9 @@ export interface CookieHealthSnapshot {
 }
 
 const POLL_INTERVAL_MS = 30 * 60 * 1000;
-const STARTUP_DELAY_MS = 8 * 1000;
+// startup 延迟从 8s 降为 1s：cookie 探测耗时已收紧到 5s 内（HttpQualityRefundSource::probe 单独 5s timeout client），
+// 大幅降低用户感知"一直待探测"的窗口
+const STARTUP_DELAY_MS = 1 * 1000;
 
 export const useCookieHealthStore = defineStore("cookie-health", () => {
   const snapshot = ref<CookieHealthSnapshot>({

@@ -68,16 +68,38 @@ impl HttpQualityRefundSource {
 
     /// 轻量 Cookie 探测：仅发 1 次 POST 空 body，只判定业务 code 是否为 0，不解析 items。
     ///
-    /// 用于「Cookie 健康探测」场景，比 [`fetch_quality_refund_orders`] 快：
+    /// 用于「Cookie 健康探测」场景，与 [`fetch_quality_refund_orders`] 的关键差异：
+    /// - **独立 5s timeout 的 client**（不复用 self.client 的 30s），cookie 失效 / 网络慢
+    ///   时 5s 内归类失败，避免用户感知"一直待探测"
     /// - 跳过 GET 尝试（GET 并非"空 body 极快"的那个路径）
     /// - 跳过 items 解析与 parse_quality_refund_record 循环
+    /// - HTTP 非 2xx 直接归类失败，不再读 body
     ///
     /// 只在 code == 0 时返回 Ok(())，其余任意结果都 Err（交由调用方转换为失效提示）。
     pub async fn probe(&self) -> anyhow::Result<()> {
-        let payload = self.request(reqwest::Method::POST).await?;
+        use std::time::Duration;
+        let probe_client =
+            desktop_services::http_client::build_desktop_http_client(Duration::from_secs(5));
+        let headers = self.build_headers();
+        let url = format!("{}?token=&lang=zh_CN", quality_refund_order_url());
+        let response = probe_client
+            .post(&url)
+            .headers(headers)
+            .json(&json!({}))
+            .send()
+            .await
+            .context("品退探测请求失败（超时或网络异常）")?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("品退探测 HTTP {status}");
+        }
+        let payload = response
+            .json::<Value>()
+            .await
+            .context("品退探测响应 JSON")?;
         match payload.get("code").and_then(Value::as_i64) {
             Some(0) => Ok(()),
-            other => anyhow::bail!("品退探测失败 code={other:?} payload={payload}"),
+            other => anyhow::bail!("品退探测失败 code={other:?}"),
         }
     }
 
