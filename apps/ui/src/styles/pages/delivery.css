@@ -27,6 +27,10 @@
   position: relative;
   overflow: hidden;
   border-left: 3px solid rgba(5, 150, 105, 0.55);
+  border-color: rgba(134, 239, 172, 0.78);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(187, 247, 208, 0.3), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 255, 252, 0.94));
   box-shadow:
     0 22px 46px -28px rgba(5, 150, 105, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
@@ -146,7 +150,9 @@
   letter-spacing: 0;
   /* textarea 抬升：白底 + 轻阴影，"表单在卡片中"的纵深 */
   background-color: #ffffff;
-  box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.22);
+  box-shadow:
+    0 10px 26px -22px rgba(15, 23, 42, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .delivery-action-bar {
@@ -238,6 +244,11 @@
 .delivery-detail-body table thead th {
   font-weight: 600;
   white-space: nowrap;
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.delivery-detail-body tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, 0.58);
 }
 
 .delivery-progress-placeholder {
@@ -373,7 +384,9 @@
   padding: 0.55rem 0.7rem;
   border-radius: 12px;
   border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.82);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.8));
+  box-shadow: 0 12px 28px -26px rgba(15, 23, 42, 0.22);
 }
 
 .delivery-placeholder-step-index {

@@ -114,12 +114,13 @@ body,
 
 body {
   margin: 0;
-  font-family: Inter, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
   color: var(--color-text);
   background:
-    radial-gradient(circle at top left, rgba(167, 243, 208, 0.52), transparent 28%),
-    radial-gradient(circle at top right, rgba(220, 252, 231, 0.8), transparent 24%),
-    radial-gradient(circle at 50% 100%, rgba(236, 253, 245, 0.96), transparent 32%),
+    radial-gradient(circle at 4% 0%, rgba(16, 185, 129, 0.16), transparent 22%),
+    radial-gradient(circle at 86% 4%, rgba(110, 231, 183, 0.42), transparent 24%),
+    radial-gradient(circle at 55% 100%, rgba(204, 251, 241, 0.52), transparent 30%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0 24%, transparent 24% 100%),
     linear-gradient(180deg, #f8fffb 0%, var(--color-bg) 100%);
 }
 
@@ -151,27 +152,37 @@ textarea {
 }
 
 .surface-panel {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 255, 252, 0.96) 100%);
-  border: 1px solid rgba(167, 243, 208, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 255, 252, 0.95) 100%);
+  border: 1px solid rgba(134, 239, 172, 0.78);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-panel);
+  box-shadow:
+    0 22px 52px -36px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(14px);
 }
 
 .surface-panel-strong {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 253, 244, 0.96) 100%);
-  border: 1px solid var(--color-border-strong);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(209, 250, 229, 0.38), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 253, 244, 0.93) 100%);
+  border: 1px solid rgba(110, 231, 183, 0.82);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-soft);
+  box-shadow:
+    0 20px 46px -34px rgba(5, 150, 105, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .hero-panel {
   background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.82), transparent 34%),
-    linear-gradient(135deg, rgba(209, 250, 229, 0.92) 0%, rgba(255, 255, 255, 0.96) 72%);
+    radial-gradient(circle at 88% 0%, rgba(187, 247, 208, 0.58), transparent 30%),
+    radial-gradient(circle at 0% 100%, rgba(236, 253, 245, 0.78), transparent 34%),
+    linear-gradient(135deg, rgba(220, 252, 231, 0.9) 0%, rgba(255, 255, 255, 0.97) 66%);
   border: 1px solid rgba(110, 231, 183, 0.7);
   border-radius: var(--radius-hero);
-  box-shadow: var(--shadow-panel);
+  box-shadow:
+    0 24px 56px -38px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .panel-title {
@@ -210,6 +221,15 @@ textarea {
     border-color var(--motion-fast) ease,
     box-shadow var(--motion-fast) ease,
     background-color var(--motion-fast) ease;
+}
+
+.field-input:hover:not(:disabled),
+.field-select:hover:not(:disabled),
+.field-textarea:hover:not(:disabled) {
+  border-color: rgba(52, 211, 153, 0.9);
+  box-shadow:
+    0 12px 30px -24px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .field-input,
@@ -349,8 +369,11 @@ select.field-input--with-leading-icon {
 .action-btn-primary {
   color: white;
   min-height: 40px;
-  background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%);
-  box-shadow: 0 18px 36px -22px rgba(5, 150, 105, 0.72);
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.95) 0%, var(--color-brand) 42%, var(--color-brand-deep) 100%);
+  box-shadow:
+    0 18px 36px -22px rgba(5, 150, 105, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .action-btn-primary:hover:not(:disabled) {
@@ -399,7 +422,8 @@ select.field-input--with-leading-icon {
   gap: 0.45rem;
   padding: 0.48rem 0.78rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
   border: 1px solid rgba(167, 243, 208, 0.78);
   color: var(--color-muted);
   box-shadow: var(--shadow-float);
@@ -653,12 +677,16 @@ select.field-input--with-leading-icon {
    * `.data-table-shell` 的底色已覆盖，内部 `<table>` 即使是矩形四角也不会视觉穿透。 */
   border-radius: 18px;
   border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: var(--shadow-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  box-shadow:
+    0 20px 48px -34px rgba(15, 23, 42, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .table-head {
-  background: linear-gradient(180deg, rgba(240, 253, 244, 0.98) 0%, rgba(220, 252, 231, 0.92) 100%);
+  background:
+    linear-gradient(180deg, rgba(236, 253, 245, 0.98) 0%, rgba(209, 250, 229, 0.92) 100%);
 }
 
 .table-head-sticky {
@@ -670,10 +698,12 @@ select.field-input--with-leading-icon {
 }
 
 .table-row:hover {
-  background: rgba(5, 150, 105, 0.04);
+  background: rgba(5, 150, 105, 0.045);
+  box-shadow: inset 2px 0 0 rgba(5, 150, 105, 0.28);
 }
 
 .sidebar-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -726,9 +756,22 @@ select.field-input--with-leading-icon {
 
 .sidebar-link.active {
   color: white;
-  background: linear-gradient(135deg, rgba(5, 150, 105, 0.28) 0%, rgba(6, 95, 70, 0.2) 100%);
+  background:
+    radial-gradient(circle at 0% 50%, rgba(167, 243, 208, 0.16), transparent 42%),
+    linear-gradient(135deg, rgba(5, 150, 105, 0.32) 0%, rgba(6, 95, 70, 0.22) 100%);
   border-color: rgba(167, 243, 208, 0.34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 34px -28px rgba(0, 0, 0, 0.7);
+}
+
+.sidebar-link.active::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.45rem;
+  left: -0.45rem;
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(167, 243, 208, 0.9);
+  box-shadow: 0 0 16px rgba(167, 243, 208, 0.5);
 }
 
 .sidebar-icon-shell {
@@ -819,6 +862,18 @@ select.field-input--with-leading-icon {
 .delivery-view,
 .settings-view-shell {
   gap: var(--page-section-gap);
+}
+
+.app-content-shell > header.surface-panel {
+  border-color: rgba(134, 239, 172, 0.78);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(187, 247, 208, 0.38), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 255, 252, 0.94));
+}
+
+.app-content-shell > header.surface-panel h1 {
+  color: #020617;
+  letter-spacing: -0.045em;
 }
 
 .app-frame,

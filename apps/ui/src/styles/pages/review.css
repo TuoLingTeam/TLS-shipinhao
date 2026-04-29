@@ -139,6 +139,27 @@
   min-height: 0;
 }
 
+.review-match-view .data-table-shell {
+  border-color: rgba(134, 239, 172, 0.82);
+}
+
+.review-match-view .data-table-shell table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.review-match-view .data-table-shell tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, 0.54);
+}
+
+.review-match-view .data-table-shell td {
+  vertical-align: top;
+}
+
+.review-match-view .data-table-shell td:last-child {
+  background: linear-gradient(90deg, transparent, rgba(240, 253, 244, 0.5));
+}
+
 /* 订单管理 hero 内：与绿色面板一体，不另叠白底卡片；布局仍由组件内 flex 控制 */
 
 .review-summary-card {
