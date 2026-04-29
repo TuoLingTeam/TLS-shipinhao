@@ -13,20 +13,68 @@ use security_core::get_device_id;
 use state::AppState;
 use tauri::{Emitter, Manager};
 
-/// 初始化全局 tracing 订阅器：
-/// - 默认级别 `info`，尊重 `RUST_LOG` 环境变量（例如
-///   `RUST_LOG=review.match.diagnostic=warn,desktop_services=info`）。
-/// - 原来整个 app 没装订阅器，所有 `tracing::warn!/info!/error!` 都是哑巴
-///   ——包括 HttpLicenseClient 的网络层警告与评价匹配诊断。补齐后这些
-///   宝贵的运营日志才会出现在 `cargo tauri dev` 的终端输出里。
+/// 初始化全局 tracing 订阅器，组合两条独立 layer：
+///
+/// 1. **控制台 layer**：保持原行为，默认 `info` + 尊重 `RUST_LOG`
+///    （例如 `RUST_LOG=review.match.diagnostic=warn,desktop_services=info`）。
+///    所有 `tracing::warn!/info!/error!` 都会走到 `cargo tauri dev` 的终端
+///    输出里，含 HttpLicenseClient 网络层警告与评价匹配诊断。
+/// 2. **安全事件 jsonl layer**：仅过滤 `target = "security"` 的事件，
+///    JSON Lines 格式追加到 `<app_home_dir>/security-events.jsonl`。
+///    走 `tracing-appender` 的 non-blocking 通道，emit 不阻塞授权关键路径。
+///
+/// **安全事件文件位置**：与 `license.json` / `store-registry.json` 同目录
+/// （`~/.tls-shipinhao/security-events.jsonl`）。用户可在排查时通过
+/// "导出诊断包"主动提交。
+///
+/// **non-blocking guard 处理**：`tracing-appender` 的 WorkerGuard 必须保持
+/// 活到进程退出，否则后台 flush 线程会被 drop 关掉、导致后续日志丢失。
+/// 这里用 `OnceLock` 静态持有；进程崩溃时缓冲区里最近几行可能丢，正常
+/// graceful shutdown 时 guard drop 会触发同步 flush。
 fn init_tracing() {
-    use tracing_subscriber::{fmt, EnvFilter};
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let _ = fmt()
-        .with_env_filter(filter)
+    use std::sync::OnceLock;
+    use tracing_appender::non_blocking::WorkerGuard;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::{fmt, EnvFilter, Layer};
+
+    static SECURITY_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
+
+    let console_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let console_layer = fmt::layer()
         .with_target(true)
         .with_level(true)
+        .with_filter(console_filter);
+
+    // security 文件 layer：成功打开文件才挂上去，失败时默默退化为只走控制台。
+    let path = security_log_path();
+    let security_layer = path
+        .parent()
+        .zip(path.file_name())
+        .and_then(|(parent, name)| {
+            std::fs::create_dir_all(parent).ok()?;
+            let appender = tracing_appender::rolling::never(parent, name);
+            let (writer, guard) = tracing_appender::non_blocking(appender);
+            let _ = SECURITY_GUARD.set(guard);
+            Some(
+                fmt::layer()
+                    .json()
+                    .with_target(true)
+                    .with_level(true)
+                    .with_writer(writer)
+                    .with_filter(EnvFilter::new("security=warn")),
+            )
+        });
+
+    let _ = tracing_subscriber::registry()
+        .with(console_layer)
+        .with(security_layer)
         .try_init();
+}
+
+fn security_log_path() -> std::path::PathBuf {
+    state::app_home_dir().join("security-events.jsonl")
 }
 
 #[cfg(windows)]

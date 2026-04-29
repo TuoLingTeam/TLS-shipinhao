@@ -24,7 +24,10 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+# 启 json feature 给 security-events.jsonl 安全事件文件用 JSON Lines 格式输出
+tracing-subscriber = { workspace = true, features = ["json"] }
+# 安全事件文件 writer 走 non-blocking 通道，避免 emit 阻塞授权关键路径
+tracing-appender = "0.2"
 chrono = { workspace = true }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
