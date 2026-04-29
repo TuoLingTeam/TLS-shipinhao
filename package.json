@@ -25,8 +25,10 @@
     "release:build:plain": "node scripts/build-release.mjs --no-obfuscate",
     "release:build:deep": "node scripts/build-obfuscate.mjs",
     "release:build:deep:mirror-only": "node scripts/build-obfuscate.mjs --skip-build",
-    "worker:deploy": "cd backend && npx wrangler deploy",
-    "worker:deploy:preview": "cd backend && npx wrangler versions upload",
+    "worker:check": "node scripts/check-worker-config.mjs",
+    "worker:check:static": "node scripts/check-worker-config.mjs --skip-remote",
+    "worker:deploy": "pnpm run worker:check && cd backend && npx wrangler deploy",
+    "worker:deploy:preview": "pnpm run worker:check && cd backend && npx wrangler versions upload",
     "prepare": "husky"
   },
   "devDependencies": {
