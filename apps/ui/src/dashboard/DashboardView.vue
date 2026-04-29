@@ -309,7 +309,7 @@ onMounted(async () => {
 
       <div
         data-testid="dashboard-shortcuts"
-        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-x-4 gap-y-3 sm:gap-x-5 sm:gap-y-4"
+        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-x-4 gap-y-5 sm:gap-x-5 sm:gap-y-6 lg:gap-y-7"
       >
         <RouterLink
           v-for="item in quickLinks"
