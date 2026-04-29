@@ -14,7 +14,7 @@
 //!   "非默认 reqwest UA"，使用真实标识更利于上游运维溯源。
 //! - 调用方传入 `timeout`，不再各自 `timeout()` + `Client::new()`。
 //!
-//! ## 同步边界与 L4-2 进度（H4 async 化）
+//! ## 同步 / 异步边界
 //!
 //! 这里返回的是 **异步** `reqwest::Client`。`apps/desktop/src/adapters/` 下的
 //! HTTP 适配器（`store` / `quality_refund` / `delivery` / `review` / `order` /
@@ -29,8 +29,8 @@
 //! 2. **HTTP + SQLite / license-guard 的混合流程命令**（如 `find_reviews`、
 //!    `sync_recent_order_cache`、`batch_delivery`）：命令层用
 //!    `tokio::task::spawn_blocking` 把同步业务流程丢到阻塞线程池；流程内调用
-//!    适配器同步 trait（`ReviewSource` / `DeliveryGateway` /
-//!    `BatchDeliveryGateway` / `CacheOrderFinder`），trait 实现内部以
+//!    剩余 3 个同步 trait（`BatchDeliveryGateway` / `OrderCacheStore` /
+//!    `CacheOrderFinder`），trait 实现内部以
 //!    `tokio::runtime::Handle::current().block_on(self.<async_method>())` 桥接到
 //!    async 实现——blocking 线程不属于异步执行上下文，是 tokio 文档允许的用法。
 //!
@@ -38,10 +38,14 @@
 //! 禁止新增绕过 UA 策略的裸 `Client::new()`；新增 HTTP 适配器请遵循「内部纯
 //! `async fn` + 同步 trait 仅作 `Handle::block_on` 薄壳」的当前模式。
 //!
-//! **后续可选（未排期）**：把上述 4 个 trait 改 `#[async_trait]`，并把 SQLite
-//! 仓储一并异步化（`tokio-rusqlite` 之类）。改面横跨 `desktop-services` 多
-//! 模块，且 SQLite 部分仍要走阻塞线程池，**收益有限**，建议独立 PR 单独评估，
-//! 不在常规清理期动。
+//! ## 剩余 sync trait 的边界决策
+//!
+//! `BatchDeliveryGateway` / `OrderCacheStore` / `CacheOrderFinder` 三个 trait
+//! **决议保留 sync**，不再追加 `#[async_trait]`。理由：HTTP 已经在适配器内
+//! 全 async，SQLite 仍是单连接同步串行；改 async trait 仅消除「内部 block_on
+//! 桥接 60 行」却引入 `±500 行` 重构与全套 `#[tokio::test]` 改造，运行时无
+//! 任何并发收益。详细评估、风险点与「后续启动条件」见仓库根 `docs/architecture/`
+//! 下的 `L4-2 异步 trait 边界决策.md`。
 
 use std::time::Duration;
 
