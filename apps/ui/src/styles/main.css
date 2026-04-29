@@ -843,7 +843,9 @@ select.field-input--with-leading-icon {
 .app-shell[data-layout="compact"],
 .app-shell[data-layout="high_dpi_compact"] {
   --app-frame-pad-lg: 0.75rem;
-  --page-section-gap: var(--spacing-stack);
+  /* 5 板块外间距：compact 系原来 stack(0.75rem) 在 retina mac 上视觉偏紧，
+   * 升一档到 app(1rem) 与 normal mode 持平；如需进一步加大改这一行即可。 */
+  --page-section-gap: var(--spacing-app);
 }
 
 .app-shell[data-layout="compact"] .app-page-shell,
