@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="settings-view-shell flex min-w-0 flex-col gap-app lg:gap-app">
+  <div class="settings-view-shell flex min-w-0 flex-col">
     <section
       data-testid="settings-panels"
       class="settings-layout"

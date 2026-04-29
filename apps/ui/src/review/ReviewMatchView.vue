@@ -136,7 +136,7 @@ function formatReplyDeadline(value: string | null) {
 </script>
 
 <template>
-  <div class="review-match-view flex min-h-0 flex-1 flex-col gap-app">
+  <div class="review-match-view flex min-h-0 flex-1 flex-col">
     <section
       data-testid="review-control-shell"
       class="hero-panel subsystem-hero review-config-panel relative overflow-hidden p-3 lg:p-3.5"

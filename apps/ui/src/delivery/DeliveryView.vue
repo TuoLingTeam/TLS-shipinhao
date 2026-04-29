@@ -105,7 +105,7 @@ function handleClearInputs() {
 </script>
 
 <template>
-  <div class="delivery-view flex h-full min-h-0 flex-col gap-app">
+  <div class="delivery-view flex h-full min-h-0 flex-col">
     <div v-if="licenseBlocked" class="soft-alert warn delivery-license-banner text-xs">
       当前未激活授权，发货功能不可用，请先前往「设置中心」完成激活。
     </div>

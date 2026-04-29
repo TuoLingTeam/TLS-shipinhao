@@ -152,7 +152,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="order-sync-view flex min-h-0 flex-1 flex-col gap-app">
+  <div class="order-sync-view flex min-h-0 flex-1 flex-col">
     <section
       data-testid="order-hero-shell"
       class="hero-panel subsystem-hero order-hero-shell relative flex shrink-0 flex-col gap-3 overflow-hidden p-3 lg:p-3.5"

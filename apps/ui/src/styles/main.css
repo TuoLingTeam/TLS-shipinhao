@@ -805,6 +805,19 @@ select.field-input--with-leading-icon {
 .app-shell {
   min-height: 100%;
   --app-frame-pad-lg: 1.25rem;
+  /* 页面 5 板块统一 gap：app-content-shell（顶栏 ↔ 主区）与各页面 view
+   * （dashboard/review/order/delivery/settings）共享同一个变量。compact 系
+   * 收紧到 stack(0.75rem)，其他模式默认 1rem。后续调间距只改本变量。 */
+  --page-section-gap: var(--spacing-app);
+}
+
+.app-content-shell,
+.dashboard-view,
+.review-match-view,
+.order-sync-view,
+.delivery-view,
+.settings-view-shell {
+  gap: var(--page-section-gap);
 }
 
 .app-frame,
@@ -829,11 +842,7 @@ select.field-input--with-leading-icon {
 .app-shell[data-layout="compact"],
 .app-shell[data-layout="high_dpi_compact"] {
   --app-frame-pad-lg: 0.75rem;
-}
-
-.app-shell[data-layout="compact"] .app-content-shell,
-.app-shell[data-layout="high_dpi_compact"] .app-content-shell {
-  gap: var(--spacing-stack);
+  --page-section-gap: var(--spacing-stack);
 }
 
 .app-shell[data-layout="compact"] .app-page-shell,
