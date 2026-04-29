@@ -2,6 +2,7 @@
 import { onMounted } from "vue";
 import AppSidebar from "./AppSidebar.vue";
 import AppHeader from "./AppHeader.vue";
+import ToastContainer from "../shared/ToastContainer.vue";
 import { useLicense } from "../license/useLicense";
 
 const { refreshStoredLicenseStatus } = useLicense();
@@ -26,5 +27,6 @@ onMounted(() => {
       </div>
     </main>
     </div>
+    <ToastContainer />
   </div>
 </template>

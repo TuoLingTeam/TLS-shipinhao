@@ -12,6 +12,7 @@ import { useRuntimeClock } from "../shared/useRuntimeClock";
 import { useStoreContextStore } from "../shared/storeContext";
 import { useUpdateCheckStore } from "../shared/updateCheck";
 import { toErrorMessage } from "../shared/toErrorMessage";
+import { useNotification } from "../shared/useNotification";
 import { isSettingsSection } from "../layout/navigation";
 import type { SettingsSectionId } from "../layout/navigation";
 
@@ -27,6 +28,7 @@ const updateCheck = useUpdateCheckStore();
 const route = useRoute();
 const { activateLicense, activateLoading } = useLicense();
 const { clockText, uptimeText } = useRuntimeClock();
+const { show: showToast } = useNotification();
 
 /** 最近一次成功保存来源：`auto`=登录窗口轮询；`manual`=手动粘贴后保存 */
 const saveNotice = ref<null | "auto" | "manual">(null);
@@ -42,8 +44,6 @@ function handleClearManualCookie() {
 }
 
 const licenseKey = ref("");
-const licenseMessage = ref<string | null>(null);
-const licenseMessageType = ref<"success" | "error">("success");
 
 const activeSection = computed<SettingsSectionId>(() => {
   const raw = Array.isArray(route.query.section) ? route.query.section[0] : route.query.section;
@@ -198,22 +198,21 @@ async function handleSelectStore(event: Event) {
 }
 
 async function handleActivate() {
-  // 空输入直接红色提示，避免用户点了没反馈以为按钮坏掉。
+  // 空输入直接红色 toast，避免用户点了没反馈以为按钮坏掉。
   // licenseKey 已用 v-model.trim 绑定，不需要再 trim 一次。
   if (!licenseKey.value) {
-    licenseMessage.value = "请先在上方输入卡密";
-    licenseMessageType.value = "error";
+    showToast("请先在上方输入卡密", "error");
     return;
   }
   // useLicense.activateLicense 在 invoke 失败时会兜底返回带 message 的 payload，
   // 因此 result 不可能为 null；message 兜底文案覆盖服务端 / 网络异常两条路径。
   const result = await activateLicense(licenseKey.value);
-  licenseMessage.value =
-    result.message ??
+  const message =
+    result.message?.trim() ||
     (result.success
       ? "激活成功，授权信息已更新"
       : "激活失败，请确认卡密未被使用 / 未被吊销，或检查网络后重试");
-  licenseMessageType.value = result.success ? "success" : "error";
+  showToast(message, result.success ? "success" : "error");
 }
 
 async function revealSection(section: SettingsSectionId) {
@@ -434,10 +433,6 @@ onBeforeUnmount(() => {
           >
             {{ activateLoading ? "激活中..." : "立即激活" }}
           </button>
-        </div>
-
-        <div v-if="licenseMessage" class="soft-alert" :class="licenseMessageType === 'success' ? 'success' : 'error'">
-          {{ licenseMessage }}
         </div>
 
         <div class="settings-info-grid settings-info-grid--single">
