@@ -421,25 +421,6 @@ onBeforeUnmount(() => {
           <span class="settings-badge" :class="appStore.isLicensed ? 'is-positive' : 'is-warning'">{{ currentStateText }}</span>
         </header>
 
-        <div class="settings-info-grid settings-info-grid--single">
-          <div class="settings-info-item" title="卡密自身的有效期，到期后卡密将失效">
-            <span class="settings-info-label">卡密有效期</span>
-            <span class="settings-info-value">{{ licenseExpiresText }}</span>
-          </div>
-          <div class="settings-info-item" title="短效执行 Token 到期时间，到期需联网续约后继续使用">
-            <span class="settings-info-label">下次续约</span>
-            <span class="settings-info-value">{{ leaseExpiresText }}</span>
-          </div>
-          <div class="settings-info-item">
-            <span class="settings-info-label">最近校验</span>
-            <span class="settings-info-value">{{ licenseVerifiedText }}</span>
-          </div>
-          <div class="settings-info-item">
-            <span class="settings-info-label">卡密</span>
-            <span class="settings-info-value settings-info-value--mono">{{ appStore.licenseKey || "未保存" }}</span>
-          </div>
-        </div>
-
         <div
           data-testid="settings-license-actions"
           class="settings-action-card settings-license-actions flex flex-col gap-2"
@@ -470,6 +451,25 @@ onBeforeUnmount(() => {
 
         <div v-if="licenseMessage" class="soft-alert" :class="licenseMessageType === 'success' ? 'success' : 'error'">
           {{ licenseMessage }}
+        </div>
+
+        <div class="settings-info-grid settings-info-grid--single">
+          <div class="settings-info-item" title="卡密自身的有效期，到期后卡密将失效">
+            <span class="settings-info-label">卡密有效期</span>
+            <span class="settings-info-value">{{ licenseExpiresText }}</span>
+          </div>
+          <div class="settings-info-item" title="短效执行 Token 到期时间，到期需联网续约后继续使用">
+            <span class="settings-info-label">下次续约</span>
+            <span class="settings-info-value">{{ leaseExpiresText }}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-label">最近校验</span>
+            <span class="settings-info-value">{{ licenseVerifiedText }}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-label">卡密</span>
+            <span class="settings-info-value settings-info-value--mono">{{ appStore.licenseKey || "未保存" }}</span>
+          </div>
         </div>
       </article>
 
