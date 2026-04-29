@@ -213,15 +213,15 @@ fn sync_and_read_orders(
     emit_order_sync_progress(
         app,
         "review_query",
-        "ensure_recent_cache",
+        "ensure_window_covered",
         18,
-        "正在补拉近 3 天订单缓存…",
+        "正在按选择范围补齐订单缓存缺口…",
     );
 
     let finder = HttpOrderCacheFinder::new(cookie, magic);
     let repository = SqliteOrderCacheRepository::open(rich_order_cache_path).map_err(|error| {
         mask_order_cache_error(
-            "review_query.open_repository_refresh_recent_cache",
+            "review_query.open_repository_ensure_window_covered",
             None,
             "订单缓存读取失败，请稍后重试",
             error,
@@ -244,11 +244,11 @@ fn sync_and_read_orders(
                 )
             })?
     } else {
-        let (_, ensure_warnings, recent_start, recent_end) = service
-            .refresh_recent_incremental_cache(Some(now))
+        let (_, ensure_warnings, candidate_start, candidate_end) = service
+            .ensure_window_covered(start_unix, end_unix, Some(now))
             .map_err(|error| {
                 mask_order_cache_error(
-                    "review_query.refresh_recent_incremental_cache",
+                    "review_query.ensure_window_covered",
                     None,
                     "订单缓存同步失败，请稍后重试",
                     error,
@@ -256,19 +256,23 @@ fn sync_and_read_orders(
             })?;
         let repo = SqliteOrderCacheRepository::open(rich_order_cache_path).map_err(|error| {
             mask_order_cache_error(
-                "review_query.open_repository_recent_incremental",
+                "review_query.open_repository_after_ensure_window",
                 None,
                 "订单缓存读取失败，请稍后重试",
                 error,
             )
         })?;
-        let (candidate_start, candidate_end) =
-            candidate_window_from_recent_cache(start_unix, end_unix, recent_start, recent_end);
+        let (final_start, final_end) = candidate_window_from_recent_cache(
+            start_unix,
+            end_unix,
+            candidate_start,
+            candidate_end,
+        );
         let orders = repo
-            .fetch_orders_in_range(candidate_start, candidate_end)
+            .fetch_orders_in_range(final_start, final_end)
             .map_err(|error| {
                 mask_order_cache_error(
-                    "review_query.fetch_orders_in_range_recent_incremental",
+                    "review_query.fetch_orders_in_range_after_ensure_window",
                     None,
                     "订单缓存读取失败，请稍后重试",
                     error,
