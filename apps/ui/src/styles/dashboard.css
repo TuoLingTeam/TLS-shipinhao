@@ -40,7 +40,7 @@
 }
 
 .dashboard-content-grid {
-  align-items: start;
+  align-items: stretch;
   gap: 0.65rem !important;
 }
 
@@ -113,16 +113,13 @@
 
 .dashboard-meta-list {
   position: relative;
+  flex: 1 1 auto;
   gap: 0.5rem !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(var(--dashboard-card-h-meta), 1fr);
 }
 
-@media (max-width: 1279.98px) {
-  .dashboard-meta-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1023.98px) {
+@media (max-width: 899.98px) {
   .dashboard-meta-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

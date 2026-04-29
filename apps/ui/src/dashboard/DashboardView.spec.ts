@@ -140,6 +140,8 @@ describe("DashboardView", () => {
 
     expect(metrics.classes()).toContain("xl:grid-cols-4");
     expect(wrapper.find(".dashboard-content-grid").exists()).toBe(true);
+    expect(wrapper.get(".dashboard-content-grid").classes()).toContain("flex-col");
+    expect(wrapper.get(".dashboard-content-grid").classes().some((item) => item.startsWith("xl:grid-cols"))).toBe(false);
     expect(wrapper.find(".dashboard-cache-panel").exists()).toBe(true);
     expect(wrapper.find(".dashboard-side-rail").exists()).toBe(true);
     expect(wrapper.get('[data-testid="dashboard-meta-cards"]').classes()).toContain("dashboard-side-rail");

@@ -273,8 +273,8 @@ onMounted(async () => {
       </div>
     </section>
 
-    <div class="dashboard-content-grid grid min-h-0 shrink-0 gap-app xl:grid-cols-[minmax(0,1fr)_18rem]">
-      <div class="dashboard-primary-stack flex min-h-0 flex-col gap-app">
+    <div class="dashboard-content-grid flex min-h-0 flex-1 flex-col gap-app">
+      <div class="dashboard-primary-stack flex min-h-0 shrink-0 flex-col gap-app">
         <section class="surface-panel dashboard-cache-panel shrink-0 p-3 lg:p-4" aria-labelledby="dashboard-cache-title">
           <div class="dashboard-panel-heading mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -353,7 +353,7 @@ onMounted(async () => {
       <!-- 侧栏低频信息：避免元数据在主流程底部占满一整排。 -->
       <aside
         data-testid="dashboard-meta-cards"
-        class="surface-panel dashboard-side-rail dashboard-meta-cards shrink-0 p-3 lg:p-4"
+        class="surface-panel dashboard-side-rail dashboard-meta-cards flex min-h-0 flex-1 flex-col p-3 lg:p-4"
         aria-label="运行时元数据"
       >
         <div class="dashboard-side-rail-head mb-3">
