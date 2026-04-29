@@ -341,7 +341,7 @@ onMounted(async () => {
       class="dashboard-meta-cards grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-app"
       aria-label="运行时元数据"
     >
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--version flex items-center gap-3 p-3">
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--version flex items-center gap-3 p-3 lg:p-4">
         <span class="dashboard-meta-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
             <path d="M12 2 4 7v10l8 5 8-5V7z" />
@@ -365,7 +365,7 @@ onMounted(async () => {
         </div>
       </article>
 
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--author flex items-center gap-3 p-3">
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--author flex items-center gap-3 p-3 lg:p-4">
         <span class="dashboard-meta-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -379,7 +379,7 @@ onMounted(async () => {
       </article>
 
       <article
-        class="surface-panel dashboard-meta-card dashboard-meta-card--tutorial flex items-center gap-3 p-3"
+        class="surface-panel dashboard-meta-card dashboard-meta-card--tutorial flex items-center gap-3 p-3 lg:p-4"
         data-testid="dashboard-meta-tutorial"
       >
         <span class="dashboard-meta-icon" aria-hidden="true">
@@ -408,7 +408,7 @@ onMounted(async () => {
         </div>
       </article>
 
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--clock flex items-center gap-3 p-3">
+      <article class="surface-panel dashboard-meta-card dashboard-meta-card--clock flex items-center gap-3 p-3 lg:p-4">
         <span class="dashboard-meta-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
             <circle cx="12" cy="12" r="9" />

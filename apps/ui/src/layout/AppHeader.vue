@@ -81,7 +81,7 @@ async function handleStoreSelect(event: Event) {
 </script>
 
 <template>
-  <header class="surface-panel relative overflow-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-5">
+  <header class="surface-panel relative overflow-hidden px-3 py-3 sm:px-4 lg:px-5 lg:py-4">
     <div class="pointer-events-none absolute inset-y-0 right-0 w-[220px] bg-[radial-gradient(circle_at_top_right,rgba(167,243,208,0.24),transparent_70%)]"></div>
     <div class="relative flex flex-row flex-nowrap items-center justify-between gap-app">
       <div class="min-w-0 flex-1 pr-2">
