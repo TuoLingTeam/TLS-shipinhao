@@ -5,6 +5,7 @@ mod app_settings;
 mod commands;
 mod error;
 mod migration;
+mod security_event;
 mod state;
 
 use desktop_services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};

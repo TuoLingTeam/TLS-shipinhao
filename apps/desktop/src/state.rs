@@ -27,6 +27,11 @@ fn init_lease_verifier_or_sentinel() -> (LeaseVerifier, bool) {
                 target: "state.lease_verifier",
                 "授权公钥加载失败，启用 Compromised 哨兵：{err}"
             );
+            crate::security_event::emit_with_detail(
+                crate::security_event::SecurityEventKind::MaterialCorrupt,
+                "lease_public_key_load_failed",
+                &err.to_string(),
+            );
             let sentinel_b64 = URL_SAFE_NO_PAD.encode([1u8; 32]);
             let sentinel = LeaseVerifier::from_public_key_b64(&sentinel_b64)
                 .expect("哨兵公钥 [1u8;32] 必须能解析（ed25519 已知有效点）");
@@ -165,6 +170,11 @@ impl AppState {
         )
         .unwrap_or_else(|err| {
             tracing::warn!("启动时恢复本地 Lease 失败，降级为 invalid：{err}");
+            crate::security_event::emit_with_detail(
+                crate::security_event::SecurityEventKind::MaterialCorrupt,
+                "load_runtime_state_failed",
+                &err,
+            );
             RuntimeState::reason_only(LicenseState::Invalid)
         });
         let runtime_license_state = if verifier_compromised {
@@ -181,6 +191,11 @@ impl AppState {
         let runtime_license_state =
             if let Err(err) = validate_integrity_if_present(integrity_manifest_path.as_deref()) {
                 tracing::error!("启动时完整性校验失败：{err}");
+                crate::security_event::emit_with_detail(
+                    crate::security_event::SecurityEventKind::IntegrityFailed,
+                    "startup_integrity_failed",
+                    &err,
+                );
                 RuntimeState {
                     reason: LicenseState::Compromised,
                     status_hint: LicenseState::Compromised,
@@ -470,11 +485,22 @@ pub fn load_runtime_state_from_store(
     let token = match store.get() {
         Ok(token) => token,
         Err(StorageError::DeviceChanged) => {
+            crate::security_event::emit(
+                crate::security_event::SecurityEventKind::DeviceMismatch,
+                "secret_store_device_changed",
+            );
             return Ok(RuntimeState::reason_only(
                 LicenseState::ReactivationRequired,
             ));
         }
-        Err(err) => return Err(err.to_string()),
+        Err(err) => {
+            crate::security_event::emit_with_detail(
+                crate::security_event::SecurityEventKind::MaterialCorrupt,
+                "secret_store_read_failed",
+                &err.to_string(),
+            );
+            return Err(err.to_string());
+        }
     };
 
     Ok(verify_stored_lease_local(
@@ -494,8 +520,31 @@ pub fn verify_and_store_license_token(
 ) -> Result<RuntimeState, String> {
     verifier
         .verify(token, Some(device_id), now_epoch, false)
-        .map_err(|err| err.to_string())?;
-    store.set(token).map_err(|err| err.to_string())?;
+        .map_err(|err| {
+            let message = err.to_string();
+            // LeaseError 类型未对外暴露其变体，但常见 reason 关键字仍可用于
+            // 安全事件分流：device_mismatch 单独走，其他归 lease_verify_failed。
+            let kind = if message.contains("device") || message.contains("设备") {
+                crate::security_event::SecurityEventKind::DeviceMismatch
+            } else {
+                crate::security_event::SecurityEventKind::LeaseVerifyFailed
+            };
+            crate::security_event::emit_with_detail(
+                kind,
+                "verify_and_store_lease_failed",
+                &message,
+            );
+            message
+        })?;
+    store.set(token).map_err(|err| {
+        let message = err.to_string();
+        crate::security_event::emit_with_detail(
+            crate::security_event::SecurityEventKind::MaterialCorrupt,
+            "secret_store_write_failed",
+            &message,
+        );
+        message
+    })?;
     load_runtime_state_from_store(store, device_id, now_epoch, verifier)
 }
 

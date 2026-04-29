@@ -1,10 +1,50 @@
 use crate::adapters::license::{normalize_license_state, HttpLicenseClient, Lar};
 use crate::app_settings::license_api_base_urls;
 use crate::error::AppError;
+use crate::security_event::{emit, emit_with_detail, SecurityEventKind};
 use crate::state::{self, AppState, Slp};
 use api_contracts::{LicenseState, Lp, Rg, RiskLevel, RuntimeState};
 use license_service::{authorize_task_local, lease::RefreshOutcome};
+use std::collections::VecDeque;
+use std::sync::{Mutex, OnceLock};
 use tauri::State;
+
+/// 异常授权尝试爆发探测：5 分钟窗口内累计 5 次激活/校验失败即 emit 一次
+/// `AuthBurstAnomaly`，emit 后清空队列防止短时间重复触发。
+///
+/// 用 `OnceLock<Mutex<VecDeque>>` 全局静态存放时间戳：
+/// - 全局而非 per-state，桌面应用单实例，AppState 也是单例，全局更省事
+/// - 加锁失败（中毒）静默返回，不阻塞业务路径
+const AUTH_BURST_WINDOW_SECS: i64 = 300;
+const AUTH_BURST_THRESHOLD: usize = 5;
+static AUTH_FAIL_TIMESTAMPS: OnceLock<Mutex<VecDeque<i64>>> = OnceLock::new();
+
+fn record_auth_failure(now_epoch: i64) {
+    let cell = AUTH_FAIL_TIMESTAMPS.get_or_init(|| Mutex::new(VecDeque::new()));
+    let Ok(mut queue) = cell.lock() else {
+        return;
+    };
+    while let Some(&front) = queue.front() {
+        if now_epoch - front > AUTH_BURST_WINDOW_SECS {
+            queue.pop_front();
+        } else {
+            break;
+        }
+    }
+    queue.push_back(now_epoch);
+    if queue.len() >= AUTH_BURST_THRESHOLD {
+        emit_with_detail(
+            SecurityEventKind::AuthBurstAnomaly,
+            "auth_failures_burst",
+            &format!(
+                "recent_count={} window_secs={}",
+                queue.len(),
+                AUTH_BURST_WINDOW_SECS
+            ),
+        );
+        queue.clear();
+    }
+}
 
 fn runtime_state_allows_feature(runtime: &RuntimeState) -> bool {
     runtime.reason.is_locally_allowed()
@@ -221,8 +261,19 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
             .await?;
             Ok(())
         }
-        Err(license_service::lease::RefreshError::Network(_)) => Ok(()),
+        Err(license_service::lease::RefreshError::Network(err)) => {
+            emit_with_detail(
+                SecurityEventKind::LeaseRefreshFailed,
+                "network_error_swallowed",
+                &err,
+            );
+            Ok(())
+        }
         Err(license_service::lease::RefreshError::HardExpired) => {
+            emit(
+                SecurityEventKind::LeaseRefreshFailed,
+                "hard_expired_locked_out",
+            );
             persist_runtime_profile(
                 state,
                 RuntimeState::reason_only(LicenseState::Expired),
@@ -232,11 +283,23 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
             .await?;
             Ok(())
         }
-        Err(err) => Err(AppError::Message(format!("Lease 续约失败：{err}"))),
+        Err(err) => {
+            emit_with_detail(
+                SecurityEventKind::LeaseRefreshFailed,
+                "refresh_failed",
+                &err.to_string(),
+            );
+            Err(AppError::Message(format!("Lease 续约失败：{err}")))
+        }
     }
 }
 
 async fn mark_runtime_compromised(state: &AppState, detail: String) -> Result<(), AppError> {
+    emit_with_detail(
+        SecurityEventKind::IntegrityFailed,
+        "runtime_integrity_failed",
+        &detail,
+    );
     let profile = state.license_profile.lock().await.clone();
     persist_runtime_profile(
         state,
@@ -311,9 +374,23 @@ pub async fn authorize_runtime_task(state: &AppState, task_type: &str) -> Result
                 env!("CARGO_PKG_VERSION"),
             )
             .await
-            .map_err(|err| AppError::Message(format!("任务授权失败：{err}")))?
+            .map_err(|err| {
+                emit_with_detail(
+                    SecurityEventKind::GrantFailed,
+                    "remote_authorize_failed",
+                    &err.to_string(),
+                );
+                AppError::Message(format!("任务授权失败：{err}"))
+            })?
     } else {
-        local_grant.map_err(|err| AppError::Message(format!("任务授权失败：{err}")))?
+        local_grant.map_err(|err| {
+            emit_with_detail(
+                SecurityEventKind::GrantFailed,
+                "local_authorize_failed",
+                &err.to_string(),
+            );
+            AppError::Message(format!("任务授权失败：{err}"))
+        })?
     };
 
     state.task_grant_cache.put(grant.clone());
@@ -333,7 +410,10 @@ pub async fn activate_license(
     let resp = client
         .activate(&license_key, &did, &fp, &version)
         .await
-        .map_err(|e| AppError::Message(e.to_string()))?;
+        .map_err(|e| {
+            record_auth_failure(chrono::Utc::now().timestamp());
+            AppError::Message(e.to_string())
+        })?;
 
     let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
     let lease_expires_at = state
@@ -368,7 +448,10 @@ pub async fn verify_license(
     let resp = client
         .verify(&license_key, &did, &version)
         .await
-        .map_err(|e| AppError::Message(e.to_string()))?;
+        .map_err(|e| {
+            record_auth_failure(chrono::Utc::now().timestamp());
+            AppError::Message(e.to_string())
+        })?;
 
     let profile = sync_license_state_from_response(&state, &license_key, &resp).await?;
     let lease_expires_at = state
