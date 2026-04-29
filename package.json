@@ -7,7 +7,7 @@
     "lint:ui": "pnpm --filter tls-shipinhao-ui lint",
     "lint:rust": "cargo clippy --workspace --all-targets --quiet -- -D warnings",
     "lint:fmt": "cargo fmt --all --check",
-    "lint:all": "pnpm run lint:ui && pnpm run lint:fmt && pnpm run lint:rust",
+    "lint:all": "pnpm run lint:ui && pnpm run check:license-state && pnpm run lint:fmt && pnpm run lint:rust",
     "check:license-state": "node scripts/check-license-state-sync.mjs",
     "test": "pnpm run test:ui && pnpm run test:rust",
     "test:ui": "pnpm --filter tls-shipinhao-ui test",
