@@ -126,9 +126,9 @@ describe("DashboardView", () => {
 
     const metrics = wrapper.get('[data-testid="dashboard-metrics"]');
 
-    expect(metrics.classes()).toContain("xl:grid-cols-5");
-    expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')).toHaveLength(5);
-    expect(wrapper.findAll(".dashboard-metric-tile")).toHaveLength(5);
+    expect(metrics.classes()).toContain("xl:grid-cols-3");
+    expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')).toHaveLength(3);
+    expect(wrapper.findAll(".dashboard-metric-tile")).toHaveLength(3);
     expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
     expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);

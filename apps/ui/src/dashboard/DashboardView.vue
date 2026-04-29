@@ -2,19 +2,20 @@
 import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 
-// 仪表盘冗余横幅已移除（2026-04）：5 个状态卡片自身的 tone + hint 已能完整
-// 表达「续费提醒 / Cookie 失效 / 缓存缺口 / 批量发货失败」等异常。
-// hero 横幅的「有 N 项需要处理」改为基于 metrics tone 数计算。
-import { useAppStore } from "../app.store";
+// 仪表盘冗余横幅已移除（2026-04）：异常已由顶栏 chip + 业务卡片 tone/hint 表达。
+// 同期移除「授权状态」「Cookie 状态」两个状态卡片：顶栏 chip（已授权 / Cookie 正常）
+// 已实时反映这两项，状态卡片重复展示。仅保留与业务流程强相关的「最近 30 天缓存 /
+// 评价匹配 / 发货任务」3 个状态卡片，hero 横幅的「有 N 项需要处理」也基于这 3 个
+// metrics 的 tone 数计算。
 import { useOrderStore } from "../order/store";
 import { useReviewStore } from "../review/store";
 import { useDeliveryStore } from "../delivery/store";
 import { useOrder } from "../order/useOrder";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useUpdateCheckStore } from "../shared/updateCheck";
+import { useAppStore } from "../app.store";
 import AppNavIcon from "../layout/AppNavIcon.vue";
 import { formatDateTime } from "../shared/format";
-import { LICENSE_STATE_LABELS } from "../license/types";
 import { buildSettingsLocation } from "../layout/navigation";
 import { AUTHOR_WECHAT } from "../shared/brand";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
@@ -30,23 +31,6 @@ const { loadCacheStatus } = useOrder();
 type Tone = "success" | "warn" | "error" | "idle";
 type ShortcutTone = "brand" | "sky" | "amber" | "slate";
 
-const daysUntilLicenseExpires = computed<number | null>(() => {
-  const iso = appStore.licenseExpiresAt;
-  if (!iso) return null;
-  const expire = Date.parse(iso);
-  if (!Number.isFinite(expire)) return null;
-  const diffMs = expire - Date.now();
-  return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
-});
-
-const licenseTone = computed<Tone>(() => {
-  if (!appStore.isLicensed) return "error";
-  if ((daysUntilLicenseExpires.value ?? Infinity) <= 7) return "warn";
-  return "success";
-});
-
-const licenseText = computed(() => LICENSE_STATE_LABELS[appStore.licenseState] ?? "未知状态");
-
 const cacheCount = computed(() => orderStore.cacheStatus?.cached_order_count ?? orderStore.cachedOrders.length);
 const missingSegments = computed(() => orderStore.cacheStatus?.missing_segment_count ?? 0);
 const lastSyncAt = computed(() => orderStore.cacheStatus?.last_sync_at ?? orderStore.lastSyncAt);
@@ -61,60 +45,6 @@ interface MetricTile {
   hint: string;
   tone: Tone;
 }
-
-const licenseMetric = computed<MetricTile>(() => {
-  const days = daysUntilLicenseExpires.value;
-  const hint = (() => {
-    if (!appStore.isLicensed) {
-      return days !== null && days < 0
-        ? `已过期 ${Math.abs(days)} 天，请前往设置中心续费`
-        : "请前往设置中心激活";
-    }
-    if (days !== null && days < 0) {
-      return `授权已过期 ${Math.abs(days)} 天，请尽快续费`;
-    }
-    if (days !== null && days <= 7) {
-      return `授权将在 ${days} 天后到期，建议提前续费`;
-    }
-    return "已激活";
-  })();
-  return { key: "license", label: "授权状态", value: licenseText.value, hint, tone: licenseTone.value };
-});
-
-const cookieMetric = computed<MetricTile>(() => {
-  const status = cookieHealth.status;
-  const lastCheckedAt = cookieHealth.snapshot.last_checked_at;
-  const hint = (() => {
-    if (status === "unhealthy") {
-      return cookieHealth.snapshot.hint || "Cookie 已失效，请重新登录小店";
-    }
-    if (status === "unconfigured") {
-      return "尚未配置，前往设置中心完成登录";
-    }
-    return lastCheckedAt ? `最近探测：${formatDateTime(lastCheckedAt)}` : "启动后自动探测";
-  })();
-  return {
-    key: "cookie",
-    label: "Cookie 状态",
-    value:
-      status === "healthy"
-        ? "可用"
-        : status === "unhealthy"
-          ? "已失效"
-          : status === "unconfigured"
-            ? "未配置"
-            : "待探测",
-    hint,
-    tone:
-      status === "healthy"
-        ? "success"
-        : status === "unhealthy"
-          ? "error"
-          : status === "unconfigured"
-            ? "warn"
-            : "idle",
-  };
-});
 
 const cacheMetric = computed<MetricTile>(() => ({
   key: "cache",
@@ -168,8 +98,6 @@ const deliveryMetric = computed<MetricTile>(() => {
 });
 
 const metrics = computed<MetricTile[]>(() => [
-  licenseMetric.value,
-  cookieMetric.value,
   cacheMetric.value,
   reviewMetric.value,
   deliveryMetric.value,
@@ -275,7 +203,7 @@ onMounted(async () => {
 
     <div
       data-testid="dashboard-metrics"
-      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 lg:gap-app xl:grid-cols-5 items-stretch"
+      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-3 min-[420px]:gap-app sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 lg:gap-app xl:grid-cols-3 items-stretch"
     >
       <article
         v-for="metric in metrics"
