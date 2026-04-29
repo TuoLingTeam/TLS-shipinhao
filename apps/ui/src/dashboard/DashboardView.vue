@@ -3,12 +3,7 @@ import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 
 // 仪表盘冗余横幅已移除（2026-04）：5 个状态卡片自身的 tone + hint 已能完整
-// 表达「续费提醒 / Cookie 失效 / 缓存缺口 / 批量发货失败」等异常，独立横幅
-// 与卡片内容重复。原 alerts computed 中的语义按下表合入对应卡片：
-//   - 续费提醒 → licenseMetric.hint
-//   - Cookie 失效 / 未配置 → cookieMetric.hint
-//   - 缓存缺口 → cacheMetric.hint（原本就在）
-//   - 批量发货失败 → deliveryMetric.hint
+// 表达「续费提醒 / Cookie 失效 / 缓存缺口 / 批量发货失败」等异常。
 // hero 横幅的「有 N 项需要处理」改为基于 metrics tone 数计算。
 import { useAppStore } from "../app.store";
 import { useOrderStore } from "../order/store";
@@ -260,8 +255,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="dashboard-view flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pr-0.5 lg:gap-8">
-    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-3 lg:p-4">
+  <div class="dashboard-view flex min-h-0 min-w-0 flex-1 flex-col gap-app overflow-y-auto pr-0.5">
+    <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-4 lg:p-5">
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
 
@@ -286,7 +281,7 @@ onMounted(async () => {
         v-for="metric in metrics"
         :key="metric.key"
         data-testid="dashboard-metric-tile"
-        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-3 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-4"
+        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-2.5 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-3"
         :class="metricAccentClass[metric.tone]"
       >
         <div class="flex items-start justify-between gap-2">
