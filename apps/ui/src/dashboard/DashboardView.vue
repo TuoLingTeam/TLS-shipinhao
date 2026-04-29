@@ -260,7 +260,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="dashboard-view flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto pr-0.5 lg:gap-6">
+  <div class="dashboard-view flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pr-0.5 lg:gap-8">
     <section class="hero-panel subsystem-hero dashboard-hero relative shrink-0 overflow-hidden p-3 lg:p-4">
       <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(167,243,208,0.55),transparent_70%)]"></div>
       <div class="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(240,253,244,0.6),transparent_70%)]"></div>
