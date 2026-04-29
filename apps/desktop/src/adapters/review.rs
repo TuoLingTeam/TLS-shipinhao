@@ -212,7 +212,6 @@ fn parse_review_record(eval: &Value) -> Option<OrderMatchResult> {
     let reply_deadline = reply_deadline(evaluation.can_reply_expire_time).map(|dt| dt.to_rfc3339());
 
     Some(OrderMatchResult {
-        evaluation_id: evaluation.evaluation_id,
         order_id: eval
             .get("orderId")
             .and_then(Value::as_str)
@@ -257,16 +256,6 @@ fn parse_evaluation_record(eval: &Value) -> Option<EvaluationRecord> {
         .unwrap_or(0);
     let evaluation_info = eval.get("evaluationInfo").cloned().unwrap_or_default();
     let product_info = eval.get("productInfo").cloned().unwrap_or_default();
-
-    let evaluation_id = eval
-        .get("productEvaluationId")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if evaluation_id.is_empty() {
-        return None;
-    }
 
     let eval_time = evaluation_info
         .get("firstEvaluationInfo")
@@ -315,7 +304,6 @@ fn parse_evaluation_record(eval: &Value) -> Option<EvaluationRecord> {
         .unwrap_or(0) as i32;
 
     Some(EvaluationRecord {
-        evaluation_id,
         buyer_nickname,
         product_id,
         sku_id,
@@ -357,7 +345,6 @@ impl ReviewSource for HttpReviewSource {
             let body = serde_json::json!({
                 "orderId": "",
                 "productId": "",
-                "productEvaluationId": "",
                 "buyerEvaluationTimeStart": start_ts,
                 "buyerEvaluationTimeEnd": end_ts,
                 "page": page,
@@ -416,7 +403,6 @@ impl HttpReviewSource {
             let body = serde_json::json!({
                 "orderId": "",
                 "productId": "",
-                "productEvaluationId": "",
                 "buyerEvaluationTimeStart": start_ts,
                 "buyerEvaluationTimeEnd": end_ts,
                 "page": page,
@@ -562,7 +548,6 @@ mod tests {
     #[test]
     fn parses_review_details_from_api_payload() {
         let item = serde_json::json!({
-            "productEvaluationId": "eval-1",
             "orderId": "order-1",
             "productInfo": {
                 "productId": "p-100",
@@ -585,7 +570,6 @@ mod tests {
         });
 
         let parsed = parse_review_record(&item).expect("should parse");
-        assert_eq!(parsed.evaluation_id, "eval-1");
         assert_eq!(parsed.order_id, "order-1");
         assert_eq!(parsed.buyer_nickname, "买家小王");
         assert_eq!(parsed.evaluation_content, "尺码偏小，物流慢");
@@ -598,7 +582,6 @@ mod tests {
     #[test]
     fn parses_evaluation_record_for_scored_matching() {
         let item = serde_json::json!({
-            "productEvaluationId": "eval-2",
             "productInfo": {
                 "productId": "p-100",
                 "skuId": "sku-9",
@@ -623,7 +606,6 @@ mod tests {
         });
 
         let parsed = parse_evaluation_record(&item).expect("evaluation record");
-        assert_eq!(parsed.evaluation_id, "eval-2");
         assert_eq!(parsed.buyer_nickname, "买家小王");
         assert_eq!(parsed.product_id, "p-100");
         assert_eq!(parsed.sku_id, "sku-9");
@@ -640,7 +622,6 @@ mod tests {
     fn keeps_reviews_even_when_reply_window_is_missing_or_expired() {
         let now = Utc::now().timestamp();
         let expired = serde_json::json!({
-            "productEvaluationId": "eval-expired",
             "productInfo": {
                 "productId": "p-100",
                 "skuId": "sku-9",
@@ -664,7 +645,6 @@ mod tests {
             }
         });
         let missing = serde_json::json!({
-            "productEvaluationId": "eval-missing",
             "productInfo": {
                 "productId": "p-100",
                 "skuId": "sku-9",

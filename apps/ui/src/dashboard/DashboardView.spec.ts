@@ -85,7 +85,6 @@ describe("DashboardView", () => {
     const reviewStore = useReviewStore();
     reviewStore.setResults([
       {
-        evaluation_id: "r-1",
         order_id: "o-1",
         buyer_nickname: "alice",
         evaluation_content: "很好",

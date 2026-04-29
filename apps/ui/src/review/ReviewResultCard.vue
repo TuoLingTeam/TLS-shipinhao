@@ -18,9 +18,6 @@ defineProps<{ result: OrderMatchResult }>();
         <div class="text-xs text-slate-500 line-clamp-2">
           评价：{{ result.evaluation_content || "（无评价内容）" }}
         </div>
-        <div class="text-xs text-slate-500">
-          评价ID：{{ result.evaluation_id }}
-        </div>
       </div>
       <div class="flex items-center gap-app">
         <StatusBadge

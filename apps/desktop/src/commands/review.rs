@@ -121,7 +121,6 @@ fn match_reviews_with_cache_records(
         .map(|matched| {
             let (replyable, reply_deadline) = map_reply_state(matched.can_reply_expire_time);
             OrderMatchResult {
-                evaluation_id: matched.evaluation_id,
                 order_id: matched.order_id.unwrap_or_default(),
                 buyer_nickname: matched.buyer_nickname,
                 evaluation_content: if matched.evaluation_content.trim().is_empty() {
@@ -518,7 +517,6 @@ mod tests {
     #[test]
     fn scored_matching_uses_cached_order_product_dimensions() {
         let evaluations = vec![EvaluationRecord {
-            evaluation_id: "eval-1".into(),
             buyer_nickname: "无锡农膜¹³⁸⁶¹⁸²¹¹⁷⁵".into(),
             product_id: "7982968968".into(),
             sku_id: "7982968968".into(),
@@ -599,7 +597,6 @@ mod tests {
     #[test]
     fn older_order_inside_recent_cache_still_exact_matches_recent_review() {
         let evaluations = vec![EvaluationRecord {
-            evaluation_id: "55947514874".into(),
             buyer_nickname: "梦云".into(),
             product_id: "10000496403296".into(),
             sku_id: "7982968968".into(),

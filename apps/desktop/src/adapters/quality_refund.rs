@@ -199,7 +199,6 @@ fn parse_quality_refund_record(
     });
 
     Some(OrderMatchResult {
-        evaluation_id: order_id.clone(),
         order_id,
         buyer_nickname: String::new(),
         evaluation_content: if reason.is_empty() {
@@ -280,7 +279,6 @@ mod tests {
         });
 
         let parsed = parse_quality_refund_record(&item, 0, 1776320000, 1776330000).expect("record");
-        assert_eq!(parsed.evaluation_id, "3735739244192085760");
         assert_eq!(parsed.order_id, "3735739244192085760");
         assert_eq!(parsed.product_id, "10000496403296");
         assert_eq!(parsed.sku_id, "400-1");

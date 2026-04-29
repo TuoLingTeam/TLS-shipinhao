@@ -45,8 +45,7 @@ const loadingDescription = computed(() =>
       ? "品退接口会直接返回订单号，成功后可直接带入发货页。"
       : "差评会先确保缓存覆盖，再按商品、SKU、昵称与时间执行评分匹配。",
 );
-const idColumnLabel = computed(() => (isQualityRefundMode.value ? "订单号" : "评价ID"));
-const tableEmptyColspan = computed(() => (isQualityRefundMode.value ? 4 : 5));
+const tableEmptyColspan = 4;
 const emptyTableHint = computed(() => {
   if (store.lastQuery) {
     return isQualityRefundMode.value
@@ -99,41 +98,47 @@ function handleUseMatchedOrder(orderId: string) {
   void router.push("/delivery");
 }
 
-function unmatchedReason(record: {
+function conciseMatchHint(record: {
+  matched: boolean;
   order_id: string;
   candidate_count: number;
-  top_score: number;
+  strategy: string;
 }) {
-  if (isQualityRefundMode.value) {
-    if (!record.order_id.trim()) {
-      return "品退接口未返回订单号，暂时无法自动带入发货。";
-    }
-    return "接口已返回订单号，但当前结果未能自动带入，请重试。";
-  }
-  if (record.candidate_count === 0) {
-    return "已完成评分匹配，但当前缓存覆盖范围内没有找到同商品/SKU候选订单。";
-  }
-  return `已找到 ${record.candidate_count} 个候选订单，最高得分 ${record.top_score}，未达到自动匹配阈值。`;
-}
-
-function displayId(record: { evaluation_id: string; order_id: string }) {
-  return isQualityRefundMode.value ? record.order_id || record.evaluation_id : record.evaluation_id;
-}
-
-function matchedHint(record: { confidence_score: number; strategy: string }) {
-  if (isQualityRefundMode.value) {
-    return "官方已返回订单号 · 点击上方策略徽章可查看命中说明，点击本行可自动带入发货页。";
-  }
   if (record.strategy === "exact_match") {
-    return "评分 100 · 已加入自动发货候选，点击上方策略徽章可查看说明。";
-  }
-  if (record.strategy === "high_confidence") {
-    return `评分 ${record.confidence_score} · 达到高置信阈值，建议复核后带入发货页。`;
+    return "订单号已自动填入发货管理输入框";
   }
   if (record.strategy === "probable_match") {
-    return `评分 ${record.confidence_score} · 可能匹配，建议人工核对后再带入。`;
+    return "建议手动核对评价与订单是否匹配";
   }
-  return `评分 ${record.confidence_score} · 当前结果仅供参考。`;
+  if (record.matched) {
+    return record.order_id ? "订单号已自动填入发货管理输入框" : "已命中订单";
+  }
+  if (isQualityRefundMode.value) {
+    return record.order_id.trim() ? "可复制订单号" : "未返回订单号";
+  }
+  return record.candidate_count === 0 ? "无候选订单" : `${record.candidate_count} 个候选，需核对`;
+}
+
+function reviewResultKey(
+  record: {
+    order_id: string;
+    buyer_nickname: string;
+    product_id: string;
+    sku_id: string;
+    evaluation_content: string;
+    quality_refund_info: { reason: string } | null;
+  },
+  index: number,
+) {
+  return [
+    record.order_id,
+    record.buyer_nickname,
+    record.product_id,
+    record.sku_id,
+    record.evaluation_content,
+    record.quality_refund_info?.reason,
+    index,
+  ].join("|");
 }
 
 function formatReplyDeadline(value: string | null) {
@@ -285,14 +290,19 @@ function formatReplyDeadline(value: string | null) {
               </th>
               <th v-if="isQualityRefundMode" class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">品退原因</th>
               <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">订单详情</th>
-              <th class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">{{ idColumnLabel }}</th>
+              <th
+                v-if="isQualityRefundMode"
+                class="table-head-sticky px-3 py-2.5 text-left text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm"
+              >
+                订单号
+              </th>
               <th class="table-head-sticky px-3 py-2.5 text-center text-xs font-semibold sm:px-5 sm:py-3 sm:text-sm">匹配</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="r in store.results"
-              :key="r.evaluation_id"
+              v-for="(r, index) in store.results"
+              :key="reviewResultKey(r, index)"
               class="table-row border-t border-slate-100/80 align-top transition-colors"
               :class="[
                 r.matched && r.order_id ? 'cursor-pointer' : '',
@@ -323,15 +333,14 @@ function formatReplyDeadline(value: string | null) {
                   <div v-if="r.product_name" class="text-slate-500">{{ r.product_name }}</div>
                 </div>
               </td>
-              <td class="px-3 py-2.5 font-mono text-sm text-slate-700 sm:px-5 sm:py-3">{{ displayId(r) }}</td>
+              <td
+                v-if="isQualityRefundMode"
+                class="px-3 py-2.5 font-mono text-sm text-slate-700 sm:px-5 sm:py-3"
+              >
+                {{ r.order_id || "-" }}
+              </td>
               <td class="px-3 py-2.5 text-center sm:px-5 sm:py-3">
-                <div class="flex flex-col items-center gap-1.5">
-                  <span
-                    class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
-                    :class="r.matched ? 'bg-brand-soft text-brand-deep' : 'bg-slate-100 text-slate-500'"
-                  >
-                    {{ r.matched ? "已匹配" : "未匹配" }}
-                  </span>
+                <div class="flex flex-col items-center gap-1">
                   <ReviewMatchStrategyBadge
                     :strategy="r.strategy"
                     :reasons="r.match_reasons"
@@ -346,10 +355,10 @@ function formatReplyDeadline(value: string | null) {
                     已超期
                   </span>
                   <div
-                    class="max-w-[180px] text-center text-[11px] leading-5"
+                    class="max-w-[112px] text-center text-[11px] leading-4"
                     :class="r.matched ? 'text-slate-500' : 'text-amber-700'"
                   >
-                    {{ r.matched ? matchedHint(r) : unmatchedReason(r) }}
+                    {{ conciseMatchHint(r) }}
                   </div>
                 </div>
               </td>

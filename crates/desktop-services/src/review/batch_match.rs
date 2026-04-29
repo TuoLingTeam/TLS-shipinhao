@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct EvaluationRecord {
-    pub evaluation_id: String,
     pub buyer_nickname: String,
     pub product_id: String,
     pub sku_id: String,
@@ -24,7 +23,6 @@ pub struct EvaluationRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchedEvaluationResult {
-    pub evaluation_id: String,
     pub order_id: Option<String>,
     pub product_id: String,
     pub sku_id: String,
@@ -103,7 +101,6 @@ pub fn build_match_result(
 ) -> MatchedEvaluationResult {
     let reference_time = matched_order.map(resolve_reference_time).unwrap_or(0);
     MatchedEvaluationResult {
-        evaluation_id: evaluation.evaluation_id.clone(),
         order_id: matched_order.map(|order| order.order_id.clone()),
         product_id: evaluation.product_id.clone(),
         sku_id: evaluation.sku_id.clone(),
@@ -166,7 +163,6 @@ mod tests {
 
     fn evaluation() -> EvaluationRecord {
         EvaluationRecord {
-            evaluation_id: "eval-1".into(),
             buyer_nickname: "无锡农膜¹³⁸⁶¹⁸²¹¹⁷⁵".into(),
             product_id: PRODUCT_ID.into(),
             sku_id: SKU_ID.into(),

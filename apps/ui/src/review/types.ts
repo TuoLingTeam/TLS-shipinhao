@@ -18,7 +18,6 @@ export interface QualityRefundInfo {
 }
 
 export interface OrderMatchResult {
-  evaluation_id: string;
   order_id: string;
   buyer_nickname: string;
   evaluation_content: string;

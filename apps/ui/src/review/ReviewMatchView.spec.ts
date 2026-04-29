@@ -79,4 +79,51 @@ describe("ReviewMatchView", () => {
     expect(wrapper.get('[data-testid="review-fetch-bad"]').text()).toContain("获取差评");
     expect(wrapper.get('[data-testid="review-fetch-quality"]').text()).toContain("获取品退");
   });
+
+  it("does not render the evaluation id column in bad review results", async () => {
+    const reviewStore = useReviewStore();
+    reviewStore.setResults([
+      {
+        order_id: "o-1",
+        buyer_nickname: "测试买家",
+        evaluation_content: "用户觉得不够好。",
+        product_id: "p-1",
+        sku_id: "s-1",
+        sku_name: "默认规格",
+        product_name: "测试商品",
+        matched: true,
+        source: "receiver_and_time_window",
+        strategy: "exact_match",
+        replyable: true,
+        reply_deadline: null,
+        confidence_score: 100,
+        quality_refund_info: null,
+        match_reasons: [],
+        candidate_count: 1,
+        top_score: 100,
+      },
+    ]);
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [...routes],
+    });
+    router.push("/review");
+    await router.isReady();
+
+    const wrapper = mount(ReviewMatchView, {
+      global: {
+        plugins: [router, pinia],
+        stubs: {
+          LoadingState: true,
+          EmptyState: true,
+          ReviewMatchStrategyBadge: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).not.toContain("评价ID");
+    expect(wrapper.text()).toContain("测试买家");
+    expect(wrapper.text()).toContain("用户觉得不够好。");
+  });
 });

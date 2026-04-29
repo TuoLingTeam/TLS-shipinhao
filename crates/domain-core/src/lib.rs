@@ -100,7 +100,6 @@ fn default_replyable() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct OrderMatchResult {
-    pub evaluation_id: String,
     pub order_id: String,
     #[serde(default)]
     pub buyer_nickname: String,
