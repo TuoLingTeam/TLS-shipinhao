@@ -162,6 +162,7 @@ fn main() {
             commands::review::find_reviews,
             commands::review::find_quality_refund_orders,
             commands::order::load_order_cache,
+            commands::order::get_order_cache_counts,
             commands::order::get_order_cache_status,
             commands::order::sync_recent_order_cache,
             commands::delivery::update_delivery,

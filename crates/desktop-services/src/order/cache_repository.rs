@@ -112,4 +112,11 @@ pub trait OrderCacheRepository: Send + Sync {
 
     /// 当前订单总数（用于 UI 展示）。
     fn count_orders(&self) -> anyhow::Result<usize>;
+
+    /// 指定时间窗口内的订单数（用于仪表盘轻量统计）。
+    fn count_orders_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<usize>;
 }

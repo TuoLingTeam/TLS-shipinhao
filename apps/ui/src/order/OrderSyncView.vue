@@ -6,10 +6,12 @@ import { useAppStore } from "../app.store";
 import OrderSearchBar from "../order/OrderSearchBar.vue";
 import { formatCent } from "../shared/format";
 import EmptyState from "../shared/EmptyState.vue";
+import { useNotification } from "../shared/useNotification";
 
 const store = useOrderStore();
 const appStore = useAppStore();
 const { syncRecentCache, loadRecentCache, loadCacheStatus } = useOrder();
+const { show: showToast } = useNotification();
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const searchKeyword = ref("");
 
@@ -90,9 +92,15 @@ const syncStepTone = (status: string) => {
 async function handleSync() {
   if (licenseBlocked.value) {
     store.error = "请先激活授权后再使用订单同步";
+    showToast(store.error, "error");
     return;
   }
-  await syncRecentCache();
+  const result = await syncRecentCache();
+  if (result) {
+    showToast(`订单缓存同步完成，本次保存 ${result.orders_saved} 条`, "success");
+    return;
+  }
+  showToast(store.error ?? "订单缓存同步失败", "error");
 }
 
 async function ensureCacheListLoaded() {
@@ -109,8 +117,12 @@ async function handleSearch(keyword: string) {
 }
 
 async function handleLoadCacheList() {
-  if (licenseBlocked.value) return;
+  if (licenseBlocked.value) {
+    showToast("请先激活授权后再加载订单列表", "error");
+    return;
+  }
   await ensureCacheListLoaded();
+  showToast(store.error ? store.error : "订单列表已加载", store.error ? "error" : "success");
 }
 
 const emptyStateTitle = computed(() => {

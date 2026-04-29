@@ -7,6 +7,7 @@ import { useUiScale } from "../layout/useUiScale";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useStoreContextStore } from "../shared/storeContext";
 import { toErrorMessage } from "../shared/toErrorMessage";
+import { useNotification } from "../shared/useNotification";
 import { buildSettingsLocation, pageMetaMap, type PageName } from "./navigation";
 
 const route = useRoute();
@@ -16,6 +17,7 @@ const cookieHealth = useCookieHealthStore();
 /** 顶栏与仪表盘共用 cookie 状态；用 ref 追踪避免嵌套 computed 在部分运行时依赖丢失（如 Windows WebView2）。 */
 const { status: cookieStatus, snapshot: cookieSnapshot } = storeToRefs(cookieHealth);
 const storeContext = useStoreContextStore();
+const { show: showToast } = useNotification();
 
 const pageMeta = computed(() => pageMetaMap[(route.name as PageName) || "dashboard"] ?? pageMetaMap.dashboard);
 const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
@@ -48,9 +50,21 @@ const cookieChip = computed(() => {
   }
 });
 
-function handleCookieChipClick() {
+async function handleCookieChipClick() {
   if (cookieStatus.value === "healthy" || cookieStatus.value === "unknown") {
-    void cookieHealth.probe();
+    await cookieHealth.probe();
+    if (cookieHealth.error) {
+      showToast(cookieHealth.error, "error");
+      return;
+    }
+    const nextCookieStatus = cookieStatus.value as "unknown" | "healthy" | "unhealthy" | "unconfigured";
+    if (nextCookieStatus === "healthy") {
+      showToast("Cookie 探测正常", "success");
+    } else if (nextCookieStatus === "unhealthy") {
+      showToast(cookieChip.value.hint, "error");
+    } else {
+      showToast("Cookie 探测已完成", "info");
+    }
     return;
   }
   void router.push(buildSettingsLocation("cookie"));
@@ -72,10 +86,13 @@ async function handleStoreSelect(event: Event) {
     const result = await storeContext.selectStore(nextStoreId);
     if (!result) {
       target.value = storeContext.activeStoreId;
+      showToast("当前店铺未切换", "info");
+      return;
     }
+    showToast(`已切换到 ${result.store.store_name}`, "success");
   } catch (error) {
     target.value = storeContext.activeStoreId;
-    window.alert(toErrorMessage(error));
+    showToast(toErrorMessage(error), "error");
   }
 }
 </script>

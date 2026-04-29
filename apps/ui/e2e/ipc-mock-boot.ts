@@ -31,6 +31,12 @@ export const IPC_MOCK_BOOT = `
     coverage_complete: true,
     missing_segment_count: 0,
   };
+  var orderCounts = {
+    today_count: 0,
+    yesterday_count: 0,
+    last_7_days_count: 0,
+    last_30_days_count: 0,
+  };
   var noUpdate = {
     app: "e2e",
     version: "0",
@@ -118,6 +124,9 @@ export const IPC_MOCK_BOOT = `
     },
     get_order_cache_status: function () {
       return Promise.resolve(orderStatus);
+    },
+    get_order_cache_counts: function () {
+      return Promise.resolve(orderCounts);
     },
     select_store: function (args) {
       var store = args && args.store_id

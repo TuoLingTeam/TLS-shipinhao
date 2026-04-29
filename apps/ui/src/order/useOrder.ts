@@ -4,6 +4,7 @@ import { useOrderStore } from "./store";
 import { useTauriInvoke } from "../shared/useTauriInvoke";
 import { localDaysAgoStartIso, localYesterdayEndIso } from "../shared/format";
 import type {
+  OrderCacheCounts,
   OrderCacheEntry,
   OrderCacheStatus,
   OrderSyncProgressEvent,
@@ -42,6 +43,12 @@ export function useOrder() {
     store.lastSyncAt = status.last_sync_at;
   }
 
+  async function loadCacheCounts() {
+    const counts = await invoke<OrderCacheCounts>("get_order_cache_counts");
+    store.setCacheCounts(counts);
+    return counts;
+  }
+
   async function withSyncEvents<T>(
     source: "manual" | "review_query",
     runner: () => Promise<T>,
@@ -78,6 +85,7 @@ export function useOrder() {
       );
       await loadRecentCache();
       await loadCacheStatus();
+      await loadCacheCounts();
       return sync;
     } catch (e) {
       store.error = toErrorMessage(e);
@@ -87,5 +95,13 @@ export function useOrder() {
     }
   }
 
-  return { loadCache, loadRecentCache, loadCacheStatus, syncRecentCache, withSyncEvents, loading };
+  return {
+    loadCache,
+    loadRecentCache,
+    loadCacheStatus,
+    loadCacheCounts,
+    syncRecentCache,
+    withSyncEvents,
+    loading,
+  };
 }

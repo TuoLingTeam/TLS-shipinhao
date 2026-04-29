@@ -1,10 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { OrderCacheEntry, OrderCacheStatus } from "./types";
+import type { OrderCacheCounts, OrderCacheEntry, OrderCacheStatus } from "./types";
 
 export const useOrderStore = defineStore("order", () => {
   const cachedOrders = ref<OrderCacheEntry[]>([]);
   const cacheStatus = ref<OrderCacheStatus | null>(null);
+  const cacheCounts = ref<OrderCacheCounts | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const lastSyncAt = ref<string | null>(null);
@@ -18,9 +19,14 @@ export const useOrderStore = defineStore("order", () => {
     lastSyncAt.value = status?.last_sync_at ?? null;
   }
 
+  function setCacheCounts(counts: OrderCacheCounts | null) {
+    cacheCounts.value = counts;
+  }
+
   function reset() {
     cachedOrders.value = [];
     cacheStatus.value = null;
+    cacheCounts.value = null;
     loading.value = false;
     error.value = null;
     lastSyncAt.value = null;
@@ -33,6 +39,7 @@ export const useOrderStore = defineStore("order", () => {
   return {
     cachedOrders,
     cacheStatus,
+    cacheCounts,
     loading,
     error,
     lastSyncAt,
@@ -41,6 +48,7 @@ export const useOrderStore = defineStore("order", () => {
     syncProgress,
     syncSource,
     setCacheStatus,
+    setCacheCounts,
     reset,
   };
 });

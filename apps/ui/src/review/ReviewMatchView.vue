@@ -8,6 +8,7 @@ import { useAppStore } from "../app.store";
 import LoadingState from "../shared/LoadingState.vue";
 import ReviewMatchStrategyBadge from "../review/ReviewMatchStrategyBadge.vue";
 import { useLayout } from "../layout/useLayout";
+import { useNotification } from "../shared/useNotification";
 import type { ReviewRangePresetKey } from "../shared/format";
 import { getReviewRangeFromPreset } from "../shared/format";
 
@@ -17,6 +18,7 @@ const store = useReviewStore();
 const orderStore = useOrderStore();
 const appStore = useAppStore();
 const { findReviews, findQualityRefundOrders, prefillMatchedOrder } = useReview();
+const { show: showToast } = useNotification();
 
 const rangePreset = ref<ReviewRangePresetKey>("last_30_days");
 const rangePresetOptions: { value: ReviewRangePresetKey; label: string }[] = [
@@ -63,24 +65,37 @@ function buildReviewWindow(): { days: number; startAt: string; endAt: string } {
 async function handleSearch() {
   if (licenseBlocked.value) {
     store.setError("请先激活授权后再使用评价管理");
+    showToast("请先激活授权后再使用评价管理", "error");
     return;
   }
   const w = buildReviewWindow();
   await findReviews(w.days, w.startAt, w.endAt);
+  if (store.error) {
+    showToast(store.error, "error");
+    return;
+  }
+  showToast(`差评查询完成，共 ${store.results.length} 条`, "success");
 }
 
 async function handleQualityRefundSearch() {
   if (licenseBlocked.value) {
     store.setError("请先激活授权后再使用品退订单");
+    showToast("请先激活授权后再使用品退订单", "error");
     return;
   }
   const w = buildReviewWindow();
   await findQualityRefundOrders(w.days, w.startAt, w.endAt);
+  if (store.error) {
+    showToast(store.error, "error");
+    return;
+  }
+  showToast(`品退查询完成，共 ${store.results.length} 条`, "success");
 }
 
 function handleUseMatchedOrder(orderId: string) {
   if (!orderId.trim()) return;
   prefillMatchedOrder(orderId, isQualityRefundMode.value ? "品退匹配" : "评价匹配");
+  showToast("订单号已带入发货页", "success");
   void router.push("/delivery");
 }
 

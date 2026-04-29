@@ -571,6 +571,21 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
             Ok(count.max(0) as usize)
         })
     }
+
+    fn count_orders_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<usize> {
+        self.with_connection(|conn| {
+            let count = conn.query_row(
+                "SELECT COUNT(*) FROM orders WHERE create_time >= ?1 AND create_time <= ?2",
+                params![start_timestamp, end_timestamp],
+                |row| row.get::<_, i64>(0),
+            )?;
+            Ok(count.max(0) as usize)
+        })
+    }
 }
 
 fn bool_to_int(value: bool) -> i64 {

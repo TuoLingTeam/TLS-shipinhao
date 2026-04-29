@@ -2,41 +2,26 @@
 import { computed, onMounted } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 
-// 仪表盘冗余横幅已移除（2026-04）：异常已由顶栏 chip + 业务卡片 tone/hint 表达。
-// 同期移除「授权状态」「Cookie 状态」两个状态卡片：顶栏 chip（已授权 / Cookie 正常）
-// 已实时反映这两项，状态卡片重复展示。仅保留与业务流程强相关的「最近 30 天缓存 /
-// 评价匹配 / 发货任务」3 个状态卡片，hero 横幅的「有 N 项需要处理」也基于这 3 个
-// metrics 的 tone 数计算。
 import { useOrderStore } from "../order/store";
-import { useReviewStore } from "../review/store";
-import { useDeliveryStore } from "../delivery/store";
 import { useOrder } from "../order/useOrder";
 import { useCookieHealthStore } from "../shared/cookieHealth";
 import { useUpdateCheckStore } from "../shared/updateCheck";
 import { useAppStore } from "../app.store";
 import AppNavIcon from "../layout/AppNavIcon.vue";
-import { formatDateTime } from "../shared/format";
 import { buildSettingsLocation } from "../layout/navigation";
 import { AUTHOR_WECHAT } from "../shared/brand";
 import { useRuntimeClock } from "../shared/useRuntimeClock";
+import { useNotification } from "../shared/useNotification";
 
 const appStore = useAppStore();
 const orderStore = useOrderStore();
-const reviewStore = useReviewStore();
-const deliveryStore = useDeliveryStore();
 const cookieHealth = useCookieHealthStore();
 const updateCheck = useUpdateCheckStore();
-const { loadCacheStatus } = useOrder();
+const { loadCacheCounts, loadCacheStatus } = useOrder();
+const { show: showToast } = useNotification();
 
 type Tone = "success" | "warn" | "error" | "idle";
 type ShortcutTone = "brand" | "sky" | "amber" | "slate";
-
-const cacheCount = computed(() => orderStore.cacheStatus?.cached_order_count ?? orderStore.cachedOrders.length);
-const missingSegments = computed(() => orderStore.cacheStatus?.missing_segment_count ?? 0);
-const lastSyncAt = computed(() => orderStore.cacheStatus?.last_sync_at ?? orderStore.lastSyncAt);
-
-const matchedReviewCount = computed(() => reviewStore.results.filter((item) => item.matched).length);
-const unmatchedReviewCount = computed(() => reviewStore.results.length - matchedReviewCount.value);
 
 interface MetricTile {
   key: string;
@@ -46,61 +31,41 @@ interface MetricTile {
   tone: Tone;
 }
 
-const cacheMetric = computed<MetricTile>(() => ({
-  key: "cache",
-  label: "最近 30 天缓存",
-  value: cacheCount.value > 0 ? String(cacheCount.value) : "--",
-  hint:
-    cacheCount.value === 0
-      ? "点击下方缓存同步建立本地订单副本"
-      : missingSegments.value > 0
-        ? `存在 ${missingSegments.value} 个缺口，建议同步补齐`
-        : lastSyncAt.value
-          ? `最近同步：${formatDateTime(lastSyncAt.value)}`
-          : "已建立，建议定期刷新",
-  tone:
-    cacheCount.value === 0 ? "warn" : missingSegments.value > 0 ? "warn" : "success",
-}));
-
-const reviewMetric = computed<MetricTile>(() => {
-  const total = reviewStore.results.length;
+function buildCacheMetric(key: string, label: string, count: number | null, hint: string): MetricTile {
   return {
-    key: "review",
-    label: "评价匹配",
-    value: total > 0 ? `${matchedReviewCount.value}/${total}` : "--",
-    hint:
-      total === 0
-        ? "未执行匹配"
-        : unmatchedReviewCount.value > 0
-          ? `${unmatchedReviewCount.value} 条待人工核实`
-          : "全部匹配成功",
-    tone:
-      total === 0 ? "idle" : unmatchedReviewCount.value > 0 ? "warn" : "success",
-  };
-});
-
-const deliveryMetric = computed<MetricTile>(() => {
-  const progress = deliveryStore.batchProgress;
-  const hint = (() => {
-    if (!progress) return "本次启动尚未执行批量";
-    if (!progress.running && progress.failureCount > 0) {
-      return `本次失败 ${progress.failureCount} 条，前往批量发货查看明细`;
-    }
-    return `成功 ${progress.successCount} · 失败 ${progress.failureCount}`;
-  })();
-  return {
-    key: "delivery",
-    label: "发货任务",
-    value: progress ? String(progress.totalCount) : "--",
+    key,
+    label,
+    value: count === null ? "--" : String(count),
     hint,
-    tone: progress ? (progress.failureCount > 0 ? "warn" : "success") : "idle",
+    tone: count === null ? "idle" : count > 0 ? "success" : "warn",
   };
-});
+}
 
 const metrics = computed<MetricTile[]>(() => [
-  cacheMetric.value,
-  reviewMetric.value,
-  deliveryMetric.value,
+  buildCacheMetric(
+    "today",
+    "今天缓存",
+    orderStore.cacheCounts?.today_count ?? null,
+    "北京时间今天的订单缓存数量",
+  ),
+  buildCacheMetric(
+    "yesterday",
+    "昨天缓存",
+    orderStore.cacheCounts?.yesterday_count ?? null,
+    "昨天自然日的订单缓存数量",
+  ),
+  buildCacheMetric(
+    "last_7_days",
+    "近 7 天缓存",
+    orderStore.cacheCounts?.last_7_days_count ?? null,
+    "含今天在内的近 7 天订单缓存",
+  ),
+  buildCacheMetric(
+    "last_30_days",
+    "近 30 天缓存",
+    orderStore.cacheCounts?.last_30_days_count ?? orderStore.cacheStatus?.cached_order_count ?? null,
+    "含今天在内的近 30 天订单缓存",
+  ),
 ]);
 
 const quickLinks: readonly {
@@ -124,10 +89,10 @@ const toneBadgeClass: Record<Tone, string> = {
 };
 
 const toneBadgeLabel: Record<Tone, string> = {
-  success: "正常",
-  warn: "注意",
-  error: "需处理",
-  idle: "待更新",
+  success: "有缓存",
+  warn: "空",
+  error: "异常",
+  idle: "待加载",
 };
 
 const metricAccentClass: Record<Tone, string> = {
@@ -163,12 +128,9 @@ const todayText = computed(() =>
 );
 
 const heroSummaryText = computed(() => {
-  // 计数依据：5 个状态卡片中 tone 为 warn / error 的数量。idle（待更新）不计入，
-  // 那是首次启动还没数据的中性状态，并非"待处理"。
-  const pendingCount = metrics.value.filter((m) => m.tone === "warn" || m.tone === "error").length;
-  if (pendingCount === 0) return "运营状态整体健康，可直接进入业务流程";
-  if (pendingCount === 1) return "有 1 项需要处理，建议先清理再开始业务";
-  return `有 ${pendingCount} 项需要处理，建议先清理再开始业务`;
+  const counts = orderStore.cacheCounts;
+  if (!counts) return "正在读取订单缓存统计";
+  return `近 30 天缓存 ${counts.last_30_days_count} 条，可直接进入业务流程`;
 });
 
 // 当前时钟抽到 useRuntimeClock；会话时长已迁至设置页，底部元数据卡改为「查看教程」。
@@ -176,8 +138,27 @@ const { clockText } = useRuntimeClock();
 
 const hasTutorialUrl = computed(() => Boolean(updateCheck.latestInfo?.tutorial_url?.trim()));
 
+async function handleOpenDownloadUrl() {
+  await updateCheck.openDownloadUrl();
+  if (updateCheck.downloadActionError) {
+    showToast(updateCheck.downloadActionError, "error");
+    return;
+  }
+  showToast("下载页已打开", "success");
+}
+
+async function handleOpenTutorialUrl() {
+  await updateCheck.openTutorialUrl();
+  if (updateCheck.tutorialActionError) {
+    showToast(updateCheck.tutorialActionError, "error");
+    return;
+  }
+  showToast("教程已打开", "success");
+}
+
 onMounted(async () => {
   void loadCacheStatus();
+  void loadCacheCounts();
   void cookieHealth.refreshSilently();
 });
 </script>
@@ -203,7 +184,7 @@ onMounted(async () => {
 
     <div
       data-testid="dashboard-metrics"
-      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-3 min-[420px]:gap-app sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 lg:gap-app xl:grid-cols-3 items-stretch"
+      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 lg:gap-app xl:grid-cols-4 items-stretch"
     >
       <article
         v-for="metric in metrics"
@@ -285,7 +266,7 @@ onMounted(async () => {
             data-testid="dashboard-update-hint"
             class="dashboard-meta-value dashboard-meta-update w-full cursor-pointer truncate text-left hover:underline"
             :title="updateCheck.downloadActionError || `当前 v${appStore.appVersion} · 打开下载页`"
-            @click="updateCheck.openDownloadUrl()"
+            @click="handleOpenDownloadUrl"
           >
             有新版本 v{{ updateCheck.latestInfo?.version }}
           </button>
@@ -325,7 +306,7 @@ onMounted(async () => {
             type="button"
             class="dashboard-meta-value w-full cursor-pointer truncate text-left hover:underline"
             :title="updateCheck.tutorialActionError || '在浏览器中打开'"
-            @click="updateCheck.openTutorialUrl()"
+            @click="handleOpenTutorialUrl"
           >
             点击打开
           </button>

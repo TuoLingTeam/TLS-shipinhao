@@ -34,6 +34,13 @@ export interface OrderCacheStatus {
   last_error?: string | null;
 }
 
+export interface OrderCacheCounts {
+  today_count: number;
+  yesterday_count: number;
+  last_7_days_count: number;
+  last_30_days_count: number;
+}
+
 export interface OrderSyncResult {
   orders_saved: number;
   cache_sync_performed: boolean;

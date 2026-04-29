@@ -41,6 +41,7 @@ const manualSaveLoading = ref(false);
 function handleClearManualCookie() {
   manualCookie.value = "";
   saveError.value = null;
+  showToast("已清空待保存的 Cookie", "info");
 }
 
 const licenseKey = ref("");
@@ -131,6 +132,7 @@ function startCookiePoll() {
     if (!ok) return;
     stopCookiePoll();
     flashSaveNotice("auto");
+    showToast("Cookie 已自动保存", "success");
     await refreshCookieHealth();
     try {
       await invoke("close_cookie_login_window");
@@ -144,6 +146,7 @@ async function handleSaveManualCookie() {
   const raw = manualCookie.value.trim();
   if (!raw) {
     saveError.value = "请粘贴 Cookie 内容后再保存";
+    showToast(saveError.value, "error");
     return;
   }
   manualSaveLoading.value = true;
@@ -154,8 +157,10 @@ async function handleSaveManualCookie() {
     await storeContext.refreshAfterCookieUpdate(previousStoreId);
     flashSaveNotice("manual");
     manualCookie.value = "";
+    showToast("手动 Cookie 已保存", "success");
   } catch (e) {
     saveError.value = toErrorMessage(e);
+    showToast(saveError.value, "error");
   } finally {
     manualSaveLoading.value = false;
   }
@@ -167,8 +172,10 @@ async function handleOpenLogin() {
   try {
     await invoke("open_cookie_login");
     startCookiePoll();
+    showToast("登录页已打开，完成登录后会自动保存 Cookie", "info");
   } catch (e) {
     saveError.value = toErrorMessage(e);
+    showToast(saveError.value, "error");
   } finally {
     loginLoading.value = false;
   }
@@ -176,7 +183,14 @@ async function handleOpenLogin() {
 
 async function handleRefreshStoreStatus() {
   saveError.value = null;
-  await Promise.all([loadCookieStatus(), refreshCookieHealth(), storeContext.refreshOrderCacheStatus()]);
+  loadError.value = null;
+  try {
+    await Promise.all([storeContext.refresh(), refreshCookieHealth(), storeContext.refreshOrderCacheStatus()]);
+    showToast("店铺状态已刷新", "success");
+  } catch (e) {
+    loadError.value = toErrorMessage(e);
+    showToast(loadError.value, "error");
+  }
 }
 
 async function handleSelectStore(event: Event) {
@@ -190,10 +204,14 @@ async function handleSelectStore(event: Event) {
     const result = await storeContext.selectStore(nextStoreId);
     if (!result) {
       target.value = storeContext.activeStoreId;
+      showToast("当前店铺未切换", "info");
+      return;
     }
+    showToast(`已切换到 ${result.store.store_name}`, "success");
   } catch (e) {
     target.value = storeContext.activeStoreId;
     saveError.value = toErrorMessage(e);
+    showToast(saveError.value, "error");
   }
 }
 
@@ -213,6 +231,28 @@ async function handleActivate() {
       ? "激活成功，授权信息已更新"
       : "激活失败，请确认卡密未被使用 / 未被吊销，或检查网络后重试");
   showToast(message, result.success ? "success" : "error");
+}
+
+async function handleOpenDownloadUrl() {
+  await updateCheck.openDownloadUrl();
+  if (updateCheck.downloadActionError) {
+    showToast(updateCheck.downloadActionError, "error");
+    return;
+  }
+  showToast("下载页已打开", "success");
+}
+
+function handleClearUpdateSnooze() {
+  updateCheck.clearSnooze();
+  showToast("顶部更新提示已恢复", "success");
+}
+
+async function handleRefreshUpdateCheck() {
+  await updateCheck.refresh();
+  showToast(
+    updateCheck.lastError ? updateCheck.lastError : "更新状态已刷新",
+    updateCheck.lastError ? "error" : "success",
+  );
 }
 
 async function revealSection(section: SettingsSectionId) {
@@ -494,7 +534,7 @@ onBeforeUnmount(() => {
                       .filter(Boolean)
                       .join(' · ')
                   "
-                  @click="updateCheck.openDownloadUrl()"
+                  @click="handleOpenDownloadUrl"
                 >
                   有新版本 v{{ updateCheck.latestInfo?.version }}
                 </button>
@@ -503,7 +543,7 @@ onBeforeUnmount(() => {
                   type="button"
                   class="shrink-0 cursor-pointer text-[11px] text-slate-500 underline decoration-slate-400/60 underline-offset-2 hover:text-slate-700"
                   title="恢复顶部更新提示"
-                  @click="updateCheck.clearSnooze()"
+                  @click="handleClearUpdateSnooze"
                 >
                   恢复
                 </button>
@@ -514,7 +554,7 @@ onBeforeUnmount(() => {
               </p>
               <p v-if="updateCheck.lastError && !updateCheck.hasUpdateAvailable" class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-amber-800">
                 <span class="min-w-0 break-all">{{ updateCheck.lastError }}</span>
-                <button type="button" class="shrink-0 cursor-pointer underline" @click="updateCheck.refresh()">重试</button>
+                <button type="button" class="shrink-0 cursor-pointer underline" @click="handleRefreshUpdateCheck">重试</button>
               </p>
             </div>
           </div>

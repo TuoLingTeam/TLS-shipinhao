@@ -542,6 +542,21 @@ impl OrderCacheRepository for InMemoryRepository {
     fn count_orders(&self) -> anyhow::Result<usize> {
         Ok(self.inner.lock().unwrap().orders.len())
     }
+
+    fn count_orders_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<usize> {
+        let data = self.inner.lock().unwrap();
+        Ok(data
+            .orders
+            .values()
+            .filter(|order| {
+                order.create_time >= start_timestamp && order.create_time <= end_timestamp
+            })
+            .count())
+    }
 }
 
 #[test]

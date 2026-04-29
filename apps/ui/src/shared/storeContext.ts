@@ -3,7 +3,7 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useDeliveryStore } from "../delivery/store";
 import { useOrderStore } from "../order/store";
-import type { OrderCacheStatus } from "../order/types";
+import type { OrderCacheCounts, OrderCacheStatus } from "../order/types";
 import { useReviewStore } from "../review/store";
 import { toErrorMessage } from "./toErrorMessage";
 import { useCookieHealthStore } from "./cookieHealth";
@@ -102,6 +102,8 @@ export const useStoreContextStore = defineStore("store-context", () => {
     try {
       const status = await invoke<OrderCacheStatus>("get_order_cache_status");
       orderStore.setCacheStatus(status);
+      const counts = await invoke<OrderCacheCounts>("get_order_cache_counts");
+      orderStore.setCacheCounts(counts);
     } catch (err) {
       orderStore.error = toErrorMessage(err);
     }

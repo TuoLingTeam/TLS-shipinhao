@@ -4,10 +4,12 @@ import { useDelivery } from "../delivery/useDelivery";
 import { useDeliveryStore } from "../delivery/store";
 import { useAppStore } from "../app.store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import { useNotification } from "../shared/useNotification";
 
 const store = useDeliveryStore();
 const appStore = useAppStore();
 const { batchDelivery, cancelBatchDelivery, retryFailedItems, exportFailedCsv } = useDelivery();
+const { show: showToast } = useNotification();
 const licenseBlocked = computed(() => !appStore.isLicensed);
 
 const orderIdsText = ref("");
@@ -77,30 +79,67 @@ const confirmMessage = computed(() => {
 function requestBatchDelivery() {
   if (licenseBlocked.value) {
     store.error = "请先激活授权后再使用发货功能";
+    showToast(store.error, "error");
     return;
   }
-  if (parsedBatchItems.value.length === 0) return;
+  if (parsedBatchItems.value.length === 0) {
+    showToast("请先填写订单号和快递单号", "error");
+    return;
+  }
+  if (lineCountMismatch.value) {
+    showToast(`订单与快递行数不一致，本次将提交前 ${parsedBatchItems.value.length} 条`, "info");
+  }
   confirmOpen.value = true;
 }
 
 async function confirmBatchDelivery() {
   confirmOpen.value = false;
   await batchDelivery(parsedBatchItems.value);
+  if (store.error) {
+    showToast(store.error, "error");
+    return;
+  }
+  const current = store.batchProgress;
+  if (!current) return;
+  showToast(
+    `批量发货完成：成功 ${current.successCount} 条，失败 ${current.failureCount} 条`,
+    current.failureCount > 0 || current.fatalError ? "error" : "success",
+  );
 }
 
 async function confirmRetryFailed() {
   retryConfirmOpen.value = false;
   await retryFailedItems();
+  if (store.error) {
+    showToast(store.error, "error");
+    return;
+  }
+  const current = store.batchProgress;
+  if (!current) return;
+  showToast(
+    `重试完成：成功 ${current.successCount} 条，失败 ${current.failureCount} 条`,
+    current.failureCount > 0 || current.fatalError ? "error" : "success",
+  );
 }
 
 async function handleCancelBatch() {
   await cancelBatchDelivery();
+  showToast(store.error ? store.error : "已请求停止批量发货", store.error ? "error" : "info");
 }
 
 function handleClearInputs() {
   orderIdsText.value = "";
   trackingNumbersText.value = "";
   store.clearPrefillOrder();
+  showToast("发货输入已清空", "info");
+}
+
+function handleExportFailedCsv() {
+  exportFailedCsv();
+  showToast(
+    failedSteps.value.length > 0 ? "失败明细 CSV 已导出" : "暂无失败条目可导出",
+    failedSteps.value.length > 0 ? "success" : "info",
+  );
 }
 </script>
 
@@ -222,7 +261,7 @@ function handleClearInputs() {
               <button
                 v-if="!progress.running && failedSteps.length > 0"
                 class="action-btn action-btn-secondary action-btn-compact"
-                @click="exportFailedCsv"
+                @click="handleExportFailedCsv"
               >
                 导出 CSV
               </button>

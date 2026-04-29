@@ -5,7 +5,9 @@ use crate::commands::shared::{current_store_paths, require_store_runtime_context
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_CACHE_MANAGE;
-use desktop_services::day_window::recent_day_range_timestamps;
+use desktop_services::day_window::{
+    end_of_day_timestamp, recent_day_range_timestamps, start_of_day_timestamp,
+};
 use desktop_services::order_cache_repository::OrderCacheRepository;
 use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop_services::order_sync_service::{
@@ -89,6 +91,15 @@ pub struct OrderCacheStatus {
     pub missing_segment_count: usize,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct OrderCacheCounts {
+    pub today_count: usize,
+    pub yesterday_count: usize,
+    pub last_7_days_count: usize,
+    pub last_30_days_count: usize,
+}
+
 pub(crate) fn emit_order_sync_progress(
     app: &AppHandle,
     source: &str,
@@ -141,6 +152,27 @@ pub(crate) fn recent_order_cache_status(
         coverage_end,
         coverage_complete,
         missing_segment_count,
+    })
+}
+
+pub(crate) fn order_cache_counts(rich_cache_path: &Path) -> anyhow::Result<OrderCacheCounts> {
+    let repository = SqliteOrderCacheRepository::open(rich_cache_path)?;
+    repository.initialize()?;
+
+    let now = chrono::Utc::now();
+    let today_start = start_of_day_timestamp(Some(now));
+    let today_end = end_of_day_timestamp(Some(now));
+    let yesterday = now - chrono::Duration::days(1);
+    let yesterday_start = start_of_day_timestamp(Some(yesterday));
+    let yesterday_end = end_of_day_timestamp(Some(yesterday));
+    let last_7_days_start = start_of_day_timestamp(Some(now - chrono::Duration::days(6)));
+    let last_30_days_start = start_of_day_timestamp(Some(now - chrono::Duration::days(29)));
+
+    Ok(OrderCacheCounts {
+        today_count: repository.count_orders_in_range(today_start, today_end)?,
+        yesterday_count: repository.count_orders_in_range(yesterday_start, yesterday_end)?,
+        last_7_days_count: repository.count_orders_in_range(last_7_days_start, today_end)?,
+        last_30_days_count: repository.count_orders_in_range(last_30_days_start, today_end)?,
     })
 }
 
@@ -207,6 +239,18 @@ pub async fn get_order_cache_status(
     let store_paths = current_store_paths(&state).await;
     let rich_cache_path = store_paths.rich_order_cache_path;
     tokio::task::spawn_blocking(move || recent_order_cache_status(&rich_cache_path))
+        .await
+        .map_err(|e| AppError::Message(e.to_string()))?
+        .map_err(AppError::Internal)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_order_cache_counts(
+    state: State<'_, AppState>,
+) -> Result<OrderCacheCounts, AppError> {
+    let store_paths = current_store_paths(&state).await;
+    let rich_cache_path = store_paths.rich_order_cache_path;
+    tokio::task::spawn_blocking(move || order_cache_counts(&rich_cache_path))
         .await
         .map_err(|e| AppError::Message(e.to_string()))?
         .map_err(AppError::Internal)

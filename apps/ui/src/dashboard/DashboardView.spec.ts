@@ -9,7 +9,7 @@ import { useDeliveryStore } from "../delivery/store";
 import { useOrderStore } from "../order/store";
 import { useReviewStore } from "../review/store";
 
-const { executeMock, loadCacheStatusMock, refreshSilentlyMock } = vi.hoisted(() => ({
+const { executeMock, loadCacheCountsMock, loadCacheStatusMock, refreshSilentlyMock } = vi.hoisted(() => ({
   executeMock: vi.fn(async () => ({
     name: "TLS",
     name_en: "TLS",
@@ -18,6 +18,7 @@ const { executeMock, loadCacheStatusMock, refreshSilentlyMock } = vi.hoisted(() 
     window_title: "TLS",
     runtime: "tauri",
   })),
+  loadCacheCountsMock: vi.fn(async () => undefined),
   loadCacheStatusMock: vi.fn(async () => undefined),
   refreshSilentlyMock: vi.fn(async () => undefined),
 }));
@@ -30,6 +31,7 @@ vi.mock("../shared/useTauriInvoke", () => ({
 
 vi.mock("../order/useOrder", () => ({
   useOrder: () => ({
+    loadCacheCounts: loadCacheCountsMock,
     loadCacheStatus: loadCacheStatusMock,
   }),
 }));
@@ -52,6 +54,7 @@ describe("DashboardView", () => {
     pinia = createPinia();
     setActivePinia(pinia);
     executeMock.mockClear();
+    loadCacheCountsMock.mockClear();
     loadCacheStatusMock.mockClear();
     refreshSilentlyMock.mockClear();
 
@@ -72,6 +75,12 @@ describe("DashboardView", () => {
       coverage_complete: true,
       missing_segment_count: 0,
     };
+    orderStore.setCacheCounts({
+      today_count: 3,
+      yesterday_count: 7,
+      last_7_days_count: 18,
+      last_30_days_count: 36,
+    });
 
     const reviewStore = useReviewStore();
     reviewStore.setResults([
@@ -126,9 +135,13 @@ describe("DashboardView", () => {
 
     const metrics = wrapper.get('[data-testid="dashboard-metrics"]');
 
-    expect(metrics.classes()).toContain("xl:grid-cols-3");
-    expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')).toHaveLength(3);
-    expect(wrapper.findAll(".dashboard-metric-tile")).toHaveLength(3);
+    expect(metrics.classes()).toContain("xl:grid-cols-4");
+    expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')).toHaveLength(4);
+    expect(wrapper.findAll(".dashboard-metric-tile")).toHaveLength(4);
+    expect(wrapper.text()).toContain("今天缓存");
+    expect(wrapper.text()).toContain("昨天缓存");
+    expect(wrapper.text()).toContain("近 7 天缓存");
+    expect(wrapper.text()).toContain("近 30 天缓存");
     expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
     expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);
