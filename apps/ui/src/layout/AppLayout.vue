@@ -17,7 +17,7 @@ onMounted(() => {
     style="padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right))"
   >
     <AppSidebar />
-    <div class="app-content-shell ml-2 flex min-w-0 flex-1 flex-col gap-app overflow-hidden sm:ml-3 lg:ml-4">
+    <div class="app-content-shell ml-2 flex min-w-0 flex-1 flex-col gap-5 overflow-hidden sm:ml-3 lg:ml-4 lg:gap-6">
       <slot />
       <AppHeader />
     <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pr-0.5 sm:pr-1">
