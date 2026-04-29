@@ -33,8 +33,8 @@ export const navGroups: readonly NavGroup[] = [
     label: "业务流程",
     items: [
       { path: "/", label: "仪表盘", icon: "dashboard", description: "总览状态" },
-      { path: "/review", label: "评价管理", icon: "review", description: "检索与匹配" },
       { path: "/order", label: "订单管理", icon: "order", description: "缓存与检索" },
+      { path: "/review", label: "评价管理", icon: "review", description: "检索与匹配" },
       { path: "/delivery", label: "发货管理", icon: "delivery", description: "单发与批量" },
     ],
   },
@@ -42,7 +42,7 @@ export const navGroups: readonly NavGroup[] = [
     id: "system",
     label: "系统配置",
     items: [
-      { path: "/settings", label: "设置", icon: "settings", description: "授权 / Cookie / 信息" },
+      { path: "/settings", label: "软件设置", icon: "settings", description: "授权 / Cookie / 信息" },
     ],
   },
 ] as const;
