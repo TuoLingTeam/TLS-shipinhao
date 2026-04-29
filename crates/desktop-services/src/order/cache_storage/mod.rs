@@ -30,7 +30,8 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use crate::order_cache_repository::{
-    CacheOrderProduct, CacheOrderRecord, OrderCacheRepository, SyncStateRecord,
+    is_cancelled_order_status, CacheOrderProduct, CacheOrderRecord, OrderCacheRepository,
+    SyncStateRecord, CANCELLED_ORDER_STATUS,
 };
 
 pub const CURRENT_SCHEMA_VERSION: i32 = 2;
@@ -228,11 +229,16 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
         }
         self.with_connection_mut(|conn| {
             let tx = conn.transaction()?;
+            let mut inserted_count = 0usize;
             for order in orders {
                 tx.execute(
                     "DELETE FROM order_products WHERE order_id = ?1",
                     params![order.order_id],
                 )?;
+                if is_cancelled_order_status(order.order_status) {
+                    tx.execute("DELETE FROM orders WHERE order_id = ?1", params![order.order_id])?;
+                    continue;
+                }
                 tx.execute(
                     r#"
                     INSERT OR REPLACE INTO orders (
@@ -257,6 +263,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                         order.updated_at,
                     ],
                 )?;
+                inserted_count += 1;
                 for product in &order.products {
                     tx.execute(
                         r#"
@@ -276,7 +283,7 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                 }
             }
             tx.commit()?;
-            Ok(orders.len())
+            Ok(inserted_count)
         })
     }
 
@@ -339,9 +346,9 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                     SELECT order_id, buyer_nickname, normalized_nickname, amount_cent, create_time,
                            confirm_receipt_time, is_waybill_received, waybill_received_time,
                            is_education_order, order_status, openid, raw_source, updated_at
-                    FROM orders WHERE order_id = ?1
+                    FROM orders WHERE order_id = ?1 AND order_status != ?2
                     "#,
-                    params![order_id],
+                    params![order_id, CANCELLED_ORDER_STATUS],
                     |row| {
                         Ok(CacheOrderRecord {
                             order_id: row.get(0)?,
@@ -502,12 +509,13 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                        confirm_receipt_time, is_waybill_received, waybill_received_time,
                        is_education_order, order_status, openid, raw_source, updated_at
                 FROM orders
-                WHERE create_time >= ?1 AND create_time <= ?2
+                WHERE create_time >= ?1 AND create_time <= ?2 AND order_status != ?3
                 ORDER BY create_time DESC, order_id DESC
                 "#,
             )?;
-            let order_rows =
-                order_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+            let order_rows = order_stmt.query_map(
+                params![start_timestamp, end_timestamp, CANCELLED_ORDER_STATUS],
+                |row| {
                     Ok(CacheOrderRecord {
                         order_id: row.get(0)?,
                         buyer_nickname: row.get(1)?,
@@ -524,7 +532,8 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                         updated_at: row.get(12)?,
                         products: Vec::new(),
                     })
-                })?;
+                },
+            )?;
             let mut orders = order_rows.collect::<rusqlite::Result<Vec<_>>>()?;
 
             let mut product_stmt = conn.prepare(
@@ -532,12 +541,13 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                 SELECT p.order_id, p.product_id, p.sku_id, p.sale_param, p.product_name, p.thumb_img
                 FROM order_products p
                 JOIN orders o ON o.order_id = p.order_id
-                WHERE o.create_time >= ?1 AND o.create_time <= ?2
+                WHERE o.create_time >= ?1 AND o.create_time <= ?2 AND o.order_status != ?3
                 ORDER BY o.create_time DESC, p.order_id ASC, p.id ASC
                 "#,
             )?;
-            let product_rows =
-                product_stmt.query_map(params![start_timestamp, end_timestamp], |row| {
+            let product_rows = product_stmt.query_map(
+                params![start_timestamp, end_timestamp, CANCELLED_ORDER_STATUS],
+                |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         CacheOrderProduct {
@@ -548,7 +558,8 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
                             thumb_img: row.get(5)?,
                         },
                     ))
-                })?;
+                },
+            )?;
             let mut products_by_order: HashMap<String, Vec<CacheOrderProduct>> = HashMap::new();
             for row in product_rows {
                 let (order_id, product) = row?;
@@ -565,9 +576,11 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
 
     fn count_orders(&self) -> anyhow::Result<usize> {
         self.with_connection(|conn| {
-            let count = conn.query_row("SELECT COUNT(*) FROM orders", [], |row| {
-                row.get::<_, i64>(0)
-            })?;
+            let count = conn.query_row(
+                "SELECT COUNT(*) FROM orders WHERE order_status != ?1",
+                params![CANCELLED_ORDER_STATUS],
+                |row| row.get::<_, i64>(0),
+            )?;
             Ok(count.max(0) as usize)
         })
     }
@@ -579,11 +592,26 @@ impl OrderCacheRepository for SqliteOrderCacheRepository {
     ) -> anyhow::Result<usize> {
         self.with_connection(|conn| {
             let count = conn.query_row(
-                "SELECT COUNT(*) FROM orders WHERE create_time >= ?1 AND create_time <= ?2",
-                params![start_timestamp, end_timestamp],
+                "SELECT COUNT(*) FROM orders WHERE create_time >= ?1 AND create_time <= ?2 AND order_status != ?3",
+                params![start_timestamp, end_timestamp, CANCELLED_ORDER_STATUS],
                 |row| row.get::<_, i64>(0),
             )?;
             Ok(count.max(0) as usize)
+        })
+    }
+
+    fn max_order_create_time_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<Option<i64>> {
+        self.with_connection(|conn| {
+            conn.query_row(
+                "SELECT MAX(create_time) FROM orders WHERE create_time >= ?1 AND create_time <= ?2 AND order_status != ?3",
+                params![start_timestamp, end_timestamp, CANCELLED_ORDER_STATUS],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .context("query max order create_time in range")
         })
     }
 }

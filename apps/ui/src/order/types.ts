@@ -25,6 +25,11 @@ export interface OrderCacheEntry {
 
 export interface OrderCacheStatus {
   cached_order_count: number;
+  today_count: number;
+  yesterday_count: number;
+  last_7_days_count: number;
+  last_30_days_count: number;
+  today_latest_order_at: string | null;
   last_sync_at: string | null;
   coverage_start: string | null;
   coverage_end: string | null;
@@ -39,6 +44,7 @@ export interface OrderCacheCounts {
   yesterday_count: number;
   last_7_days_count: number;
   last_30_days_count: number;
+  today_latest_order_at: string | null;
 }
 
 export interface OrderSyncResult {

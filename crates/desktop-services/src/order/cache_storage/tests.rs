@@ -70,6 +70,54 @@ fn upsert_and_fetch_order() {
 }
 
 #[test]
+fn upsert_cancelled_order_deletes_existing_cache_record() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("order_cache.sqlite3");
+    let repo = open_repo(&path);
+    repo.initialize().unwrap();
+    repo.upsert_orders(&[sample_order()]).unwrap();
+    assert!(repo.fetch_order("o-1").unwrap().is_some());
+
+    let mut cancelled = sample_order();
+    cancelled.order_status = 250;
+    repo.upsert_orders(&[cancelled]).unwrap();
+
+    assert!(repo.fetch_order("o-1").unwrap().is_none());
+    assert_eq!(repo.count_orders().unwrap(), 0);
+}
+
+#[test]
+fn legacy_cancelled_order_rows_are_excluded_from_reads() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("order_cache.sqlite3");
+    let repo = open_repo(&path);
+    repo.initialize().unwrap();
+    repo.with_connection(|conn| {
+        conn.execute(
+            r#"
+            INSERT INTO orders (
+                order_id, buyer_nickname, normalized_nickname, amount_cent, create_time,
+                confirm_receipt_time, is_waybill_received, waybill_received_time,
+                is_education_order, order_status, openid, raw_source, updated_at
+            ) VALUES ('cancelled-legacy', 'buyer', 'buyer', 100, 1000, 0, 0, 0, 0, 250, '', 'order_api', 1000)
+            "#,
+            [],
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    assert!(repo.fetch_order("cancelled-legacy").unwrap().is_none());
+    assert!(repo.fetch_orders_in_range(900, 1_100).unwrap().is_empty());
+    assert_eq!(repo.count_orders().unwrap(), 0);
+    assert_eq!(repo.count_orders_in_range(900, 1_100).unwrap(), 0);
+    assert_eq!(
+        repo.max_order_create_time_in_range(900, 1_100).unwrap(),
+        None
+    );
+}
+
+#[test]
 fn computes_missing_segments_and_range_fetch() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("order_cache.sqlite3");
@@ -92,6 +140,14 @@ fn computes_missing_segments_and_range_fetch() {
     let orders = repo.fetch_orders_in_range(900, 2_100).unwrap();
     assert_eq!(orders.len(), 2);
     assert_eq!(orders[0].order_id, "o-2");
+    assert_eq!(
+        repo.max_order_create_time_in_range(900, 2_100).unwrap(),
+        Some(2_000)
+    );
+    assert_eq!(
+        repo.max_order_create_time_in_range(2_100, 3_000).unwrap(),
+        None
+    );
 }
 
 #[test]

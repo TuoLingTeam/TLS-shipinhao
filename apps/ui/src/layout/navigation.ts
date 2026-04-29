@@ -61,7 +61,7 @@ export const pageMetaMap: Record<PageName, PageMeta> = {
   order: {
     eyebrow: "TLS · ORDER CACHE",
     title: "订单管理",
-    description: "维护近 30 天缓存，并支持本地快速检索。",
+    description: "维护近 30 天（不含今天）缓存，并支持本地快速检索。",
   },
   delivery: {
     eyebrow: "TLS · DELIVERY CONTROL",

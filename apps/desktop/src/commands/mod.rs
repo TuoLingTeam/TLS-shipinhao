@@ -6,7 +6,7 @@
 //! | ---------- | ------------------------------------------------------------ | -------- |
 //! | `delivery` | 单条 / 批量发货、取消批量发货                                | `update_delivery` / `batch_delivery` / `cancel_batch_delivery` |
 //! | `license`  | 授权激活、校验、Lease 续约、任务级 `RuntimeGrant` 授权       | `activate_license` / `verify_license` / `authorize_runtime_task` |
-//! | `order`    | 订单缓存加载、状态查询、近 30 天同步、时间窗同步             | `load_order_cache` / `sync_recent_order_cache` / `sync_orders` |
+//! | `order`    | 订单缓存加载、状态查询、近 30 天（不含今天）同步、时间窗同步 | `load_order_cache` / `sync_recent_order_cache` / `sync_orders` |
 //! | `review`   | 差评评分匹配、品退直连订单                                   | `find_reviews` / `find_quality_refund_orders` |
 //! | `system`   | 应用元信息、外链、Cookie 登录窗口、旧版 Python 数据迁移等     | `get_app_info` / `open_cookie_login` / `start_legacy_migration` |
 //!

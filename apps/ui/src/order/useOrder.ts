@@ -39,14 +39,32 @@ export function useOrder() {
 
   async function loadCacheStatus() {
     const status = await invoke<OrderCacheStatus>("get_order_cache_status");
-    store.cacheStatus = status;
-    store.lastSyncAt = status.last_sync_at;
+    store.setCacheStatus(status);
+    store.setCacheCounts({
+      today_count: status.today_count,
+      yesterday_count: status.yesterday_count,
+      last_7_days_count: status.last_7_days_count,
+      last_30_days_count: status.last_30_days_count,
+      today_latest_order_at: status.today_latest_order_at,
+    });
+    return status;
   }
 
   async function loadCacheCounts() {
-    const counts = await invoke<OrderCacheCounts>("get_order_cache_counts");
-    store.setCacheCounts(counts);
-    return counts;
+    try {
+      const counts = await invoke<OrderCacheCounts>("get_order_cache_counts");
+      store.setCacheCounts(counts);
+      return counts;
+    } catch (e) {
+      const status = await loadCacheStatus();
+      return {
+        today_count: status.today_count,
+        yesterday_count: status.yesterday_count,
+        last_7_days_count: status.last_7_days_count,
+        last_30_days_count: status.last_30_days_count,
+        today_latest_order_at: status.today_latest_order_at,
+      };
+    }
   }
 
   async function withSyncEvents<T>(

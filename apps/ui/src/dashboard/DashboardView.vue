@@ -31,6 +31,8 @@ interface MetricTile {
   tone: Tone;
 }
 
+type CacheMetricKey = "today" | "yesterday" | "last_7_days" | "last_30_days";
+
 function buildCacheMetric(key: string, label: string, count: number | null, hint: string): MetricTile {
   return {
     key,
@@ -41,30 +43,120 @@ function buildCacheMetric(key: string, label: string, count: number | null, hint
   };
 }
 
+const cacheCounts = computed(() => ({
+  today: orderStore.cacheCounts?.today_count ?? orderStore.cacheStatus?.today_count ?? null,
+  yesterday: orderStore.cacheCounts?.yesterday_count ?? orderStore.cacheStatus?.yesterday_count ?? null,
+  last7: orderStore.cacheCounts?.last_7_days_count ?? orderStore.cacheStatus?.last_7_days_count ?? null,
+  last30:
+    orderStore.cacheCounts?.last_30_days_count ??
+    orderStore.cacheStatus?.last_30_days_count ??
+    orderStore.cacheStatus?.cached_order_count ??
+    null,
+  todayLatestOrderAt:
+    orderStore.cacheCounts?.today_latest_order_at ??
+    orderStore.cacheStatus?.today_latest_order_at ??
+    null,
+}));
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
+function endOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isSameLocalDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatClock(date: Date): string {
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const second = String(date.getSeconds()).padStart(2, "0");
+  return `${hour}:${minute}:${second}`;
+}
+
+function formatMonthDayTime(date: Date): string {
+  return `${date.getMonth() + 1}.${date.getDate()} ${formatClock(date)}`;
+}
+
+function formatCacheRange(start: Date, end: Date): string {
+  if (isSameLocalDay(start, end)) {
+    return `${formatMonthDayTime(start)}-${formatClock(end)}`;
+  }
+  return `${formatMonthDayTime(start)}-${formatMonthDayTime(end)}`;
+}
+
+function parseValidDate(value: string | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function buildCacheRangeHints(
+  now: Date,
+  todayCount: number | null,
+  todayLatestOrderAt: string | null,
+): Record<CacheMetricKey, string> {
+  const todayStart = startOfLocalDay(now);
+  const todayEnd = endOfLocalDay(now);
+  const yesterday = addLocalDays(now, -1);
+  const yesterdayStart = startOfLocalDay(yesterday);
+  const yesterdayEnd = endOfLocalDay(yesterday);
+  const last7Start = startOfLocalDay(addLocalDays(now, -7));
+  const last30Start = startOfLocalDay(addLocalDays(now, -30));
+  const latestTodayOrder = parseValidDate(todayLatestOrderAt);
+  const todayRangeEnd =
+    latestTodayOrder && isSameLocalDay(latestTodayOrder, todayStart) && latestTodayOrder <= todayEnd
+      ? latestTodayOrder
+      : null;
+
+  return {
+    today:
+      todayRangeEnd === null
+        ? `${formatMonthDayTime(todayStart)}-${todayCount === null ? "待加载" : "暂无今日缓存"}`
+        : formatCacheRange(todayStart, todayRangeEnd),
+    yesterday: formatCacheRange(yesterdayStart, yesterdayEnd),
+    last_7_days: formatCacheRange(last7Start, yesterdayEnd),
+    last_30_days: formatCacheRange(last30Start, yesterdayEnd),
+  };
+}
+
+const cacheRangeHints = computed(() =>
+  buildCacheRangeHints(new Date(), cacheCounts.value.today, cacheCounts.value.todayLatestOrderAt),
+);
+
 const metrics = computed<MetricTile[]>(() => [
   buildCacheMetric(
     "today",
     "今天缓存",
-    orderStore.cacheCounts?.today_count ?? null,
-    "北京时间今天的订单缓存数量",
+    cacheCounts.value.today,
+    cacheRangeHints.value.today,
   ),
   buildCacheMetric(
     "yesterday",
     "昨天缓存",
-    orderStore.cacheCounts?.yesterday_count ?? null,
-    "昨天自然日的订单缓存数量",
+    cacheCounts.value.yesterday,
+    cacheRangeHints.value.yesterday,
   ),
   buildCacheMetric(
     "last_7_days",
     "近 7 天缓存",
-    orderStore.cacheCounts?.last_7_days_count ?? null,
-    "含今天在内的近 7 天订单缓存",
+    cacheCounts.value.last7,
+    cacheRangeHints.value.last_7_days,
   ),
   buildCacheMetric(
     "last_30_days",
     "近 30 天缓存",
-    orderStore.cacheCounts?.last_30_days_count ?? orderStore.cacheStatus?.cached_order_count ?? null,
-    "含今天在内的近 30 天订单缓存",
+    cacheCounts.value.last30,
+    cacheRangeHints.value.last_30_days,
   ),
 ]);
 
@@ -76,7 +168,7 @@ const quickLinks: readonly {
   tone: ShortcutTone;
 }[] = [
   { to: "/review", title: "中差评/品退", icon: "review", description: "一键匹配订单并带入发货", tone: "brand" },
-  { to: "/order", title: "订单缓存同步", icon: "order", description: "维护 30 天订单缓存与本地检索", tone: "sky" },
+  { to: "/order", title: "订单缓存同步", icon: "order", description: "维护近 30 天（不含今天）缓存", tone: "sky" },
   { to: "/delivery", title: "批量发货", icon: "delivery", description: "逐条进度·失败明细·支持取消", tone: "amber" },
   { to: buildSettingsLocation("license"), title: "设置中心", icon: "settings", description: "授权、Cookie 与版本信息", tone: "slate" },
 ] as const;
@@ -128,9 +220,8 @@ const todayText = computed(() =>
 );
 
 const heroSummaryText = computed(() => {
-  const counts = orderStore.cacheCounts;
-  if (!counts) return "正在读取订单缓存统计";
-  return `近 30 天缓存 ${counts.last_30_days_count} 条，可直接进入业务流程`;
+  if (cacheCounts.value.last30 === null) return "正在读取订单缓存统计";
+  return `近 30 天（不含今天）缓存 ${cacheCounts.value.last30} 条，可直接进入业务流程`;
 });
 
 // 当前时钟抽到 useRuntimeClock；会话时长已迁至设置页，底部元数据卡改为「查看教程」。

@@ -1,7 +1,9 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
-use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
+use desktop_services::order_cache_repository::{
+    is_cancelled_order_status, CacheOrderProduct, CacheOrderRecord, CANCELLED_ORDER_STATUS,
+};
 use desktop_services::order_fetcher::{backoff_seconds, is_api_rate_limited, is_http_rate_limited};
 use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
 use domain_core::OrderCacheEntry;
@@ -533,6 +535,9 @@ fn pick_amount_cent(v: &Value) -> i64 {
 }
 
 fn order_json_to_entry(raw: &Value, now_rfc: &str) -> Option<OrderCacheEntry> {
+    if is_cancelled_order_json(raw) {
+        return None;
+    }
     let common = raw.get("commonInfo")?.as_object()?;
     let order_id = common.get("orderId")?.as_str()?.trim();
     if order_id.is_empty() {
@@ -562,6 +567,22 @@ fn order_json_to_entry(raw: &Value, now_rfc: &str) -> Option<OrderCacheEntry> {
         created_at,
         updated_at: now_rfc.to_string(),
     })
+}
+
+fn is_cancelled_order_json(raw: &Value) -> bool {
+    let common = match raw.get("commonInfo") {
+        Some(value) => value,
+        None => return false,
+    };
+    let status = common.get("status").and_then(parse_i64_like).unwrap_or(0);
+    if is_cancelled_order_status(status) {
+        return true;
+    }
+    common
+        .get("statusStr")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().contains("已取消"))
+        .unwrap_or(false)
 }
 
 fn first_non_empty_value<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a Value> {
@@ -677,7 +698,16 @@ fn order_json_to_cache_record(raw: &Value, now_epoch: i64) -> Option<CacheOrderR
             .get("isEducationOrder")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        order_status: common.get("status").and_then(parse_i64_like).unwrap_or(0),
+        order_status: common
+            .get("status")
+            .and_then(parse_i64_like)
+            .unwrap_or_else(|| {
+                if is_cancelled_order_json(raw) {
+                    CANCELLED_ORDER_STATUS
+                } else {
+                    0
+                }
+            }),
         openid: common
             .get("openid")
             .and_then(Value::as_str)

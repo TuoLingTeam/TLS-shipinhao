@@ -6,7 +6,7 @@
 use super::*;
 use crate::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
 use crate::order_cache_storage::SqliteOrderCacheRepository;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use tempfile::tempdir;
 
 fn open_shared_repo(path: &std::path::Path) -> Arc<dyn OrderCacheRepository> {
@@ -382,6 +382,107 @@ fn ensure_orders_reads_recent_cache_after_bootstrap() {
     assert_eq!(warnings, vec!["bootstrapped"]);
 }
 
+#[test]
+fn ensure_recent_and_today_cache_fetches_today_without_marking_complete() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("order_cache.sqlite3");
+    let now = DateTime::parse_from_rfc3339("2026-04-29T04:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let recent_end = sync_now(Some(now));
+    let recent_start = retention_start(recent_end);
+    let today_start = crate::day_window::start_of_day_timestamp(Some(now));
+    let today_end = crate::day_window::end_of_day_timestamp(Some(now));
+    let finder = FakeFinder::with_responses(vec![
+        CacheFetchResult {
+            windows: vec![sample_window(
+                "recent",
+                recent_start,
+                recent_end,
+                vec![sample_order("o-recent", recent_start + 3_600)],
+            )],
+            warnings: vec![],
+        },
+        CacheFetchResult {
+            windows: vec![sample_window(
+                "today",
+                today_start,
+                today_end,
+                vec![sample_order("o-today", today_start + 3_600)],
+            )],
+            warnings: vec!["today-warning".into()],
+        },
+    ]);
+    let repo = open_shared_repo(&path);
+    let mut service = OrderSyncService::new(finder, repo);
+
+    let (written, warnings, coverage_start, coverage_end) =
+        service.ensure_recent_and_today_cache(Some(now)).unwrap();
+
+    assert_eq!(written, 2);
+    assert_eq!(warnings, vec!["today-warning"]);
+    assert_eq!(
+        Utc.timestamp_opt(coverage_start, 0).unwrap().to_rfc3339(),
+        "2026-03-29T16:00:00+00:00"
+    );
+    assert_eq!(
+        Utc.timestamp_opt(coverage_end, 0).unwrap().to_rfc3339(),
+        "2026-04-28T15:59:59+00:00"
+    );
+    assert_eq!(service.finder.calls.len(), 2);
+    assert_eq!(
+        Utc.timestamp_opt(service.finder.calls[0].1, 0)
+            .unwrap()
+            .to_rfc3339(),
+        "2026-03-29T16:00:00+00:00"
+    );
+    assert_eq!(
+        Utc.timestamp_opt(service.finder.calls[0].2, 0)
+            .unwrap()
+            .to_rfc3339(),
+        "2026-04-28T15:59:59+00:00"
+    );
+    assert_eq!(
+        Utc.timestamp_opt(service.finder.calls[1].1, 0)
+            .unwrap()
+            .to_rfc3339(),
+        "2026-04-28T16:00:00+00:00"
+    );
+    assert_eq!(
+        Utc.timestamp_opt(service.finder.calls[1].2, 0)
+            .unwrap()
+            .to_rfc3339(),
+        "2026-04-29T15:59:59+00:00"
+    );
+    assert!(service
+        .repository
+        .fetch_order("o-recent")
+        .unwrap()
+        .is_some());
+    assert!(service.repository.fetch_order("o-today").unwrap().is_some());
+
+    let today_segments = service
+        .repository
+        .get_complete_segments(ORDER_CACHE_SCOPE, today_start, today_end)
+        .unwrap();
+    assert!(
+        today_segments.is_empty(),
+        "今天仍在进行中，不能标记为完整覆盖段，否则稍后新增订单会被跳过"
+    );
+
+    let state = service
+        .repository
+        .get_state(ORDER_CACHE_SCOPE)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        Utc.timestamp_opt(state.coverage_end, 0)
+            .unwrap()
+            .to_rfc3339(),
+        "2026-04-28T15:59:59+00:00"
+    );
+}
+
 /// 内存 Mock：不依赖 sqlite，只实现测试覆盖流程所需的行为。
 /// M3-02 AC 要求 Mock Repository 能跑通 OrderSyncService 主流程。
 #[derive(Default)]
@@ -556,6 +657,22 @@ impl OrderCacheRepository for InMemoryRepository {
                 order.create_time >= start_timestamp && order.create_time <= end_timestamp
             })
             .count())
+    }
+
+    fn max_order_create_time_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<Option<i64>> {
+        let data = self.inner.lock().unwrap();
+        Ok(data
+            .orders
+            .values()
+            .filter(|order| {
+                order.create_time >= start_timestamp && order.create_time <= end_timestamp
+            })
+            .map(|order| order.create_time)
+            .max())
     }
 }
 

@@ -25,6 +25,11 @@ export const IPC_MOCK_BOOT = `
   };
   var orderStatus = {
     cached_order_count: 0,
+    today_count: 0,
+    yesterday_count: 0,
+    last_7_days_count: 0,
+    last_30_days_count: 0,
+    today_latest_order_at: null,
     last_sync_at: null,
     coverage_start: null,
     coverage_end: null,
@@ -36,6 +41,7 @@ export const IPC_MOCK_BOOT = `
     yesterday_count: 0,
     last_7_days_count: 0,
     last_30_days_count: 0,
+    today_latest_order_at: null,
   };
   var noUpdate = {
     app: "e2e",

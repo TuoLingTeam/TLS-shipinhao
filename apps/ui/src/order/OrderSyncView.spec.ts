@@ -28,6 +28,11 @@ describe("OrderSyncView", () => {
     const orderStore = useOrderStore();
     orderStore.cacheStatus = {
       cached_order_count: 2,
+      today_count: 0,
+      yesterday_count: 1,
+      last_7_days_count: 2,
+      last_30_days_count: 2,
+      today_latest_order_at: null,
       last_sync_at: "2026-04-18T10:00:00Z",
       coverage_start: "2026-03-19T00:00:00Z",
       coverage_end: "2026-04-18T23:59:59Z",

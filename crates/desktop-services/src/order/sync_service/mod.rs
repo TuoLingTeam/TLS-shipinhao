@@ -1,4 +1,7 @@
-use crate::order_cache_repository::{CacheOrderRecord, OrderCacheRepository, SyncStateRecord};
+use crate::day_window::{end_of_day_timestamp, start_of_day_timestamp};
+use crate::order_cache_repository::{
+    is_cancelled_order_status, CacheOrderRecord, OrderCacheRepository, SyncStateRecord,
+};
 use crate::order_sync_planner::{
     incremental_refresh_start, retention_start, sync_now, SyncPlannerState,
 };
@@ -283,6 +286,36 @@ where
         Ok((total_written, warnings, start_timestamp, end_timestamp))
     }
 
+    /// 手动维护订单缓存时使用：先补齐「近 30 天（不含今天）」的稳定窗口，
+    /// 再额外拉取今天自然日，保证仪表盘「今天」卡片能看到当天订单。
+    ///
+    /// 今天仍处于进行中，因此只入库订单，不写 sync_state，也不标记 completed
+    /// segment；否则当天稍晚新增的订单会被缺口规划误判为已覆盖而跳过。
+    pub fn ensure_recent_and_today_cache(
+        &mut self,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<(usize, Vec<String>, i64, i64)> {
+        let current = now.unwrap_or_else(chrono::Utc::now);
+        let (recent_written, mut warnings, recent_start, recent_end) =
+            self.ensure_recent_cache(Some(current))?;
+        if self.stopped {
+            return Ok((recent_written, warnings, recent_start, recent_end));
+        }
+
+        let today_start = start_of_day_timestamp(Some(current));
+        let today_end = end_of_day_timestamp(Some(current));
+        let (today_written, today_warnings) =
+            self.sync_range_without_state(today_start, today_end, "today", Some(current))?;
+        warnings.extend(today_warnings);
+
+        Ok((
+            recent_written + today_written,
+            warnings,
+            recent_start,
+            recent_end,
+        ))
+    }
+
     pub fn ensure_orders(
         &mut self,
         earliest_time: i64,
@@ -330,6 +363,28 @@ where
         mode: &str,
         now: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<(usize, Vec<String>)> {
+        self.sync_range_inner(start_timestamp, end_timestamp, mode, now, true, true)
+    }
+
+    fn sync_range_without_state(
+        &mut self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+        mode: &str,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<(usize, Vec<String>)> {
+        self.sync_range_inner(start_timestamp, end_timestamp, mode, now, false, false)
+    }
+
+    fn sync_range_inner(
+        &mut self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+        mode: &str,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+        mark_segment_complete: bool,
+        save_sync_state: bool,
+    ) -> anyhow::Result<(usize, Vec<String>)> {
         if self.stopped
             || start_timestamp <= 0
             || end_timestamp <= 0
@@ -351,30 +406,37 @@ where
             self.repository.upsert_orders(&window.orders)?;
             persisted_orders.extend(window.orders.clone());
         }
-        self.repository
-            .mark_segment_complete(ORDER_CACHE_SCOPE, start_timestamp, end_timestamp)?;
+        if mark_segment_complete {
+            self.repository.mark_segment_complete(
+                ORDER_CACHE_SCOPE,
+                start_timestamp,
+                end_timestamp,
+            )?;
+        }
         let unique_written = count_unique_order_ids(&persisted_orders);
-        let now_ts = sync_now(now);
-        let completed_at = sync_completed_at(now);
-        let retention = retention_start(now_ts);
-        self.repository.save_state(&SyncStateRecord {
-            scope: ORDER_CACHE_SCOPE.to_string(),
-            coverage_start: retention,
-            coverage_end: now_ts,
-            last_incremental_start: if matches!(mode, "incremental" | "rebuild") {
-                start_timestamp
-            } else {
-                0
-            },
-            last_incremental_end: if matches!(mode, "incremental" | "rebuild") {
-                end_timestamp
-            } else {
-                0
-            },
-            last_success_at: completed_at,
-            last_mode: mode.to_string(),
-            last_error: String::new(),
-        })?;
+        if save_sync_state {
+            let now_ts = sync_now(now);
+            let completed_at = sync_completed_at(now);
+            let retention = retention_start(now_ts);
+            self.repository.save_state(&SyncStateRecord {
+                scope: ORDER_CACHE_SCOPE.to_string(),
+                coverage_start: retention,
+                coverage_end: now_ts,
+                last_incremental_start: if matches!(mode, "incremental" | "rebuild") {
+                    start_timestamp
+                } else {
+                    0
+                },
+                last_incremental_end: if matches!(mode, "incremental" | "rebuild") {
+                    end_timestamp
+                } else {
+                    0
+                },
+                last_success_at: completed_at,
+                last_mode: mode.to_string(),
+                last_error: String::new(),
+            })?;
+        }
         Ok((unique_written, fetched.warnings))
     }
 }
@@ -382,7 +444,7 @@ where
 fn count_unique_order_ids(orders: &[CacheOrderRecord]) -> usize {
     let mut unique = std::collections::BTreeSet::new();
     for order in orders {
-        if !order.order_id.is_empty() {
+        if !order.order_id.is_empty() && !is_cancelled_order_status(order.order_status) {
             unique.insert(order.order_id.clone());
         }
     }
@@ -393,6 +455,9 @@ pub fn deduplicate_orders_by_id(orders: Vec<CacheOrderRecord>) -> Vec<CacheOrder
     let mut seen = std::collections::BTreeSet::new();
     let mut deduplicated = Vec::new();
     for order in orders {
+        if is_cancelled_order_status(order.order_status) {
+            continue;
+        }
         if order.order_id.is_empty() || seen.insert(order.order_id.clone()) {
             deduplicated.push(order);
         }

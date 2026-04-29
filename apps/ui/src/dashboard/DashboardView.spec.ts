@@ -2,7 +2,7 @@
 
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardView from "./DashboardView.vue";
 import { useAppStore } from "../app.store";
 import { useDeliveryStore } from "../delivery/store";
@@ -51,6 +51,8 @@ describe("DashboardView", () => {
   let pinia: Pinia;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 29, 18, 20, 0));
     pinia = createPinia();
     setActivePinia(pinia);
     executeMock.mockClear();
@@ -69,19 +71,17 @@ describe("DashboardView", () => {
     const orderStore = useOrderStore();
     orderStore.cacheStatus = {
       cached_order_count: 36,
+      today_count: 3,
+      yesterday_count: 7,
+      last_7_days_count: 18,
+      last_30_days_count: 36,
+      today_latest_order_at: "2026-04-29T10:18:25Z",
       last_sync_at: "2026-04-18T10:00:00Z",
       coverage_start: "2026-03-19T00:00:00Z",
       coverage_end: "2026-04-18T23:59:59Z",
       coverage_complete: true,
       missing_segment_count: 0,
     };
-    orderStore.setCacheCounts({
-      today_count: 3,
-      yesterday_count: 7,
-      last_7_days_count: 18,
-      last_30_days_count: 36,
-    });
-
     const reviewStore = useReviewStore();
     reviewStore.setResults([
       {
@@ -120,6 +120,10 @@ describe("DashboardView", () => {
     };
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("uses a single-row metrics strip on desktop with enlarged metric tiles", async () => {
     const wrapper = mount(DashboardView, {
       global: {
@@ -142,6 +146,14 @@ describe("DashboardView", () => {
     expect(wrapper.text()).toContain("昨天缓存");
     expect(wrapper.text()).toContain("近 7 天缓存");
     expect(wrapper.text()).toContain("近 30 天缓存");
+    expect(wrapper.text()).toContain("3");
+    expect(wrapper.text()).toContain("7");
+    expect(wrapper.text()).toContain("18");
+    expect(wrapper.text()).toContain("36");
+    expect(wrapper.text()).toContain("4.29 00:00:00-18:18:25");
+    expect(wrapper.text()).toContain("4.28 00:00:00-23:59:59");
+    expect(wrapper.text()).toContain("4.22 00:00:00-4.28 23:59:59");
+    expect(wrapper.text()).toContain("3.30 00:00:00-4.28 23:59:59");
     expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
     expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);

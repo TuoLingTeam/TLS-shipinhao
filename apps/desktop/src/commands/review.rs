@@ -172,7 +172,7 @@ fn read_orders_from_ready_cache(
         "review_query",
         "read_cached_orders",
         22,
-        "最近 30 天缓存完整，直接读取本地订单并进入评分匹配…",
+        "订单缓存完整，直接读取本地订单并进入评分匹配…",
     );
     let repository = SqliteOrderCacheRepository::open(rich_order_cache_path).map_err(|error| {
         mask_order_cache_error(
@@ -215,7 +215,7 @@ fn sync_and_read_orders(
         "review_query",
         "ensure_window_covered",
         18,
-        "正在按近 30 天范围补齐订单缓存缺口…",
+        "正在按业务日期范围补齐订单缓存缺口…",
     );
 
     let finder = HttpOrderCacheFinder::new(cookie, magic);
@@ -245,9 +245,8 @@ fn sync_and_read_orders(
                 )
             })?
     } else {
-        // 评价匹配候选必须用「完整近 30 天订单池」：query 只决定拉哪段评价，
-        // 订单则覆盖整个 retention 范围。target_end 取 max(query_end, sync_now)
-        // 以兼容用户选「今天」的场景，让今天的订单也被纳入缓存。
+        // 评价匹配候选以缓存保留窗口为基础；query 决定拉哪段评价。
+        // 若用户选「今天」，订单候选需要扩展到今天，避免今天评价找不到同日订单。
         let target_end = end_unix.max(sync_now);
         let (_, ensure_warnings, candidate_start, candidate_end) = service
             .ensure_window_covered(retention_start, target_end, Some(now))

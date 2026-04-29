@@ -6,6 +6,12 @@
 
 use serde::{Deserialize, Serialize};
 
+pub const CANCELLED_ORDER_STATUS: i64 = 250;
+
+pub fn is_cancelled_order_status(status: i64) -> bool {
+    status == CANCELLED_ORDER_STATUS
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheOrderProduct {
@@ -119,4 +125,11 @@ pub trait OrderCacheRepository: Send + Sync {
         start_timestamp: i64,
         end_timestamp: i64,
     ) -> anyhow::Result<usize>;
+
+    /// 指定时间窗口内最新订单的 create_time；无订单时返回 None。
+    fn max_order_create_time_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> anyhow::Result<Option<i64>>;
 }

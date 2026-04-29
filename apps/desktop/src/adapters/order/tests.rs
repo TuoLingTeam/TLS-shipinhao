@@ -119,6 +119,26 @@ fn order_json_to_entry_maps_buyer_and_string_amount() {
 }
 
 #[test]
+fn cancelled_order_json_is_hidden_from_lightweight_order_list() {
+    let raw = json!({
+        "commonInfo": {
+            "orderId": "3736036707705178624",
+            "createTime": 1777459219,
+            "status": 250,
+            "statusStr": "已取消"
+        },
+        "buyerInfo": {
+            "nickName": "cancelled-buyer"
+        },
+        "orderStatus": {
+            "cancelReason": "取消原因：买家主动取消"
+        }
+    });
+
+    assert!(order_json_to_entry(&raw, "2026-04-29T10:40:00Z").is_none());
+}
+
+#[test]
 fn order_json_to_cache_record_maps_products_and_receipt_fields() {
     let raw = json!({
         "commonInfo": {
@@ -166,4 +186,28 @@ fn order_json_to_cache_record_maps_products_and_receipt_fields() {
     assert_eq!(record.products[0].sku_id, "400-1");
     assert_eq!(record.products[0].sale_param, "单瓶|400ml");
     assert_eq!(record.products[0].product_name, "仁和二硫化硒去屑洗发水");
+}
+
+#[test]
+fn cancelled_order_json_keeps_status_marker_for_cache_deletion() {
+    let raw = json!({
+        "commonInfo": {
+            "orderId": "3736036707705178624",
+            "createTime": 1777459219,
+            "status": 250,
+            "statusStr": "已取消",
+            "openid": "openid-cancelled"
+        },
+        "buyerInfo": {
+            "nickName": "cancelled-buyer"
+        },
+        "orderStatus": {
+            "cancelReason": "取消原因：买家主动取消"
+        }
+    });
+
+    let record = order_json_to_cache_record(&raw, 1777460000).expect("delete marker");
+    assert_eq!(record.order_id, "3736036707705178624");
+    assert_eq!(record.order_status, 250);
+    assert_eq!(record.buyer_nickname, "cancelled-buyer");
 }

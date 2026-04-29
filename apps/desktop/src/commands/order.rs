@@ -84,6 +84,11 @@ pub struct OrderSyncResult {
 #[serde(rename_all = "snake_case")]
 pub struct OrderCacheStatus {
     pub cached_order_count: usize,
+    pub today_count: usize,
+    pub yesterday_count: usize,
+    pub last_7_days_count: usize,
+    pub last_30_days_count: usize,
+    pub today_latest_order_at: Option<String>,
     pub last_sync_at: Option<String>,
     pub coverage_start: Option<String>,
     pub coverage_end: Option<String>,
@@ -98,6 +103,15 @@ pub struct OrderCacheCounts {
     pub yesterday_count: usize,
     pub last_7_days_count: usize,
     pub last_30_days_count: usize,
+    pub today_latest_order_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct OrderCacheCountWindows {
+    today: (i64, i64),
+    yesterday: (i64, i64),
+    last_7_days: (i64, i64),
+    last_30_days: (i64, i64),
 }
 
 pub(crate) fn emit_order_sync_progress(
@@ -124,6 +138,7 @@ pub(crate) fn recent_order_cache_status(
     let repository = SqliteOrderCacheRepository::open(rich_cache_path)?;
     repository.initialize()?;
     let count = repository.count_orders()?;
+    let counts = order_cache_counts_from_repository(&repository)?;
     let state = repository.get_state(ORDER_CACHE_SCOPE)?;
     let (coverage_start, coverage_end, last_sync_at, coverage_complete, missing_segment_count) =
         if let Some(state) = state {
@@ -147,6 +162,11 @@ pub(crate) fn recent_order_cache_status(
 
     Ok(OrderCacheStatus {
         cached_order_count: count,
+        today_count: counts.today_count,
+        yesterday_count: counts.yesterday_count,
+        last_7_days_count: counts.last_7_days_count,
+        last_30_days_count: counts.last_30_days_count,
+        today_latest_order_at: counts.today_latest_order_at,
         last_sync_at,
         coverage_start,
         coverage_end,
@@ -158,22 +178,43 @@ pub(crate) fn recent_order_cache_status(
 pub(crate) fn order_cache_counts(rich_cache_path: &Path) -> anyhow::Result<OrderCacheCounts> {
     let repository = SqliteOrderCacheRepository::open(rich_cache_path)?;
     repository.initialize()?;
+    order_cache_counts_from_repository(&repository)
+}
 
-    let now = chrono::Utc::now();
-    let today_start = start_of_day_timestamp(Some(now));
-    let today_end = end_of_day_timestamp(Some(now));
-    let yesterday = now - chrono::Duration::days(1);
-    let yesterday_start = start_of_day_timestamp(Some(yesterday));
-    let yesterday_end = end_of_day_timestamp(Some(yesterday));
-    let last_7_days_start = start_of_day_timestamp(Some(now - chrono::Duration::days(6)));
-    let last_30_days_start = start_of_day_timestamp(Some(now - chrono::Duration::days(29)));
+fn order_cache_counts_from_repository(
+    repository: &dyn OrderCacheRepository,
+) -> anyhow::Result<OrderCacheCounts> {
+    let windows = order_cache_count_windows(chrono::Utc::now());
 
     Ok(OrderCacheCounts {
-        today_count: repository.count_orders_in_range(today_start, today_end)?,
-        yesterday_count: repository.count_orders_in_range(yesterday_start, yesterday_end)?,
-        last_7_days_count: repository.count_orders_in_range(last_7_days_start, today_end)?,
-        last_30_days_count: repository.count_orders_in_range(last_30_days_start, today_end)?,
+        today_count: repository.count_orders_in_range(windows.today.0, windows.today.1)?,
+        yesterday_count: repository
+            .count_orders_in_range(windows.yesterday.0, windows.yesterday.1)?,
+        last_7_days_count: repository
+            .count_orders_in_range(windows.last_7_days.0, windows.last_7_days.1)?,
+        last_30_days_count: repository
+            .count_orders_in_range(windows.last_30_days.0, windows.last_30_days.1)?,
+        today_latest_order_at: repository
+            .max_order_create_time_in_range(windows.today.0, windows.today.1)?
+            .and_then(timestamp_to_iso),
     })
+}
+
+fn order_cache_count_windows(now: chrono::DateTime<chrono::Utc>) -> OrderCacheCountWindows {
+    let today = (
+        start_of_day_timestamp(Some(now)),
+        end_of_day_timestamp(Some(now)),
+    );
+    let yesterday = recent_day_range_timestamps(1, Some(now));
+    let last_7_days = recent_day_range_timestamps(7, Some(now));
+    let last_30_days = recent_day_range_timestamps(30, Some(now));
+
+    OrderCacheCountWindows {
+        today,
+        yesterday,
+        last_7_days,
+        last_30_days,
+    }
 }
 
 fn write_lightweight_recent_cache(
@@ -277,9 +318,9 @@ pub async fn sync_recent_order_cache(
     emit_order_sync_progress(
         &app,
         "manual",
-        "ensure_recent_cache",
+        "ensure_recent_and_today_cache",
         15,
-        "正在维护近 30 天（不含今天）订单缓存…",
+        "正在维护近 30 天（不含今天）及今天订单缓存…",
     );
 
     let app_clone = app.clone();
@@ -296,10 +337,10 @@ pub async fn sync_recent_order_cache(
         let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
         let (written, warnings, coverage_start, coverage_end) = service
-            .ensure_recent_cache(Some(chrono::Utc::now()))
+            .ensure_recent_and_today_cache(Some(chrono::Utc::now()))
             .map_err(|error| {
                 mask_order_cache_error(
-                    "sync_recent_order_cache.ensure_recent_cache",
+                    "sync_recent_order_cache.ensure_recent_and_today_cache",
                     None,
                     "订单缓存同步失败，请稍后重试",
                     error,
@@ -311,7 +352,7 @@ pub async fn sync_recent_order_cache(
             "manual",
             "refresh_light_cache",
             78,
-            "近 30 天（不含今天）富缓存已更新，正在刷新订单列表视图…",
+            "近 30 天（不含今天）及今天富缓存已更新，正在刷新订单列表视图…",
         );
 
         let light_entries =
@@ -351,6 +392,7 @@ pub async fn sync_recent_order_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn order_cache_load_error_masks_internal_window_details() {
@@ -378,5 +420,58 @@ mod tests {
         assert_eq!(masked.to_string(), "订单缓存同步失败，请稍后重试");
         assert!(!masked.to_string().contains("1773964799"));
         assert!(!masked.to_string().contains("fetch cache orders for"));
+    }
+
+    #[test]
+    fn order_cache_count_windows_follow_business_day_rules() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-04-20T04:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let windows = order_cache_count_windows(now);
+
+        assert_eq!(
+            chrono::Utc
+                .timestamp_opt(windows.today.0, 0)
+                .unwrap()
+                .to_rfc3339(),
+            "2026-04-19T16:00:00+00:00"
+        );
+        assert_eq!(
+            chrono::Utc
+                .timestamp_opt(windows.today.1, 0)
+                .unwrap()
+                .to_rfc3339(),
+            "2026-04-20T15:59:59+00:00"
+        );
+        assert_eq!(
+            chrono::Utc
+                .timestamp_opt(windows.yesterday.0, 0)
+                .unwrap()
+                .to_rfc3339(),
+            "2026-04-18T16:00:00+00:00"
+        );
+        assert_eq!(
+            chrono::Utc
+                .timestamp_opt(windows.yesterday.1, 0)
+                .unwrap()
+                .to_rfc3339(),
+            "2026-04-19T15:59:59+00:00"
+        );
+        assert_eq!(
+            chrono::Utc
+                .timestamp_opt(windows.last_7_days.0, 0)
+                .unwrap()
+                .to_rfc3339(),
+            "2026-04-12T16:00:00+00:00"
+        );
+        assert_eq!(windows.last_7_days.1, windows.yesterday.1);
+        assert_eq!(
+            chrono::Utc
+                .timestamp_opt(windows.last_30_days.0, 0)
+                .unwrap()
+                .to_rfc3339(),
+            "2026-03-20T16:00:00+00:00"
+        );
+        assert_eq!(windows.last_30_days.1, windows.yesterday.1);
     }
 }
