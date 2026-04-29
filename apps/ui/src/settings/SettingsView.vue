@@ -25,7 +25,7 @@ const cookieHealth = useCookieHealthStore();
 const storeContext = useStoreContextStore();
 const updateCheck = useUpdateCheckStore();
 const route = useRoute();
-const { activateLicense, verifyLicense, activateLoading, verifyLoading } = useLicense();
+const { activateLicense, activateLoading } = useLicense();
 const { clockText, uptimeText } = useRuntimeClock();
 
 /** 最近一次成功保存来源：`auto`=登录窗口轮询；`manual`=手动粘贴后保存 */
@@ -202,20 +202,6 @@ async function handleActivate() {
   const result = await activateLicense(licenseKey.value);
   if (result) {
     licenseMessage.value = result.message ?? null;
-    licenseMessageType.value = result.success ? "success" : "error";
-  }
-}
-
-async function handleRefresh() {
-  const key = appStore.licenseKey || licenseKey.value;
-  if (!key) {
-    licenseMessage.value = "暂无已保存卡密，无法刷新状态";
-    licenseMessageType.value = "error";
-    return;
-  }
-  const result = await verifyLicense(key);
-  if (result) {
-    licenseMessage.value = result.message ?? "状态已刷新";
     licenseMessageType.value = result.success ? "success" : "error";
   }
 }
@@ -431,22 +417,13 @@ onBeforeUnmount(() => {
             placeholder="输入卡密"
             aria-label="卡密"
           />
-          <div class="settings-action-buttons-grid settings-action-buttons-grid--1x2">
-            <button
-              :disabled="activateLoading"
-              class="action-btn action-btn-primary min-h-10 cursor-pointer"
-              @click="handleActivate"
-            >
-              {{ activateLoading ? "激活中..." : "立即激活" }}
-            </button>
-            <button
-              :disabled="verifyLoading"
-              class="action-btn action-btn-secondary min-h-10 cursor-pointer"
-              @click="handleRefresh"
-            >
-              {{ verifyLoading ? "刷新中..." : "刷新状态" }}
-            </button>
-          </div>
+          <button
+            :disabled="activateLoading"
+            class="action-btn action-btn-primary min-h-10 w-full cursor-pointer"
+            @click="handleActivate"
+          >
+            {{ activateLoading ? "激活中..." : "立即激活" }}
+          </button>
         </div>
 
         <div v-if="licenseMessage" class="soft-alert" :class="licenseMessageType === 'success' ? 'success' : 'error'">
