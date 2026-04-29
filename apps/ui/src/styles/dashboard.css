@@ -11,6 +11,16 @@
  * / delivery）目前在 main.css 中穿插分布较广，强行拆分会打乱 cascade，暂保留。
  */
 
+/* compact / high_dpi_compact 模式下 main.css 已经把 app-content-shell 的 gap
+ * 从 1rem 收紧到 var(--spacing-stack) = 0.75rem（顶栏 ↔ hero），但 dashboard-view
+ * 自己的 flex gap 保持 gap-app = 1rem 不变，导致 5 板块中 ①↔② 比 ②↔③↔④↔⑤
+ * 小 0.25rem，视觉不齐。在 compact 系下让 dashboard-view 同步收紧到 stack，
+ * 5 个间隔统一为 0.75rem。普通 / wide 模式不受影响。 */
+.app-shell[data-layout="compact"] .dashboard-view,
+.app-shell[data-layout="high_dpi_compact"] .dashboard-view {
+  gap: var(--spacing-stack);
+}
+
 /* 仪表盘三组卡片固定高度变量：集中此处便于调整阶梯节奏。
  * metric 8rem / shortcut 5.5rem / meta 6.5rem。
  *
