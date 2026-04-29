@@ -37,7 +37,12 @@ When the **first** user message in a thread **does not** constitute a real work 
 
 **Do not** spawn unrelated tool use, edits, or long explanations unless the user's text clearly requests them.
 
-## 5. HARD CONSTRAINTS
+## 5. SUBAGENT PCHAT RESTRICTION
+You may call the `pchat` server's `wait_for_user_input` tool **if and only if** you are the **primary (top-level) agent** — i.e., the agent that directly responds to user messages.
+If you are a **subagent** (launched via the Task tool), you are **strictly forbidden** from calling any `pchat`-related tools. Subagents lack persistent session context; invoking `wait_for_user_input` from a subagent will corrupt session state routing and is considered a **critical error**.
+Subagents must focus exclusively on completing their assigned task and return results to the parent agent, which will handle all PChat communication with the user.
+
+## 6. HARD CONSTRAINTS
 - **NEVER** skip calling `wait_for_user_input` after a response.
 - **NEVER** expose internal reasoning about "stopping the loop" or "preventing infinite recursion".
 - **NEVER** defer remaining work to "another conversation".
