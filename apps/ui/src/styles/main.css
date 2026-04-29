@@ -504,7 +504,10 @@ select.field-input--with-leading-icon {
 
 .subsystem-summary-strip {
   display: grid;
-  gap: 0.625rem;
+  /* 不在此预设 gap：让调用方通过 Tailwind gap-x-* / gap-y-* 工具类自行声明，
+     避免 shorthand `gap` 在 cascade 中覆盖更精细的 row-gap / column-gap utility。
+     历史上仪表盘快捷入口的 gap-y-5/6/7 被这里的 0.625rem 静默压平，
+     调间距怎么改都没视觉变化。 */
 }
 
 .subsystem-summary-card {
