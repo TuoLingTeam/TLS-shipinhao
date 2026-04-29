@@ -198,12 +198,22 @@ async function handleSelectStore(event: Event) {
 }
 
 async function handleActivate() {
-  if (!licenseKey.value) return;
-  const result = await activateLicense(licenseKey.value);
-  if (result) {
-    licenseMessage.value = result.message ?? null;
-    licenseMessageType.value = result.success ? "success" : "error";
+  // 空输入直接红色提示，避免用户点了没反馈以为按钮坏掉。
+  // licenseKey 已用 v-model.trim 绑定，不需要再 trim 一次。
+  if (!licenseKey.value) {
+    licenseMessage.value = "请先在上方输入卡密";
+    licenseMessageType.value = "error";
+    return;
   }
+  // useLicense.activateLicense 在 invoke 失败时会兜底返回带 message 的 payload，
+  // 因此 result 不可能为 null；message 兜底文案覆盖服务端 / 网络异常两条路径。
+  const result = await activateLicense(licenseKey.value);
+  licenseMessage.value =
+    result.message ??
+    (result.success
+      ? "激活成功，授权信息已更新"
+      : "激活失败，请确认卡密未被使用 / 未被吊销，或检查网络后重试");
+  licenseMessageType.value = result.success ? "success" : "error";
 }
 
 async function revealSection(section: SettingsSectionId) {
