@@ -159,11 +159,8 @@ fn benchmark_fixture(fixture: &MatchBenchmarkFixture) -> BenchmarkArtifacts {
     let mut diffs = Vec::new();
     let mut mismatch_reasons = Vec::new();
 
-    for python in &fixture.python_results {
-        let Some(rust) = rust_results
-            .iter()
-            .find(|item| item.evaluation_id == python.evaluation_id)
-        else {
+    for (index, python) in fixture.python_results.iter().enumerate() {
+        let Some(rust) = rust_results.get(index) else {
             diffs.push(BenchmarkDiffRow {
                 evaluation_id: python.evaluation_id.clone(),
                 python_order_id: python.order_id.clone(),
@@ -183,7 +180,7 @@ fn benchmark_fixture(fixture: &MatchBenchmarkFixture) -> BenchmarkArtifacts {
             continue;
         };
 
-        let rust_top_candidates = collect_rust_top_candidates(fixture, &python.evaluation_id);
+        let rust_top_candidates = collect_rust_top_candidates(fixture, index);
         let row = build_diff_row(python, rust, &rust_top_candidates);
         if !row.mismatch_reason.is_empty() {
             mismatch_reasons.extend(row.mismatch_reason.clone());
@@ -217,13 +214,9 @@ fn benchmark_fixture(fixture: &MatchBenchmarkFixture) -> BenchmarkArtifacts {
 
 fn collect_rust_top_candidates(
     fixture: &MatchBenchmarkFixture,
-    evaluation_id: &str,
+    evaluation_index: usize,
 ) -> Vec<PythonTopCandidate> {
-    let Some(evaluation) = fixture
-        .evaluations
-        .iter()
-        .find(|item| item.evaluation_id == evaluation_id)
-    else {
+    let Some(evaluation) = fixture.evaluations.get(evaluation_index) else {
         return Vec::new();
     };
 
@@ -526,7 +519,6 @@ mod tests {
         }];
         let evaluations = (0..100)
             .map(|index| EvaluationRecord {
-                evaluation_id: format!("eval-{index}"),
                 buyer_nickname: "赵亮6057".into(),
                 product_id: "p1".into(),
                 sku_id: "s1".into(),

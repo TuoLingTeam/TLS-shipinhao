@@ -210,7 +210,6 @@ fn benchmark_match_100() -> f64 {
     }];
     let evaluations = (0..100)
         .map(|index| EvaluationRecord {
-            evaluation_id: format!("eval-{index}"),
             buyer_nickname: "赵亮6057".into(),
             product_id: "p1".into(),
             sku_id: "s1".into(),

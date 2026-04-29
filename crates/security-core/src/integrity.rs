@@ -307,12 +307,12 @@ mod tests {
         let (_dir, manifest_path, _, _sk, vk) = fresh_setup();
         let raw = std::fs::read_to_string(&manifest_path).unwrap();
         let mut signed: Sm = serde_json::from_str(&raw).unwrap();
-        // 篡改签名：随机替换几个字符
-        signed.signature = signed.signature.replace('a', "b").replace('A', "B");
-        if signed.signature == raw {
-            // 替换没产生变化时，直接尾追一个字符也行
-            signed.signature.push('X');
-        }
+        // 确定性篡改签名首字符：保持 base64url 字符合法，但签名内容一定不同。
+        let first = signed.signature.chars().next().unwrap();
+        let replacement = if first == 'A' { 'B' } else { 'A' };
+        signed
+            .signature
+            .replace_range(0..first.len_utf8(), &replacement.to_string());
         std::fs::write(&manifest_path, serde_json::to_vec_pretty(&signed).unwrap()).unwrap();
 
         let err = validate_runtime_continuity(&manifest_path, &vk).unwrap_err();
