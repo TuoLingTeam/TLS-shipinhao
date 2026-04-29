@@ -273,154 +273,178 @@ onMounted(async () => {
       </div>
     </section>
 
-    <div
-      data-testid="dashboard-metrics"
-      class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 lg:gap-app xl:grid-cols-4 items-stretch"
-    >
-      <article
-        v-for="metric in metrics"
-        :key="metric.key"
-        data-testid="dashboard-metric-tile"
-        class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-3 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-4"
-        :class="metricAccentClass[metric.tone]"
-      >
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-2">
-            <span class="status-dot shrink-0" :class="metric.tone !== 'idle' ? metric.tone : ''"></span>
-            <div class="metric-label dashboard-metric-label truncate">{{ metric.label }}</div>
+    <div class="dashboard-content-grid grid min-h-0 shrink-0 gap-app xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div class="dashboard-primary-stack flex min-h-0 flex-col gap-app">
+        <section class="surface-panel dashboard-cache-panel shrink-0 p-3 lg:p-4" aria-labelledby="dashboard-cache-title">
+          <div class="dashboard-panel-heading mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <span class="card-eyebrow">ORDER CACHE</span>
+              <h3 id="dashboard-cache-title" class="mt-1 text-base font-bold tracking-tight text-slate-950">订单缓存概览</h3>
+            </div>
+            <span class="dashboard-panel-note rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+              按自然日统计
+            </span>
           </div>
-          <span
-            class="dashboard-metric-badge shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 font-semibold leading-none"
-            :class="toneBadgeClass[metric.tone]"
+
+          <div
+            data-testid="dashboard-metrics"
+            class="dashboard-metrics grid shrink-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2 min-[420px]:gap-app sm:grid-cols-2 lg:grid-cols-4 lg:gap-app xl:grid-cols-4 items-stretch"
           >
-            {{ toneBadgeLabel[metric.tone] }}
-          </span>
+            <article
+              v-for="metric in metrics"
+              :key="metric.key"
+              data-testid="dashboard-metric-tile"
+              class="surface-panel metric-card dashboard-metric-tile dashboard-metric-card relative flex min-h-[5.25rem] flex-col gap-1 overflow-hidden p-3 transition-all sm:min-h-[5.5rem] sm:gap-1.5 lg:min-h-[5.75rem] lg:gap-1.5 lg:p-4"
+              :class="[metricAccentClass[metric.tone], { 'dashboard-metric-card--today': metric.key === 'today' }]"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="status-dot shrink-0" :class="metric.tone !== 'idle' ? metric.tone : ''"></span>
+                  <div class="metric-label dashboard-metric-label truncate">{{ metric.label }}</div>
+                </div>
+                <span
+                  class="dashboard-metric-badge shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 font-semibold leading-none"
+                  :class="toneBadgeClass[metric.tone]"
+                >
+                  {{ toneBadgeLabel[metric.tone] }}
+                </span>
+              </div>
+              <div class="metric-value dashboard-metric-value">{{ metric.value }}</div>
+              <div class="metric-hint dashboard-metric-hint line-clamp-2">{{ metric.hint }}</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="surface-panel dashboard-shortcuts-panel flex min-h-0 shrink-0 flex-col p-3 lg:p-4">
+          <div class="subsystem-section-header mb-3 flex items-center gap-2">
+            <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
+            <span class="text-[11px] text-slate-400">一键直达核心业务</span>
+          </div>
+
+          <div
+            data-testid="dashboard-shortcuts"
+            class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-4 gap-x-4 gap-y-3 sm:gap-x-5 sm:gap-y-4 lg:gap-y-5"
+          >
+            <RouterLink
+              v-for="item in quickLinks"
+              :key="item.title"
+              :to="item.to"
+              class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-3 overflow-hidden sm:gap-3"
+              :class="shortcutClass[item.tone]"
+            >
+              <div class="dashboard-shortcut-icon" aria-hidden="true">
+                <AppNavIcon :name="item.icon" icon-class="h-[18px] w-[18px]" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <h4 class="text-[13px] font-semibold text-slate-900">{{ item.title }}</h4>
+                <p class="mt-0.5 truncate text-[11px] leading-4 text-slate-500">{{ item.description }}</p>
+              </div>
+              <div class="dashboard-shortcut-arrow" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </div>
+            </RouterLink>
+          </div>
+        </section>
+      </div>
+
+      <!-- 侧栏低频信息：避免元数据在主流程底部占满一整排。 -->
+      <aside
+        data-testid="dashboard-meta-cards"
+        class="surface-panel dashboard-side-rail dashboard-meta-cards shrink-0 p-3 lg:p-4"
+        aria-label="运行时元数据"
+      >
+        <div class="dashboard-side-rail-head mb-3">
+          <span class="card-eyebrow">RUNTIME</span>
+          <h3 class="mt-1 text-sm font-bold tracking-tight text-slate-950">运行信息</h3>
+          <p class="mt-1 text-[11px] leading-4 text-slate-500">版本、教程与本机时间</p>
         </div>
-        <div class="metric-value dashboard-metric-value">{{ metric.value }}</div>
-        <div class="metric-hint dashboard-metric-hint line-clamp-2">{{ metric.hint }}</div>
-      </article>
+
+        <div class="dashboard-meta-list grid gap-3">
+          <article class="dashboard-meta-card dashboard-meta-card--version flex items-center gap-3 p-3">
+            <span class="dashboard-meta-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M12 2 4 7v10l8 5 8-5V7z" />
+                <path d="M12 22V12" />
+                <path d="m4 7 8 5 8-5" />
+              </svg>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="dashboard-meta-label">版本</div>
+              <button
+                v-if="updateCheck.hasUpdateAvailable"
+                type="button"
+                data-testid="dashboard-update-hint"
+                class="dashboard-meta-value dashboard-meta-update w-full cursor-pointer truncate text-left hover:underline"
+                :title="updateCheck.downloadActionError || `当前 v${appStore.appVersion} · 打开下载页`"
+                @click="handleOpenDownloadUrl"
+              >
+                有新版本 v{{ updateCheck.latestInfo?.version }}
+              </button>
+              <div v-else class="dashboard-meta-value">v{{ appStore.appVersion }}</div>
+            </div>
+          </article>
+
+          <article class="dashboard-meta-card dashboard-meta-card--author flex items-center gap-3 p-3">
+            <span class="dashboard-meta-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="dashboard-meta-label">作者微信</div>
+              <div class="dashboard-meta-value dashboard-meta-value--mono">{{ AUTHOR_WECHAT }}</div>
+            </div>
+          </article>
+
+          <article
+            class="dashboard-meta-card dashboard-meta-card--tutorial flex items-center gap-3 p-3"
+            data-testid="dashboard-meta-tutorial"
+          >
+            <span class="dashboard-meta-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                <path d="M8 7h8" />
+                <path d="M8 11h6" />
+              </svg>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="dashboard-meta-label">查看教程</div>
+              <button
+                v-if="hasTutorialUrl"
+                type="button"
+                class="dashboard-meta-value w-full cursor-pointer truncate text-left hover:underline"
+                :title="updateCheck.tutorialActionError || '在浏览器中打开'"
+                @click="handleOpenTutorialUrl"
+              >
+                点击打开
+              </button>
+              <div v-else class="dashboard-meta-value text-slate-400">暂无链接</div>
+              <p v-if="updateCheck.tutorialActionError" class="mt-0.5 truncate text-[10px] text-red-600">
+                {{ updateCheck.tutorialActionError }}
+              </p>
+            </div>
+          </article>
+
+          <article class="dashboard-meta-card dashboard-meta-card--clock flex items-center gap-3 p-3">
+            <span class="dashboard-meta-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="dashboard-meta-label">当前时间</div>
+              <div class="dashboard-meta-value dashboard-meta-value--mono">{{ clockText }}</div>
+            </div>
+          </article>
+        </div>
+      </aside>
     </div>
-
-    <section class="surface-panel dashboard-shortcuts-panel flex min-h-0 shrink-0 flex-col p-3 lg:p-4">
-      <div class="subsystem-section-header mb-3 flex items-center gap-2">
-        <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
-        <span class="text-[11px] text-slate-400">一键直达核心业务</span>
-      </div>
-
-      <div
-        data-testid="dashboard-shortcuts"
-        class="dashboard-shortcuts-grid subsystem-summary-strip grid grid-cols-2 gap-x-4 gap-y-3 sm:gap-x-5 sm:gap-y-4 lg:gap-y-5"
-      >
-        <RouterLink
-          v-for="item in quickLinks"
-          :key="item.title"
-          :to="item.to"
-          class="quick-link quick-link-compact surface-panel-strong dashboard-shortcut group relative flex h-full items-center gap-3 overflow-hidden sm:gap-3"
-          :class="shortcutClass[item.tone]"
-        >
-          <div class="dashboard-shortcut-icon" aria-hidden="true">
-            <AppNavIcon :name="item.icon" icon-class="h-[18px] w-[18px]" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <h4 class="text-[13px] font-semibold text-slate-900">{{ item.title }}</h4>
-            <p class="mt-0.5 truncate text-[11px] leading-4 text-slate-500">{{ item.description }}</p>
-          </div>
-          <div class="dashboard-shortcut-arrow" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5">
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-          </div>
-        </RouterLink>
-      </div>
-    </section>
-
-    <!-- 底部元数据卡片：版本 / 作者微信 / 查看教程 / 当前时间 -->
-    <section
-      data-testid="dashboard-meta-cards"
-      class="dashboard-meta-cards grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-app"
-      aria-label="运行时元数据"
-    >
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--version flex items-center gap-3 p-3 lg:p-4">
-        <span class="dashboard-meta-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-            <path d="M12 2 4 7v10l8 5 8-5V7z" />
-            <path d="M12 22V12" />
-            <path d="m4 7 8 5 8-5" />
-          </svg>
-        </span>
-        <div class="min-w-0 flex-1">
-          <div class="dashboard-meta-label">版本</div>
-          <button
-            v-if="updateCheck.hasUpdateAvailable"
-            type="button"
-            data-testid="dashboard-update-hint"
-            class="dashboard-meta-value dashboard-meta-update w-full cursor-pointer truncate text-left hover:underline"
-            :title="updateCheck.downloadActionError || `当前 v${appStore.appVersion} · 打开下载页`"
-            @click="handleOpenDownloadUrl"
-          >
-            有新版本 v{{ updateCheck.latestInfo?.version }}
-          </button>
-          <div v-else class="dashboard-meta-value">v{{ appStore.appVersion }}</div>
-        </div>
-      </article>
-
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--author flex items-center gap-3 p-3 lg:p-4">
-        <span class="dashboard-meta-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </span>
-        <div class="min-w-0 flex-1">
-          <div class="dashboard-meta-label">作者微信</div>
-          <div class="dashboard-meta-value dashboard-meta-value--mono">{{ AUTHOR_WECHAT }}</div>
-        </div>
-      </article>
-
-      <article
-        class="surface-panel dashboard-meta-card dashboard-meta-card--tutorial flex items-center gap-3 p-3 lg:p-4"
-        data-testid="dashboard-meta-tutorial"
-      >
-        <span class="dashboard-meta-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            <path d="M8 7h8" />
-            <path d="M8 11h6" />
-          </svg>
-        </span>
-        <div class="min-w-0 flex-1">
-          <div class="dashboard-meta-label">查看教程</div>
-          <button
-            v-if="hasTutorialUrl"
-            type="button"
-            class="dashboard-meta-value w-full cursor-pointer truncate text-left hover:underline"
-            :title="updateCheck.tutorialActionError || '在浏览器中打开'"
-            @click="handleOpenTutorialUrl"
-          >
-            点击打开
-          </button>
-          <div v-else class="dashboard-meta-value text-slate-400">暂无链接</div>
-          <p v-if="updateCheck.tutorialActionError" class="mt-0.5 truncate text-[10px] text-red-600">
-            {{ updateCheck.tutorialActionError }}
-          </p>
-        </div>
-      </article>
-
-      <article class="surface-panel dashboard-meta-card dashboard-meta-card--clock flex items-center gap-3 p-3 lg:p-4">
-        <span class="dashboard-meta-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3 2" />
-          </svg>
-        </span>
-        <div class="min-w-0 flex-1">
-          <div class="dashboard-meta-label">当前时间</div>
-          <div class="dashboard-meta-value dashboard-meta-value--mono">{{ clockText }}</div>
-        </div>
-      </article>
-    </section>
 
   </div>
 </template>

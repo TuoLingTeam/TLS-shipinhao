@@ -11,17 +11,121 @@
  * / delivery）目前在 main.css 中穿插分布较广，强行拆分会打乱 cascade，暂保留。
  */
 
-/* 仪表盘三组卡片固定高度变量：集中此处便于调整阶梯节奏。
- * metric 8rem / shortcut 5.5rem / meta 6.5rem。
- *
- * 2026-04 调整：原 shortcut 7rem 内容仅图标 + 标题 + 描述 + 箭头偏空洞；
- * 原 meta 5rem 让仪表盘底部出现 ~1.5rem 留白。重新分配：shortcut 收 1.5rem，
- * meta 加 1.5rem，整体页面更贴底，视觉层级仍然 metric ＞ meta ＞ shortcut。
- */
+/* 仪表盘卡片高度变量：缓存指标承担主信息密度，快捷入口次之，右侧运行信息更紧凑。 */
 :root {
-  --dashboard-card-h-metric: 8rem;
-  --dashboard-card-h-shortcut: 5.5rem;
-  --dashboard-card-h-meta: 6.5rem;
+  --dashboard-card-h-metric: 5.85rem;
+  --dashboard-card-h-shortcut: 4.55rem;
+  --dashboard-card-h-meta: 3.65rem;
+}
+
+.dashboard-view {
+  gap: 0.65rem !important;
+}
+
+.dashboard-hero {
+  padding: 0.82rem 1rem !important;
+}
+
+.dashboard-hero h2 {
+  font-size: clamp(1.18rem, 1.25vw + 0.85rem, 1.5rem) !important;
+  line-height: 1.12;
+}
+
+.dashboard-hero .card-eyebrow {
+  font-size: 0.72rem;
+}
+
+.dashboard-hero .text-xs {
+  font-size: 0.78rem !important;
+}
+
+.dashboard-content-grid {
+  align-items: start;
+  gap: 0.65rem !important;
+}
+
+.dashboard-primary-stack {
+  min-width: 0;
+  gap: 0.65rem !important;
+}
+
+.dashboard-cache-panel {
+  padding: 0.78rem 0.9rem !important;
+  background:
+    radial-gradient(circle at 96% 0%, rgba(187, 247, 208, 0.34), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(247, 255, 251, 0.94) 100%);
+}
+
+.dashboard-panel-heading {
+  position: relative;
+  margin-bottom: 0.55rem !important;
+}
+
+.dashboard-panel-heading h3 {
+  margin-top: 0.2rem !important;
+  font-size: 0.92rem;
+  line-height: 1.15;
+}
+
+.dashboard-panel-note {
+  padding: 0.22rem 0.62rem !important;
+  font-size: 0.68rem !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.dashboard-side-rail {
+  position: relative;
+  overflow: hidden;
+  padding: 0.78rem 0.9rem !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(186, 230, 253, 0.28), transparent 36%),
+    radial-gradient(circle at 0% 100%, rgba(209, 250, 229, 0.42), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.93));
+}
+
+.dashboard-side-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.dashboard-side-rail-head {
+  position: relative;
+  margin-bottom: 0.55rem !important;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+}
+
+.dashboard-side-rail-head h3 {
+  margin-top: 0.18rem !important;
+  font-size: 0.86rem;
+  line-height: 1.12;
+}
+
+.dashboard-side-rail-head p {
+  margin-top: 0.18rem !important;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.dashboard-meta-list {
+  position: relative;
+  gap: 0.5rem !important;
+}
+
+@media (max-width: 1279.98px) {
+  .dashboard-meta-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .dashboard-meta-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* 仪表盘：hero 右侧状态 pill（授权/Cookie/缓存健康速览） */
@@ -80,44 +184,56 @@
     border-color var(--motion-mid) ease;
   border-top: 3px solid transparent;
   height: var(--dashboard-card-h-metric);
+  min-height: var(--dashboard-card-h-metric) !important;
+  padding: 0.72rem 0.82rem !important;
   justify-content: space-between;
   background:
-    radial-gradient(circle at 92% 8%, rgba(187, 247, 208, 0.26), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(187, 247, 208, 0.3), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 255, 252, 0.94));
+}
+
+.dashboard-metric-card--today {
+  background:
+    radial-gradient(circle at 88% 0%, rgba(52, 211, 153, 0.22), transparent 38%),
+    linear-gradient(180deg, rgba(240, 253, 244, 0.98), rgba(255, 255, 255, 0.95));
+  box-shadow:
+    0 20px 46px -34px rgba(5, 150, 105, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 /* 较历史 compact 卡更「撑满」：控制主数字与辅文尺寸，避免沿用 .metric-value 2rem 在 5 列下过爆 */
 .dashboard-metric-tile .dashboard-metric-value.metric-value {
   margin-top: 0;
-  font-size: clamp(1.32rem, 0.35vw + 1.05rem, 1.72rem);
+  font-size: clamp(1.18rem, 0.25vw + 1rem, 1.45rem);
   line-height: 1.1;
   letter-spacing: -0.035em;
 }
 
 .dashboard-metric-tile .dashboard-metric-hint.metric-hint {
   margin-top: 0;
-  font-size: 0.76rem;
-  line-height: 1.42;
+  font-size: 0.7rem;
+  line-height: 1.28;
   color: var(--color-neutral-text);
 }
 
 .dashboard-metric-tile .dashboard-metric-label.metric-label {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
 }
 
 @media (min-width: 1024px) {
   .dashboard-metric-tile .dashboard-metric-label.metric-label {
-    font-size: 0.82rem;
+    font-size: 0.76rem;
   }
 }
 
 .dashboard-metric-badge {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
+  padding: 0.15rem 0.5rem !important;
 }
 
 @media (min-width: 640px) {
   .dashboard-metric-badge {
-    font-size: 0.7rem;
+    font-size: 0.66rem;
   }
 }
 
@@ -144,28 +260,36 @@
   border-top-color: rgba(148, 163, 184, 0.45);
 }
 
-/* 仪表盘底部：运行时元数据 4 卡片（版本 / 作者 / 会话时长 / 当前时间）
-   与上方业务域 tiles / shortcuts 解耦，纯元数据信息。
-   独立一行，shrink-0，不参与 flex-1 争夺；
-   视觉深度略弱于 shortcut / metric：不抢焦点。 */
+.dashboard-metric-card--today {
+  border-top-color: rgba(5, 150, 105, 0.78);
+}
+
+/* 仪表盘右侧：运行时元数据 4 卡片（版本 / 作者 / 教程 / 当前时间）
+   与主流程解耦，降低低频信息权重，避免占用底部整排空间。 */
 .dashboard-meta-card {
-  border-top: 3px solid transparent;
+  position: relative;
+  border: 1px solid rgba(226, 232, 240, 0.84);
+  border-left: 3px solid transparent;
+  border-radius: 14px;
   transition:
     transform var(--motion-mid) ease,
     box-shadow var(--motion-base) ease,
     border-color var(--motion-base) ease;
   height: var(--dashboard-card-h-meta);
+  padding: 0.48rem 0.62rem !important;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.9));
 }
 
 .dashboard-meta-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px -22px rgba(15, 23, 42, 0.22);
+  box-shadow:
+    0 14px 30px -24px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .dashboard-meta-card--version {
-  border-top-color: rgba(5, 150, 105, 0.55);
+  border-left-color: rgba(5, 150, 105, 0.58);
 }
 
 /* 版本卡出现「可更新」副文案时避免固定 height 裁切；其余 meta 卡高度不变 */
@@ -175,24 +299,24 @@
 }
 
 .dashboard-meta-card--author {
-  border-top-color: rgba(148, 163, 184, 0.55);
+  border-left-color: rgba(148, 163, 184, 0.58);
 }
 
 .dashboard-meta-card--tutorial {
-  border-top-color: rgba(56, 189, 248, 0.55);
+  border-left-color: rgba(56, 189, 248, 0.6);
 }
 
 .dashboard-meta-card--clock {
-  border-top-color: rgba(56, 189, 248, 0.6);
+  border-left-color: rgba(56, 189, 248, 0.62);
 }
 
 .dashboard-meta-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 10px;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 9px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.9) 100%);
   color: #475569;
   box-shadow: 0 2px 8px -6px rgba(15, 23, 42, 0.18);
@@ -215,7 +339,7 @@
 }
 
 .dashboard-meta-label {
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   color: #64748b;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -223,8 +347,8 @@
 }
 
 .dashboard-meta-value {
-  margin-top: 0.15rem;
-  font-size: 0.92rem;
+  margin-top: 0.08rem;
+  font-size: 0.78rem;
   color: #0f172a;
   font-weight: 700;
   letter-spacing: -0.005em;
@@ -236,14 +360,31 @@
 
 .dashboard-meta-value--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
 }
 
-/* 仪表盘：快捷入口 2x2 卡片网格。
- * 统一卡高策略下不再用 1fr 动态分配行高，rows 按卡片固定高度自然展开。
+/* 仪表盘：快捷入口 1x4 卡片网格。
+ * 一行展示 4 个核心入口，减少主流程区纵向高度。
  */
 .dashboard-shortcuts-grid {
-  grid-template-rows: repeat(2, auto);
+  grid-template-rows: auto;
+}
+
+.dashboard-shortcuts-panel {
+  padding: 0.78rem 0.9rem !important;
+}
+
+.dashboard-shortcuts-panel .subsystem-section-header {
+  margin-bottom: 0.55rem !important;
+}
+
+.dashboard-shortcuts-panel .subsystem-section-header h3 {
+  font-size: 0.88rem;
+  line-height: 1.15;
+}
+
+.dashboard-shortcuts-panel .subsystem-section-header span {
+  font-size: 0.68rem;
 }
 
 /* 仪表盘：四个快捷入口，按业务域给图标上不同配色。
@@ -251,11 +392,21 @@
  */
 .dashboard-shortcut {
   height: var(--dashboard-card-h-shortcut);
-  padding: 0.5rem 0.7rem;
+  padding: 0.48rem 0.62rem;
   transition:
     transform var(--motion-fast) ease,
     box-shadow var(--motion-mid) ease,
     border-color var(--motion-mid) ease;
+}
+
+.dashboard-shortcut h4 {
+  font-size: 0.78rem;
+  line-height: 1.15;
+}
+
+.dashboard-shortcut p {
+  font-size: 0.66rem;
+  line-height: 1.15;
 }
 
 .dashboard-shortcut:hover {
@@ -267,10 +418,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 1.9rem;
+  height: 1.9rem;
   flex-shrink: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   color: white;
   transition: transform var(--motion-mid) ease, box-shadow 250ms ease;
 }
@@ -283,8 +434,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   flex-shrink: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.82);

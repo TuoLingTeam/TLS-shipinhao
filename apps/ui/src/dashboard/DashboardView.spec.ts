@@ -123,7 +123,7 @@ describe("DashboardView", () => {
     vi.useRealTimers();
   });
 
-  it("uses a single-row metrics strip on desktop with enlarged metric tiles", async () => {
+  it("uses a grouped dashboard layout with cache metrics and runtime rail", async () => {
     const wrapper = mount(DashboardView, {
       global: {
         plugins: [pinia],
@@ -139,8 +139,15 @@ describe("DashboardView", () => {
     const metrics = wrapper.get('[data-testid="dashboard-metrics"]');
 
     expect(metrics.classes()).toContain("xl:grid-cols-4");
+    expect(wrapper.find(".dashboard-content-grid").exists()).toBe(true);
+    expect(wrapper.find(".dashboard-cache-panel").exists()).toBe(true);
+    expect(wrapper.find(".dashboard-side-rail").exists()).toBe(true);
+    expect(wrapper.get('[data-testid="dashboard-meta-cards"]').classes()).toContain("dashboard-side-rail");
     expect(wrapper.findAll('[data-testid="dashboard-metric-tile"]')).toHaveLength(4);
     expect(wrapper.findAll(".dashboard-metric-tile")).toHaveLength(4);
+    expect(wrapper.find(".dashboard-metric-card--today").exists()).toBe(true);
+    expect(wrapper.text()).toContain("订单缓存概览");
+    expect(wrapper.text()).toContain("运行信息");
     expect(wrapper.text()).toContain("今天缓存");
     expect(wrapper.text()).toContain("昨天缓存");
     expect(wrapper.text()).toContain("近 7 天缓存");
@@ -154,6 +161,7 @@ describe("DashboardView", () => {
     expect(wrapper.text()).toContain("4.22 00:00:00-4.28 23:59:59");
     expect(wrapper.text()).toContain("3.30 00:00:00-4.28 23:59:59");
     expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("subsystem-summary-strip");
+    expect(wrapper.get('[data-testid="dashboard-shortcuts"]').classes()).toContain("grid-cols-4");
     expect(wrapper.findAll(".quick-link-compact")).toHaveLength(4);
     expect(wrapper.find(".subsystem-chipbar").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("TLS 工作台");
