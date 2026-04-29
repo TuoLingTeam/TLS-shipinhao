@@ -188,6 +188,63 @@ where
         Ok((total_written, warnings, retention, end_timestamp))
     }
 
+    /// 按用户给定的目标时间窗精确补齐缓存缺口。
+    ///
+    /// 与 [`refresh_recent_incremental_cache`] 的固定「最近几天 + planner 状态推算」
+    /// 不同：本方法接收一对 `(target_start, target_end)`，调 SQLite
+    /// `get_missing_segments` 得到该窗口内的实际缺口段，逐段调 `sync_range`
+    /// 拉取入库。适用于「用户在评价管理页选了任意一段时间，需要保证该范围
+    /// 内订单缓存零缺口后再做匹配」场景。
+    ///
+    /// 返回值：
+    /// - `usize`：本次新写入订单数
+    /// - `Vec<String>`：本次拉取过程中累积的 warnings
+    /// - `(i64, i64)`：建议下游 `fetch_orders_in_range` 使用的候选窗口
+    ///   `(candidate_start, candidate_end)`：
+    ///   - `candidate_start = min(retention_start, target_start)`，扩展到 retention 起点，
+    ///     允许匹配候选包含早于 query 的老订单（评价时间可能远后于订单创建）
+    ///   - `candidate_end = target_end`，原样保留以包含「今天」等现 sync_now 截断后的范围
+    pub fn ensure_window_covered(
+        &mut self,
+        target_start: i64,
+        target_end: i64,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<(usize, Vec<String>, i64, i64)> {
+        self.repository.initialize()?;
+        if self.stopped || target_start <= 0 || target_end <= 0 || target_start > target_end {
+            return Ok((0, Vec::new(), target_start, target_end));
+        }
+
+        let gaps = self.repository.get_missing_segments(
+            ORDER_CACHE_SCOPE,
+            target_start,
+            target_end,
+            MERGE_TOLERANCE_SECONDS,
+            MIN_GAP_WIDTH_SECONDS,
+        )?;
+
+        let mut total_written = 0;
+        let mut warnings = Vec::new();
+        for (gap_start, gap_end) in gaps {
+            if self.stopped {
+                break;
+            }
+            let (written, gap_warnings) =
+                self.sync_range(gap_start, gap_end, "window_fill", now)?;
+            total_written += written;
+            warnings.extend(gap_warnings);
+        }
+
+        let now_ts = sync_now(now);
+        let cutoff = retention_start(now_ts);
+        let _ = self
+            .repository
+            .delete_older_than(ORDER_CACHE_SCOPE, cutoff)?;
+
+        let candidate_start = cutoff.min(target_start);
+        Ok((total_written, warnings, candidate_start, target_end))
+    }
+
     pub fn ensure_recent_cache(
         &mut self,
         now: Option<chrono::DateTime<chrono::Utc>>,

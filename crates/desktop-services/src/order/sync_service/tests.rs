@@ -261,6 +261,105 @@ fn review_incremental_cache_bootstrap_only_fetches_recent_incremental_window() {
 }
 
 #[test]
+fn ensure_window_covered_returns_zero_for_invalid_range() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("order_cache.sqlite3");
+    let finder = FakeFinder::with_responses(vec![]);
+    let repo = open_shared_repo(&path);
+    let mut service = OrderSyncService::new(finder, repo);
+    let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+
+    let (written, warnings, candidate_start, candidate_end) = service
+        .ensure_window_covered(0, 1_000_000, Some(now))
+        .unwrap();
+    assert_eq!(written, 0);
+    assert!(warnings.is_empty());
+    assert_eq!(candidate_start, 0);
+    assert_eq!(candidate_end, 1_000_000);
+
+    let (written, _, _, _) = service
+        .ensure_window_covered(2_000_000, 1_000_000, Some(now))
+        .unwrap();
+    assert_eq!(written, 0);
+    assert!(
+        service.finder.calls.is_empty(),
+        "无效窗口不应触发任何 finder 调用"
+    );
+}
+
+#[test]
+fn ensure_window_covered_fills_missing_segments_when_cache_empty() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("order_cache.sqlite3");
+    let finder = FakeFinder::with_responses(vec![CacheFetchResult {
+        windows: vec![sample_window(
+            "window-fill",
+            3_456_000,
+            3_542_399,
+            vec![sample_order("o-window-fill", 3_500_000)],
+        )],
+        warnings: vec!["window_fill_warn".into()],
+    }]);
+    let repo = open_shared_repo(&path);
+    let mut service = OrderSyncService::new(finder, repo);
+    let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+
+    let (written, warnings, candidate_start, candidate_end) = service
+        .ensure_window_covered(3_456_000, 3_542_399, Some(now))
+        .unwrap();
+    assert_eq!(written, 1);
+    assert_eq!(warnings, vec!["window_fill_warn"]);
+    assert_eq!(candidate_end, 3_542_399);
+    assert!(
+        candidate_start <= 3_456_000,
+        "candidate_start 应不晚于 target_start，实际 {candidate_start}"
+    );
+    assert_eq!(service.finder.calls.len(), 1);
+    let state = service
+        .repository
+        .get_state(ORDER_CACHE_SCOPE)
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.last_mode, "window_fill");
+    assert!(service
+        .repository
+        .fetch_order("o-window-fill")
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn ensure_window_covered_skips_fetch_when_segment_already_covered() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("order_cache.sqlite3");
+    let finder = FakeFinder::with_responses(vec![]);
+    let repo = open_shared_repo(&path);
+    repo.initialize().unwrap();
+    repo.mark_segment_complete(ORDER_CACHE_SCOPE, 3_456_000, 3_542_399)
+        .unwrap();
+    let mut service = OrderSyncService::new(finder, repo);
+    let now = DateTime::parse_from_rfc3339("1970-02-10T00:35:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+
+    let (written, warnings, _, candidate_end) = service
+        .ensure_window_covered(3_456_000, 3_542_399, Some(now))
+        .unwrap();
+    assert_eq!(written, 0, "窗口已完全覆盖时不应再发 finder 请求");
+    assert!(warnings.is_empty());
+    assert_eq!(candidate_end, 3_542_399);
+    assert!(
+        service.finder.calls.is_empty(),
+        "已 covered 不应触发 fetch，实际调用 {} 次",
+        service.finder.calls.len()
+    );
+}
+
+#[test]
 fn ensure_orders_reads_recent_cache_after_bootstrap() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("order_cache.sqlite3");
