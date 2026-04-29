@@ -21,7 +21,7 @@ onMounted(() => {
       <slot />
       <AppHeader />
     <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pr-0.5 sm:pr-1">
-      <div class="app-page-shell mx-auto flex w-full min-w-0 max-w-[1480px] flex-1 min-h-0 flex-col gap-app pb-4 sm:pb-6 lg:pb-8">
+      <div class="app-page-shell mx-auto flex w-full min-w-0 max-w-[1480px] flex-1 min-h-0 flex-col pb-4 sm:pb-6 lg:pb-8">
         <RouterView />
       </div>
     </main>
