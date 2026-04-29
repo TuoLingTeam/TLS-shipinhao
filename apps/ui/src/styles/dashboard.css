@@ -12,11 +12,16 @@
  */
 
 /* 仪表盘三组卡片固定高度变量：集中此处便于调整阶梯节奏。
- * metric 8rem / shortcut 7rem / meta 5rem，相邻档位 1–2rem 递减，视觉层级分明 */
+ * metric 8rem / shortcut 5.5rem / meta 6.5rem。
+ *
+ * 2026-04 调整：原 shortcut 7rem 内容仅图标 + 标题 + 描述 + 箭头偏空洞；
+ * 原 meta 5rem 让仪表盘底部出现 ~1.5rem 留白。重新分配：shortcut 收 1.5rem，
+ * meta 加 1.5rem，整体页面更贴底，视觉层级仍然 metric ＞ meta ＞ shortcut。
+ */
 :root {
   --dashboard-card-h-metric: 8rem;
-  --dashboard-card-h-shortcut: 7rem;
-  --dashboard-card-h-meta: 5rem;
+  --dashboard-card-h-shortcut: 5.5rem;
+  --dashboard-card-h-meta: 6.5rem;
 }
 
 /* 仪表盘：hero 右侧状态 pill（授权/Cookie/缓存健康速览） */
