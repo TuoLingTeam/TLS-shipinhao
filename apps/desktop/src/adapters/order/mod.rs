@@ -1,12 +1,14 @@
 //! 微信小店订单列表 `orderSearch`，请求体与 `review_matcher._build_order_search_payload` 对齐。
 
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
-use desktop_services::order_cache_repository::{
+use desktop::domain::OrderCacheEntry;
+use desktop::services::order_cache_repository::{
     is_cancelled_order_status, CacheOrderProduct, CacheOrderRecord, CANCELLED_ORDER_STATUS,
 };
-use desktop_services::order_fetcher::{backoff_seconds, is_api_rate_limited, is_http_rate_limited};
-use desktop_services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
-use domain_core::OrderCacheEntry;
+use desktop::services::order_fetcher::{
+    backoff_seconds, is_api_rate_limited, is_http_rate_limited,
+};
+use desktop::services::order_sync_service::{CacheFetchResult, CacheOrderFinder, SyncWindowOrders};
 use reqwest::header::HeaderMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;

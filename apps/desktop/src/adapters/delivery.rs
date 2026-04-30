@@ -1,12 +1,12 @@
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use async_trait::async_trait;
-use desktop_services::delivery_batch_runner::BatchDeliveryGateway;
-use desktop_services::delivery_update::{
+use desktop::domain::{DeliveryUpdateRequest, DeliveryUpdateResult};
+use desktop::services::delivery_batch_runner::BatchDeliveryGateway;
+use desktop::services::delivery_update::{
     build_raw_update_delivery_payload, determine_delivery_override_from_raw_info,
     is_delivery_mismatch_error,
 };
-use desktop_services::DeliveryGateway;
-use domain_core::{DeliveryUpdateRequest, DeliveryUpdateResult};
+use desktop::services::DeliveryGateway;
 use serde_json::Value;
 
 /// 发货链路相关 URL：obfstr 编译期加密
@@ -128,7 +128,7 @@ impl HttpDeliveryGateway {
         delivery_override: Option<(&str, &str)>,
     ) -> anyhow::Result<()> {
         let delivery_override = delivery_override.map(|(delivery_id, delivery_name)| {
-            desktop_services::delivery_update::DeliveryOverride {
+            desktop::services::delivery_update::DeliveryOverride {
                 delivery_id: delivery_id.to_string(),
                 delivery_name: delivery_name.to_string(),
             }

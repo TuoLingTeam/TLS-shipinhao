@@ -123,7 +123,7 @@ pub fn backoff_seconds(attempt: u32) -> u64 {
 
 /// 判断 HTTP 响应状态是否为平台频率限制。
 ///
-/// 用 `u16` 而不是 `reqwest::StatusCode`，避免 `desktop-services` 被迫依赖 reqwest；
+/// 用 `u16` 而不是 `reqwest::StatusCode`，避免业务判断与 reqwest 类型强绑定；
 /// 业务层通常写：`if is_http_rate_limited(response.status().as_u16()) { ... }`。
 pub fn is_http_rate_limited(status_code: u16) -> bool {
     status_code == 429

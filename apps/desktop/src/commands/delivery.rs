@@ -8,11 +8,11 @@ use crate::commands::shared::require_cookie_credentials;
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_BATCH_DELIVERY;
-use desktop_services::delivery_batch_runner::{
+use desktop::domain::DeliveryUpdateResult;
+use desktop::services::delivery_batch_runner::{
     run_batch_delivery_with_hooks, BatchDeliveryItem, BatchDeliveryReport,
     BatchDeliveryRuntimeGuard, BatchDeliveryStepResult,
 };
-use domain_core::DeliveryUpdateResult;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn update_delivery(
@@ -27,7 +27,7 @@ pub async fn update_delivery(
 
     let gateway =
         HttpDeliveryGateway::new_with_grant(creds.cookie, creds.magic, Some(grant.grant_id));
-    let request = domain_core::DeliveryUpdateRequest {
+    let request = desktop::domain::DeliveryUpdateRequest {
         order_id,
         tracking_number,
         carrier_code,

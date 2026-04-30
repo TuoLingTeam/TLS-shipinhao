@@ -5,15 +5,15 @@ use crate::commands::shared::{current_store_paths, require_store_runtime_context
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::LICENSE_TASK_CACHE_MANAGE;
-use desktop_services::day_window::{
+use desktop::domain::{OrderCacheEntry, TimeWindow};
+use desktop::services::day_window::{
     end_of_day_timestamp, recent_day_range_timestamps, start_of_day_timestamp,
 };
-use desktop_services::order_cache_repository::OrderCacheRepository;
-use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
-use desktop_services::order_sync_service::{
+use desktop::services::order_cache_repository::OrderCacheRepository;
+use desktop::services::order_cache_storage::SqliteOrderCacheRepository;
+use desktop::services::order_sync_service::{
     OrderSyncService, MERGE_TOLERANCE_SECONDS, MIN_GAP_WIDTH_SECONDS, ORDER_CACHE_SCOPE,
 };
-use domain_core::{OrderCacheEntry, TimeWindow};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
@@ -221,7 +221,7 @@ fn write_lightweight_recent_cache(
     data_dir: &Path,
     rich_cache_path: &Path,
 ) -> anyhow::Result<Vec<OrderCacheEntry>> {
-    use desktop_services::OrderCacheStore;
+    use desktop::services::OrderCacheStore;
 
     let status_window = recent_window();
     let repository = SqliteOrderCacheRepository::open(rich_cache_path)?;
@@ -257,7 +257,7 @@ pub async fn load_order_cache(
     let store_paths = current_store_paths(&state).await;
     let data_dir = store_paths.data_dir;
     tokio::task::spawn_blocking(move || {
-        use desktop_services::OrderCacheStore;
+        use desktop::services::OrderCacheStore;
         let cache = SqliteOrderCache::new(data_dir);
         cache.load_recent_orders(&window)
     })

@@ -17,7 +17,7 @@ pub enum TaskKind {
 impl TaskKind {
     /// 枚举对应的 canonical 字符串。与 `api_contracts::LICENSE_TASK_*` 常量字面量一致，
     /// `#[serde(rename_all = "snake_case")]` 的序列化结果也相同。改任一侧都会破坏
-    /// 已发放的 Lease / task_policy 字符串匹配，因此 `domain-core` 单测与 api-contracts
+    /// 已发放的 Lease / task_policy 字符串匹配，因此 domain 模块单测与 api-contracts
     /// 常量通过 dev-dep 锁定等价关系。
     pub const fn as_str(&self) -> &'static str {
         match self {

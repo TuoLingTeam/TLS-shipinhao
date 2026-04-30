@@ -11,7 +11,7 @@ workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
-desktop-services = { path = "../../apps/desktop/services" }
+desktop = { path = "../../apps/desktop" }
 serde.workspace = true
 build-tools = { path = "../build-tools" }
 

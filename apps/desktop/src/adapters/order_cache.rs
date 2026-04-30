@@ -1,5 +1,5 @@
-use desktop_services::OrderCacheStore;
-use domain_core::{OrderCacheEntry, TimeWindow};
+use desktop::domain::{OrderCacheEntry, TimeWindow};
+use desktop::services::OrderCacheStore;
 use rusqlite::{params, Connection};
 use std::path::PathBuf;
 

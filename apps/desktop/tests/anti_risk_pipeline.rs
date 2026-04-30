@@ -3,11 +3,11 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use desktop_services::order_fetcher::{
+use desktop::services::order_fetcher::{
     classify_rate_limit, is_risk_control_result, retry_on_rate_limit, FetchError, LimitOutcome,
     ProgressCallback,
 };
-use desktop_services::order_fetcher_risk::{
+use desktop::services::order_fetcher_risk::{
     run_with_risk_fallback, FallbackOutcome, NormalOutcome, RiskOutcome,
 };
 use serde_json::{json, Value};

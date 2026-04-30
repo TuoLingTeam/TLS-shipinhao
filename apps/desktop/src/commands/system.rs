@@ -1,5 +1,5 @@
-use desktop_services::parse_cookie_profile;
-use desktop_services::update_service::{fetch_latest_version_info, UpdateInfo};
+use desktop::services::parse_cookie_profile;
+use desktop::services::update_service::{fetch_latest_version_info, UpdateInfo};
 use reqwest::Url;
 use security_core::get_device_id;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -24,7 +24,7 @@ pub async fn check_for_update() -> Result<UpdateInfo, AppError> {
 
 async fn identify_store_from_cookie(
     cookie_header: &str,
-) -> Result<(desktop_services::CookieProfile, StoreMeta), AppError> {
+) -> Result<(desktop::services::CookieProfile, StoreMeta), AppError> {
     let profile = parse_cookie_profile(cookie_header.trim());
     if profile.cookie_header.is_empty() {
         return Err(AppError::Message("请粘贴完整 Cookie 后再保存".to_string()));
@@ -50,7 +50,7 @@ async fn identify_store_from_cookie(
 async fn activate_store_cookie(
     state: &AppState,
     store: StoreMeta,
-    profile: desktop_services::CookieProfile,
+    profile: desktop::services::CookieProfile,
 ) -> Result<(std::path::PathBuf, bool), AppError> {
     let cookie_path = state::store_cookie_path(&state.app_home_dir, &store.store_id);
     state::save_cookie_to_file(&cookie_path, &profile.cookie_header)

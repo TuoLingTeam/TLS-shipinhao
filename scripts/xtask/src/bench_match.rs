@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Context, Result};
-use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
-use desktop_services::review_candidate_scoring::{
+use desktop::services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
+use desktop::services::review_candidate_scoring::{
     score_candidate_order, CandidateOrder, EvaluationMatchContext,
 };
-use desktop_services::review_index::{build_product_sku_index, collect_candidate_orders};
+use desktop::services::review_index::{build_product_sku_index, collect_candidate_orders};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -254,7 +254,7 @@ fn collect_rust_top_candidates(
 
 fn build_diff_row(
     python: &PythonMatchResult,
-    rust: &desktop_services::review_batch_match::MatchedEvaluationResult,
+    rust: &desktop::services::review_batch_match::MatchedEvaluationResult,
     rust_top_candidates: &[PythonTopCandidate],
 ) -> BenchmarkDiffRow {
     let rust_strategy = rust.match_strategy.map(match_strategy_to_string);
@@ -338,18 +338,18 @@ fn strategy_rank(value: &str) -> i32 {
 }
 
 fn match_strategy_to_string(
-    strategy: desktop_services::review_match_flow::MatchStrategy,
+    strategy: desktop::services::review_match_flow::MatchStrategy,
 ) -> String {
     match strategy {
-        desktop_services::review_match_flow::MatchStrategy::ExactMatch => "exact_match".into(),
-        desktop_services::review_match_flow::MatchStrategy::HighConfidence => {
+        desktop::services::review_match_flow::MatchStrategy::ExactMatch => "exact_match".into(),
+        desktop::services::review_match_flow::MatchStrategy::HighConfidence => {
             "high_confidence".into()
         }
-        desktop_services::review_match_flow::MatchStrategy::ProbableMatch => {
+        desktop::services::review_match_flow::MatchStrategy::ProbableMatch => {
             "probable_match".into()
         }
-        desktop_services::review_match_flow::MatchStrategy::Fallback => "fallback".into(),
-        desktop_services::review_match_flow::MatchStrategy::None => "none".into(),
+        desktop::services::review_match_flow::MatchStrategy::Fallback => "fallback".into(),
+        desktop::services::review_match_flow::MatchStrategy::None => "none".into(),
     }
 }
 

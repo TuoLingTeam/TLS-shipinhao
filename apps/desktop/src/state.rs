@@ -7,7 +7,7 @@ use base64::Engine;
 
 use crate::adapters::secure_storage::{init_default_store, SecretStore, StorageError};
 use api_contracts::{LicenseState, RuntimeState};
-use desktop_services::{parse_cookie_profile, CookieProfile};
+use desktop::services::{parse_cookie_profile, CookieProfile};
 use license_service::{verify_stored_lease_local, LeaseVerifier, TaskGrantCache};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;

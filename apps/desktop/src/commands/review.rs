@@ -12,16 +12,18 @@ use crate::commands::shared::{require_cookie_credentials, require_store_runtime_
 use crate::error::AppError;
 use crate::state::AppState;
 use api_contracts::{LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND};
-use desktop_services::order_cache_repository::{CacheOrderRecord, OrderCacheRepository};
-use desktop_services::order_cache_storage::SqliteOrderCacheRepository;
-use desktop_services::order_sync_service::OrderSyncService;
-use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
-use desktop_services::review_candidate_scoring::CandidateOrder;
-use desktop_services::review_match_flow::{
+use desktop::domain::{
+    MatchSource, MatchStrategy as ApiMatchStrategy, OrderMatchResult, TimeWindow,
+};
+use desktop::services::order_cache_repository::{CacheOrderRecord, OrderCacheRepository};
+use desktop::services::order_cache_storage::SqliteOrderCacheRepository;
+use desktop::services::order_sync_service::OrderSyncService;
+use desktop::services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
+use desktop::services::review_candidate_scoring::CandidateOrder;
+use desktop::services::review_match_flow::{
     is_evaluation_replyable, reply_deadline, MatchStrategy as ServiceMatchStrategy,
 };
-use desktop_services::ReviewQuery;
-use domain_core::{MatchSource, MatchStrategy as ApiMatchStrategy, OrderMatchResult, TimeWindow};
+use desktop::services::ReviewQuery;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -483,8 +485,8 @@ pub async fn find_quality_refund_orders(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use desktop_services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
-    use desktop_services::review_batch_match::EvaluationRecord;
+    use desktop::services::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
+    use desktop::services::review_batch_match::EvaluationRecord;
 
     #[test]
     fn recent_cache_candidate_window_expands_small_review_window_to_cache_start() {
@@ -583,7 +585,10 @@ mod tests {
         assert!(results[0].matched);
         assert_eq!(results[0].order_id, "3735563912835389952");
         assert_eq!(results[0].source, MatchSource::ExactOrderId);
-        assert_eq!(results[0].strategy, domain_core::MatchStrategy::ExactMatch);
+        assert_eq!(
+            results[0].strategy,
+            desktop::domain::MatchStrategy::ExactMatch
+        );
         assert!(results[0].replyable);
         assert!(results[0].reply_deadline.is_some());
         // 主路径（nickname_index）命中：candidate_count 仅表示同昵称+SKU 的候选，
@@ -638,7 +643,10 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert!(results[0].matched);
         assert_eq!(results[0].order_id, "3735167246652299776");
-        assert_eq!(results[0].strategy, domain_core::MatchStrategy::ExactMatch);
+        assert_eq!(
+            results[0].strategy,
+            desktop::domain::MatchStrategy::ExactMatch
+        );
         assert_eq!(results[0].candidate_count, 1);
         assert_eq!(results[0].top_score, 100);
     }

@@ -1,6 +1,8 @@
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use anyhow::Context;
-use domain_core::{MatchSource, MatchStrategy, OrderMatchResult, QualityRefundInfo, TimeWindow};
+use desktop::domain::{
+    MatchSource, MatchStrategy, OrderMatchResult, QualityRefundInfo, TimeWindow,
+};
 use reqwest::header::HeaderMap;
 use serde_json::{json, Value};
 
@@ -70,7 +72,7 @@ impl HttpQualityRefundSource {
     pub async fn probe(&self) -> anyhow::Result<()> {
         use std::time::Duration;
         let probe_client =
-            desktop_services::http_client::build_desktop_http_client(Duration::from_secs(5));
+            desktop::services::http_client::build_desktop_http_client(Duration::from_secs(5));
         let headers = self.build_headers();
         let url = format!("{}?token=&lang=zh_CN", quality_refund_order_url());
         let response = probe_client
@@ -276,10 +278,10 @@ mod tests {
         assert_eq!(parsed.sku_name, "单瓶（体验装） 400*1瓶");
         assert_eq!(parsed.product_name, "仁和二硫化硒去屑洗发水");
         assert_eq!(parsed.evaluation_content, "品退原因：商品质量问题");
-        assert_eq!(parsed.strategy, domain_core::MatchStrategy::ExactMatch);
+        assert_eq!(parsed.strategy, desktop::domain::MatchStrategy::ExactMatch);
         assert_eq!(
             parsed.quality_refund_info,
-            Some(domain_core::QualityRefundInfo {
+            Some(desktop::domain::QualityRefundInfo {
                 reason: "商品质量问题".into(),
                 source: "quality_refund_api".into(),
             })

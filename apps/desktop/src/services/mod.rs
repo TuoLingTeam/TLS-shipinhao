@@ -24,11 +24,11 @@ pub use review::index as review_index;
 pub use review::match_flow as review_match_flow;
 pub use review::matcher_helpers as review_matcher_helpers;
 
-use api_contracts::Rg;
-use async_trait::async_trait;
-use domain_core::{
+use crate::domain::{
     DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow,
 };
+use api_contracts::Rg;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

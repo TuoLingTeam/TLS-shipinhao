@@ -6,7 +6,7 @@
 //!   就要同步改 4 份且容易漏。这里统一出来：
 //!
 //! - [`REQUEST_TIMEOUT_SECS`]：桌面端出站 HTTP 的统一超时
-//! - [`build_client`]：封装 `desktop_services::http_client::build_desktop_http_client`
+//! - [`build_client`]：封装 `desktop::services::http_client::build_desktop_http_client`
 //! - [`build_weixin_shop_headers`]：微信小店业务出站请求的公共 HeaderMap，`Referer` 由调用方传入
 
 use reqwest::header::{
@@ -19,7 +19,7 @@ pub(crate) const REQUEST_TIMEOUT_SECS: u64 = 30;
 
 /// 构造默认的出站 `reqwest::Client`（含 UA 策略、连接复用等）。
 pub(crate) fn build_client() -> reqwest::Client {
-    desktop_services::http_client::build_desktop_http_client(Duration::from_secs(
+    desktop::services::http_client::build_desktop_http_client(Duration::from_secs(
         REQUEST_TIMEOUT_SECS,
     ))
 }

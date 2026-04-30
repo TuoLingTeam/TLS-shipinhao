@@ -8,7 +8,7 @@ mod migration;
 mod security_event;
 mod state;
 
-use desktop_services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
+use desktop::services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
 use security_core::get_device_id;
 use state::AppState;
 use tauri::{Emitter, Manager};
@@ -16,7 +16,7 @@ use tauri::{Emitter, Manager};
 /// 初始化全局 tracing 订阅器，组合两条独立 layer：
 ///
 /// 1. **控制台 layer**：保持原行为，默认 `info` + 尊重 `RUST_LOG`
-///    （例如 `RUST_LOG=review.match.diagnostic=warn,desktop_services=info`）。
+///    （例如 `RUST_LOG=review.match.diagnostic=warn,desktop=info`）。
 ///    所有 `tracing::warn!/info!/error!` 都会走到 `cargo tauri dev` 的终端
 ///    输出里，含 HttpLicenseClient 网络层警告与评价匹配诊断。
 /// 2. **安全事件 jsonl layer**：仅过滤 `target = "security"` 的事件，

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use desktop_services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
-use desktop_services::review_candidate_scoring::CandidateOrder;
+use desktop::services::review_batch_match::{match_orders_with_evaluations, EvaluationRecord};
+use desktop::services::review_candidate_scoring::CandidateOrder;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::fs;

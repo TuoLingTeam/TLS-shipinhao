@@ -6,7 +6,7 @@
 use crate::commands::paths::{cache_data_dir_for_store, rich_order_cache_path_for_store};
 use crate::error::AppError;
 use crate::state::{AppState, CookieHealthSnapshot, StoreRegistry};
-use desktop_services::CookieProfile;
+use desktop::services::CookieProfile;
 use std::path::{Path, PathBuf};
 use tauri::State;
 

@@ -12,8 +12,6 @@ tauri-build = { workspace = true, features = [] }
 
 [dependencies]
 tauri = { workspace = true, features = [] }
-desktop-services = { path = "services" }
-domain-core = { path = "domain" }
 api-contracts = { path = "../../backend/contracts" }
 license-service = { path = "../../backend/license" }
 security_core = { path = "security" }
@@ -32,6 +30,7 @@ chrono = { workspace = true }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 rusqlite = { workspace = true }
+regex = "1"
 # B3 LeaseVerifier 哨兵需要在 release 主路径上构造 base64url(s)，因此
 # 从 dev-dependencies 提升到主依赖。版本与 license-service 系列内部使用
 # 的 base64 0.22 对齐，编译产物不会因此重复链接。

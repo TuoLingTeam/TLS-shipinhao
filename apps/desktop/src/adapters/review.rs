@@ -1,13 +1,13 @@
 use crate::adapters::common::{build_client, build_weixin_shop_headers};
 use async_trait::async_trait;
-use desktop_services::order_fetcher::{
+use desktop::domain::{MatchSource, MatchStrategy, OrderMatchResult};
+use desktop::services::order_fetcher::{
     backoff_seconds, is_api_rate_limited, is_http_rate_limited, RATE_LIMIT_RETRY_COUNT,
 };
-use desktop_services::review_batch_match::EvaluationRecord;
-use desktop_services::review_match_flow::{is_evaluation_replyable, reply_deadline};
-use desktop_services::ReviewQuery;
-use desktop_services::ReviewSource;
-use domain_core::{MatchSource, MatchStrategy, OrderMatchResult};
+use desktop::services::review_batch_match::EvaluationRecord;
+use desktop::services::review_match_flow::{is_evaluation_replyable, reply_deadline};
+use desktop::services::ReviewQuery;
+use desktop::services::ReviewSource;
 use serde_json::Value;
 use std::future::Future;
 use std::time::Duration;

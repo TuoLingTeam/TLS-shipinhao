@@ -3,7 +3,7 @@ use serde::Serialize;
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("{0}")]
-    Domain(#[from] domain_core::DomainError),
+    Domain(#[from] desktop::domain::DomainError),
 
     #[error("{0}")]
     Internal(#[from] anyhow::Error),
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn domain_variant_serializes_as_domain_error_display() {
-        let error: AppError = domain_core::DomainError::UnsupportedTaskKind.into();
+        let error: AppError = desktop::domain::DomainError::UnsupportedTaskKind.into();
         assert!(matches!(error, AppError::Domain(_)));
         let json = serde_json::to_string(&error).unwrap();
         assert_eq!(json, format!("\"{}\"", error));
@@ -310,7 +310,7 @@ mod tests {
         // Message 与 Domain 变体显示与序列化保持一致（无脱敏需要）。
         for error in [
             AppError::Message("M".into()),
-            domain_core::DomainError::UnsupportedTaskKind.into(),
+            desktop::domain::DomainError::UnsupportedTaskKind.into(),
         ] {
             let display = error.to_string();
             let json = serde_json::to_string(&error).unwrap();

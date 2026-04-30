@@ -30,9 +30,7 @@ const RUST_MEMBER_DIRS = [
   "backend/contracts",
   "backend/license",
   "backend/worker",
-  "apps/desktop/domain",
   "apps/desktop/security",
-  "apps/desktop/services",
   "scripts/build-tools",
   "scripts/xtask",
 ];
@@ -300,9 +298,9 @@ function stage_hardenRustflags() {
 [build]
 target-dir = "target"
 rustflags = [
+  "--remap-path-prefix", "${mirror}/apps/desktop/src/services/=svc/",
+  "--remap-path-prefix", "${mirror}/apps/desktop/src/domain/=dom/",
   "--remap-path-prefix", "${mirror}/apps/desktop/src=s",
-  "--remap-path-prefix", "${mirror}/apps/desktop/services/=svc/",
-  "--remap-path-prefix", "${mirror}/apps/desktop/domain/=dom/",
   "--remap-path-prefix", "${mirror}/apps/desktop/security/=sec/",
   "--remap-path-prefix", "${mirror}/backend/=b/",
   "--remap-path-prefix", "${mirror}/scripts/=x/",

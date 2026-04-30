@@ -34,8 +34,8 @@ TLS-shipinhao/
 ├── apps/                        # 应用层
 │   ├── desktop/                 # Tauri 2 桌面端
 │   │   ├── src/                 # Rust 命令、适配器、状态与迁移逻辑
-│   │   ├── services/            # 桌面业务服务（Cargo package: desktop-services）
-│   │   ├── domain/              # 桌面领域常量与规则（Cargo package: domain-core）
+│   │   │   ├── services/        # 桌面业务服务
+│   │   │   └── domain/          # 桌面领域常量与规则
 │   │   ├── security/            # 设备与安全能力（Cargo package/lib: security_core）
 │   │   ├── e2e/                 # 真 Tauri 壳 E2E
 │   │   ├── capabilities/        # Tauri capability 配置
