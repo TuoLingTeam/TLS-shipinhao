@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import AppLayout from "./layout/AppLayout.vue";
-import MigrationBanner from "./migration/MigrationBanner.vue";
+import MigrationBanner from "./shared/MigrationBanner.vue";
 import { useLayout } from "./layout/useLayout";
 import { useUiScale } from "./layout/useUiScale";
-import { useCookieHealthStore } from "./shared/cookieHealth";
-import { useStoreContextStore } from "./shared/storeContext";
-import { useUpdateCheckStore } from "./shared/updateCheck";
-import { useLicense } from "./license/useLicense";
+import { useCookieHealthStore } from "@/stores/cookieHealth";
+import { useStoreContextStore } from "@/stores/storeContext";
+import { useUpdateCheckStore } from "@/stores/updateCheck";
+import { useLicense } from "@/services/license";
 
 useUiScale();
 const { mode } = useLayout();

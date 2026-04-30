@@ -4,7 +4,7 @@ export const routes: readonly RouteRecordRaw[] = [
   {
     path: "/",
     name: "dashboard",
-    component: () => import("./dashboard/DashboardView.vue"),
+    component: () => import("@/pages/DashboardView.vue"),
   },
   // Windows 下 Tauri WebView2（Chromium）加载的入口是 "/index.html"，
   // 而 Mac WKWebView 规范化成 "/"，导致 createWebHistory 匹配不到任何路由
@@ -17,17 +17,17 @@ export const routes: readonly RouteRecordRaw[] = [
   {
     path: "/review",
     name: "review",
-    component: () => import("./review/ReviewMatchView.vue"),
+    component: () => import("@/pages/ReviewMatchView.vue"),
   },
   {
     path: "/order",
     name: "order",
-    component: () => import("./order/OrderSyncView.vue"),
+    component: () => import("@/pages/OrderSyncView.vue"),
   },
   {
     path: "/delivery",
     name: "delivery",
-    component: () => import("./delivery/DeliveryView.vue"),
+    component: () => import("@/pages/DeliveryView.vue"),
   },
   {
     path: "/license",
@@ -39,6 +39,6 @@ export const routes: readonly RouteRecordRaw[] = [
   {
     path: "/settings",
     name: "settings",
-    component: () => import("./settings/SettingsView.vue"),
+    component: () => import("@/pages/SettingsView.vue"),
   },
 ];

@@ -2,10 +2,10 @@
 import { useRoute, useRouter } from "vue-router";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
-import { useAppStore } from "../app.store";
+import { useAppStore } from "@/stores/app";
 import { useUiScale } from "../layout/useUiScale";
-import { useCookieHealthStore } from "../shared/cookieHealth";
-import { useStoreContextStore } from "../shared/storeContext";
+import { useCookieHealthStore } from "@/stores/cookieHealth";
+import { useStoreContextStore } from "@/stores/storeContext";
 import { toErrorMessage } from "../shared/toErrorMessage";
 import { useNotification } from "../shared/useNotification";
 import { buildSettingsLocation, pageMetaMap, type PageName } from "./navigation";

@@ -5,12 +5,7 @@
 //!
 //! - [`contracts`]：前后端共享 DTO、授权状态、任务白名单与签名 canonical payload。
 //! - [`license`]：Lease、本地校验、任务授权、授权记录模型。
-//! - [`messages`]：HTTP DTO 与路由枚举（`parse_route` / `WorkerRoute` /
-//!   `SignedLicenseApiResponse` 等），与外部协议一对一。
-//! - [`runtime`]：异步运行时业务层 + Cloudflare D1 仓储实现。所有
-//!   `runtime_activate / verify / refresh_lease / revoke / task_authorize /
-//!   handle_async_runtime_json` 都在这里。
-//! - `admin`（仅 `wasm32`）：`/admin` 页面与 `/api/admin/*` 路由。
+//! - [`worker`]：Worker HTTP DTO、路由枚举、异步运行时业务层与 D1 仓储。
 //! - `cloudflare_entry`（仅 `wasm32`）：`#[event(fetch)]` 入口 + 路由 +
 //!   secret 读取 + D1 绑定获取。
 //! - [`LeaseTokenSigner`]（**本文件唯一的业务类型**）：把 `LicenseLease`
@@ -34,11 +29,11 @@ pub use async_trait::async_trait;
 
 pub mod contracts;
 pub mod license;
-pub mod messages;
-pub mod runtime;
+pub mod worker;
 
 #[cfg(target_arch = "wasm32")]
-mod admin;
+pub(crate) use worker::admin;
+pub use worker::{messages, runtime};
 
 pub use messages::{
     parse_route, route_request, route_requires_signer, AdminRevokeRequest, LeaseRefreshRequest,
@@ -102,9 +97,9 @@ impl LeaseTokenSigner {
 mod cloudflare_entry {
     use super::*;
     use crate::runtime::D1RuntimeRepo;
+    use ::worker::{event, Context, Env, Method, Request, Response, Result};
     use chrono::Utc;
     use serde_json::Value;
-    use worker::{event, Env, Method, Request, Response, Result};
 
     fn missing_secret(name: &str) -> Result<Response> {
         Response::from_json(&serde_json::json!({
@@ -134,8 +129,8 @@ mod cloudflare_entry {
         .to_string()
     }
 
-    fn worker_error(err: impl ToString) -> worker::Error {
-        worker::Error::RustError(err.to_string())
+    fn worker_error(err: impl ToString) -> ::worker::Error {
+        ::worker::Error::RustError(err.to_string())
     }
 
     /// wrangler tail / Logpush 友好：单行 JSON，便于按 `evt`/`lvl` 过滤；不改 HTTP 契约。
@@ -148,9 +143,9 @@ mod cloudflare_entry {
             return;
         };
         match level {
-            "error" => worker::console_error!("{line}"),
-            "warn" => worker::console_warn!("{line}"),
-            _ => worker::console_log!("{line}"),
+            "error" => ::worker::console_error!("{line}"),
+            "warn" => ::worker::console_warn!("{line}"),
+            _ => ::worker::console_log!("{line}"),
         }
     }
 
@@ -259,7 +254,7 @@ mod cloudflare_entry {
     }
 
     #[event(fetch)]
-    pub async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+    pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         route_fetch(req, env).await.or_else(|err| {
             // 顶层兜底：HTTP 响应仍走 200 + compatibility_payload 不变，避免破坏
             // 客户端的兼容握手；同时把错误以 console_error 形式记录到 Cloudflare
@@ -275,4 +270,5 @@ mod cloudflare_entry {
 }
 
 #[cfg(test)]
+#[path = "worker/tests.rs"]
 mod tests;

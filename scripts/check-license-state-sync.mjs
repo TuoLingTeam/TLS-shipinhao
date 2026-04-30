@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 
 const RUST_PATH = join(REPO_ROOT, "backend/src/contracts.rs");
-const TS_PATH = join(REPO_ROOT, "apps/ui/src/license/types.ts");
+const TS_PATH = join(REPO_ROOT, "apps/ui/src/services/licenseTypes.ts");
 
 /** 从 Rust 源中提取 LICENSE_STATE_SERDE_LABELS 数组（snake_case 字符串）。 */
 function extractRustLabels(source) {
@@ -80,7 +80,7 @@ function main() {
     "请同步以下三处后再提交：\n" +
       "  1. backend/src/contracts.rs::LicenseState 变体\n" +
       "  2. backend/src/contracts.rs::LICENSE_STATE_SERDE_LABELS 常量\n" +
-      "  3. apps/ui/src/license/types.ts::LICENSE_STATE / LICENSE_STATE_LABELS",
+      "  3. apps/ui/src/services/licenseTypes.ts::LICENSE_STATE / LICENSE_STATE_LABELS",
   );
   process.exit(1);
 }

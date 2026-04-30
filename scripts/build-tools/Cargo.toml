@@ -18,5 +18,5 @@ base64 = "0.22"
 ed25519-dalek = { version = "2.1", features = ["pkcs8"] }
 
 [dev-dependencies]
-security_core = { path = "../../apps/desktop/security" }
+security_core = { path = "../../apps/desktop/src/security" }
 tempfile = "3"

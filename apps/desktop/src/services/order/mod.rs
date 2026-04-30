@@ -7,3 +7,6 @@ pub mod match_scoring;
 pub mod sync_planner;
 pub mod sync_service;
 pub mod utils;
+
+#[cfg(test)]
+mod anti_risk_pipeline_tests;

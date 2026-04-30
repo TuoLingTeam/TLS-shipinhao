@@ -28,7 +28,7 @@ const OUT_DIR = join(REPO_ROOT, "TLS-shipinhao-release");
 const RUST_MEMBER_DIRS = [
   "apps/desktop",
   "backend",
-  "apps/desktop/security",
+  "apps/desktop/src/security",
   "scripts/build-tools",
   "scripts/xtask",
 ];
@@ -299,7 +299,7 @@ rustflags = [
   "--remap-path-prefix", "${mirror}/apps/desktop/src/services/=svc/",
   "--remap-path-prefix", "${mirror}/apps/desktop/src/domain/=dom/",
   "--remap-path-prefix", "${mirror}/apps/desktop/src=s",
-  "--remap-path-prefix", "${mirror}/apps/desktop/security/=sec/",
+  "--remap-path-prefix", "${mirror}/apps/desktop/src/security/=sec/",
   "--remap-path-prefix", "${mirror}/backend/=b/",
   "--remap-path-prefix", "${mirror}/scripts/=x/",
   "--remap-path-prefix", "${cargoHome}=r",

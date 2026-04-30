@@ -1,0 +1,27 @@
+[package]
+name = "security_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+backend = { path = "../../../../backend" }
+base64 = "0.22"
+ed25519-dalek = "2.1"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+tempfile = "3"
+
+[lib]
+name = "security_core"
+path = "lib.rs"
+crate-type = ["cdylib", "rlib"]

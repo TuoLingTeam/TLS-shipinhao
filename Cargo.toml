@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
   "backend",
-  "apps/desktop/security",
+  "apps/desktop/src/security",
   "scripts/build-tools",
   "scripts/xtask",
   "apps/desktop",

@@ -34,16 +34,29 @@ TLS-shipinhao/
 ├── apps/                        # 应用层
 │   ├── desktop/                 # Tauri 2 桌面端
 │   │   ├── src/                 # Rust 命令、适配器、状态与迁移逻辑
+│   │   │   ├── commands/        # Tauri 命令入口
+│   │   │   ├── adapters/        # 外部 API / 存储适配
 │   │   │   ├── services/        # 桌面业务服务
-│   │   │   └── domain/          # 桌面领域常量与规则
-│   │   ├── security/            # 设备与安全能力（Cargo package/lib: security_core）
+│   │   │   ├── security/        # 设备与安全能力（Cargo package/lib: security_core）
+│   │   │   ├── domain/          # 桌面领域常量与规则
+│   │   │   └── migration/       # 旧版数据迁移
 │   │   ├── e2e/                 # 真 Tauri 壳 E2E
 │   │   ├── capabilities/        # Tauri capability 配置
 │   │   └── icons/               # 桌面图标资源
 │   └── ui/                      # Vue 3 前端（Vite 6 + Pinia + vue-router + Tailwind v4）
+│       ├── e2e/                 # 前端 E2E
+│       └── src/
+│           ├── pages/           # 页面级组件
+│           ├── layout/          # 应用布局与导航
+│           ├── shared/          # 通用组件与工具
+│           ├── stores/          # Pinia 状态
+│           ├── services/        # Tauri 调用与页面业务组合逻辑
+│           └── styles/          # 全局与页面样式
 ├── backend/                     # Cloudflare Worker 授权后端
 │   ├── src/                     # 单一 backend crate：contracts / license / Worker runtime
-│   │   └── license/             # 授权域逻辑：Lease、本地校验、任务授权、授权模型
+│   │   ├── contracts.rs         # 前后端共享契约
+│   │   ├── license/             # 授权域逻辑：Lease、本地校验、任务授权、授权模型
+│   │   └── worker/              # Worker HTTP DTO、路由、运行时与 D1 仓储
 │   ├── assets/                  # 管理后台 HTML（编译期嵌入 Worker）
 │   ├── db/                      # D1 schema / migration
 │   ├── scripts/                 # Worker 构建脚本

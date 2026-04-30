@@ -20,7 +20,7 @@ https://sphapi.199908.top/admin
 
 ## 功能概览
 
-运行时协议全部由 `backend/src/messages.rs` 定义，下述 5 条客户端路由 + 4 条管理端路由就是全部对外表面：
+运行时协议全部由 `backend/src/worker/messages.rs` 定义，下述 5 条客户端路由 + 4 条管理端路由就是全部对外表面：
 
 ### 客户端路由
 
@@ -37,7 +37,7 @@ https://sphapi.199908.top/admin
 - 生成卡密：`POST /api/admin/generate`
 - 吊销卡密：`POST /api/admin/revoke`
 
-管理端路由全部要求 `X-Admin-Secret: <ADMIN_SECRET>` 请求头；具体鉴权逻辑见 `backend/src/admin.rs`。
+管理端路由全部要求 `X-Admin-Secret: <ADMIN_SECRET>` 请求头；具体鉴权逻辑见 `backend/src/worker/admin.rs`。
 
 ## 配置说明
 
@@ -103,7 +103,7 @@ LICENSE_SIGNING_PRIVATE_KEY_B64=<Ed25519 私钥 Base64>
 
 ## 客户端 API
 
-所有请求/响应均为 JSON，字段名使用 `snake_case`。字段定义位于 `backend/src/messages.rs` 与 `backend/src/license/model.rs`。
+所有请求/响应均为 JSON，字段名使用 `snake_case`。字段定义位于 `backend/src/worker/messages.rs` 与 `backend/src/license/model.rs`。
 
 ### `POST /api/activate`
 

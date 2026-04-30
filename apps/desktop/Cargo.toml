@@ -13,7 +13,7 @@ tauri-build = { workspace = true, features = [] }
 [dependencies]
 tauri = { workspace = true, features = [] }
 backend = { path = "../../backend" }
-security_core = { path = "security" }
+security_core = { path = "src/security" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

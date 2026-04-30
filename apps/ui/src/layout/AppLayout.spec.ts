@@ -4,7 +4,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import AppLayout from "./AppLayout.vue";
 
-vi.mock("../license/useLicense", () => ({
+vi.mock("@/services/license", () => ({
   useLicense: () => ({
     refreshStoredLicenseStatus: vi.fn(),
   }),

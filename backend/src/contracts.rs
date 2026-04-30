@@ -61,7 +61,7 @@ pub const ALLOWED_LOCAL_STATES: &[LicenseState] = &[LicenseState::Active, Licens
 /// 这是「LicenseState 序列化形态」的单点事实源（SSoT）：
 /// - 后端测试 [`tests::license_state_serde_labels_cover_all_variants`]
 ///   保证此常量与 `serde_json::to_string` 的实际取值一一对应；
-/// - 前端 `apps/ui/src/license/types.ts::LicenseState` 与
+/// - 前端 `apps/ui/src/services/licenseTypes.ts::LicenseState` 与
 ///   `LICENSE_STATE_LABELS` 与本常量逐项对齐，新增/重命名变体时
 ///   两端必须同步。
 ///
