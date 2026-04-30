@@ -8,7 +8,7 @@ import process from "node:process";
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(dirname(__filename), "..");
-const e2eDir = resolve(repoRoot, "apps", "desktop", "e2e-tauri");
+const e2eDir = resolve(repoRoot, "apps", "desktop", "e2e");
 
 if (process.platform === "darwin") {
   console.log("[tauri-e2e] macOS 上 tauri-driver 不可用（Apple WKWebView 没有官方 WebDriver）。");
@@ -33,6 +33,6 @@ if (!existsSync(nodeModules)) {
 }
 
 const testScript = process.env.TAURI_E2E_HEADLESS === "1" ? "test:ci" : "test";
-console.log(`[tauri-e2e] 运行：cd apps/desktop/e2e-tauri && npm run ${testScript}`);
+console.log(`[tauri-e2e] 运行：cd apps/desktop/e2e && npm run ${testScript}`);
 const run = spawnSync(npmCmd, ["run", testScript], { cwd: e2eDir, stdio: "inherit" });
 process.exit(run.status ?? 1);

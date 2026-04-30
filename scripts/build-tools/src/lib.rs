@@ -98,7 +98,7 @@ pub fn verify_manifest_signature(
 }
 
 fn canonical_manifest_payload(manifest: &IntegrityManifest) -> anyhow::Result<Vec<u8>> {
-    // 统一委托到 api-contracts 的权威实现，避免 build-tools 与 security-core 各自投影导致字节漂移。
+    // 统一委托到 api-contracts，避免 build-tools 与 security_core 的投影字节漂移。
     Ok(manifest.canonical_payload_bytes()?)
 }
 

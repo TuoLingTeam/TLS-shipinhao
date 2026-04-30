@@ -1,8 +1,8 @@
 # TLS-shipinhao 卡密后端
 
-**正式部署入口为本目录**：在 `backend/` 执行 `npx wrangler deploy`（`wrangler.toml` 会编译 `backend/license-worker` 并指向其 `license-worker/build/worker/shim.mjs`）。
+**正式部署入口为本目录**：在 `backend/` 执行 `npx wrangler deploy`（`wrangler.toml` 会编译 `backend/worker` 并指向其 `worker/build/worker/shim.mjs`）。
 
-- **管理后台页面**唯一源文件：`backend/license-worker/assets/admin.html`（由 Rust Worker 在编译期 `include_str!` 嵌入）。
+- **管理后台页面**唯一源文件：`backend/worker/assets/admin.html`（由 Rust Worker 在编译期 `include_str!` 嵌入）。
 - **D1 schema / 迁移**：`backend/db/`。
 - **遗留 JS 壳**：已从仓库移除，当前仅保留 Rust Worker 作为正式实现。
 
@@ -20,7 +20,7 @@ https://sphapi.199908.top/admin
 
 ## 功能概览
 
-运行时协议全部由 `backend/license-worker/src/messages.rs` 定义，下述 5 条客户端路由 + 4 条管理端路由就是全部对外表面：
+运行时协议全部由 `backend/worker/src/messages.rs` 定义，下述 5 条客户端路由 + 4 条管理端路由就是全部对外表面：
 
 ### 客户端路由
 
@@ -37,7 +37,7 @@ https://sphapi.199908.top/admin
 - 生成卡密：`POST /api/admin/generate`
 - 吊销卡密：`POST /api/admin/revoke`
 
-管理端路由全部要求 `X-Admin-Secret: <ADMIN_SECRET>` 请求头；具体鉴权逻辑见 `backend/license-worker/src/admin.rs`。
+管理端路由全部要求 `X-Admin-Secret: <ADMIN_SECRET>` 请求头；具体鉴权逻辑见 `backend/worker/src/admin.rs`。
 
 ## 配置说明
 
@@ -52,7 +52,7 @@ https://sphapi.199908.top/admin
 >
 > 建议执行 `cd backend && npx wrangler secret delete HMAC_SECRET` 清理线上 secret，新部署不再需要它。
 
-客户端内置的验签公钥常量在 `backend/license-service/src/service.rs` 的 `LICENSE_PUBLIC_KEY_B64`。**轮换签名私钥前，必须同步更新该常量与所有已发布客户端**，否则旧设备的 Lease Token 将全部进入 `LicenseState::Invalid`，被迫重新激活。
+客户端内置的验签公钥常量在 `backend/license/src/service.rs` 的 `LICENSE_PUBLIC_KEY_B64`。**轮换签名私钥前，必须同步更新该常量与所有已发布客户端**，否则旧设备的 Lease Token 将全部进入 `LicenseState::Invalid`，被迫重新激活。
 
 ## 首次部署
 
@@ -63,7 +63,7 @@ npx wrangler secret put LICENSE_SIGNING_PRIVATE_KEY_B64
 npx wrangler deploy
 ```
 
-（`wrangler` 会在部署前执行 `[build]`，在 `backend/license-worker` 内运行 `worker-build`。）
+（`wrangler` 会在部署前执行 `[build]`，在 `backend/worker` 内运行 `worker-build`。）
 
 ## 线上升级到授权协议 V2
 
@@ -103,7 +103,7 @@ LICENSE_SIGNING_PRIVATE_KEY_B64=<Ed25519 私钥 Base64>
 
 ## 客户端 API
 
-所有请求/响应均为 JSON，字段名使用 `snake_case`。字段定义位于 `backend/license-worker/src/messages.rs` 与 `backend/license-service/src/model.rs`。
+所有请求/响应均为 JSON，字段名使用 `snake_case`。字段定义位于 `backend/worker/src/messages.rs` 与 `backend/license/src/model.rs`。
 
 ### `POST /api/activate`
 
@@ -224,7 +224,7 @@ Lease 进入软刷新窗口（`now >= renew_after`）后调用；硬过期（`no
 }
 ```
 
-支持的 `task_type` 白名单在 `backend/api-contracts/src/lib.rs` 的 `SUPPORTED_TASKS`：`review_find` / `review_full_scan` / `quality_refund` / `batch_delivery` / `cache_manage`。
+支持的 `task_type` 白名单在 `backend/contracts/src/lib.rs` 的 `SUPPORTED_TASKS`：`review_find` / `review_full_scan` / `quality_refund` / `batch_delivery` / `cache_manage`。
 
 ## 管理员 API
 

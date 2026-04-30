@@ -48,9 +48,9 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
 BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$BACKEND_DIR/.." && pwd)
 TEMP_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/license-worker-workspace.XXXXXX")
-REAL_WORKER_DIR="$BACKEND_DIR/license-worker"
+REAL_WORKER_DIR="$BACKEND_DIR/worker"
 TEMP_BACKEND_DIR="$TEMP_WORKSPACE/backend"
-TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/license-worker"
+TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/worker"
 
 cleanup() {
   rm -rf "$TEMP_WORKSPACE"
@@ -66,16 +66,16 @@ log "Working backend dir: $BACKEND_DIR"
 
 mkdir -p "$TEMP_BACKEND_DIR"
 cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"
-cp -R "$BACKEND_DIR/api-contracts" "$TEMP_BACKEND_DIR/api-contracts"
-cp -R "$BACKEND_DIR/license-service" "$TEMP_BACKEND_DIR/license-service"
+cp -R "$BACKEND_DIR/contracts" "$TEMP_BACKEND_DIR/contracts"
+cp -R "$BACKEND_DIR/license" "$TEMP_BACKEND_DIR/license"
 
-# license-service 的 [dev-dependencies] 仍然引用桌面侧 security-core
+# license-service 的 [dev-dependencies] 仍然引用桌面侧 security_core
 # 做跨 crate 一致性测试。wasm target 下不会编译 dev-dep，但 `cargo metadata`
-# 必须能读到 security-core 的 manifest，否则 worker-build 在解析 workspace
+# 必须能读到 security_core 的 manifest，否则 worker-build 在解析 workspace
 # 时就会 "failed to load manifest for dependency security_core" 报错。
-# 因此把 apps/desktop/crates/security-core 也复制进临时 workspace 并作为 member 声明。
-mkdir -p "$TEMP_WORKSPACE/apps/desktop/crates"
-cp -R "$REPO_ROOT/apps/desktop/crates/security-core" "$TEMP_WORKSPACE/apps/desktop/crates/security-core"
+# 因此把 apps/desktop/security 也复制进临时 workspace 并作为 member 声明。
+mkdir -p "$TEMP_WORKSPACE/apps/desktop"
+cp -R "$REPO_ROOT/apps/desktop/security" "$TEMP_WORKSPACE/apps/desktop/security"
 
 if [ -f "$REPO_ROOT/Cargo.lock" ]; then
   cp "$REPO_ROOT/Cargo.lock" "$TEMP_WORKSPACE/Cargo.lock"
@@ -85,10 +85,10 @@ cat > "$TEMP_WORKSPACE/Cargo.toml" <<'EOF'
 [workspace]
 resolver = "2"
 members = [
-  "backend/license-worker",
-  "backend/api-contracts",
-  "backend/license-service",
-  "apps/desktop/crates/security-core",
+  "backend/worker",
+  "backend/contracts",
+  "backend/license",
+  "apps/desktop/security",
 ]
 
 [workspace.package]

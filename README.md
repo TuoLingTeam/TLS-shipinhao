@@ -32,12 +32,19 @@
 ```text
 TLS-shipinhao/
 ├── apps/                        # 应用层
-│   ├── desktop/                 # Tauri 2 桌面端（Rust 命令、适配器、状态、图标、桌面侧 crates）
+│   ├── desktop/                 # Tauri 2 桌面端
+│   │   ├── src/                 # Rust 命令、适配器、状态与迁移逻辑
+│   │   ├── services/            # 桌面业务服务（Cargo package: desktop-services）
+│   │   ├── domain/              # 桌面领域常量与规则（Cargo package: domain-core）
+│   │   ├── security/            # 设备与安全能力（Cargo package/lib: security_core）
+│   │   ├── e2e/                 # 真 Tauri 壳 E2E
+│   │   ├── capabilities/        # Tauri capability 配置
+│   │   └── icons/               # 桌面图标资源
 │   └── ui/                      # Vue 3 前端（Vite 6 + Pinia + vue-router + Tailwind v4）
 ├── backend/                     # Cloudflare Worker 授权后端
-│   ├── api-contracts/           # 前后端共享 API 契约（serde 类型）
-│   ├── license-service/         # 授权域逻辑（Lease、卡密、本地验证）
-│   ├── license-worker/          # Rust → WASM Cloudflare Worker 入口
+│   ├── contracts/               # 前后端共享 API 契约（Cargo package: api-contracts）
+│   ├── license/                 # 授权域逻辑（Cargo package: license-service）
+│   ├── worker/                  # Rust → WASM Cloudflare Worker 入口（Cargo package: license-worker）
 │   ├── db/                      # D1 schema / migration
 │   ├── scripts/                 # Worker 构建脚本
 │   └── wrangler.toml            # Worker 生产部署入口
@@ -165,9 +172,9 @@ pnpm --filter tls-shipinhao-ui test:e2e:headed
 `apps/ui/e2e/license-ipc.spec.ts` 在浏览器内注入最小 `__TAURI_INTERNALS__` mock，
 覆盖设置页「模拟激活 → 已激活」展示链，不启动真实桌面壳。
 
-**L4-4（真 Tauri E2E，骨架已就绪）**：`apps/desktop/e2e-tauri/`（脱离 pnpm workspace 的独立
+**L4-4（真 Tauri E2E，骨架已就绪）**：`apps/desktop/e2e/`（脱离 pnpm workspace 的独立
 npm 包）已完成骨架，包含 WebdriverIO + `tauri-driver` 配置、Linux/Windows 平台
-矩阵、smoke spec 与故障排查指南，详见 [`apps/desktop/e2e-tauri/README.md`](./apps/desktop/e2e-tauri/README.md)。
+矩阵、smoke spec 与故障排查指南，详见 [`apps/desktop/e2e/README.md`](./apps/desktop/e2e/README.md)。
 GitHub Actions workflow `Tauri E2E (real shell)` 仅 `workflow_dispatch` 手动
 触发（每次会跑一次完整 cargo tauri build + tauri-driver 安装，约 10–20 min）。
 macOS 因 Apple WKWebView 无官方 WebDriver 驱动**不支持**，本地仍走

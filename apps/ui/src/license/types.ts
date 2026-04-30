@@ -1,8 +1,8 @@
 /**
  * 与 Rust `api_contracts::LicenseState` 严格一一对齐。
  * 后端 serde 序列化永远落在下列 10 个取值之一；若未来新增状态，必须同时更新：
- *   1. `api-contracts/src/lib.rs::LicenseState` 枚举变体
- *   2. `api-contracts/src/lib.rs::LICENSE_STATE_SERDE_LABELS` 常量
+ *   1. `backend/contracts/src/lib.rs::LicenseState` 枚举变体
+ *   2. `backend/contracts/src/lib.rs::LICENSE_STATE_SERDE_LABELS` 常量
  *   3. 本文件与 `LICENSE_STATE_LABELS`
  *
  * 后端单测 `license_state_serde_labels_cover_all_variants` 守住 #1 与 #2 的一致性；

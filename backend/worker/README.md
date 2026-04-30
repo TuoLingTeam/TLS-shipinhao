@@ -12,12 +12,12 @@ npx wrangler secret put ADMIN_SECRET
 npx wrangler deploy
 ```
 
-管理页 HTML 的**唯一源文件**为 `backend/license-worker/assets/admin.html`（编译期嵌入 Worker）。
+管理页 HTML 的**唯一源文件**为 `backend/worker/assets/admin.html`（编译期嵌入 Worker）。
 
 ## 仅本地调试本 crate
 
 ```bash
-cd backend/license-worker
+cd backend/worker
 npx wrangler dev
 ```
 

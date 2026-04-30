@@ -27,12 +27,12 @@ const OUT_DIR = join(REPO_ROOT, "TLS-shipinhao-release");
 // 启动期会与根 Cargo.toml 校验一致性。
 const RUST_MEMBER_DIRS = [
   "apps/desktop",
-  "backend/api-contracts",
-  "backend/license-service",
-  "backend/license-worker",
-  "apps/desktop/crates/domain-core",
-  "apps/desktop/crates/security-core",
-  "apps/desktop/crates/desktop-services",
+  "backend/contracts",
+  "backend/license",
+  "backend/worker",
+  "apps/desktop/domain",
+  "apps/desktop/security",
+  "apps/desktop/services",
   "scripts/build-tools",
   "scripts/xtask",
 ];
@@ -84,7 +84,7 @@ const WEBVIEW2_RUNTIME_SOURCE = process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR
 const EXCLUDE_NAMES = new Set([
   "target",
   "node_modules",
-  "build", // backend/license-worker/build 等运行时产物
+  "build", // backend/worker/build 等运行时产物
   ".DS_Store",
   "Thumbs.db",
   "__pycache__",
@@ -301,7 +301,9 @@ function stage_hardenRustflags() {
 target-dir = "target"
 rustflags = [
   "--remap-path-prefix", "${mirror}/apps/desktop/src=s",
-  "--remap-path-prefix", "${mirror}/apps/desktop/crates/=c/",
+  "--remap-path-prefix", "${mirror}/apps/desktop/services/=svc/",
+  "--remap-path-prefix", "${mirror}/apps/desktop/domain/=dom/",
+  "--remap-path-prefix", "${mirror}/apps/desktop/security/=sec/",
   "--remap-path-prefix", "${mirror}/backend/=b/",
   "--remap-path-prefix", "${mirror}/scripts/=x/",
   "--remap-path-prefix", "${cargoHome}=r",

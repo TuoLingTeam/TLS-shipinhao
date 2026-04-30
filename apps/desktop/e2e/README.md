@@ -30,7 +30,7 @@ cargo install --locked tauri-driver
 ### 2. 安装本目录 npm 依赖
 
 ```bash
-cd apps/desktop/e2e-tauri
+cd apps/desktop/e2e
 npm install
 ```
 
@@ -58,7 +58,7 @@ npm run test:ci   # 等价于 xvfb-run -a wdio run wdio.conf.ts
 
 > 也可以从仓库根使用统一入口：
 > - `pnpm test:e2e:tauri`：自动判定平台。macOS 会打印降级提示并 exit 0；
->   Linux/Windows 自动 `cd apps/desktop/e2e-tauri && npm install && npm test`。
+>   Linux/Windows 自动 `cd apps/desktop/e2e && npm install && npm test`。
 > - `pnpm test:e2e:tauri:headless`：等价于上面但通过 `xvfb-run` 走无头链路。
 > - 入口脚本：`scripts/run-tauri-e2e.mjs`。
 
@@ -75,7 +75,7 @@ npm run test:ci   # 等价于 xvfb-run -a wdio run wdio.conf.ts
 2. `cargo install --locked tauri-driver`
 3. `pnpm install --frozen-lockfile && pnpm --filter tls-shipinhao-ui build`
 4. `cargo tauri build --no-bundle`（仅产 binary，省 dmg/AppImage）
-5. `cd apps/desktop/e2e-tauri && npm install`
+5. `cd apps/desktop/e2e && npm install`
 6. `xvfb-run -a npm test`
 
 如需在 PR 上自动跑，把 workflow 的 `on:` 块加上 `pull_request`，但建议同时

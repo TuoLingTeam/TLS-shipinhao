@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // E2E 仅作前端冒烟。Tauri 真壳 E2E（WebdriverIO + tauri-driver）见
-// `apps/desktop/e2e-tauri/`，覆盖 Linux / Windows；macOS 因 Apple WKWebView
+// `apps/desktop/e2e/`，覆盖 Linux / Windows；macOS 因 Apple WKWebView
 // 没有官方 WebDriver 不支持，本配置文件继续承担 macOS 上唯一的 E2E 入口。
 //
 // 本骨架先把「vite preview 起得来 + 主要路由能渲染 + 主要资源不报 404」三条
