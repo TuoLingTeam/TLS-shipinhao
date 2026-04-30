@@ -222,9 +222,9 @@ jobs:
         run: |
           $tag = "${{ needs.extract-version.outputs.release_tag }}"
           $version = "${{ needs.extract-version.outputs.app_version }}"
-          # 深混脚本 build-obfuscate.mjs 会把产物统一收集到 dist/release/
+          # 深混脚本 build-obfuscate.mjs 会把产物统一收集到 dist/
           # Windows 仅分发便携包。
-          $portable = Get-ChildItem -Path "dist/release/*portable*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $portable = Get-ChildItem -Path "dist/*portable*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $portable) {
             # 兜底：--no-bundle 下主程序会直接输出 desktop.exe
             $portable = Get-ChildItem -Path "TLS-shipinhao-release/target/release/desktop.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -233,7 +233,7 @@ jobs:
             gh release upload $tag "$($portable.FullName)#TLS-shipinhao-v$version.exe" `
               --repo "${{ github.repository }}" --clobber
           } else {
-            throw "Windows portable exe not found under dist/release/ or TLS-shipinhao-release/target/release/"
+            throw "Windows portable exe not found under dist/ or TLS-shipinhao-release/target/release/"
           }
 
   build-macos:
@@ -320,8 +320,8 @@ jobs:
           set -euo pipefail
           tag='${{ needs.extract-version.outputs.release_tag }}'
           version='${{ needs.extract-version.outputs.app_version }}'
-          # 深混脚本会把 dmg 收集到 dist/release/；兜底再查镜像 bundle 目录
-          dmg=$(find dist/release -name '*.dmg' 2>/dev/null | head -1)
+          # 深混脚本会把 dmg 收集到 dist/；兜底再查镜像 bundle 目录
+          dmg=$(find dist -name '*.dmg' 2>/dev/null | head -1)
           if [ -z "$dmg" ]; then
             dmg=$(find TLS-shipinhao-release/target/release/bundle/dmg -name '*.dmg' 2>/dev/null | head -1)
           fi
@@ -329,6 +329,6 @@ jobs:
             gh release upload "$tag" "${dmg}#TLS-shipinhao-v${version}-mac.dmg" \
               --repo "${{ github.repository }}" --clobber
           else
-            echo "dmg not found in dist/release/ nor TLS-shipinhao-release/target/release/bundle/dmg" >&2
+            echo "dmg not found in dist/ nor TLS-shipinhao-release/target/release/bundle/dmg" >&2
             exit 1
           fi

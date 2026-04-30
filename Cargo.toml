@@ -4,11 +4,11 @@ members = [
   "backend/api-contracts",
   "backend/license-service",
   "backend/license-worker",
-  "crates/domain-core",
-  "crates/security-core",
-  "crates/desktop-services",
-  "tools/build-tools",
-  "tools/xtask",
+  "apps/desktop/crates/domain-core",
+  "apps/desktop/crates/security-core",
+  "apps/desktop/crates/desktop-services",
+  "scripts/build-tools",
+  "scripts/xtask",
   "apps/desktop",
 ]
 

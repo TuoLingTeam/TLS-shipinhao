@@ -1,0 +1,29 @@
+[package]
+name = "desktop-services"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+regex = "1"
+reqwest.workspace = true
+rusqlite = { version = "0.31", features = ["bundled"] }
+api-contracts = { path = "../../../../backend/api-contracts" }
+domain-core = { path = "../domain-core" }
+obfstr = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }

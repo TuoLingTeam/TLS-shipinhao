@@ -12,11 +12,11 @@ tauri-build = { workspace = true, features = [] }
 
 [dependencies]
 tauri = { workspace = true, features = [] }
-desktop-services = { path = "../../crates/desktop-services" }
-domain-core = { path = "../../crates/domain-core" }
+desktop-services = { path = "crates/desktop-services" }
+domain-core = { path = "crates/domain-core" }
 api-contracts = { path = "../../backend/api-contracts" }
 license-service = { path = "../../backend/license-service" }
-security_core = { path = "../../crates/security-core" }
+security_core = { path = "crates/security-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

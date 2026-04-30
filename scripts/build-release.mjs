@@ -18,7 +18,7 @@ const uiSrcDir = join(repoRoot, "apps", "ui");
 const uiDistDir = join(uiSrcDir, "dist");
 const buildDir = join(repoRoot, "build");
 const obfUiDir = join(buildDir, "obfuscated-ui");
-const releaseOutDir = join(repoRoot, "dist", "release");
+const releaseOutDir = join(repoRoot, "dist");
 const obfuscatorConfigPath = join(repoRoot, "scripts", "obfuscator.config.json");
 
 const desktopDir = join(repoRoot, "apps", "desktop");
@@ -78,6 +78,16 @@ function ensureDir(dir) {
 function cleanDir(dir) {
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
   ensureDir(dir);
+}
+
+function cleanBuildDir() {
+  if (!existsSync(buildDir)) return;
+  try {
+    rmSync(buildDir, { recursive: true, force: true });
+    log("clean", `✓ 已清理临时构建目录：${relative(repoRoot, buildDir)}/`);
+  } catch (err) {
+    log("clean", `⚠️ 临时构建目录清理失败：${err?.message || err}`);
+  }
 }
 
 function copyTree(from, to) {
@@ -212,18 +222,22 @@ function collectArtifacts() {
 }
 
 (async () => {
-  log("boot", `混淆模式=${skipObfuscate ? "关闭" : "开启"} / skipRustBuild=${skipRustBuild}`);
-  buildFrontend();
-  if (!skipObfuscate) {
-    obfuscateFrontend();
+  try {
+    log("boot", `混淆模式=${skipObfuscate ? "关闭" : "开启"} / skipRustBuild=${skipRustBuild}`);
+    buildFrontend();
+    if (!skipObfuscate) {
+      obfuscateFrontend();
+    }
+    if (skipRustBuild) {
+      log("done", "仅前端阶段完成，跳过 Tauri 构建");
+      return;
+    }
+    buildTauri();
+    collectArtifacts();
+    log("done", `完整发版产物已就绪：${relative(repoRoot, releaseOutDir)}`);
+  } finally {
+    cleanBuildDir();
   }
-  if (skipRustBuild) {
-    log("done", "仅前端阶段完成，跳过 Tauri 构建");
-    return;
-  }
-  buildTauri();
-  collectArtifacts();
-  log("done", `完整发版产物已就绪：${relative(repoRoot, releaseOutDir)}`);
 })().catch((err) => {
   console.error("\n[build-release] FATAL:", err?.stack || err);
   process.exit(1);

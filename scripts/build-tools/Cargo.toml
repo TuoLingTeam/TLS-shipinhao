@@ -1,0 +1,22 @@
+[package]
+name = "build-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+api-contracts = { path = "../../backend/api-contracts" }
+base64 = "0.22"
+ed25519-dalek = { version = "2.1", features = ["pkcs8"] }
+
+[dev-dependencies]
+security_core = { path = "../../apps/desktop/crates/security-core" }
+tempfile = "3"

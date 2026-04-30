@@ -69,13 +69,13 @@ cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"
 cp -R "$BACKEND_DIR/api-contracts" "$TEMP_BACKEND_DIR/api-contracts"
 cp -R "$BACKEND_DIR/license-service" "$TEMP_BACKEND_DIR/license-service"
 
-# license-service 的 [dev-dependencies] 仍然引用 `../../crates/security-core`
+# license-service 的 [dev-dependencies] 仍然引用桌面侧 security-core
 # 做跨 crate 一致性测试。wasm target 下不会编译 dev-dep，但 `cargo metadata`
 # 必须能读到 security-core 的 manifest，否则 worker-build 在解析 workspace
 # 时就会 "failed to load manifest for dependency security_core" 报错。
-# 因此把 crates/security-core 也复制进临时 workspace 并作为 member 声明。
-mkdir -p "$TEMP_WORKSPACE/crates"
-cp -R "$REPO_ROOT/crates/security-core" "$TEMP_WORKSPACE/crates/security-core"
+# 因此把 apps/desktop/crates/security-core 也复制进临时 workspace 并作为 member 声明。
+mkdir -p "$TEMP_WORKSPACE/apps/desktop/crates"
+cp -R "$REPO_ROOT/apps/desktop/crates/security-core" "$TEMP_WORKSPACE/apps/desktop/crates/security-core"
 
 if [ -f "$REPO_ROOT/Cargo.lock" ]; then
   cp "$REPO_ROOT/Cargo.lock" "$TEMP_WORKSPACE/Cargo.lock"
@@ -88,7 +88,7 @@ members = [
   "backend/license-worker",
   "backend/api-contracts",
   "backend/license-service",
-  "crates/security-core",
+  "apps/desktop/crates/security-core",
 ]
 
 [workspace.package]

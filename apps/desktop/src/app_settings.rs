@@ -1,4 +1,4 @@
-//! 与 `backup/legacy-src/app/settings.py` 保持一致的远程配置，避免桌面端与 Python 业务分叉。
+//! 桌面端远程配置入口，集中维护授权 API 域名与超时。
 //!
 //! 授权 API 域名属敏感数据，release 二进制中不再以明文 const 形式存放。
 //! 通过 obfstr 编译期加密 + 运行时 XOR 解码，`strings` 扫不到原文。

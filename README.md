@@ -32,12 +32,8 @@
 ```text
 TLS-shipinhao/
 ├── apps/                        # 应用层
-│   ├── desktop/                 # Tauri 2 桌面端（Rust 命令、适配器、状态、图标）
+│   ├── desktop/                 # Tauri 2 桌面端（Rust 命令、适配器、状态、图标、桌面侧 crates）
 │   └── ui/                      # Vue 3 前端（Vite 6 + Pinia + vue-router + Tailwind v4）
-├── crates/                      # 桌面共享 Rust 库
-│   ├── domain-core/             # 领域模型与错误类型
-│   ├── desktop-services/        # 订单缓存、同步、HTTP、SQLite 等业务服务
-│   └── security-core/           # 设备指纹、Lease 校验、完整性检查
 ├── backend/                     # Cloudflare Worker 授权后端
 │   ├── api-contracts/           # 前后端共享 API 契约（serde 类型）
 │   ├── license-service/         # 授权域逻辑（Lease、卡密、本地验证）
@@ -46,17 +42,16 @@ TLS-shipinhao/
 │   ├── scripts/                 # Worker 构建脚本
 │   └── wrangler.toml            # Worker 生产部署入口
 ├── scripts/                     # 发版与构建脚本
+│   ├── build-tools/             # 发版相关 Rust 构建工具库
+│   ├── xtask/                   # perf、release、bench 等 Rust 辅助命令
 │   ├── tauri_dev.sh             # 本地开发启动器（安全处理 5173 端口占用）
 │   ├── verify.sh                # pre-push 同款完整校验入口
 │   ├── build-obfuscate.mjs      # 混淆镜像构建（JS obfuscator + cargo tauri build）
 │   └── obfuscator.config.json   # javascript-obfuscator 配置
-├── tools/                       # 辅助工具
-│   ├── build-tools/             # 发版相关构建工具库
-│   └── xtask/                   # perf、release、bench 等辅助命令
-├── backup/                      # 旧版 Python 资产备份（不参与主线）
 ├── Cargo.toml                   # 顶层 Rust workspace
 ├── package.json                 # pnpm 脚本入口
 ├── pnpm-workspace.yaml          # pnpm workspace 配置
+├── rust-toolchain.toml          # Rust toolchain 固定
 └── .github/workflows/           # CI/CD（tag 触发桌面发版）
 ```
 
@@ -170,9 +165,9 @@ pnpm --filter tls-shipinhao-ui test:e2e:headed
 `apps/ui/e2e/license-ipc.spec.ts` 在浏览器内注入最小 `__TAURI_INTERNALS__` mock，
 覆盖设置页「模拟激活 → 已激活」展示链，不启动真实桌面壳。
 
-**L4-4（真 Tauri E2E，骨架已就绪）**：`e2e-tauri/`（脱离 pnpm workspace 的独立
+**L4-4（真 Tauri E2E，骨架已就绪）**：`apps/desktop/e2e-tauri/`（脱离 pnpm workspace 的独立
 npm 包）已完成骨架，包含 WebdriverIO + `tauri-driver` 配置、Linux/Windows 平台
-矩阵、smoke spec 与故障排查指南，详见 [`e2e-tauri/README.md`](./e2e-tauri/README.md)。
+矩阵、smoke spec 与故障排查指南，详见 [`apps/desktop/e2e-tauri/README.md`](./apps/desktop/e2e-tauri/README.md)。
 GitHub Actions workflow `Tauri E2E (real shell)` 仅 `workflow_dispatch` 手动
 触发（每次会跑一次完整 cargo tauri build + tauri-driver 安装，约 10–20 min）。
 macOS 因 Apple WKWebView 无官方 WebDriver 驱动**不支持**，本地仍走
@@ -202,9 +197,9 @@ pnpm tauri:build
 | 命令 | 入口脚本 | 中间镜像 / 缓存 | 最终产物目录 | 适用场景 |
 |---|---|---|---|---|
 | `pnpm tauri:build` | `apps/desktop` 内 `cargo tauri build` | 无（在源码 `target/` 内编译） | `target/release/bundle/{dmg,nsis,...}` | 本地直建，不混淆 |
-| `pnpm release:build` | `scripts/build-release.mjs` | `build/obfuscated-ui/`（前端混淆中转） | `dist/release/` + `target/release/bundle/...` | 轻量发版，源树内打包 |
-| `pnpm release:build:plain` | `scripts/build-release.mjs --no-obfuscate` | 同上但跳过 JS 混淆 | 同上 | 快速本地预览混淆前包形态 |
-| `pnpm release:build:deep` | `scripts/build-obfuscate.mjs` | `TLS-shipinhao-release/`（整树镜像 + JS 深混 + rustflags 重写） | `dist/release/` 内最终安装包 / 便携 exe / dmg | 正式发版主路径 |
+| `pnpm release:build` | `scripts/build-release.mjs` | `build/obfuscated-ui/`（前端混淆中转，构建结束自动清理） | `dist/` | 轻量发版，源树内打包 |
+| `pnpm release:build:plain` | `scripts/build-release.mjs --no-obfuscate` | 跳过 JS 混淆，无 `build/` 中转 | 同上 | 快速本地预览混淆前包形态 |
+| `pnpm release:build:deep` | `scripts/build-obfuscate.mjs` | `TLS-shipinhao-release/`（整树镜像 + JS 深混 + rustflags 重写） | `dist/` 内最终安装包 / 便携 exe / dmg | 正式发版主路径 |
 | `pnpm release:build:deep:mirror-only` | 同上 + `--skip-build` | 仅生成 `TLS-shipinhao-release/` 镜像，不调 `cargo tauri build` | 无最终产物 | 验证镜像内容是否干净 |
 | `pnpm worker:deploy` | `cd backend && npx wrangler deploy` | `backend/build/` | Cloudflare 边缘 | 授权 Worker 上线 |
 
@@ -213,13 +208,13 @@ pnpm tauri:build
 ### Mac 桌面应用
 
 ```text
-target/release/bundle/dmg/*.dmg
+dist/*.dmg
 ```
 
 ### Windows 安装包
 
 ```text
-target/release/bundle/nsis/*.exe
+dist/*.exe
 ```
 
 ### Rust 可执行文件
@@ -241,7 +236,7 @@ TLS_WEBVIEW2_FIXED_RUNTIME_DIR=/path/to/fixed-runtime pnpm release:build:deep
 构建脚本会生成：
 
 ```text
-dist/release/TLS-shipinhao-portable/
+dist/TLS-shipinhao-portable/
 ├── TLS-shipinhao.exe
 └── WebView2Runtime/
 ```
@@ -294,19 +289,9 @@ Cloudflare 判 1014（unknown host），或 Worker 绑了路由却没人调。�
 
 完成后回到本表格末尾追加一行，让运营同学也能看到当前期望的域名拓扑。
 
-## 备份目录说明
-
-`backup/` 下的内容用于保留旧版 Python 客户端资产，便于：
-- 迁移对照
-- 回归参考
-- 历史实现追溯
-
-这些目录**不是当前正式运行路径**。
-
 ## 注意事项
 
 - 桌面图标资源位于 `apps/desktop/icons/`
 - JS 混淆配置已关闭 `controlFlowFlattening` / `deadCodeInjection` / `selfDefending` / `debugProtection`，避免破坏 Vue 3 runtime 或触发 Tauri CSP 拦截。**详细原因与触发的真实故障链路**见 [`scripts/obfuscator.config.json`](scripts/obfuscator.config.json) 中 `_note_cff_dci_off` 字段；**不要**为「更难被反混淆」打开这两个开关，否则下次发版会以非常间歇且难复现的方式炸掉
 - Windows 下 `std::process::Command` 调用系统工具（如 `wmic`）需加 `CREATE_NO_WINDOW` 防止黑窗闪现
-- `backup/` 为旧版 Python 资产，不参与当前主运行链路
 - 新增 / 调整授权 Worker 域名前请通读上文「新增 / 调整备用域名检查清单」，避免客户端 `apps/desktop/src/app_settings.rs::license_api_base_urls` 与 `backend/wrangler.toml` 路由对不上

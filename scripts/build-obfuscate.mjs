@@ -30,11 +30,11 @@ const RUST_MEMBER_DIRS = [
   "backend/api-contracts",
   "backend/license-service",
   "backend/license-worker",
-  "crates/domain-core",
-  "crates/security-core",
-  "crates/desktop-services",
-  "tools/build-tools",
-  "tools/xtask",
+  "apps/desktop/crates/domain-core",
+  "apps/desktop/crates/security-core",
+  "apps/desktop/crates/desktop-services",
+  "scripts/build-tools",
+  "scripts/xtask",
 ];
 
 /** 解析根 Cargo.toml 的 [workspace].members 列表。 */
@@ -75,7 +75,7 @@ const ROOT_DIRS = [".cargo"];
 
 const OBFUSCATOR_CONFIG = join(REPO_ROOT, "scripts", "obfuscator.config.json");
 const UI_DIST_SRC = join(REPO_ROOT, "apps", "ui", "dist");
-const RELEASE_OUT = join(REPO_ROOT, "dist", "release");
+const RELEASE_OUT = join(REPO_ROOT, "dist");
 const WEBVIEW2_RUNTIME_SOURCE = process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR
   ? resolve(process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR)
   : join(REPO_ROOT, "vendor", "webview2-runtime");
@@ -301,9 +301,9 @@ function stage_hardenRustflags() {
 target-dir = "target"
 rustflags = [
   "--remap-path-prefix", "${mirror}/apps/desktop/src=s",
-  "--remap-path-prefix", "${mirror}/crates/=c/",
+  "--remap-path-prefix", "${mirror}/apps/desktop/crates/=c/",
   "--remap-path-prefix", "${mirror}/backend/=b/",
-  "--remap-path-prefix", "${mirror}/tools/=t/",
+  "--remap-path-prefix", "${mirror}/scripts/=x/",
   "--remap-path-prefix", "${cargoHome}=r",
   "-Z", "location-detail=none",
 ]
