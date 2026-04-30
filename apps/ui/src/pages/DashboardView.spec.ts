@@ -150,10 +150,10 @@ describe("DashboardView", () => {
     expect(wrapper.find(".dashboard-metric-card--today").exists()).toBe(true);
     expect(wrapper.text()).toContain("订单缓存概览");
     expect(wrapper.text()).toContain("运行信息");
-    expect(wrapper.text()).toContain("今天缓存");
-    expect(wrapper.text()).toContain("昨天缓存");
-    expect(wrapper.text()).toContain("近 7 天缓存");
-    expect(wrapper.text()).toContain("近 30 天缓存");
+    expect(wrapper.text()).toContain("今天订单");
+    expect(wrapper.text()).toContain("昨天订单");
+    expect(wrapper.text()).toContain("近 7 天订单");
+    expect(wrapper.text()).toContain("近 30 天订单");
     expect(wrapper.text()).toContain("3");
     expect(wrapper.text()).toContain("7");
     expect(wrapper.text()).toContain("18");

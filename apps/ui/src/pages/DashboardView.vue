@@ -136,25 +136,25 @@ const cacheRangeHints = computed(() =>
 const metrics = computed<MetricTile[]>(() => [
   buildCacheMetric(
     "today",
-    "今天缓存",
+    "今天订单",
     cacheCounts.value.today,
     cacheRangeHints.value.today,
   ),
   buildCacheMetric(
     "yesterday",
-    "昨天缓存",
+    "昨天订单",
     cacheCounts.value.yesterday,
     cacheRangeHints.value.yesterday,
   ),
   buildCacheMetric(
     "last_7_days",
-    "近 7 天缓存",
+    "近 7 天订单",
     cacheCounts.value.last7,
     cacheRangeHints.value.last_7_days,
   ),
   buildCacheMetric(
     "last_30_days",
-    "近 30 天缓存",
+    "近 30 天订单",
     cacheCounts.value.last30,
     cacheRangeHints.value.last_30_days,
   ),
@@ -277,12 +277,11 @@ onMounted(async () => {
         <section class="surface-panel dashboard-cache-panel shrink-0 p-3 lg:p-4" aria-labelledby="dashboard-cache-title">
           <div class="dashboard-panel-heading mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <span class="card-eyebrow">ORDER CACHE</span>
-              <h3 id="dashboard-cache-title" class="mt-1 text-base font-bold tracking-tight text-slate-950">订单缓存概览</h3>
+              <div class="dashboard-section-title-row">
+                <h3 id="dashboard-cache-title" class="dashboard-section-title text-base font-bold tracking-tight text-slate-950">订单缓存概览</h3>
+                <span class="dashboard-section-kicker dashboard-section-kicker--cache">CACHE · 自然日窗口</span>
+              </div>
             </div>
-            <span class="dashboard-panel-note rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-              按自然日统计
-            </span>
           </div>
 
           <div
@@ -315,9 +314,13 @@ onMounted(async () => {
         </section>
 
         <section class="surface-panel dashboard-shortcuts-panel flex min-h-0 shrink-0 flex-col p-3 lg:p-4">
-          <div class="subsystem-section-header mb-3 flex items-center gap-2">
-            <h3 class="text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
-            <span class="text-[11px] text-slate-400">一键直达核心业务</span>
+          <div class="subsystem-section-header dashboard-shortcuts-head mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div class="dashboard-section-title-row">
+                <h3 class="dashboard-section-title text-sm font-semibold tracking-tight text-slate-900">快捷入口</h3>
+                <span class="dashboard-section-kicker dashboard-section-kicker--shortcut">FAST PATH · 常用流程</span>
+              </div>
+            </div>
           </div>
 
           <div
@@ -355,9 +358,10 @@ onMounted(async () => {
         aria-label="运行时元数据"
       >
         <div class="dashboard-side-rail-head mb-3">
-          <span class="card-eyebrow">RUNTIME</span>
-          <h3 class="mt-1 text-sm font-bold tracking-tight text-slate-950">运行信息</h3>
-          <p class="mt-1 text-[11px] leading-4 text-slate-500">版本、教程与本机时间</p>
+          <div class="dashboard-section-title-row">
+            <h3 class="dashboard-section-title text-sm font-bold tracking-tight text-slate-950">运行信息</h3>
+            <span class="dashboard-section-kicker dashboard-section-kicker--runtime">RUNTIME · 本机快照</span>
+          </div>
         </div>
 
         <div class="dashboard-meta-list grid gap-3">

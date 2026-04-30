@@ -1,12 +1,12 @@
 /* Dashboard scoped styles. */
 :root {
-  --dashboard-card-h-metric: 5.85rem;
-  --dashboard-card-h-shortcut: 4.55rem;
-  --dashboard-card-h-meta: 3.65rem;
+  --dashboard-card-h-metric: 6.15rem;
+  --dashboard-card-h-shortcut: 4.85rem;
+  --dashboard-card-h-meta: 3.9rem;
 }
 
 .dashboard-view {
-  gap: 0.65rem !important;
+  gap: 1.22rem !important;
 }
 
 .dashboard-hero {
@@ -28,16 +28,16 @@
 
 .dashboard-content-grid {
   align-items: stretch;
-  gap: 0.65rem !important;
+  gap: 1.32rem !important;
 }
 
 .dashboard-primary-stack {
   min-width: 0;
-  gap: 0.65rem !important;
+  gap: 1.32rem !important;
 }
 
 .dashboard-cache-panel {
-  padding: 0.78rem 0.9rem !important;
+  padding: 0.95rem 1.05rem !important;
   background:
     radial-gradient(circle at 96% 0%, rgba(187, 247, 208, 0.34), transparent 32%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(247, 255, 251, 0.94) 100%);
@@ -45,25 +45,94 @@
 
 .dashboard-panel-heading {
   position: relative;
-  margin-bottom: 0.55rem !important;
+  margin-bottom: 0.75rem !important;
 }
 
-.dashboard-panel-heading h3 {
-  margin-top: 0.2rem !important;
-  font-size: 0.92rem;
+.dashboard-section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.22rem 0.52rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(236, 253, 245, 0.62));
+  color: #047857;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  box-shadow:
+    0 10px 24px -22px rgba(5, 150, 105, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.dashboard-section-kicker::before {
+  content: "";
+  width: 0.36rem;
+  height: 0.36rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+  opacity: 0.88;
+}
+
+.dashboard-section-kicker--shortcut {
+  border-color: rgba(14, 165, 233, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(240, 249, 255, 0.68));
+  color: #0369a1;
+}
+
+.dashboard-section-kicker--shortcut::before {
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
+}
+
+.dashboard-section-kicker--runtime {
+  border-color: rgba(100, 116, 139, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 252, 0.74));
+  color: #475569;
+}
+
+.dashboard-section-kicker--runtime::before {
+  box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.1);
+}
+
+.dashboard-section-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.56rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-section-title {
+  color: #07111f;
+  letter-spacing: -0.025em;
   line-height: 1.15;
 }
 
-.dashboard-panel-note {
-  padding: 0.22rem 0.62rem !important;
-  font-size: 0.68rem !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+.dashboard-section-copy {
+  max-width: 28rem;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.dashboard-panel-heading h3 {
+  font-size: 0.92rem;
+  line-height: 1.15;
 }
 
 .dashboard-side-rail {
   position: relative;
   overflow: hidden;
-  padding: 0.78rem 0.9rem !important;
+  padding: 0.95rem 1.05rem !important;
   background:
     radial-gradient(circle at 100% 0%, rgba(186, 230, 253, 0.28), transparent 36%),
     radial-gradient(circle at 0% 100%, rgba(209, 250, 229, 0.42), transparent 34%),
@@ -81,13 +150,10 @@
 
 .dashboard-side-rail-head {
   position: relative;
-  margin-bottom: 0.55rem !important;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+  margin-bottom: 0.7rem !important;
 }
 
 .dashboard-side-rail-head h3 {
-  margin-top: 0.18rem !important;
   font-size: 0.86rem;
   line-height: 1.12;
 }
@@ -101,7 +167,7 @@
 .dashboard-meta-list {
   position: relative;
   flex: 1 1 auto;
-  gap: 0.5rem !important;
+  gap: 0.65rem !important;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: minmax(var(--dashboard-card-h-meta), 1fr);
 }
@@ -159,10 +225,10 @@
     transform var(--motion-mid) ease,
     box-shadow var(--motion-mid) ease,
     border-color var(--motion-mid) ease;
-  border-top: 3px solid transparent;
+  border-left: 4px solid transparent;
   height: var(--dashboard-card-h-metric);
   min-height: var(--dashboard-card-h-metric) !important;
-  padding: 0.72rem 0.82rem !important;
+  padding: 0.82rem 0.95rem !important;
   justify-content: space-between;
   background:
     radial-gradient(circle at 92% 8%, rgba(187, 247, 208, 0.3), transparent 34%),
@@ -221,36 +287,38 @@
 }
 
 .dashboard-metric-card--success {
-  border-top-color: rgba(5, 150, 105, 0.58);
+  border-left-color: rgba(5, 150, 105, 0.58);
 }
 
 .dashboard-metric-card--warn {
-  border-top-color: rgba(249, 115, 22, 0.6);
+  border-left-color: rgba(249, 115, 22, 0.6);
 }
 
 .dashboard-metric-card--error {
-  border-top-color: rgba(220, 38, 38, 0.62);
+  border-left-color: rgba(220, 38, 38, 0.62);
 }
 
 .dashboard-metric-card--idle {
-  border-top-color: rgba(148, 163, 184, 0.45);
+  border-left-color: rgba(148, 163, 184, 0.45);
 }
 
 .dashboard-metric-card--today {
-  border-top-color: rgba(5, 150, 105, 0.78);
+  border-left-color: rgba(5, 150, 105, 0.78);
 }
 
 .dashboard-meta-card {
   position: relative;
   border: 1px solid rgba(226, 232, 240, 0.84);
-  border-left: 3px solid transparent;
+  border-left: 4px solid transparent;
   border-radius: 14px;
   transition:
     transform var(--motion-mid) ease,
     box-shadow var(--motion-base) ease,
     border-color var(--motion-base) ease;
   height: var(--dashboard-card-h-meta);
-  padding: 0.48rem 0.62rem !important;
+  padding: 0.58rem 0.75rem !important;
+  align-items: center;
+  gap: 0.72rem !important;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.9));
 }
@@ -287,13 +355,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.65rem;
-  height: 1.65rem;
-  border-radius: 9px;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 10px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.9) 100%);
   color: #475569;
   box-shadow: 0 2px 8px -6px rgba(15, 23, 42, 0.18);
   flex-shrink: 0;
+}
+
+.dashboard-meta-icon svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .dashboard-meta-card--version .dashboard-meta-icon {
@@ -312,20 +385,21 @@
 }
 
 .dashboard-meta-label {
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   color: #64748b;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .dashboard-meta-value {
-  margin-top: 0.08rem;
-  font-size: 0.78rem;
+  margin-top: 0.16rem;
+  font-size: 0.8rem;
   color: #0f172a;
   font-weight: 700;
   letter-spacing: -0.005em;
-  line-height: 1.2;
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -333,7 +407,8 @@
 
 .dashboard-meta-value--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
+  letter-spacing: -0.02em;
 }
 
 .dashboard-shortcuts-grid {
@@ -341,11 +416,15 @@
 }
 
 .dashboard-shortcuts-panel {
-  padding: 0.78rem 0.9rem !important;
+  padding: 0.95rem 1.05rem !important;
 }
 
 .dashboard-shortcuts-panel .subsystem-section-header {
-  margin-bottom: 0.55rem !important;
+  margin-bottom: 0.72rem !important;
+}
+
+.dashboard-shortcuts-head {
+  align-items: center;
 }
 
 .dashboard-shortcuts-panel .subsystem-section-header h3 {
@@ -358,8 +437,9 @@
 }
 
 .dashboard-shortcut {
+  border-left: 4px solid transparent;
   height: var(--dashboard-card-h-shortcut);
-  padding: 0.48rem 0.62rem;
+  padding: 0.58rem 0.75rem;
   transition:
     transform var(--motion-fast) ease,
     box-shadow var(--motion-mid) ease,
@@ -425,9 +505,17 @@
   box-shadow: 0 14px 30px -18px rgba(5, 150, 105, 0.66);
 }
 
+.dashboard-shortcut--brand {
+  border-left-color: rgba(5, 150, 105, 0.64);
+}
+
 .dashboard-shortcut--sky .dashboard-shortcut-icon {
   background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
   box-shadow: 0 14px 30px -18px rgba(14, 165, 233, 0.6);
+}
+
+.dashboard-shortcut--sky {
+  border-left-color: rgba(14, 165, 233, 0.62);
 }
 
 .dashboard-shortcut--amber .dashboard-shortcut-icon {
@@ -435,9 +523,17 @@
   box-shadow: 0 14px 30px -18px rgba(234, 88, 12, 0.6);
 }
 
+.dashboard-shortcut--amber {
+  border-left-color: rgba(234, 88, 12, 0.62);
+}
+
 .dashboard-shortcut--slate .dashboard-shortcut-icon {
   background: linear-gradient(135deg, #94a3b8 0%, #475569 100%);
   box-shadow: 0 14px 30px -18px rgba(71, 85, 105, 0.55);
+}
+
+.dashboard-shortcut--slate {
+  border-left-color: rgba(71, 85, 105, 0.6);
 }
 
 /* 仪表盘：业务流程引导 5 步 */
