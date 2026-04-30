@@ -1,4 +1,4 @@
-use api_contracts::{IntegrityManifest, IntegrityManifestFile};
+use backend::contracts::{IntegrityManifest, IntegrityManifestFile};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use chrono::Utc;
@@ -98,7 +98,7 @@ pub fn verify_manifest_signature(
 }
 
 fn canonical_manifest_payload(manifest: &IntegrityManifest) -> anyhow::Result<Vec<u8>> {
-    // 统一委托到 api-contracts，避免 build-tools 与 security_core 的投影字节漂移。
+    // 统一委托到 backend::contracts，避免打包侧与运行时校验侧字节漂移。
     Ok(manifest.canonical_payload_bytes()?)
 }
 

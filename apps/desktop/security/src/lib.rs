@@ -73,7 +73,7 @@ fn verifying_key_from_b64url(public_key_b64url: &str) -> Result<VerifyingKey, St
 /// - `payload: null | <parsed payload Value>`
 /// - 可选 `error: string`
 ///
-/// 对外 `pub fn` 便于集成测试锁住"FFI 与 `license_service::lease::LeaseVerifier`
+/// 对外 `pub fn` 便于集成测试锁住"FFI 与 `backend::license::lease::LeaseVerifier`
 /// 两条验签路径的行为等价"。应用层业务请优先使用 `LeaseVerifier`，它返回类型化
 /// `LeasePayload` + `LeaseError`，比 JSON 扁平结构更适合错误分支穷尽。
 pub fn verify_lease_impl(
@@ -123,7 +123,7 @@ pub fn verify_lease_impl(
         }
     };
 
-    if payload.get("kind").and_then(Value::as_str) != Some(api_contracts::LEASE_KIND_LICENSE) {
+    if payload.get("kind").and_then(Value::as_str) != Some(backend::contracts::LEASE_KIND_LICENSE) {
         return json!({"ok": false, "reason": "invalid", "payload": null});
     }
 
@@ -329,7 +329,7 @@ mod tests {
 
     fn lease_payload(device_id: &str, exp: i64) -> Value {
         json!({
-            "kind": api_contracts::LEASE_KIND_LICENSE,
+            "kind": backend::contracts::LEASE_KIND_LICENSE,
             "device_id": device_id,
             "exp": exp
         })

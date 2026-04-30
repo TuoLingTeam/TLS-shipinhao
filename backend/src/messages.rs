@@ -3,12 +3,12 @@
 //! 这里只放**纯 DTO + 路由 parse helper**，不包含业务逻辑。拆出来的动机：
 //!
 //! - `lib.rs` 原本近 2000 行，导入 / DTO / handler / dispatch 全堆在一起
-//! - DTO 与路由枚举**无副作用、无外部依赖**（除了 serde 与 api-contracts），
+//! - DTO 与路由枚举**无副作用、无外部依赖**（除了 serde 与 contracts），
 //!   迁移风险最小；对外公共 API 通过 `pub use messages::*` 保持不变
 //! - 后续若要继续拆 handler / dispatch，可以在本模块稳定后以相同思路进行
 
-use api_contracts::blank_debug_release;
-use api_contracts::LicenseState;
+use crate::blank_debug_release;
+use crate::contracts::LicenseState;
 use serde::{Deserialize, Serialize};
 
 /// Worker 支持的路由枚举。
@@ -24,7 +24,7 @@ pub enum WorkerRoute {
     /// 管理员吊销端点：由后台管理 UI 触发
     LeaseRevoke,
     /// M2-08 任务级授权：input = [`TaskAuthorizeRequest`]，output =
-    /// `api_contracts::RuntimeGrant`
+    /// `crate::contracts::RuntimeGrant`
     TaskAuthorize,
     NotFound,
 }

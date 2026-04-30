@@ -116,7 +116,7 @@ tests/integration/__pycache__/
 
 backend/.wrangler/
 
-backend/worker/build/
+backend/build/
 backend/.cache/
 
 # 深度混淆镜像产物（scripts/build-obfuscate.mjs 生成）

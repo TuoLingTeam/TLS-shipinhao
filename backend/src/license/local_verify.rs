@@ -5,13 +5,13 @@
 //! 仍能让用户正常使用。
 //!
 //! 本模块不直接依赖 Keychain/文件后备——调用方（`apps/desktop` 的 Tauri
-//! 命令层）负责读取 Token 后作为 `Option<&str>` 传入。这样 license-service
+//! 命令层）负责读取 Token 后作为 `Option<&str>` 传入。这样授权域逻辑
 //! 无需依赖任何 IO，方便纯函数测试。
 
-use api_contracts::{LicenseState, Lp, RuntimeState};
+use crate::contracts::{LicenseState, Lp, RuntimeState};
 use chrono::{DateTime, Utc};
 
-use crate::lease::{LeaseError, LeaseVerifier};
+use crate::license::lease::{LeaseError, LeaseVerifier};
 
 const RUNTIME_BACKEND: &str = "rust";
 
@@ -102,7 +102,7 @@ fn epoch_to_iso(epoch: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api_contracts::LEASE_KIND_LICENSE;
+    use crate::contracts::LEASE_KIND_LICENSE;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};

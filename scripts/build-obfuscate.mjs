@@ -27,9 +27,7 @@ const OUT_DIR = join(REPO_ROOT, "TLS-shipinhao-release");
 // 启动期会与根 Cargo.toml 校验一致性。
 const RUST_MEMBER_DIRS = [
   "apps/desktop",
-  "backend/contracts",
-  "backend/license",
-  "backend/worker",
+  "backend",
   "apps/desktop/security",
   "scripts/build-tools",
   "scripts/xtask",
@@ -82,7 +80,7 @@ const WEBVIEW2_RUNTIME_SOURCE = process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR
 const EXCLUDE_NAMES = new Set([
   "target",
   "node_modules",
-  "build", // backend/worker/build 等运行时产物
+  "build", // backend/build 等运行时产物
   ".DS_Store",
   "Thumbs.db",
   "__pycache__",

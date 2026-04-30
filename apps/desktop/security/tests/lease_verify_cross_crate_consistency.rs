@@ -1,5 +1,5 @@
 //! 跨 crate 一致性回归：`security_core::verify_lease_impl`（FFI JSON）与
-//! `license_service::lease::LeaseVerifier::verify`（类型化 Rust API）对同一个
+//! `backend::license::lease::LeaseVerifier::verify`（类型化 Rust API）对同一个
 //! token 必须返回等价语义。两条路径语义漂移一小格会直接让 FFI Python 桥接
 //! 与 Rust 业务层各自"判活"，酿成"一边说签名通过、一边说过期"的诡异现象。
 //!
@@ -11,10 +11,10 @@
 //! 5. 已过期 + 不允许过期：两边都失败（FFI `expired` / Rust `Expired`）
 //! 6. 已过期 + 允许过期（allow_expired=true）：两边都成功
 
-use api_contracts::LEASE_KIND_LICENSE;
+use backend::contracts::LEASE_KIND_LICENSE;
+use backend::license::lease::{LeaseError, LeaseVerifier};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signer, SigningKey};
-use license_service::lease::{LeaseError, LeaseVerifier};
 use serde_json::{json, Value};
 
 fn generate_keypair() -> (SigningKey, String) {

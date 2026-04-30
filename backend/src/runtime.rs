@@ -1,16 +1,16 @@
 //! `/api/*` 路由的异步业务层与仓储 trait。
 
-use api_contracts::{
+use crate::contracts::{
     LicenseLease, LicenseState, Lp, Rg, RiskLevel, LEASE_KIND_LICENSE, LICENSE_TASK_BATCH_DELIVERY,
     LICENSE_TASK_CACHE_MANAGE, LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND,
     LICENSE_TASK_REVIEW_FULL_SCAN,
 };
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use license_service::{
+use crate::license::{
     authorize_task_local, ActivationInput, AuditEvent, DeviceRegistration, GeneratedKeyRecord,
     GeneratedKeyStatus, LicenseRecord, VerifyInput,
 };
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -122,14 +122,14 @@ pub(crate) fn device_id_matches_fingerprint(device_id: &str, device_fingerprint:
 }
 
 fn issue_license_lease_for_record(record: &LicenseRecord, now: DateTime<Utc>) -> LicenseLease {
-    let lease = license_service::issue_license_lease(
+    let lease = crate::license::issue_license_lease(
         &record.license_key,
         &record.device_id,
         record.status,
         &record.license_expires_at,
-        &(now + chrono::Duration::hours(license_service::LEASE_HARD_EXPIRY_HOURS))
+        &(now + chrono::Duration::hours(crate::license::LEASE_HARD_EXPIRY_HOURS))
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-        &(now + chrono::Duration::hours(license_service::LEASE_RENEWAL_HOURS))
+        &(now + chrono::Duration::hours(crate::license::LEASE_RENEWAL_HOURS))
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         &now_iso(now),
     );
@@ -432,7 +432,7 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
         }
         record.device_fingerprint = input.device_fingerprint.clone();
         record.updated_at = now_iso_str.clone();
-        record.binding_version = license_service::LICENSE_PROTOCOL_VERSION;
+        record.binding_version = crate::license::LICENSE_PROTOCOL_VERSION;
         record.status = LicenseState::Active;
         record.last_verify_at = now_iso_str.clone();
         repo.save_license(&record).await?;
@@ -446,7 +446,7 @@ pub async fn runtime_activate<R: AsyncRuntimeRepository + ?Sized>(
             activated_at: now_iso_str.clone(),
             license_expires_at: now_iso(now + chrono::Duration::days(key_record.plan_days as i64)),
             updated_at: now_iso_str.clone(),
-            binding_version: license_service::LICENSE_PROTOCOL_VERSION,
+            binding_version: crate::license::LICENSE_PROTOCOL_VERSION,
             status: LicenseState::Active,
             last_verify_at: now_iso_str.clone(),
         };

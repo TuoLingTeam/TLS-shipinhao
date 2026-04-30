@@ -1,5 +1,5 @@
 [package]
-name = "license-worker"
+name = "backend"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,14 +12,13 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-chrono.workspace = true
 sha2.workspace = true
-license-service = { path = "../license" }
-api-contracts = { path = "../contracts" }
+thiserror.workspace = true
 base64 = "0.22"
-async-trait = "0.1"
 ed25519-dalek = { version = "2.1", features = ["pkcs8"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

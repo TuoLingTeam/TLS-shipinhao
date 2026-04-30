@@ -1,6 +1,6 @@
 //! 授权协议常量与 Lease 构造函数。
 
-use api_contracts::{LicenseLease, LicenseState, SUPPORTED_TASKS};
+use crate::contracts::{LicenseLease, LicenseState, SUPPORTED_TASKS};
 
 pub const LEASE_RENEWAL_HOURS: i64 = 24;
 pub const LEASE_HARD_EXPIRY_HOURS: i64 = 72;
@@ -16,8 +16,8 @@ pub const LICENSE_RUNTIME_GRANT_MINUTES: i64 = 30;
 /// `LicenseState::Invalid`，从而触发「请重新激活」流程。
 pub const LICENSE_PUBLIC_KEY_B64: &str = "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4PyQSo";
 
-/// 默认签发给 Lease 的任务白名单。与 `api_contracts::SUPPORTED_TASKS` 同值（单一事实源），
-/// 新增任务类型时只需在 `api-contracts` 一处扩展 `SUPPORTED_TASKS`。
+/// 默认签发给 Lease 的任务白名单。与 `crate::contracts::SUPPORTED_TASKS` 同值（单一事实源），
+/// 新增任务类型时只需在 `contracts` 一处扩展 `SUPPORTED_TASKS`。
 pub const DEFAULT_TASK_POLICY: &[&str] = SUPPORTED_TASKS;
 
 /// 按给定字段构造未签名的 `LicenseLease`。

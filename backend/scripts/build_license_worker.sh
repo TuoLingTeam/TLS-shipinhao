@@ -2,7 +2,7 @@
 set -eu
 
 log() {
-  printf '[license-worker-build] %s\n' "$*"
+  printf '[backend-build] %s\n' "$*"
 }
 
 ensure_cmd() {
@@ -46,16 +46,6 @@ case "$SCRIPT_PATH" in
 esac
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
 BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$BACKEND_DIR/.." && pwd)
-TEMP_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/license-worker-workspace.XXXXXX")
-REAL_WORKER_DIR="$BACKEND_DIR/worker"
-TEMP_BACKEND_DIR="$TEMP_WORKSPACE/backend"
-TEMP_WORKER_DIR="$TEMP_BACKEND_DIR/worker"
-
-cleanup() {
-  rm -rf "$TEMP_WORKSPACE"
-}
-trap cleanup EXIT HUP INT TERM
 
 bootstrap_rust
 ensure_rust_target
@@ -64,50 +54,7 @@ log "Using cargo: $(command -v cargo)"
 log "Using rustc: $(command -v rustc)"
 log "Working backend dir: $BACKEND_DIR"
 
-mkdir -p "$TEMP_BACKEND_DIR"
-cp -R "$REAL_WORKER_DIR" "$TEMP_WORKER_DIR"
-cp -R "$BACKEND_DIR/contracts" "$TEMP_BACKEND_DIR/contracts"
-cp -R "$BACKEND_DIR/license" "$TEMP_BACKEND_DIR/license"
-
-# license-service 的 [dev-dependencies] 仍然引用桌面侧 security_core
-# 做跨 crate 一致性测试。wasm target 下不会编译 dev-dep，但 `cargo metadata`
-# 必须能读到 security_core 的 manifest，否则 worker-build 在解析 workspace
-# 时就会 "failed to load manifest for dependency security_core" 报错。
-# 因此把 apps/desktop/security 也复制进临时 workspace 并作为 member 声明。
-mkdir -p "$TEMP_WORKSPACE/apps/desktop"
-cp -R "$REPO_ROOT/apps/desktop/security" "$TEMP_WORKSPACE/apps/desktop/security"
-
-if [ -f "$REPO_ROOT/Cargo.lock" ]; then
-  cp "$REPO_ROOT/Cargo.lock" "$TEMP_WORKSPACE/Cargo.lock"
-fi
-
-cat > "$TEMP_WORKSPACE/Cargo.toml" <<'EOF'
-[workspace]
-resolver = "2"
-members = [
-  "backend/worker",
-  "backend/contracts",
-  "backend/license",
-  "apps/desktop/security",
-]
-
-[workspace.package]
-edition = "2021"
-version = "5.1.0"
-license = "Proprietary"
-authors = ["TLS-801"]
-
-[workspace.dependencies]
-anyhow = "1"
-chrono = { version = "0.4", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-thiserror = "2"
-tokio = { version = "1", features = ["full"] }
-EOF
-
-cd "$TEMP_WORKER_DIR"
+cd "$BACKEND_DIR"
 
 # ---- worker-build（无官方预编译，只能 cargo install；下一次升级到 worker-build 0.7 可换预编译） ----
 WORKER_BUILD_ROOT="$BACKEND_DIR/.cache/worker-build-0.1"
@@ -181,7 +128,4 @@ export WASM_BINDGEN_BIN
 
 log "Running worker-build..."
 "$WORKER_BUILD_BIN" "$@"
-
-rm -rf "$REAL_WORKER_DIR/build"
-cp -R "$TEMP_WORKER_DIR/build" "$REAL_WORKER_DIR/build"
-log "Build artifacts copied to $REAL_WORKER_DIR/build"
+log "Build artifacts written to $BACKEND_DIR/build"

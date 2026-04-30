@@ -3,8 +3,8 @@ use crate::app_settings::license_api_base_urls;
 use crate::error::AppError;
 use crate::security_event::{emit, emit_with_detail, SecurityEventKind};
 use crate::state::{self, AppState, Slp};
-use api_contracts::{LicenseState, Lp, Rg, RiskLevel, RuntimeState};
-use license_service::{authorize_task_local, lease::RefreshOutcome};
+use backend::contracts::{LicenseState, Lp, Rg, RiskLevel, RuntimeState};
+use backend::license::{authorize_task_local, lease::RefreshOutcome};
 use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 use tauri::State;
@@ -231,7 +231,7 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
     let client = make_client();
 
     let outcome =
-        license_service::lease::refresh_lease_if_due(&payload, now_epoch, |req| async move {
+        backend::license::lease::refresh_lease_if_due(&payload, now_epoch, |req| async move {
             let response = client
                 .refresh_lease(&req.license_key, &req.device_id, req.current_issued_at)
                 .await
@@ -239,7 +239,7 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
             if !response.success {
                 return Err(response.message);
             }
-            Ok(license_service::lease::RefreshResponse {
+            Ok(backend::license::lease::RefreshResponse {
                 new_token: response.new_token,
             })
         })
@@ -261,7 +261,7 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
             .await?;
             Ok(())
         }
-        Err(license_service::lease::RefreshError::Network(err)) => {
+        Err(backend::license::lease::RefreshError::Network(err)) => {
             emit_with_detail(
                 SecurityEventKind::LeaseRefreshFailed,
                 "network_error_swallowed",
@@ -269,7 +269,7 @@ async fn refresh_runtime_license_if_needed(state: &AppState) -> Result<(), AppEr
             );
             Ok(())
         }
-        Err(license_service::lease::RefreshError::HardExpired) => {
+        Err(backend::license::lease::RefreshError::HardExpired) => {
             emit(
                 SecurityEventKind::LeaseRefreshFailed,
                 "hard_expired_locked_out",
@@ -336,9 +336,9 @@ fn next_grant_id() -> String {
 fn task_requires_remote_authorization(task_type: &str) -> bool {
     matches!(
         task_type,
-        api_contracts::LICENSE_TASK_BATCH_DELIVERY
-            | api_contracts::LICENSE_TASK_REVIEW_FULL_SCAN
-            | api_contracts::LICENSE_TASK_CACHE_MANAGE
+        backend::contracts::LICENSE_TASK_BATCH_DELIVERY
+            | backend::contracts::LICENSE_TASK_REVIEW_FULL_SCAN
+            | backend::contracts::LICENSE_TASK_CACHE_MANAGE
     )
 }
 
@@ -613,9 +613,9 @@ mod tests {
             integrity_manifest_path: None,
             device_id: device_id.to_string(),
             lease_store: store,
-            lease_verifier: license_service::LeaseVerifier::from_public_key_b64(public_key_b64)
+            lease_verifier: backend::license::LeaseVerifier::from_public_key_b64(public_key_b64)
                 .unwrap(),
-            task_grant_cache: license_service::TaskGrantCache::new(),
+            task_grant_cache: backend::license::TaskGrantCache::new(),
             runtime_license_state: Mutex::new(RuntimeState::reason_only(LicenseState::Invalid)),
             license_profile: Mutex::new(Slp::default()),
             batch_delivery_cancel: Arc::new(AtomicBool::new(false)),
@@ -731,31 +731,34 @@ mod tests {
             *runtime = RuntimeState::reason_only(LicenseState::Active);
         }
 
-        let first = authorize_runtime_task(&state, api_contracts::LICENSE_TASK_REVIEW_FIND)
+        let first = authorize_runtime_task(&state, backend::contracts::LICENSE_TASK_REVIEW_FIND)
             .await
             .expect("local grant should be issued");
-        let second = authorize_runtime_task(&state, api_contracts::LICENSE_TASK_REVIEW_FIND)
+        let second = authorize_runtime_task(&state, backend::contracts::LICENSE_TASK_REVIEW_FIND)
             .await
             .expect("cached grant should be reused");
 
         assert!(first.granted);
         assert_eq!(first.grant_id, second.grant_id);
-        assert_eq!(first.task_type, api_contracts::LICENSE_TASK_REVIEW_FIND);
+        assert_eq!(
+            first.task_type,
+            backend::contracts::LICENSE_TASK_REVIEW_FIND
+        );
     }
 
     #[test]
     fn high_risk_tasks_require_remote_authorization() {
         assert!(task_requires_remote_authorization(
-            api_contracts::LICENSE_TASK_BATCH_DELIVERY
+            backend::contracts::LICENSE_TASK_BATCH_DELIVERY
         ));
         assert!(task_requires_remote_authorization(
-            api_contracts::LICENSE_TASK_REVIEW_FULL_SCAN
+            backend::contracts::LICENSE_TASK_REVIEW_FULL_SCAN
         ));
         assert!(task_requires_remote_authorization(
-            api_contracts::LICENSE_TASK_CACHE_MANAGE
+            backend::contracts::LICENSE_TASK_CACHE_MANAGE
         ));
         assert!(!task_requires_remote_authorization(
-            api_contracts::LICENSE_TASK_REVIEW_FIND
+            backend::contracts::LICENSE_TASK_REVIEW_FIND
         ));
     }
 

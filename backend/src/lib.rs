@@ -1,8 +1,10 @@
-//! `license-worker` 的 crate 入口。
+//! 授权后端 crate 入口。
 //!
-//! 这个 crate 的职责是把 `license-service` / `api-contracts` 暴露的授权协议
-//! 落成一个可部署到 Cloudflare Workers 的异步服务。整体结构尽量扁平：
+//! 这个 crate 同时承载前后端共享契约、授权领域逻辑与 Cloudflare Worker 入口。
+//! 目录收敛后仍保持源码模块边界清晰：
 //!
+//! - [`contracts`]：前后端共享 DTO、授权状态、任务白名单与签名 canonical payload。
+//! - [`license`]：Lease、本地校验、任务授权、授权记录模型。
 //! - [`messages`]：HTTP DTO 与路由枚举（`parse_route` / `WorkerRoute` /
 //!   `SignedLicenseApiResponse` 等），与外部协议一对一。
 //! - [`runtime`]：异步运行时业务层 + Cloudflare D1 仓储实现。所有
@@ -16,11 +18,7 @@
 //!   的 Lease Token。放在 lib.rs 主要是因为 `cloudflare_entry` 需要它，且它
 //!   的职责与"runtime 业务流程"解耦。
 //!
-//! 外部调用（测试 / 其它 crate）通过 `pub use messages::*;` + `pub use
-//! runtime::*;` 继续以 `license_worker::<symbol>` 的形式访问所有公开 API，
-//! 完成 runtime 业务从 lib.rs 抽出的搬家时不会破坏任何上游 import。
-
-use api_contracts::LicenseLease;
+use crate::contracts::LicenseLease;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use ed25519_dalek::pkcs8::DecodePrivateKey;
@@ -34,6 +32,8 @@ use ed25519_dalek::{Signer, SigningKey};
 #[doc(hidden)]
 pub use async_trait::async_trait;
 
+pub mod contracts;
+pub mod license;
 pub mod messages;
 pub mod runtime;
 
@@ -57,7 +57,7 @@ pub use runtime::{
 /// 从 Cloudflare Secret `LICENSE_SIGNING_PRIVATE_KEY_B64` 里加载 PKCS8 DER
 /// 或 PEM 文本；`sign_license_lease` 把 `LicenseLease` 折叠成 `Lp`
 /// canonical JSON 后做 `base64url(payload).base64url(ed25519_sig)` 格式的
-/// Token 输出，客户端 `security_core` / `license-service::lease::LeaseVerifier`
+/// Token 输出，客户端 `security_core` / `backend::license::LeaseVerifier`
 /// 用同一份公钥（`LICENSE_PUBLIC_KEY_B64`）验签。
 #[derive(Debug, Clone)]
 pub struct LeaseTokenSigner {

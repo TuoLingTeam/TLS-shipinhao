@@ -27,8 +27,8 @@ pub use review::matcher_helpers as review_matcher_helpers;
 use crate::domain::{
     DeliveryUpdateRequest, DeliveryUpdateResult, OrderCacheEntry, OrderMatchResult, TimeWindow,
 };
-use api_contracts::Rg;
 use async_trait::async_trait;
+use backend::contracts::Rg;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

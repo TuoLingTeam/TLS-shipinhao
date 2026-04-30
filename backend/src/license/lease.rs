@@ -1,12 +1,12 @@
 //! Lease Token 的 Ed25519 验签与续约判定。
 
-use api_contracts::{Lp, LEASE_KIND_LICENSE};
+use crate::contracts::{Lp, LEASE_KIND_LICENSE};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use thiserror::Error;
 
-use crate::LICENSE_PUBLIC_KEY_B64;
+use crate::license::LICENSE_PUBLIC_KEY_B64;
 
 /// Lease 校验失败的分类错误。
 #[derive(Debug, Error)]

@@ -42,9 +42,9 @@ TLS-shipinhao/
 │   │   └── icons/               # 桌面图标资源
 │   └── ui/                      # Vue 3 前端（Vite 6 + Pinia + vue-router + Tailwind v4）
 ├── backend/                     # Cloudflare Worker 授权后端
-│   ├── contracts/               # 前后端共享 API 契约（Cargo package: api-contracts）
-│   ├── license/                 # 授权域逻辑（Cargo package: license-service）
-│   ├── worker/                  # Rust → WASM Cloudflare Worker 入口（Cargo package: license-worker）
+│   ├── src/                     # 单一 backend crate：contracts / license / Worker runtime
+│   │   └── license/             # 授权域逻辑：Lease、本地校验、任务授权、授权模型
+│   ├── assets/                  # 管理后台 HTML（编译期嵌入 Worker）
 │   ├── db/                      # D1 schema / migration
 │   ├── scripts/                 # Worker 构建脚本
 │   └── wrangler.toml            # Worker 生产部署入口

@@ -15,9 +15,9 @@ pub enum TaskKind {
 }
 
 impl TaskKind {
-    /// 枚举对应的 canonical 字符串。与 `api_contracts::LICENSE_TASK_*` 常量字面量一致，
+    /// 枚举对应的 canonical 字符串。与 `backend::contracts::LICENSE_TASK_*` 常量字面量一致，
     /// `#[serde(rename_all = "snake_case")]` 的序列化结果也相同。改任一侧都会破坏
-    /// 已发放的 Lease / task_policy 字符串匹配，因此 domain 模块单测与 api-contracts
+    /// 已发放的 Lease / task_policy 字符串匹配，因此 domain 模块单测与 backend::contracts
     /// 常量通过 dev-dep 锁定等价关系。
     pub const fn as_str(&self) -> &'static str {
         match self {
@@ -29,7 +29,7 @@ impl TaskKind {
         }
     }
 
-    /// 所有已知任务类型，迭代顺序与 `api_contracts::SUPPORTED_TASKS` 对齐。
+    /// 所有已知任务类型，迭代顺序与 `backend::contracts::SUPPORTED_TASKS` 对齐。
     pub const ALL: &'static [TaskKind] = &[
         Self::ReviewFind,
         Self::ReviewFullScan,
@@ -164,7 +164,7 @@ pub enum DomainError {
 #[cfg(test)]
 mod task_kind_tests {
     use super::TaskKind;
-    use api_contracts::{
+    use backend::contracts::{
         is_supported_task, LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE,
         LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
         SUPPORTED_TASKS,
@@ -195,7 +195,7 @@ mod task_kind_tests {
         assert_eq!(
             TaskKind::ALL.len(),
             SUPPORTED_TASKS.len(),
-            "TaskKind::ALL 必须与 api_contracts::SUPPORTED_TASKS 长度一致",
+            "TaskKind::ALL 必须与 backend::contracts::SUPPORTED_TASKS 长度一致",
         );
         for kind in TaskKind::ALL.iter() {
             assert!(

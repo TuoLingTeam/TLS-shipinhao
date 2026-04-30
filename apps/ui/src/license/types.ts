@@ -1,8 +1,8 @@
 /**
- * 与 Rust `api_contracts::LicenseState` 严格一一对齐。
+ * 与 Rust `backend::contracts::LicenseState` 严格一一对齐。
  * 后端 serde 序列化永远落在下列 10 个取值之一；若未来新增状态，必须同时更新：
- *   1. `backend/contracts/src/lib.rs::LicenseState` 枚举变体
- *   2. `backend/contracts/src/lib.rs::LICENSE_STATE_SERDE_LABELS` 常量
+ *   1. `backend/src/contracts.rs::LicenseState` 枚举变体
+ *   2. `backend/src/contracts.rs::LICENSE_STATE_SERDE_LABELS` 常量
  *   3. 本文件与 `LICENSE_STATE_LABELS`
  *
  * 后端单测 `license_state_serde_labels_cover_all_variants` 守住 #1 与 #2 的一致性；
@@ -58,7 +58,7 @@ export interface RuntimeGrant {
 }
 
 /**
- * `api_contracts::RuntimeState` 在 TS 端的只读镜像。
+ * `backend::contracts::RuntimeState` 在 TS 端的只读镜像。
  *
  * 当前 `useLicense` 内的 `LicensePayload` 只覆盖了 IPC `get_license_status` /
  * `activate_license` / `verify_license` 这一组命令实际暴露的子集；如果未来
@@ -67,7 +67,7 @@ export interface RuntimeGrant {
  *
  * 这个接口定义保持「全字段、全可选」与 Rust serde 的 `#[serde(default)]`
  * 配套：
- * - 字段名严格按 `api_contracts::RuntimeState` 的 snake_case
+ * - 字段名严格按 `backend::contracts::RuntimeState` 的 snake_case
  * - 字段全部 optional，模拟「老前端读到新字段时什么都不做」的安全语义
  * - 不直接绑定到 `useTauriInvoke` 上以避免改动现有命令契约
  *

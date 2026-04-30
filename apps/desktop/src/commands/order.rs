@@ -4,7 +4,7 @@ use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized
 use crate::commands::shared::{current_store_paths, require_store_runtime_context};
 use crate::error::AppError;
 use crate::state::AppState;
-use api_contracts::LICENSE_TASK_CACHE_MANAGE;
+use backend::contracts::LICENSE_TASK_CACHE_MANAGE;
 use desktop::domain::{OrderCacheEntry, TimeWindow};
 use desktop::services::day_window::{
     end_of_day_timestamp, recent_day_range_timestamps, start_of_day_timestamp,

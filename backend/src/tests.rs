@@ -2,23 +2,23 @@
 //! 测试单独放到本文件，让 `lib.rs` 的生产代码不被千行测试淹没。
 //!
 //! `use super::*;` 拉入 crate root 的 pub 符号（`runtime_*` / `LeaseTokenSigner`
-//! / DTO / 契约常量等）；下面再显式从外部 crate import `api_contracts` /
-//! `chrono` / `license_service` 的类型，避免依赖"lib.rs 以前顺带 `use` 的
+//! / DTO / 契约常量等）；下面再显式 import `contracts` / `chrono` /
+//! `license` 的类型，避免依赖"lib.rs 以前顺带 `use` 的
 //! 私有符号通过同一个模块传递"这种脆弱的耦合。
 
 use super::*;
+use crate::contracts::{LicenseState, Rg, LICENSE_TASK_REVIEW_FIND};
+use crate::license::LeaseVerifier;
+use crate::license::{
+    ActivationInput, AuditEvent, DeviceRegistration, GeneratedKeyRecord, GeneratedKeyStatus,
+    LicenseRecord, VerifyInput,
+};
 use crate::runtime::{device_id_matches_fingerprint, now_iso};
-use api_contracts::{LicenseState, Rg, LICENSE_TASK_REVIEW_FIND};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use chrono::Utc;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use ed25519_dalek::SigningKey;
-use license_service::LeaseVerifier;
-use license_service::{
-    ActivationInput, AuditEvent, DeviceRegistration, GeneratedKeyRecord, GeneratedKeyStatus,
-    LicenseRecord, VerifyInput,
-};
 use std::collections::HashMap;
 use std::sync::Mutex;
 

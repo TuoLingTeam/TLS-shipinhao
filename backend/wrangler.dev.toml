@@ -1,13 +1,13 @@
-# 仅用于在 backend/worker 目录本地调试：`npx wrangler dev`。
-# 线上生产部署请使用 ../wrangler.toml（管理页与 D1 配置以 backend 为入口）。
+# 仅用于 backend 本地调试：`npx wrangler dev -c wrangler.dev.toml`。
+# 线上生产部署请使用 wrangler.toml。
 
-name = "tls-shipinhao-license-worker"
+name = "tls-shipinhao-backend-dev"
 main = "build/worker/shim.mjs"
 compatibility_date = "2024-12-01"
 workers_dev = true
 
 [build]
-command = "../scripts/build_license_worker.sh --release"
+command = "./scripts/build_license_worker.sh --release"
 
 # 勿在此文件配置 routes，避免与 backend/wrangler.toml 线上路由冲突。
 

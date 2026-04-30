@@ -1,12 +1,12 @@
 use std::future::Future;
 use std::time::Duration;
 
-use api_contracts::Rg;
+use backend::contracts::Rg;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::app_settings::LICENSE_API_TIMEOUT_SECS;
-use api_contracts::blank_debug_release;
+use backend::blank_debug_release;
 
 blank_debug_release!(Lrr);
 blank_debug_release!(Lar);
@@ -125,7 +125,7 @@ async fn response_to_attempt<R: serde::de::DeserializeOwned>(
     }
 }
 
-/// 激活请求体：字段名必须与 Worker `license_service::ActivationInput`
+/// 激活请求体：字段名必须与 Worker `backend::license::ActivationInput`
 /// 完全对齐（`license_key` 而非 `key`），否则 Worker 的 `serde_json::from_value`
 /// 会在 Activate 分支静默失败，被顶层 `or_else` 收敛为 `worker_runtime_error`
 /// 兜底响应，客户端看到"激活失败"却拿不到任何业务原因。
@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn activate_request_serializes_with_license_key_field() {
         // 回归测试：防止再次把 `license_key` 错写回 `key`。
-        // Worker 端 `license_service::ActivationInput` 只识别 `license_key`，
+        // Worker 端 `backend::license::ActivationInput` 只识别 `license_key`，
         // 字段名偏移会导致 serde_json::from_value 失败并被 Worker 顶层兜底为
         // `worker_runtime_error`，客户端看到的"激活失败"无任何业务原因。
         let req = ActivateRequest {

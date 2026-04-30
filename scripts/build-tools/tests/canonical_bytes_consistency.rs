@@ -1,11 +1,11 @@
 //! 跨 crate 回归：打包侧与校验侧产出的 canonical payload 字节必须完全一致。
 //!
-//! 背景：`build-tools::sign_manifest` 用 `api_contracts::IntegrityManifest::canonical_payload_bytes()`
+//! 背景：`build-tools::sign_manifest` 用 `backend::contracts::IntegrityManifest::canonical_payload_bytes()`
 //! 签名，而运行时校验走 `security_core::integrity::canonicalize_manifest(&ManifestPayload)`。
 //! 两侧若字段顺序 / 类型 / 序列化规则偏差一个字节，Ed25519 校验就会直接失败，
 //! 历史签过的包也会集体不可验证。用本测试锁住字节串一致性。
 
-use api_contracts::{IntegrityManifest, IntegrityManifestFile};
+use backend::contracts::{IntegrityManifest, IntegrityManifestFile};
 use security_core::integrity::{canonicalize_manifest, ManifestPayload, Mf};
 
 fn fixture_files() -> (Vec<IntegrityManifestFile>, Vec<Mf>) {
@@ -49,7 +49,7 @@ fn canonical_bytes_match_between_build_tools_and_security_core() {
 
     let bytes_from_api = api_manifest
         .canonical_payload_bytes()
-        .expect("api_contracts canonical serialization should not fail");
+        .expect("backend contracts canonical serialization should not fail");
     let bytes_from_sec = canonicalize_manifest(&sec_payload)
         .expect("security_core canonicalize_manifest should not fail");
 

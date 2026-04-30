@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use api_contracts::{is_supported_task, Lp, Rg, RiskLevel};
+use crate::contracts::{is_supported_task, Lp, Rg, RiskLevel};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::LICENSE_RUNTIME_GRANT_MINUTES;
+use crate::license::LICENSE_RUNTIME_GRANT_MINUTES;
 
 /// 任务授权过程中的错误分类。
 #[derive(Debug, Error)]
@@ -126,7 +126,7 @@ impl TaskGrantCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api_contracts::{
+    use crate::contracts::{
         LEASE_KIND_LICENSE, LICENSE_TASK_BATCH_DELIVERY, LICENSE_TASK_CACHE_MANAGE,
         LICENSE_TASK_QUALITY_REFUND, LICENSE_TASK_REVIEW_FIND, LICENSE_TASK_REVIEW_FULL_SCAN,
     };

@@ -6,9 +6,9 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 
 use crate::adapters::secure_storage::{init_default_store, SecretStore, StorageError};
-use api_contracts::{LicenseState, RuntimeState};
+use backend::contracts::{LicenseState, RuntimeState};
+use backend::license::{verify_stored_lease_local, LeaseVerifier, TaskGrantCache};
 use desktop::services::{parse_cookie_profile, CookieProfile};
-use license_service::{verify_stored_lease_local, LeaseVerifier, TaskGrantCache};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -43,7 +43,7 @@ const STORE_REGISTRY_FILE_NAME: &str = "store-registry.json";
 const STORES_DIR_NAME: &str = "stores";
 const STORE_META_FILE_NAME: &str = "meta.json";
 
-use api_contracts::blank_debug_release;
+use backend::blank_debug_release;
 blank_debug_release!(Slp);
 
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -537,7 +537,7 @@ pub fn validate_integrity_if_present(manifest_path: Option<&Path>) -> Result<(),
     };
     security_core::validate_runtime_continuity(
         manifest_path,
-        license_service::LICENSE_PUBLIC_KEY_B64,
+        backend::license::LICENSE_PUBLIC_KEY_B64,
     )
     .map_err(|err| err.to_string())
 }
@@ -570,10 +570,10 @@ impl ExpandHome for Path {
 mod tests {
     use super::*;
     use crate::adapters::secure_storage::{InMemorySecretStore, SecretStore};
+    use backend::license::LeaseVerifier;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
-    use license_service::LeaseVerifier;
     use rand::rngs::OsRng;
     use serde_json::json;
     use std::sync::Arc;

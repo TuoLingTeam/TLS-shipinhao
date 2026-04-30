@@ -7,7 +7,7 @@ use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized
 use crate::commands::shared::require_cookie_credentials;
 use crate::error::AppError;
 use crate::state::AppState;
-use api_contracts::LICENSE_TASK_BATCH_DELIVERY;
+use backend::contracts::LICENSE_TASK_BATCH_DELIVERY;
 use desktop::domain::DeliveryUpdateResult;
 use desktop::services::delivery_batch_runner::{
     run_batch_delivery_with_hooks, BatchDeliveryItem, BatchDeliveryReport,

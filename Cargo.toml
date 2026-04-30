@@ -1,9 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "backend/contracts",
-  "backend/license",
-  "backend/worker",
+  "backend",
   "apps/desktop/security",
   "scripts/build-tools",
   "scripts/xtask",

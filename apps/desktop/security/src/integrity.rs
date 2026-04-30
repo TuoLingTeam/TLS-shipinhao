@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use api_contracts::blank_debug_release;
+use backend::blank_debug_release;
 
 /// 默认 Manifest 文件名。与打包侧 `xtask generate-manifest` 输出保持一致。
 pub const INTEGRITY_MANIFEST_FILE_NAME: &str = "integrity_manifest.json";
@@ -33,7 +33,7 @@ pub struct Mf {
 /// Manifest payload 主体（去掉 `signature` 之外的所有字段）。
 ///
 /// 字段命名与 Worker 签名侧保持一致；新增字段要同时更新 canonical 序列化。
-/// `version` 与 `api_contracts::IntegrityManifest.version` 对齐为 `u32`，
+/// `version` 与 `backend::contracts::IntegrityManifest.version` 对齐为 `u32`，
 /// 便于两侧在同一份 manifest 上比对 canonical 字节串完全一致。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManifestPayload {

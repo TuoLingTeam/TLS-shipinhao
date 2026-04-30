@@ -1,4 +1,4 @@
-use api_contracts::LicenseState;
+use crate::contracts::LicenseState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
