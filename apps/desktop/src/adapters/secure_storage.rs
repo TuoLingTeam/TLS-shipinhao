@@ -1,20 +1,4 @@
-//! 凭据安全存储封装（PRD §5.8 / M2-06）。
-//!
-//! 统一 Lease、RuntimeBundle 等敏感材料的落地入口：
-//! - macOS → Keychain（Secrets Generic Password Service）
-//! - Windows → Credential Manager
-//! - Linux → secret-service（keyring crate 自适应）
-//!
-//! 设计要点：
-//! - 抽象为 `SecretStore` trait，业务层持 `Arc<dyn SecretStore>`，单测用
-//!   内存实现替换，不触碰真实系统密钥环。
-//! - `get` 遇到 NoEntry 返回 `Ok(None)` 而不是错误，避免上层在「首次启动」
-//!   场景被迫识别"没写过"与"读失败"两种等价情况。
-//! - `delete` 遇到 NoEntry 视为 noop，多次调用幂等。
-//!
-//! 密钥环不可用（CI、无 seahorse 的 Linux、企业策略禁用等）时自动回退到
-//! 加密文件后备（M2-07）：使用设备指纹派生 AES-256-GCM 密钥，把密文落在
-//! 应用运行目录下；设备指纹一旦变化，解密失败会返回 `StorageError::DeviceChanged`。
+//! 凭据安全存储封装：优先系统密钥环，失败时回退设备绑定加密文件。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -28,10 +12,6 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-/// Keychain / Credential Manager 条目的 service 与 account。
-///
-/// - service：对外用反域名标识应用；后端运维查询时一步到位
-/// - account：同一应用下不同敏感材料的槽位标签
 pub const KEYCHAIN_SERVICE: &str = "com.tuoling.tls-shipinhao.runtime";
 pub const KEYCHAIN_ACCOUNT: &str = "runtime_bundle";
 
@@ -60,12 +40,7 @@ impl From<std::io::Error> for StorageError {
     }
 }
 
-/// 抽象安全存储。
-///
-/// 所有方法约定：
-/// - `set` 幂等：写入相同或不同值均成功，覆盖旧值。
-/// - `get` 不存在返回 `Ok(None)`，I/O 或后端错误才 `Err`。
-/// - `delete` 幂等：条目不存在视为 noop。
+/// 抽象安全存储：`get` 不存在返回 `Ok(None)`，`delete` 幂等。
 pub trait SecretStore: Send + Sync {
     fn set(&self, value: &str) -> Result<(), StorageError>;
     fn get(&self) -> Result<Option<String>, StorageError>;
@@ -112,10 +87,7 @@ impl SecretStore for KeychainSecretStore {
     }
 }
 
-/// 内存实现，**仅用于测试**：数据只在进程生命周期内保留。
-///
-/// 在单元测试里替换 `KeychainSecretStore` 即可不触碰真实 Keychain；
-/// 并发场景通过 `Mutex` 保证 set/get/delete 互斥。正式构建不编译此实现。
+/// 内存实现，仅用于测试。
 #[cfg(test)]
 pub struct InMemorySecretStore {
     cell: Mutex<Option<String>>,
@@ -166,8 +138,6 @@ impl SecretStore for InMemorySecretStore {
     }
 }
 
-// ---- 加密文件后备（M2-07） --------------------------------------------------
-
 /// 加密文件格式版本。未来升级 KDF / 加密算法时递增此常量。
 const FILE_FORMAT_VERSION: u8 = 1;
 
@@ -175,11 +145,6 @@ const FILE_FORMAT_VERSION: u8 = 1;
 const NONCE_LEN: usize = 12;
 
 /// 用设备指纹派生 AES-256-GCM 密钥。
-///
-/// KDF：`SHA256(device_id)`。选择简单 SHA 而非 Argon2 的理由：
-/// - 本地文件场景攻击者若能拿到磁盘文件，通常也能拿到设备 serial；
-///   设计意图是"让偶然的 exfiltration 无法读到明文"，不是对抗离线暴力破解。
-/// - Argon2 在慢设备上显著增加启动耗时，不值得。
 fn derive_file_key(device_id: &str) -> [u8; 32] {
     let hash = Sha256::digest(device_id.as_bytes());
     let mut out = [0u8; 32];

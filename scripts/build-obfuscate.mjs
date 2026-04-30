@@ -1,30 +1,5 @@
 #!/usr/bin/env node
-// ========================================
-// 深度混淆镜像构建脚本
-// 参考：TLS-douyin-CF/build-obfuscate.js（扁平 walk + JS 深混 + 逐文件日志）
-// 适配：Tauri 项目（前端 + Rust workspace）
-//
-// 设计原则：
-//   - 源码 readonly：0 改动 / 0 写入 apps/**、crates/**、backend/**、tools/**
-//   - 镜像输出：TLS-shipinhao-release/（workspace 根级副本），每次全量重建
-//   - 混淆范围：Vite 产物里的 .js 深度混淆，其它文件 1:1 复制
-//   - Rust 侧：源码整体复制，依赖 release profile 现有硬化（lto/strip/panic=abort）
-//
-// 阶段：
-//   1. clean            清空 TLS-shipinhao-release/
-//   2. frontend         pnpm --filter tls-shipinhao-ui build → apps/ui/dist
-//   3. mirror-rust      复制所有 workspace member 源码 + Cargo.toml / Cargo.lock / .cargo
-//   4. mirror-ui-dist   apps/ui/dist → TLS-shipinhao-release/apps/ui/dist
-//   5. obfuscate-js     扁平 walk TLS-shipinhao-release/apps/ui/dist 内所有 .js 深度混淆
-//   6. rewrite-conf     去掉镜像里 tauri.conf.json 的 beforeBuildCommand，避免二次 vite build
-//   7. build-tauri      在 TLS-shipinhao-release/apps/desktop 跑 cargo tauri build
-//   8. collect          dmg / exe → dist/release/
-//
-// 用法：
-//   node scripts/build-obfuscate.mjs                  完整流程
-//   node scripts/build-obfuscate.mjs --skip-build     只跑混淆，不编译（验证镜像是否干净）
-//   node scripts/build-obfuscate.mjs --skip-frontend  复用现有 apps/ui/dist
-// ========================================
+// 深度混淆镜像构建：复制 workspace、混淆前端产物，再在镜像内打包。
 
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -46,11 +21,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "..");
 
-// 镜像输出根：与源码根同级的子目录（大小写差异命名，避免与项目同名误识别）
+// 镜像输出根，避免与源码目录同名。
 const OUT_DIR = join(REPO_ROOT, "TLS-shipinhao-release");
 
-// Rust workspace 成员（保持与根 Cargo.toml 一致，漏一个 cargo 会报错）
-// 实际值通过 verifyWorkspaceMembers() 在启动期与根 Cargo.toml 校验，避免漂移。
+// 启动期会与根 Cargo.toml 校验一致性。
 const RUST_MEMBER_DIRS = [
   "apps/desktop",
   "backend/api-contracts",
@@ -63,11 +37,7 @@ const RUST_MEMBER_DIRS = [
   "tools/xtask",
 ];
 
-/**
- * 解析根 Cargo.toml 的 [workspace].members 列表。
- * 用极简正则即可，因为我们只关心 `members = [ "...", "..." ]` 这一段。
- * 故意不引第三方 toml 解析器，避免给镜像构建添加新依赖。
- */
+/** 解析根 Cargo.toml 的 [workspace].members 列表。 */
 function parseCargoMembers(cargoTomlPath) {
   const text = readFileSync(cargoTomlPath, "utf8");
   const match = text.match(/\[workspace\][\s\S]*?members\s*=\s*\[([\s\S]*?)\]/);
@@ -81,11 +51,7 @@ function parseCargoMembers(cargoTomlPath) {
     .map((s) => s.replace(/^["']|["']$/g, ""));
 }
 
-/**
- * 启动期校验：脚本硬编码的 RUST_MEMBER_DIRS 必须与根 Cargo.toml 的 members
- * 完全一致（顺序不限）。新增/重命名 crate 时漏改任一处会立即在镜像构建第 0
- * 阶段失败，避免拖到 cargo build 才暴露。
- */
+/** 校验脚本成员列表与 Cargo workspace 完全一致。 */
 function verifyWorkspaceMembers() {
   const cargoMembers = parseCargoMembers(join(REPO_ROOT, "Cargo.toml"));
   const cargoSet = new Set(cargoMembers);
@@ -104,7 +70,6 @@ function verifyWorkspaceMembers() {
   log("verify", `✓ workspace members 一致（${cargoMembers.length} 个）`);
 }
 
-// workspace 根必需的 manifest（不复制就没法构建）
 const ROOT_FILES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"];
 const ROOT_DIRS = [".cargo"];
 
@@ -115,8 +80,7 @@ const WEBVIEW2_RUNTIME_SOURCE = process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR
   ? resolve(process.env.TLS_WEBVIEW2_FIXED_RUNTIME_DIR)
   : join(REPO_ROOT, "vendor", "webview2-runtime");
 
-// 复制源码时的过滤清单（basename 粒度，避免把构建产物 / 运行时文件带进镜像）
-// 注意：不要把 "dist" 加进来，否则 copyTree(apps/ui/dist, ...) 会因源路径 basename=dist 被整体排除
+// basename 粒度过滤；不要加入 "dist"，否则 apps/ui/dist 会被整体排除。
 const EXCLUDE_NAMES = new Set([
   "target",
   "node_modules",
@@ -134,12 +98,8 @@ const EXCLUDE_NAMES = new Set([
 
 const EXCLUDE_EXTS = new Set([".log"]);
 
-// 点号开头的文件/目录白名单（默认排除所有 dotfiles，但这些是构建必需）
 const KEEP_DOTFILES = new Set([".cargo", ".env.example", ".gitkeep"]);
 
-// ========================================
-// 工具
-// ========================================
 function log(stage, msg) {
   const t = new Date().toISOString().split("T")[1].slice(0, 8);
   console.log(`[${t}] [${stage}] ${msg}`);
@@ -148,7 +108,7 @@ function log(stage, msg) {
 function run(cmd, opts = {}) {
   log("run", `${cmd}${opts.cwd ? ` (cwd=${relative(REPO_ROOT, opts.cwd)})` : ""}`);
   const env = { ...process.env, ...(opts.env || {}) };
-  // Tauri CLI 对 CI=0/1 会当成非 bool 字面量报错，规整一下
+  // Tauri CLI 只接受 CI=true/false。
   const ciRaw = (env.CI ?? "").toString().trim();
   if (ciRaw && !/^(true|false)$/i.test(ciRaw)) {
     env.CI = ciRaw === "0" ? "false" : "true";
@@ -175,7 +135,6 @@ function shouldExclude(srcPath) {
   const name = basename(srcPath);
   if (EXCLUDE_NAMES.has(name)) return true;
   if (EXCLUDE_EXTS.has(extname(name))) return true;
-  // 点号开头默认排除（.git .cursor .codex .windsurf .env 等），白名单豁免
   if (name.startsWith(".") && !KEEP_DOTFILES.has(name)) return true;
   return false;
 }
@@ -203,17 +162,11 @@ function findFixedWebview2Runtime(dir) {
   return null;
 }
 
-// ========================================
-// 阶段实现
-// ========================================
-
-// 阶段 1：清空输出
 function stage_clean() {
   log("clean", `清空 ${relative(REPO_ROOT, OUT_DIR)}/`);
   cleanDir(OUT_DIR);
 }
 
-// 阶段 2：前端 Vite 构建
 function stage_buildFrontend() {
   log("frontend", "pnpm --filter tls-shipinhao-ui build");
   run("pnpm --filter tls-shipinhao-ui build", { cwd: REPO_ROOT });
@@ -222,7 +175,6 @@ function stage_buildFrontend() {
   }
 }
 
-// 阶段 3：Rust workspace 源码镜像
 function stage_mirrorRust() {
   for (const member of RUST_MEMBER_DIRS) {
     const src = join(REPO_ROOT, member);
@@ -251,7 +203,6 @@ function stage_mirrorRust() {
   }
 }
 
-// 阶段 4：前端构建产物镜像
 function stage_mirrorUiDist() {
   const dst = join(OUT_DIR, "apps", "ui", "dist");
   ensureDir(dirname(dst));
@@ -259,7 +210,6 @@ function stage_mirrorUiDist() {
   log("mirror", `✓ apps/ui/dist → ${relative(REPO_ROOT, dst)}/`);
 }
 
-// 阶段 5：JS 深度混淆（扁平 walk + 逐文件）
 function stage_obfuscateJs() {
   if (!existsSync(OBFUSCATOR_CONFIG)) {
     throw new Error(`缺少混淆配置：${OBFUSCATOR_CONFIG}`);
@@ -278,8 +228,7 @@ function stage_obfuscateJs() {
   walk(distDir);
   log("obfuscate", `发现 ${jsFiles.length} 个 .js 文件待混淆`);
 
-  // Windows 上 spawnSync("pnpm", …) 往往找不到 pnpm.cmd，子进程静默失败且 stderr 为空。
-  // 直接从 apps/ui 解析依赖并调用 obfuscate API，与平台无关。
+  // 直接调用 obfuscate API，避开 Windows pnpm.cmd 解析差异。
   const requireUi = createRequire(join(REPO_ROOT, "apps", "ui", "package.json"));
   const { obfuscate } = requireUi("javascript-obfuscator");
   const obfuscatorOptions = loadObfuscatorOptions();
@@ -328,8 +277,6 @@ function stage_obfuscateJs() {
   }
 }
 
-// 阶段 6：改写 tauri.conf.json
-// 镜像里没有 apps/ui/src，不能再让 beforeBuildCommand 跑 vite build（会覆盖混淆产物）
 function stage_rewriteTauriConf() {
   const confPath = join(OUT_DIR, "apps", "desktop", "tauri.conf.json");
   if (!existsSync(confPath)) {
@@ -344,13 +291,6 @@ function stage_rewriteTauriConf() {
   log("conf", "✓ 改写 apps/desktop/tauri.conf.json（去 beforeBuildCommand/beforeDevCommand）");
 }
 
-// 阶段 6b：注入 Rust 二进制加固 rustflags
-// 作用：
-//   1. --remap-path-prefix：重写 file!()/panic location/debuginfo 中的绝对路径
-//      （镜像内源码在 TLS-shipinhao-release/ 下，按子目录压成单字母前缀，strings 不易还原树形）
-//   2. -Z location-detail=none：panic / track_caller 等不再嵌入 file/line/column（需 RUSTC_BOOTSTRAP=1）
-// 说明：tracing 宏里的路径也走 file!()，额外依赖 workspace 里 tracing 的 release_max_level_off
-//       先把 callsite 里「带行号的 event ...」打薄；remap 再把裸路径变短。
 function stage_hardenRustflags() {
   const cargoConfigPath = join(OUT_DIR, ".cargo", "config.toml");
   ensureDir(dirname(cargoConfigPath));
@@ -372,7 +312,6 @@ rustflags = [
   log("harden", `✓ 注入 rustflags（mirror remap + cargo registry + location-detail=none）`);
 }
 
-// 阶段 7：Tauri 构建
 function stage_buildTauri() {
   const desktopDir = join(OUT_DIR, "apps", "desktop");
   const mirrorTarget = join(OUT_DIR, "target");
@@ -380,8 +319,6 @@ function stage_buildTauri() {
     process.env.TLS_TAURI_NO_BUNDLE === "1" || process.env.TLS_WINDOWS_PORTABLE_ONLY === "1";
   const tauriCmd = noBundle ? "cargo tauri build --no-bundle" : "cargo tauri build";
   log("tauri", `${tauriCmd} (cwd=${relative(REPO_ROOT, desktopDir)})`);
-  // - CARGO_TARGET_DIR：强制 target 落在镜像内，不污染源码根
-  // - RUSTC_BOOTSTRAP=1：允许 stable rustc 使用 -Z unstable flag（本项目用到 -Z location-detail=none）
   run(tauriCmd, {
     cwd: desktopDir,
     env: {
@@ -391,7 +328,6 @@ function stage_buildTauri() {
   });
 }
 
-// 阶段 8：收集产物
 function stage_collectArtifacts() {
   cleanDir(RELEASE_OUT);
   const portableExe = join(OUT_DIR, "target", "release", "desktop.exe");
@@ -413,23 +349,19 @@ function stage_collectArtifacts() {
   }
 
   const sources = [
-    // Windows 安装包：安装阶段会根据 tauri.conf.json 补齐 WebView2 Runtime。
     {
       fromDir: join(OUT_DIR, "target", "release", "bundle", "nsis"),
       match: /\.exe$/,
       name: "TLS-shipinhao-windows-setup.exe",
     },
-    // Windows 便携 exe
     {
       from: join(OUT_DIR, "target", "release", "desktop.exe"),
       name: "TLS-shipinhao-portable.exe",
     },
-    // macOS dmg
     {
       fromDir: join(OUT_DIR, "target", "release", "bundle", "dmg"),
       match: /\.dmg$/,
     },
-    // macOS .app（可选，便于本地测试）
     {
       fromDir: join(OUT_DIR, "target", "release", "bundle", "macos"),
       match: /\.app$/,
@@ -454,9 +386,6 @@ function stage_collectArtifacts() {
   }
 }
 
-// ========================================
-// 主流程
-// ========================================
 const args = new Set(process.argv.slice(2));
 const skipFrontend = args.has("--skip-frontend");
 const skipBuild = args.has("--skip-build");

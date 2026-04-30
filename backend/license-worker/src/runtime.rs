@@ -1,22 +1,4 @@
-//! 异步运行时业务层：`/api/*` 路由入口的纯业务实现 + Cloudflare D1 的仓储实现。
-//!
-//! 历史上这两层代码分散在 `lib.rs` 与 `runtime/repo_d1.rs` 里，`lib.rs` 因此
-//! 既像"Worker 入口"又像"runtime service"的 God File（~900 行）。本文件把:
-//!
-//! - 协议常量（`WORKER_RUNTIME_ERROR_MESSAGE` / `REVOKE_GENERATED_KEY_SQL_*`）
-//! - 纯 helper（时间 / 哈希 / 响应体组装 / 错误契约 / device_id 自洽校验）
-//! - [`AsyncRuntimeRepository`] trait
-//! - `runtime_activate / verify / refresh_lease / revoke / task_authorize /
-//!   handle_admin_revoke_json / handle_async_runtime_json`
-//!
-//! 都收敛到这里。[`D1RuntimeRepo`]（仅 `wasm32` target 下编译的 Cloudflare D1
-//! 实现）已拆到 `runtime_d1.rs`，通过 `#[path]` 属性加载，保持对外访问路径
-//! `crate::runtime::D1RuntimeRepo` 不变；这样主文件只保留业务主线，便于阅读。
-//!
-//! `lib.rs` 只保留三件事：[`crate::LeaseTokenSigner`]（签发工具）、
-//! `cloudflare_entry`（wasm `fetch` 事件入口）以及对 `messages` 与本模块的
-//! `pub use` 转发，保证外部测试与调用方的 import 路径（`use super::*;` /
-//! `use license_worker::…`）不变。
+//! `/api/*` 路由的异步业务层与仓储 trait。
 
 use api_contracts::{
     LicenseLease, LicenseState, Lp, Rg, RiskLevel, LEASE_KIND_LICENSE, LICENSE_TASK_BATCH_DELIVERY,

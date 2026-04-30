@@ -1,16 +1,4 @@
-//! 授权协议常量与纯函数。
-//!
-//! 历史上本文件还持有一套同步 `LicenseService<R> + LicenseRepository` 的业务
-//! 流水线（activate / verify 的 D1 兼容路径），但生产侧（Cloudflare Worker）
-//! 早已切换到 `license-worker::runtime_*` 异步路径，桌面端也只依赖本模块的
-//! Lease/Grant/常量，同步服务从未被任何生产代码调用。自 T-01 起彻底下线同步
-//! 路径，只保留下列**协议层单一事实源**：
-//!
-//! - 常量：Lease 过期窗口、协议版本、签发者标识、默认任务白名单、公钥 base64url
-//! - 纯函数：`issue_license_lease` —— 给定关键字段构造 `LicenseLease`
-//!
-//! 若日后需要在非 Worker 环境（例如管理端 Rust SDK）复用激活/校验流程，请优先
-//! 把 `license-worker::runtime_*` 抽象成独立的 trait/helper 而不是重建同步分支。
+//! 授权协议常量与 Lease 构造函数。
 
 use api_contracts::{LicenseLease, LicenseState, SUPPORTED_TASKS};
 
@@ -19,7 +7,7 @@ pub const LEASE_HARD_EXPIRY_HOURS: i64 = 72;
 pub const LICENSE_PROTOCOL_VERSION: u32 = 3;
 pub const ISSUER: &str = "tls-license-backend";
 
-/// 任务级授权 Grant 的有效期（分钟）。与 Python 4.3.0 `LICENSE_RUNTIME_GRANT_MINUTES` 对齐。
+/// 任务级授权 Grant 的有效期（分钟）。
 pub const LICENSE_RUNTIME_GRANT_MINUTES: i64 = 30;
 
 /// Worker 签发 Lease 使用的 Ed25519 公钥（base64url）。客户端用来验签。
@@ -32,11 +20,7 @@ pub const LICENSE_PUBLIC_KEY_B64: &str = "1IS6t6PdHin8DEX9fy3s5oUfXs__QqGfN_T1o4
 /// 新增任务类型时只需在 `api-contracts` 一处扩展 `SUPPORTED_TASKS`。
 pub const DEFAULT_TASK_POLICY: &[&str] = SUPPORTED_TASKS;
 
-/// 按给定字段构造一个 `LicenseLease` 结构（未签名的 UI 展示层）。
-///
-/// Worker 端会拿这个结构转成 `Lp` 再做 Ed25519 签名；客户端验签后
-/// 会以相同字段回填。字段命名和默认任务策略都锁死在本模块里，保证协议 v3
-/// 前后端完全一致。
+/// 按给定字段构造未签名的 `LicenseLease`。
 pub fn issue_license_lease(
     license_key: &str,
     device_id: &str,
@@ -87,7 +71,6 @@ mod tests {
         assert_eq!(lease.issued_at, "2026-04-16T00:00:00Z");
         assert_eq!(lease.keyset_version, 1);
         assert_eq!(lease.binding_version, LICENSE_PROTOCOL_VERSION);
-        // task_policy 与 SUPPORTED_TASKS 同构，顺序锁定以保 Lease 字节稳定
         let expected: Vec<String> = SUPPORTED_TASKS.iter().map(|s| s.to_string()).collect();
         assert_eq!(lease.task_policy, expected);
     }

@@ -12,13 +12,7 @@ use license_service::{verify_stored_lease_local, LeaseVerifier, TaskGrantCache};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-/// 当 `LeaseVerifier::new()` 解析编译期公钥失败（极端场景：二进制被局部
-/// 篡改 / strip 出错把常量打坏）时，我们不再让应用直接 panic 退出，而是
-/// 用一个**已知不可能匹配真实签名的哨兵公钥**构造 verifier，并在启动时
-/// 立刻把 RuntimeState 置为 `Compromised`，让 UI 显示「完整性损坏」并禁
-/// 用业务功能。哨兵公钥用 `[1u8; 32]` —— 这是 lease.rs 既有测试已验证
-/// 能 ed25519 from_bytes 解码的字节序列；使用它的好处是「编译期可计算
-/// base64」、「真实签名永远校验失败」。
+/// 公钥解析失败时使用哨兵 verifier，并把运行态标记为 `Compromised`。
 fn init_lease_verifier_or_sentinel() -> (LeaseVerifier, bool) {
     match LeaseVerifier::new() {
         Ok(verifier) => (verifier, false),
@@ -109,22 +103,7 @@ impl StoreRegistry {
     }
 }
 
-/// Tauri 全局状态：Cookie / 授权信息在内存 + 磁盘双写。
-///
-/// ## 锁顺序协议（避免潜在死锁，新 handler 必须遵守）
-///
-/// 当一个函数需要**同时**持有多把下列 `Mutex`/`RwLock` 时，**必须按以下顺序获取**：
-///
-/// 1. `store_registry`
-/// 2. `cookie_profile`
-/// 3. `cookie_path`
-/// 4. `runtime_license_state`
-/// 5. `license_profile`
-/// 6. `cookie_health`
-///
-/// 单锁持有或用 `{}` 显式作用域**串行**获取多把锁，无需顺序约束。
-/// 违反顺序短期可能靠 `{}` 立即释放规避，但一旦某处 await 点跨越
-/// guard 生命周期就会出现真实死锁——保险起见始终按此协议写。
+/// Tauri 全局状态；多锁场景按字段声明顺序获取，避免跨 await 死锁。
 pub struct AppState {
     pub store_registry: Mutex<StoreRegistry>,
     pub cookie_profile: Mutex<CookieProfile>,

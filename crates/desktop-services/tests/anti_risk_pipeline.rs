@@ -1,11 +1,4 @@
 //! 反风控管线集成测试。
-//!
-//! 对应 M1-06 卡片：把 `order_fetcher::retry_on_rate_limit` 与
-//! `order_fetcher_risk::run_with_risk_fallback` 串起来跑，模拟"抓多页 + 限流
-//! 重试 + 风控冷却 + 极速降级"的完整链路，确保 CI 每次回归都能在秒级完成。
-//!
-//! 执行速度：用 `#[tokio::test(start_paused = true)]` 让 tokio runtime 在所有
-//! 任务都在 sleep 时自动 advance 虚拟时钟；60 秒冷却实际耗时 < 1 秒。
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -19,22 +12,14 @@ use desktop_services::order_fetcher_risk::{
 };
 use serde_json::{json, Value};
 
-// ---- Mock 订单 API ----------------------------------------------------------
-
 /// 单次请求的预设响应类型。
 #[derive(Clone, Debug)]
 enum Response {
-    /// HTTP 429，payload 忽略。
     HttpRateLimit,
-    /// HTTP 200 + body 是 API 429。
     ApiRateLimit,
-    /// HTTP 200 + body 是 code=430 风控。
     RiskControl,
-    /// HTTP 200 + body 是 msg 命中风控关键词。
     RiskByMessage(&'static str),
-    /// HTTP 200 + 订单页。
     OrdersPage(Vec<u32>),
-    /// HTTP 200 + 空页，标记结束。
     Empty,
 }
 
@@ -49,7 +34,6 @@ impl MockApi {
         }
     }
 
-    /// 取下一条预设响应；脚本耗尽视为 Empty，避免测试意外死循环。
     fn next_response(&self) -> Response {
         self.script
             .lock()
@@ -76,21 +60,14 @@ fn response_to_pair(r: Response) -> (u16, Option<Value>, Vec<u32>) {
     }
 }
 
-// ---- 业务层：单次请求 → LimitOutcome -----------------------------------------
-
 /// 单次抓页的执行结果。外层 retry 循环据此判断是否重试。
 #[derive(Debug)]
 enum PageOutcome {
-    /// 拿到订单页，可能为空（空页视为结束）。
     Orders(Vec<u32>),
-    /// 平台风控，中断翻页并把 partial 带回。
     RiskControl,
 }
 
 /// 模拟业务层执行一次带限流重试的分页请求。
-///
-/// 把 classify_rate_limit + is_risk_control_result 的判定收口到业务层，
-/// 把限流视为"请再试"，把风控视为"退出翻页"。
 async fn fetch_page_with_retry(
     api: &MockApi,
     page_index: u32,
@@ -115,8 +92,6 @@ async fn fetch_page_with_retry(
     })
     .await
 }
-
-// ---- 顶层：抓多页并按风控早停 -----------------------------------------------
 
 async fn run_pages_as_normal(
     api: &MockApi,
@@ -171,8 +146,6 @@ fn default_key(order: &u32) -> u32 {
     *order
 }
 
-// ---- 场景 1: 纯正常 ---------------------------------------------------------
-
 #[tokio::test(start_paused = true)]
 async fn pipeline_returns_all_orders_when_no_risk_or_limit() {
     let normal = Arc::new(MockApi::new(vec![
@@ -209,8 +182,6 @@ async fn pipeline_returns_all_orders_when_no_risk_or_limit() {
     assert_eq!(out.orders, vec![1, 2, 3, 4, 5]);
     assert!(out.warnings.is_empty());
 }
-
-// ---- 场景 2: HTTP 429 退避后成功 -------------------------------------------
 
 #[tokio::test(start_paused = true)]
 async fn pipeline_recovers_after_two_http_429() {
@@ -261,8 +232,6 @@ async fn pipeline_recovers_after_two_http_429() {
     assert!(backoff_msgs[1].contains("4 秒"));
 }
 
-// ---- 场景 3: HTTP 429 连续 4 次 → 耗尽 --------------------------------------
-
 #[tokio::test(start_paused = true)]
 async fn pipeline_reports_fatal_when_rate_limit_exhausted() {
     let normal = Arc::new(MockApi::new(vec![
@@ -306,8 +275,6 @@ async fn pipeline_reports_fatal_when_rate_limit_exhausted() {
     }
 }
 
-// ---- 场景 4: code=430 风控 → 冷却 → 极速模式成功 ----------------------------
-
 #[tokio::test(start_paused = true)]
 async fn pipeline_cools_down_then_risk_mode_succeeds() {
     let normal = Arc::new(MockApi::new(vec![
@@ -350,7 +317,6 @@ async fn pipeline_cools_down_then_risk_mode_succeeds() {
     .await
     .unwrap();
 
-    // 合并去重：1,2 (normal) + 2,3,4 (risk) → 1,2,3,4
     assert_eq!(out.orders, vec![1, 2, 3, 4]);
     assert_eq!(out.warnings.len(), 1);
     assert!(out.warnings[0].contains("降级"));
@@ -359,8 +325,6 @@ async fn pipeline_cools_down_then_risk_mode_succeeds() {
     assert!(msgs.iter().any(|m| m.contains("还剩 60 秒")));
     assert!(msgs.iter().any(|m| m.contains("还剩 10 秒")));
 }
-
-// ---- 场景 5: msg 风控关键词 → 冷却 → 极速也失败但有 partial -----------------
 
 #[tokio::test(start_paused = true)]
 async fn pipeline_returns_partial_when_risk_mode_also_hits_risk() {
@@ -407,18 +371,14 @@ async fn pipeline_returns_partial_when_risk_mode_also_hits_risk() {
     assert!(out.warnings[1].contains("部分窗口未完成"));
 }
 
-// ---- 场景 6: 混合 HTTP 429 + API 429 + 风控 ---------------------------------
-
 #[tokio::test(start_paused = true)]
 async fn pipeline_handles_mixed_http_api_and_risk_signals() {
-    // normal: HTTP 429 → API 429 → 订单 → RISK（中断）
     let normal = Arc::new(MockApi::new(vec![
         Response::HttpRateLimit,
         Response::ApiRateLimit,
         Response::OrdersPage(vec![7]),
         Response::RiskControl,
     ]));
-    // risk: 纯正常 2 页
     let risk = Arc::new(MockApi::new(vec![
         Response::OrdersPage(vec![8, 9]),
         Response::Empty,
@@ -467,8 +427,6 @@ async fn pipeline_handles_mixed_http_api_and_risk_signals() {
     assert!(http_msg.is_some(), "必须有一条 HTTP 级限流提示");
 }
 
-// ---- 场景 7: 双路都没产出数据 → Fatal ---------------------------------------
-
 #[tokio::test(start_paused = true)]
 async fn pipeline_escalates_to_fatal_when_no_partial_collected() {
     let normal = Arc::new(MockApi::new(vec![Response::RiskControl]));
@@ -507,8 +465,6 @@ async fn pipeline_escalates_to_fatal_when_no_partial_collected() {
         other => panic!("预期 Other，实际 {other:?}"),
     }
 }
-
-// ---- 场景 8: 抓取途中用户停止 -----------------------------------------------
 
 #[tokio::test(start_paused = true)]
 async fn pipeline_respects_stop_flag_during_cooldown() {
@@ -557,9 +513,6 @@ async fn pipeline_respects_stop_flag_during_cooldown() {
     assert!(matches!(result, Err(FetchError::Stopped)));
 }
 
-// ---- 总结：call_count 断言 --------------------------------------------------
-
-/// 辅助：确认 normal_fn 仅调用一次、risk_fn 也只在需要时调用一次。
 #[tokio::test(start_paused = true)]
 async fn pipeline_invokes_fns_exactly_once() {
     let normal_calls = Arc::new(AtomicUsize::new(0));

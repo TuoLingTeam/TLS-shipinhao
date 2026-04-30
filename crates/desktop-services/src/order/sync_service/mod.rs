@@ -55,10 +55,6 @@ impl<F> OrderSyncService<F>
 where
     F: CacheOrderFinder,
 {
-    /// 新建实例，持有一个共享的仓储实现（trait object）。
-    ///
-    /// 传入 `Arc<dyn OrderCacheRepository>` 允许业务层复用同一 sqlite 连接，
-    /// 也方便单元测试用内存 Mock 替换真实数据库。
     pub fn new(finder: F, repository: Arc<dyn OrderCacheRepository>) -> Self {
         Self {
             finder,
@@ -191,22 +187,9 @@ where
         Ok((total_written, warnings, retention, end_timestamp))
     }
 
-    /// 按用户给定的目标时间窗精确补齐缓存缺口。
+    /// 补齐指定窗口缺口，供评价 / 品退匹配前保障缓存覆盖。
     ///
-    /// 与 [`refresh_recent_incremental_cache`] 的固定「最近几天 + planner 状态推算」
-    /// 不同：本方法接收一对 `(target_start, target_end)`，调 SQLite
-    /// `get_missing_segments` 得到该窗口内的实际缺口段，逐段调 `sync_range`
-    /// 拉取入库。适用于「用户在评价管理页选了任意一段时间，需要保证该范围
-    /// 内订单缓存零缺口后再做匹配」场景。
-    ///
-    /// 返回值：
-    /// - `usize`：本次新写入订单数
-    /// - `Vec<String>`：本次拉取过程中累积的 warnings
-    /// - `(i64, i64)`：建议下游 `fetch_orders_in_range` 使用的候选窗口
-    ///   `(candidate_start, candidate_end)`：
-    ///   - `candidate_start = min(retention_start, target_start)`，扩展到 retention 起点，
-    ///     允许匹配候选包含早于 query 的老订单（评价时间可能远后于订单创建）
-    ///   - `candidate_end = target_end`，原样保留以包含「今天」等现 sync_now 截断后的范围
+    /// 返回的 `candidate_start` 会扩展到保留窗口起点，允许匹配早于查询范围的老订单。
     pub fn ensure_window_covered(
         &mut self,
         target_start: i64,
@@ -286,11 +269,9 @@ where
         Ok((total_written, warnings, start_timestamp, end_timestamp))
     }
 
-    /// 手动维护订单缓存时使用：先补齐「近 30 天（不含今天）」的稳定窗口，
-    /// 再额外拉取今天自然日，保证仪表盘「今天」卡片能看到当天订单。
+    /// 手动同步时补齐近 30 天稳定窗口，并额外拉取今天自然日。
     ///
-    /// 今天仍处于进行中，因此只入库订单，不写 sync_state，也不标记 completed
-    /// segment；否则当天稍晚新增的订单会被缺口规划误判为已覆盖而跳过。
+    /// 今天不写 sync_state，避免当天新增订单被误判为已覆盖。
     pub fn ensure_recent_and_today_cache(
         &mut self,
         now: Option<chrono::DateTime<chrono::Utc>>,

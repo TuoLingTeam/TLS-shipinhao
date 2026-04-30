@@ -1,5 +1,4 @@
-/* 评价管理页样式：ReviewMatchView.vue / 差评筛选器 / summary card tone
- * 从 main.css 抽出；cascade 顺序保持等价。 */
+/* 评价管理页样式。 */
 
 .review-control-shell {
   display: flex;
@@ -13,7 +12,6 @@
   backdrop-filter: blur(10px);
 }
 
-/* 评价管理配置区：与订单同风格的左侧强调线 + 顶部高光，强化"这是入口/控制区"的识别 */
 .review-config-panel {
   padding: 0.85rem 1rem !important;
   border-left: 3px solid rgba(5, 150, 105, 0.55);
@@ -108,7 +106,6 @@
   min-height: 40px;
 }
 
-/* >=768（md）三列布局即生效，与 #app 最小宽度对齐，避免中间宽度段单列堆叠造成的视觉空旷 */
 @media (min-width: 768px) {
   .review-filter-grid {
     grid-template-columns: 88px minmax(0, 1fr) 132px;
@@ -121,7 +118,6 @@
   }
 }
 
-/* 差评模式：仅「天数 + 主按钮」两列，去掉占位的说明列 */
 @media (min-width: 768px) {
   .review-filter-grid.review-filter-grid--compact {
     grid-template-columns: 88px minmax(128px, 148px);
@@ -160,8 +156,6 @@
   background: linear-gradient(90deg, transparent, rgba(240, 253, 244, 0.5));
 }
 
-/* 订单管理 hero 内：与绿色面板一体，不另叠白底卡片；布局仍由组件内 flex 控制 */
-
 .review-summary-card {
   border-left: 3px solid transparent;
   transition:
@@ -190,5 +184,3 @@
 .review-summary-card--success {
   border-left-color: rgba(16, 185, 129, 0.68);
 }
-
-/* 订单管理：hero 右上「缓存状态」徽章 */

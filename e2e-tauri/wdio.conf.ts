@@ -1,14 +1,4 @@
-/**
- * WebdriverIO 配置：连接 `tauri-driver` 桥接平台 WebDriver（Linux 走
- * `webkit2gtk-driver`，Windows 走 `msedgedriver`）驱动 Tauri 真壳。
- *
- * 启动方式：
- * - 本地 Linux：`cargo install tauri-driver` 之后直接 `npm test`，
- *   `onPrepare` 会拉起 `tauri-driver` 子进程，`onComplete` 收尾。
- * - 本地 macOS：**不支持**（Apple WKWebView 没有官方 WebDriver 实现），
- *   请退回 `pnpm test:e2e:web`。
- * - CI：见 `.github/workflows/tauri-e2e.yml`，仅 `workflow_dispatch` 手动触发。
- */
+/** WebdriverIO 配置：通过 tauri-driver 驱动 Tauri 真壳。 */
 import { spawn, type ChildProcess } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,9 +45,6 @@ export const config: Options.Testrunner = {
     ui: "bdd",
     timeout: 60_000,
   },
-
-  // wdio v9 默认通过 tsx 直接加载 `.ts`，不再需要 v8 时代的 `autoCompileOpts`
-  // / `ts-node` 配置；此处保持空白即可。
 
   onPrepare() {
     if (process.env.SKIP_TAURI_DRIVER === "1") {

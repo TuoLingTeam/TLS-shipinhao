@@ -1,19 +1,4 @@
-//! Lease Token 的 Ed25519 验签。
-//!
-//! Token 格式：`base64url(payload_json) . base64url(ed25519_signature)`。
-//!
-//! 设计目标（与 PRD §5.5、M2-03 对齐）：
-//! - 原子化的错误枚举：`InvalidFormat / InvalidSignature / InvalidKind /
-//!   DeviceMismatch / Expired`，业务层可以精确决定后续动作（重激/续约/降级）。
-//! - 验签 + 业务字段校验一次完成，避免"先解 payload 再二次校验"的双重路径。
-//! - 公钥常量来自 `LICENSE_PUBLIC_KEY_B64`（M2-02），轮换密钥时只改一处。
-//!
-//! 与 `security_core::verify_lease_impl` 的关系：
-//! - 本模块是**纯 Rust API**，返回 `Result<Lp, LeaseError>`，方便
-//!   在 license-service 内部或 Tauri 命令里直接消费。
-//! - security-core 里的 FFI 版本面向 Python 桥接（legacy 兼容），两者共用
-//!   相同的语义，但不能简单互相调用——FFI 层把错误扁平化为 JSON，损失了
-//!   类型信息。
+//! Lease Token 的 Ed25519 验签与续约判定。
 
 use api_contracts::{Lp, LEASE_KIND_LICENSE};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -47,12 +32,6 @@ pub enum LeaseError {
 }
 
 /// Lease 验签器。
-///
-/// 典型用法：
-/// ```ignore
-/// let verifier = LeaseVerifier::from_public_key_b64(LICENSE_PUBLIC_KEY_B64)?;
-/// let payload = verifier.verify(&token, Some(&device_id), now_epoch, false)?;
-/// ```
 #[derive(Debug)]
 pub struct LeaseVerifier {
     public_key: VerifyingKey,
@@ -189,18 +168,7 @@ pub enum RefreshError {
     Protocol(String),
 }
 
-/// 在软刷新窗口内自动续约；窗口外按语义返回 `NotDue` 或 `HardExpired`。
-///
-/// 流程：
-/// 1. `now < renew_after` → `NotDue`，不联网
-/// 2. `now >= exp` → `HardExpired`，需重激
-/// 3. `renew_after <= now < exp` → 调 `refresher` 请求 `/api/lease/refresh`
-///    - 返回空 token → `Protocol`
-///    - 网络失败 → `Network`，**不覆盖旧 Token**，调用方由业务上下文决定降级
-///    - 成功 → `Renewed(new_token)`
-///
-/// 注意：本函数不做「写回 Keychain」与「事件推送」，这些是 Tauri 命令层的
-/// 职责（M2-06 + M2-08）。这里保持纯 async 逻辑方便单测。
+/// 在软刷新窗口内自动续约；窗口外返回 `NotDue` 或 `HardExpired`。
 pub async fn refresh_lease_if_due<F, Fut>(
     payload: &Lp,
     now_epoch: i64,

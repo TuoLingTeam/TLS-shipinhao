@@ -1,7 +1,4 @@
 //! `SqliteOrderCacheRepository` 与 schema 迁移辅助的回归测试。
-//!
-//! 历史上和 `mod.rs` 同文件，2026 年起按 A1 大文件拆分外移到本文件，
-//! 行为完全等价（`super::*` 仍指向 cache_storage 模块顶层）。
 
 use super::*;
 use tempfile::tempdir;

@@ -1,7 +1,5 @@
 <script setup lang="ts">
-// 全局 Toast 浮层容器：与 useNotification 配套。
-// AppLayout 顶层挂一次，其它任何组件 useNotification().show(message, type)
-// 即可弹出 3 秒自动关闭的小提示，避免在 form 下方 inline alert 撑开布局。
+// 全局 Toast 浮层容器。
 import { useNotification } from "./useNotification";
 
 const { toasts, dismiss } = useNotification();

@@ -1,26 +1,4 @@
-//! 订单富缓存的 SQLite 实现 + DDL/迁移辅助。
-//!
-//! trait `OrderCacheRepository` 与 DTO 定义在 [`crate::order_cache_repository`]。
-//! 这里通过 `pub use` 对外兼容导出，避免破坏旧的 import 路径
-//! `desktop_services::order_cache_storage::{CacheOrderRecord, ...}`。
-//!
-//! ## 阻塞边界与锁约束
-//!
-//! 仓库内部用 `std::sync::Mutex<Connection>` 串行化对单个 SQLite 句柄的访问，
-//! 这是 rusqlite 的标准用法（`Connection` 不可跨线程共享，又不是 `Send`-clone-safe）。
-//! 由此带来两条**强制约束**：
-//!
-//! 1. **禁止在 `MutexGuard<Connection>` 存活期间 `.await`**——`std::sync::Mutex`
-//!    的 guard 不实现 `Send`，跨 await 点持有会让外层 `async fn` 失去 `Send`，
-//!    被 `tokio::spawn` / `task::spawn_blocking` 拒绝；即便编译器没拒绝，
-//!    阻塞 SQLite I/O 也会拖慢整个 tokio 调度器。
-//! 2. **同一 async 任务内不要同时持有两把 `Connection` 锁**——目前仓库只
-//!    暴露同步方法，调用方在 `spawn_blocking` 内顺序调用即可避免；如果
-//!    未来引入第二个 `Mutex<Connection>`（缓存 + 元数据等），新加方法要
-//!    显式约束加锁顺序，并写测试覆盖。
-//!
-//! 这些约束的反例曾让批量发货命令在大数据量下出现「UI 卡 30s 才返回」与
-//! 「tokio runtime starvation」联合症状，定位代价很高。改本模块前请通读。
+//! 订单富缓存的 SQLite 实现；`Connection` 锁不得跨 await 持有。
 
 use anyhow::Context;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -115,10 +93,6 @@ const ORDERS_V2_COLUMNS: &[(&str, &str)] = &[
 ];
 
 /// `OrderCacheRepository` 的 SQLite 实现。
-///
-/// 内部使用 `Mutex<Connection>` 串行化对单文件数据库的访问，
-/// 使得 trait 方法可以保持 `&self` 并通过 `Arc<dyn OrderCacheRepository>`
-/// 在多个 Tauri 线程间共享。
 pub struct SqliteOrderCacheRepository {
     connection: Mutex<Connection>,
 }

@@ -1,16 +1,5 @@
 #!/usr/bin/env node
-// 守住 Cloudflare Worker 发版前的关键配置：
-//
-// - `backend/wrangler.toml` 静态结构：name / main / routes / [[d1_databases]]
-//   任一字段缺失或为空都直接报错。
-// - 远端 secret：必备 `ADMIN_SECRET` 与 `LICENSE_SIGNING_PRIVATE_KEY_B64`
-//   缺失会让 `/api/admin/*` 与签名 Lease 全链路在线上炸掉，必须在 deploy 前
-//   挡住。需 wrangler 处于已登录态；用 `npx wrangler login` 完成 OAuth。
-//
-// 用法：
-//   pnpm worker:check                 # 默认走完静态 + 远端两段
-//   node scripts/check-worker-config.mjs --skip-remote   # 仅静态结构（CI 用）
-//   node scripts/check-worker-config.mjs --no-color      # 关 ANSI 颜色
+// 检查 Worker 发版前的 wrangler.toml 与必备 secrets。
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -150,7 +139,6 @@ function runRemoteChecks(workerName) {
         "请确认 Worker 已部署过、当前账号有权限、网络可达。",
     );
   }
-  // wrangler secret list 输出形如：[{ "name": "X", "type": "secret_text" }]
   let secrets;
   try {
     const jsonStart = result.indexOf("[");

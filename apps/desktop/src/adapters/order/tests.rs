@@ -1,8 +1,4 @@
-//! `HttpOrderSearchClient` / `OrderRateLimitGate` 等 adapter 入口的回归测试。
-//!
-//! 历史上和 `mod.rs` 同文件，2026 年起按 A1 大文件拆分外移到本文件，
-//! `super::*` 仍指向 adapter::order 模块顶层（含 #[cfg(test)] 暴露的
-//! `OrderRateLimitGate` 测试专用方法）。
+//! 订单 adapter 入口的回归测试。
 
 use super::*;
 use serde_json::json;

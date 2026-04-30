@@ -1,7 +1,4 @@
 //! `OrderSyncService` 与重复消除工具的回归测试。
-//!
-//! 历史上和 `mod.rs` 同文件，2026 年起按 A1 大文件拆分外移到本文件，
-//! 行为完全等价（`super::*` 仍指向 sync_service 模块顶层）。
 
 use super::*;
 use crate::order_cache_repository::{CacheOrderProduct, CacheOrderRecord};
@@ -19,8 +16,7 @@ struct FakeFinder {
     stopped: bool,
     responses: Vec<CacheFetchResult>,
     calls: Vec<(i64, i64, i64)>,
-    /// 设为 `Some(msg)` 时，下一次 `get_orders_for_cache` 消耗该值并返回错误；
-    /// 允许按顺序塞多条错误（FIFO），验证 sync_range 对 finder 错误的传递行为。
+    /// 下一次 `get_orders_for_cache` 消耗一条错误，用于验证错误传递。
     errors: std::collections::VecDeque<String>,
 }
 
@@ -483,8 +479,7 @@ fn ensure_recent_and_today_cache_fetches_today_without_marking_complete() {
     );
 }
 
-/// 内存 Mock：不依赖 sqlite，只实现测试覆盖流程所需的行为。
-/// M3-02 AC 要求 Mock Repository 能跑通 OrderSyncService 主流程。
+/// 内存 Mock：只实现测试覆盖流程所需的行为。
 #[derive(Default)]
 struct InMemoryRepository {
     inner: std::sync::Mutex<InMemoryData>,
@@ -742,12 +737,8 @@ fn full_scan_combines_temporary_and_recent_orders_without_duplicates() {
     assert_eq!(orders[0].order_id, "o-0");
 }
 
-// ---- 错误分支 / 停任务路径回归（Pass 4 · T15） ------------------------
-
 #[test]
 fn rebuild_cache_surfaces_finder_error_with_context() {
-    // finder 首次调用抛错时，sync_range 通过 .with_context(...) 将其包装为带窗口范围
-    // 的 anyhow::Error 向上传递；错误不能被吞成 Ok((0, []))
     let dir = tempdir().unwrap();
     let path = dir.path().join("order_cache.sqlite3");
     let finder = FakeFinder::with_error("风控限流拒绝请求");
@@ -767,15 +758,12 @@ fn rebuild_cache_surfaces_finder_error_with_context() {
         text.contains("fetch cache orders"),
         "应带 sync_range 的 with_context 前缀：{text}",
     );
-    // finder 被调用过一次（抛错的那一次）
     assert_eq!(service.finder.calls.len(), 1);
-    // 失败不写 DB：订单库应为空
     assert!(service.repository.fetch_order("any").unwrap().is_none());
 }
 
 #[test]
 fn rebuild_cache_short_circuits_and_does_not_touch_finder_after_stop() {
-    // stop() 后 rebuild_cache 必须早退：不调用 finder、也不改状态表
     let dir = tempdir().unwrap();
     let path = dir.path().join("order_cache.sqlite3");
     let finder = FakeFinder::with_responses(vec![CacheFetchResult::default()]);
@@ -791,30 +779,23 @@ fn rebuild_cache_short_circuits_and_does_not_touch_finder_after_stop() {
     assert_eq!(written, 0);
     assert!(warnings.is_empty());
     assert!(service.finder.calls.is_empty(), "stop 后不应派发给 finder");
-    // stop 后短路不会调用 repository.initialize()，因此 sync_state 表根本没创建。
-    // 不断言 `get_state()`：返回的是查询错误而非 `None`，真正关键语义是「finder 零调用 + 返回 (0, [])」。
 }
 
 #[test]
 fn sync_range_rejects_illegal_window_without_calling_finder() {
-    // 非法时间窗（start > end / start <= 0 / end <= 0）直接返回 (0, []) 且不调 finder。
-    // 通过直接调用 private sync_range 验证 —— #[cfg(test)] 同模块内可见。
     let dir = tempdir().unwrap();
     let path = dir.path().join("order_cache.sqlite3");
     let repo = open_shared_repo(&path);
     let mut service = OrderSyncService::new(FakeFinder::with_responses(vec![]), Arc::clone(&repo));
 
-    // start > end
     let (written, warnings) = service.sync_range(5_000, 1_000, "rebuild", None).unwrap();
     assert_eq!(written, 0);
     assert!(warnings.is_empty());
 
-    // start <= 0
     let (written, warnings) = service.sync_range(0, 1_000, "rebuild", None).unwrap();
     assert_eq!(written, 0);
     assert!(warnings.is_empty());
 
-    // end <= 0
     let (written, warnings) = service.sync_range(100, 0, "rebuild", None).unwrap();
     assert_eq!(written, 0);
     assert!(warnings.is_empty());

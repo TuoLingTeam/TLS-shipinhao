@@ -224,7 +224,6 @@ const heroSummaryText = computed(() => {
   return `近 30 天（不含今天）缓存 ${cacheCounts.value.last30} 条，可直接进入业务流程`;
 });
 
-// 当前时钟抽到 useRuntimeClock；会话时长已迁至设置页，底部元数据卡改为「查看教程」。
 const { clockText } = useRuntimeClock();
 
 const hasTutorialUrl = computed(() => Boolean(updateCheck.latestInfo?.tutorial_url?.trim()));
@@ -350,7 +349,6 @@ onMounted(async () => {
         </section>
       </div>
 
-      <!-- 侧栏低频信息：避免元数据在主流程底部占满一整排。 -->
       <aside
         data-testid="dashboard-meta-cards"
         class="surface-panel dashboard-side-rail dashboard-meta-cards flex min-h-0 flex-1 flex-col p-3 lg:p-4"

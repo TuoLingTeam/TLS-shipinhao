@@ -1,19 +1,16 @@
-/* 订单管理页样式：OrderSyncView.vue / OrderSearchBar / OrderTable 等
- * 从 main.css 抽出；cascade 顺序保持等价。 */
+/* 订单管理页样式。 */
 
 .order-hero-shell {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
   padding: 0.85rem 1rem !important;
-  /* 轻量美化：左侧 3px 品牌色强调线 + 柔和顶部高光 + 略微收紧的阴影，让配置区在整页绿色背景中有层次 */
   border-left: 3px solid rgba(5, 150, 105, 0.55);
   box-shadow:
     0 22px 46px -28px rgba(5, 150, 105, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
-/* 订单配置区内部的搜索控件：略抬高，与面板背景形成"表单在卡片中"的层次 */
 .order-hero-shell .order-search-shell .field-input {
   background-color: #ffffff;
   box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.22);
@@ -64,7 +61,6 @@
   box-shadow: 0 14px 32px -28px rgba(15, 23, 42, 0.18);
 }
 
-/* 订单管理整页：在 app-page-shell 内纵向可伸展，便于列表区吃满剩余高度 */
 .order-sync-view {
   min-height: 0;
 }
@@ -79,7 +75,6 @@
   backdrop-filter: none;
 }
 
-/* OrderSearchBar：布局见组件内 flex，此处仅统一与 .field-input 同高 */
 .order-search-action {
   min-height: 40px;
   box-sizing: border-box;

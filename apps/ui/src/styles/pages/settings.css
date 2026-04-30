@@ -1,37 +1,14 @@
-/* 设置页样式：SettingsView.vue
- * 从 main.css 抽出以便独立演进；cascade 顺序保持与原位置等价。
- * 外层滚动由 .settings-view-shell 接管；横幅挤占高度时仅内部滚动，不裁切卡片背景。
- *
- * 2026-04-21 清理：删除多轮迭代遗留的废弃 class，只保留 SettingsView.vue template
- * 实际使用的规则，文件规模 1066 行 → ~390 行。被删除的前缀家族包括：
- *   settings-row-...、settings-sidebar-...、settings-meta-...、settings-summary-...
- *   settings-stat-...、settings-about-pill/grid/card、settings-nav-...
- *   settings-overview-...、settings-workspace、settings-panel-accent
- *   settings-cookie-helper/manual-label/manual-actions/actions-wrap
- *   settings-inline-input/btn、settings-action-row/--auto-width
- *   settings-license-action-stack/btn-row
- */
-
-/* ============ 页面容器 ============ */
-
-/* 与 Dashboard 一致：在 app-page-shell 固定高度内自滚动，避免横幅/多卡堆叠时底部被裁切 */
+/* 设置页样式。 */
 .settings-view-shell {
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
-  /* settings-layout 通过 height: 100% 撑满 shell，为 Cookie 卡 textarea 提供确定的可分配空间 */
   display: flex;
   flex-direction: column;
 }
 
-/* ============ 主布局 ============
- * 左列 Cookie + 右列（授权 + 应用）：
- * - layout 通过 flex:1 + grid-template-rows: 1fr 撑满 shell 可用高度，得到确定的行高；
- * - Cookie 卡默认 stretch 到该行高，内部 flex 链路把剩余空间分配给方式二 textarea（吃满底部）；
- * - 右列 align-self: start 按内容自然高度，下方留白交给整页 shell（更饱满但不过度拉伸 about 卡）。
- * 单列布局（< 1024px）在 @media 内重排成纵向堆叠（Cookie → 授权 → 应用）。 */
 .settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -48,12 +25,9 @@
 
 .settings-section-card--cookie {
   grid-area: cookie;
-  /* 允许内部 flex:1 链路生效（min-h:0 打破 flex 子项最小内容高度约束） */
   min-height: 0;
 }
 
-/* 右列：授权与应用信息卡按自然高度纵向堆叠；
- * align-self: start 避免被 layout 的 stretch 拉伸，保证没有多余下方空白。 */
 .settings-right-column {
   grid-area: right;
   display: flex;
@@ -74,7 +48,6 @@
     grid-template-areas:
       "cookie"
       "right";
-    /* 单列布局下改为按内容自然高度，交由外层 main 接管整页滚动 */
     grid-template-rows: auto auto;
     flex: 0 0 auto;
     min-height: auto;
@@ -84,8 +57,6 @@
     align-items: flex-start;
   }
 }
-
-/* ============ Section 卡片骨架 ============ */
 
 .settings-section-card {
   display: flex;
@@ -265,8 +236,6 @@
 }
 
 .settings-cookie-textarea {
-  /* 最小 4.5rem 兜底，flex:1 + min-h:0 让其在 Cookie 卡剩余空间内自动撑满；
-   * 用户可用 resize-y 手动拖拽到更大。 */
   min-height: 4.5rem;
   font-size: 0.78rem;
   line-height: 1.45;
@@ -301,10 +270,6 @@
   overflow-wrap: anywhere;
 }
 
-/* ============ 授权 / 应用 信息网格 ============ */
-
-/* 2 列紧凑网格：应用信息卡默认 2 列；授权信息卡用 --single 变为单列 4 行（更饱满）。
- * gap 0.55rem 在「紧凑」与「视觉呼吸」之间取平衡，避免信息项粘连过密。 */
 .settings-info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -315,10 +280,6 @@
   grid-template-columns: 1fr;
 }
 
-/* ============ Cookie 卡店铺信息组合块 ============
- * 精简版：以 selector 作为主操作入口（selector 自己显示当前店铺名），
- * 下方小字展示 store_id 和简短说明，不再左右分栏平铺两份信息。
- * 相比分栏版节省纵向高度，也消除了「当前店铺 + 切换店铺」两份 label 的视觉冗余。 */
 .settings-store-combo {
   padding: 0.6rem 0.78rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(240, 253, 244, 0.35) 100%);

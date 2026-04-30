@@ -66,16 +66,7 @@ impl HttpQualityRefundSource {
         response.json::<Value>().await.context("品退响应 JSON")
     }
 
-    /// 轻量 Cookie 探测：仅发 1 次 POST 空 body，只判定业务 code 是否为 0，不解析 items。
-    ///
-    /// 用于「Cookie 健康探测」场景，与 [`fetch_quality_refund_orders`] 的关键差异：
-    /// - **独立 5s timeout 的 client**（不复用 self.client 的 30s），cookie 失效 / 网络慢
-    ///   时 5s 内归类失败，避免用户感知"一直待探测"
-    /// - 跳过 GET 尝试（GET 并非"空 body 极快"的那个路径）
-    /// - 跳过 items 解析与 parse_quality_refund_record 循环
-    /// - HTTP 非 2xx 直接归类失败，不再读 body
-    ///
-    /// 只在 code == 0 时返回 Ok(())，其余任意结果都 Err（交由调用方转换为失效提示）。
+    /// Cookie 健康探测：5s 内发起轻量 POST，仅认可业务 `code == 0`。
     pub async fn probe(&self) -> anyhow::Result<()> {
         use std::time::Duration;
         let probe_client =

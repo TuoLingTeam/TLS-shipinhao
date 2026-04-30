@@ -16,9 +16,7 @@ import { useNotification } from "../shared/useNotification";
 import { isSettingsSection } from "../layout/navigation";
 import type { SettingsSectionId } from "../layout/navigation";
 
-/** 登录窗口打开后，前端轮询读取登录态的间隔（ms） */
 const COOKIE_POLL_INTERVAL_MS = 1500;
-/** 轮询最长持续时间（ms），到期后自动停止以避免无谓占用 */
 const COOKIE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 const appStore = useAppStore();
@@ -30,7 +28,6 @@ const { activateLicense, activateLoading } = useLicense();
 const { clockText, uptimeText } = useRuntimeClock();
 const { show: showToast } = useNotification();
 
-/** 最近一次成功保存来源：`auto`=登录窗口轮询；`manual`=手动粘贴后保存 */
 const saveNotice = ref<null | "auto" | "manual">(null);
 const saveError = ref<string | null>(null);
 const loadError = ref<string | null>(null);
@@ -80,7 +77,6 @@ async function refreshCookieHealth() {
   try {
     await cookieHealth.refreshSilently();
   } catch {
-    // 忽略刷新异常，页面上已有错误态文案
   }
 }
 
@@ -115,7 +111,6 @@ async function tryExtractCookieOnce() {
     await storeContext.refreshAfterCookieUpdate(previousStoreId);
     return true;
   } catch {
-    // 登录尚未完成或窗口已关闭：保持轮询继续，由调用方控制超时
     return false;
   }
 }
@@ -137,7 +132,6 @@ function startCookiePoll() {
     try {
       await invoke("close_cookie_login_window");
     } catch {
-      // 关窗失败不影响保存结果，留给用户手动关闭
     }
   }, COOKIE_POLL_INTERVAL_MS);
 }
@@ -216,14 +210,10 @@ async function handleSelectStore(event: Event) {
 }
 
 async function handleActivate() {
-  // 空输入直接红色 toast，避免用户点了没反馈以为按钮坏掉。
-  // licenseKey 已用 v-model.trim 绑定，不需要再 trim 一次。
   if (!licenseKey.value) {
     showToast("请先在上方输入卡密", "error");
     return;
   }
-  // useLicense.activateLicense 在 invoke 失败时会兜底返回带 message 的 payload，
-  // 因此 result 不可能为 null；message 兜底文案覆盖服务端 / 网络异常两条路径。
   const result = await activateLicense(licenseKey.value);
   const message =
     result.message?.trim() ||

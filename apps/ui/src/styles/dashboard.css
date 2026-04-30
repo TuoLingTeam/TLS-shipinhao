@@ -1,17 +1,4 @@
-/*
- * 仪表盘（DashboardView）专属样式。
- *
- * 原本集中写在 `main.css` 约 230 行（2029-2258），与设置 / 评价 / 发货 / 订单等
- * 业务域样式混在一起，定位查找成本高。抽到独立文件后：
- * - 改仪表盘样式时 diff 范围限定在本文件
- * - `main.css` 的尾部仅保留 `@import "./dashboard.css"` 入口，cascade 顺序等价
- * - 使用方（Vue 组件）**无需改动**，类名与原来完全一致
- *
- * 若未来仪表盘再增类名，请继续落在此文件；其它业务域（settings / review / order
- * / delivery）目前在 main.css 中穿插分布较广，强行拆分会打乱 cascade，暂保留。
- */
-
-/* 仪表盘卡片高度变量：缓存指标承担主信息密度，快捷入口次之，右侧运行信息更紧凑。 */
+/* Dashboard scoped styles. */
 :root {
   --dashboard-card-h-metric: 5.85rem;
   --dashboard-card-h-shortcut: 4.55rem;
@@ -125,7 +112,6 @@
   }
 }
 
-/* 仪表盘：hero 右侧状态 pill（授权/Cookie/缓存健康速览） */
 .dashboard-hint-pill {
   display: inline-flex;
   align-items: center;
@@ -168,12 +154,6 @@
   color: #64748b;
 }
 
-/* 仪表盘：三组卡片固定各自高度（指标 9rem / 快捷入口 7rem / 元数据 5rem），
- * 让每一组内部等高、跨组按信息密度呈阶梯状排布。
- * 指标卡 space-between 让 header / value / hint 上中下均匀分布，
- * 避免 hint 字数差异把 value 位置漂移；其余两组内容简单，依赖
- * 内部 items-center / h-full 做垂直居中。
- */
 .dashboard-metric-card {
   transition:
     transform var(--motion-mid) ease,
@@ -198,7 +178,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
-/* 较历史 compact 卡更「撑满」：控制主数字与辅文尺寸，避免沿用 .metric-value 2rem 在 5 列下过爆 */
 .dashboard-metric-tile .dashboard-metric-value.metric-value {
   margin-top: 0;
   font-size: clamp(1.18rem, 0.25vw + 1rem, 1.45rem);
@@ -261,8 +240,6 @@
   border-top-color: rgba(5, 150, 105, 0.78);
 }
 
-/* 仪表盘右侧：运行时元数据 4 卡片（版本 / 作者 / 教程 / 当前时间）
-   与主流程解耦，降低低频信息权重，避免占用底部整排空间。 */
 .dashboard-meta-card {
   position: relative;
   border: 1px solid rgba(226, 232, 240, 0.84);
@@ -289,7 +266,6 @@
   border-left-color: rgba(5, 150, 105, 0.58);
 }
 
-/* 版本卡出现「可更新」副文案时避免固定 height 裁切；其余 meta 卡高度不变 */
 .dashboard-meta-card--version:has(.dashboard-meta-update) {
   height: auto;
   min-height: var(--dashboard-card-h-meta);
@@ -360,9 +336,6 @@
   font-size: 0.76rem;
 }
 
-/* 仪表盘：快捷入口 1x4 卡片网格。
- * 一行展示 4 个核心入口，减少主流程区纵向高度。
- */
 .dashboard-shortcuts-grid {
   grid-template-rows: auto;
 }
@@ -384,9 +357,6 @@
   font-size: 0.68rem;
 }
 
-/* 仪表盘：四个快捷入口，按业务域给图标上不同配色。
- * 与指标卡 / 元数据卡统一为 7rem，保持仪表盘整体卡片高度一致。
- */
 .dashboard-shortcut {
   height: var(--dashboard-card-h-shortcut);
   padding: 0.48rem 0.62rem;

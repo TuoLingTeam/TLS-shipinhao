@@ -1,16 +1,5 @@
 #!/usr/bin/env node
-// 守住 LicenseState 前后端 SSoT 一致性。
-//
-// 后端 SSoT：backend/api-contracts/src/lib.rs::LICENSE_STATE_SERDE_LABELS
-// 前端镜像：apps/ui/src/license/types.ts::LICENSE_STATE_LABELS（key 集合）
-//
-// 任意一边新增/删除/重命名 LicenseState 变体，对方未同步时本脚本立刻
-// 失败，避免漂移到运行期才被发现（serde 用未识别的 string 反序列化时
-// 会回落到 default 变体 Active，会让前端把"未激活"误判成"已激活"）。
-//
-// 用法：
-//   pnpm check:license-state
-//   node scripts/check-license-state-sync.mjs
+// 校验 LicenseState 前后端 SSoT 一致性。
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

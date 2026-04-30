@@ -1,13 +1,6 @@
 @import "tailwindcss";
 
-/*
- * 3 档间距 scale（在 Raw CSS 中通过 var 引用；Vue class 用原生数字类）：
- *   inline (0.5rem) —— 图标 / chip / badge 横向并排
- *   stack  (0.75rem) —— 卡片内部纵向堆叠 label → value → hint
- *   app    (1rem)  —— 页面 / 卡片区块之间的主节奏（历史沿用）
- * 细粒度细节（gap-0.5 / gap-1 / gap-1.5 以及 0.35rem / 0.42rem 等精调值）
- * 不进入 scale，保留原字面值。
- */
+/* Raw CSS 间距 token；细粒度精调保留字面值。 */
 @theme {
   --spacing-inline: 0.5rem;
   --spacing-stack: 0.75rem;
@@ -47,8 +40,7 @@
   --color-neutral-text: #64748b;
   --color-neutral-border: #cbd5e1;
 
-  /* 中性灰十级（slate palette）。仅补 token，历史 rgba/hex 保留不强制改，
-     后续新增代码优先用变量引用，避免散落硬编码值继续扩散。 */
+  /* 补齐 slate token，新增样式优先复用变量。 */
   --color-slate-50: #f8fafc;
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
@@ -73,7 +65,7 @@
   --radius-xl: 20px;
   --radius-lg: 16px;
 
-  /* 过渡时长节律：快 / 中 / 基础 / 慢，复用避免各处散落 180/200/220/300ms */
+  /* 统一过渡时长。 */
   --motion-fast: 180ms;
   --motion-mid: 200ms;
   --motion-base: 220ms;
@@ -90,12 +82,7 @@ body,
   min-height: 100%;
 }
 
-/*
- * 全局最小宽度：与 Tauri 桌面窗口 minWidth (768px) 对齐。
- * 运行在 Tauri 内时窗口本身已由 tauri.conf.json 限制；此处保留为 `pnpm dev`
- * 在浏览器里预览的兜底（无 Tauri 壳时窗口可任意缩小）。不删。
- * < 768px 才允许横向滚动作为兜底，常规桌面窗口 (>= 768px) 走真正的响应式自适应。
- */
+/* 与 Tauri minWidth 对齐；浏览器预览低于 768px 时允许横向滚动。 */
 #app {
   min-width: 768px;
 }
@@ -266,10 +253,7 @@ textarea {
   box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.16);
 }
 
-/* 带前缀图标的输入 / 下拉：由 .field-affix--leading 提供绝对定位的图标槽，
- * 内部控件再加 .field-input--with-leading-icon 预留左侧 padding。
- * select 需要显式关闭原生外观，否则浏览器会在同一区域绘制自己的文字与指示箭头，
- * 把绝对定位的图标遮住。 */
+/* 前缀图标输入：外层定位图标，控件预留左侧 padding。 */
 .field-affix {
   position: relative;
   display: inline-flex;
@@ -297,7 +281,6 @@ textarea {
   padding-left: 2.45rem;
 }
 
-/* 配置区顶部的「小标签」：点 + 小字，作为 section 身份标识，不追加叙述性文案 */
 .config-panel-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -321,7 +304,7 @@ textarea {
   line-height: 1;
 }
 
-/* 对 <select> 关闭原生外观，改用右侧 CSS 箭头，左侧留给 affix 图标 */
+/* select 使用自绘箭头，避免和前缀图标重叠。 */
 select.field-input--with-leading-icon {
   appearance: none;
   -webkit-appearance: none;
@@ -528,10 +511,7 @@ select.field-input--with-leading-icon {
 
 .subsystem-summary-strip {
   display: grid;
-  /* 不在此预设 gap：让调用方通过 Tailwind gap-x-* / gap-y-* 工具类自行声明，
-     避免 shorthand `gap` 在 cascade 中覆盖更精细的 row-gap / column-gap utility。
-     历史上仪表盘快捷入口的 gap-y-5/6/7 被这里的 0.625rem 静默压平，
-     调间距怎么改都没视觉变化。 */
+  /* gap 由调用方声明，避免覆盖 Tailwind 的 gap-x / gap-y 工具类。 */
 }
 
 .subsystem-summary-card {
@@ -669,12 +649,7 @@ select.field-input--with-leading-icon {
 }
 
 .data-table-shell {
-  /* 不再固定 `overflow: hidden`：该简写属于普通规则、优先级高于 Tailwind v4
-   * `@layer utilities`，会把使用方申明的 `overflow-x-auto` / `overflow-y-auto`
-   * 压掉导致列表无法滚动。改由每个使用方用 Tailwind utility 决定溢出行为：
-   *   - OrderSyncView 用 `overflow-auto`
-   *   - ReviewMatchView 用 `overflow-x-auto overflow-y-auto`
-   * `.data-table-shell` 的底色已覆盖，内部 `<table>` 即使是矩形四角也不会视觉穿透。 */
+  /* 溢出行为交给页面 utility，避免覆盖表格滚动。 */
   border-radius: 18px;
   border: 1px solid var(--color-border);
   background:
@@ -837,20 +812,10 @@ select.field-input--with-leading-icon {
   }
 }
 
-/* 历史兜底 @media (max-width: 1023.98px), (max-height: 719.98px) 已下线：
- * - Dashboard / Delivery / Settings 的视图容器都改为自己开 `overflow-y: auto`
- * - 短视口 / 窄屏不再触发「切回内容自然高度 + main 滚动」的 !important 重置，
- *   避免同一页面在 768/1024 两侧切换时布局发生明显跳变
- * - 仍保留窄屏单列布局（settings-layout 在 max-width: 1023px 内重排为 1 列）
- */
-
-
 .app-shell {
   min-height: 100%;
   --app-frame-pad-lg: 1.25rem;
-  /* 页面 5 板块统一 gap：app-content-shell（顶栏 ↔ 主区）与各页面 view
-   * （dashboard/review/order/delivery/settings）共享同一个变量。compact 系
-   * 收紧到 stack(0.75rem)，其他模式默认 1rem。后续调间距只改本变量。 */
+  /* 页面主区间距统一入口。 */
   --page-section-gap: var(--spacing-app);
 }
 
@@ -898,8 +863,6 @@ select.field-input--with-leading-icon {
 .app-shell[data-layout="compact"],
 .app-shell[data-layout="high_dpi_compact"] {
   --app-frame-pad-lg: 0.75rem;
-  /* 5 板块外间距：compact 系原来 stack(0.75rem) 在 retina mac 上视觉偏紧，
-   * 升一档到 app(1rem) 与 normal mode 持平；如需进一步加大改这一行即可。 */
   --page-section-gap: var(--spacing-app);
 }
 
@@ -938,10 +901,7 @@ select.field-input--with-leading-icon {
   }
 }
 
-/* 业务域 CSS 分拆：每个页面一个 partial，降低本文件复杂度与改一处牵动全局的风险。
- * Vite / PostCSS 会在此位置内联追加；cascade 顺序等价于"在本文件末尾就地书写"。
- * 新增页面时：在 ./pages/ 下建 <page>.css，再在下方补一行 @import 即可。
- */
+/* 页面样式 partial 在此处保持原 cascade 顺序。 */
 @import "./dashboard.css";
 @import "./pages/review.css";
 @import "./pages/order.css";

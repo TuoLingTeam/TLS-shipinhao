@@ -1,15 +1,5 @@
 #!/usr/bin/env node
-/**
- * Tauri 真壳 E2E 平台 aware launcher（L4-4）。
- *
- * - macOS：tauri-driver 不支持（Apple WKWebView 没有官方 WebDriver 实现），
- *   打印降级提示并以 exit 0 结束。让根 `pnpm test:e2e:tauri` 在 macOS 开发机上
- *   既不静默失败、也不阻塞 husky / 本地脚本链。
- * - Linux / Windows：进入 `e2e-tauri/` 子项目，按需 npm install 后 npm test。
- *   该子目录故意脱离根 pnpm-workspace.yaml，这里用 npm 而非 pnpm。
- *
- * 通过 `TAURI_E2E_BIN` 环境变量可覆盖被测二进制路径（与 wdio.conf.ts 对齐）。
- */
+/** Tauri 真壳 E2E launcher；macOS 无 tauri-driver 时提示并跳过。 */
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

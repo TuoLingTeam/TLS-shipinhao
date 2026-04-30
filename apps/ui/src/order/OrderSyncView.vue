@@ -15,21 +15,16 @@ const { show: showToast } = useNotification();
 const licenseBlocked = computed(() => !appStore.isLicensed);
 const searchKeyword = ref("");
 
-// 列表渲染上限：默认仅渲染前 N 条，避免每次切换页面都把上万条订单一次性渲染导致卡顿。
-// 用户点击「显示完整订单」后才解锁全量渲染。
+// 大列表默认懒渲染，避免路由切换时一次性挂载上万条订单。
 const INITIAL_DISPLAY_LIMIT = 100;
 const showAllOrders = ref(false);
 
-// 切换到订单管理时默认不加载完整列表（可能上万条），避免渲染卡顿；
-// 用户点击「加载订单列表」或触发搜索时再懒加载
-// 基于 store 判断，跨路由切换回来时若已加载过，不再重复拉取
 const cacheListLoaded = computed(() => store.cachedOrders.length > 0);
 const totalAmount = computed(() =>
   store.cachedOrders.reduce((sum, item) => sum + (item.amount_cent ?? 0), 0),
 );
 const uniqueBuyerCount = computed(() => new Set(store.cachedOrders.map((item) => item.buyer_name)).size);
 
-// 关键词搜索后的完整匹配集合（不截断，用于统计 + 列表渲染上限决策）
 const filteredOrders = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
   if (!keyword) return store.cachedOrders;
@@ -40,14 +35,12 @@ const filteredOrders = computed(() => {
   );
 });
 
-// 实际渲染的订单：搜索时用关键词过滤后的结果，否则按 showAllOrders 决定是否截断
 const visibleOrders = computed(() => {
   const list = filteredOrders.value;
   if (showAllOrders.value || searchKeyword.value.trim()) return list;
   return list.length > INITIAL_DISPLAY_LIMIT ? list.slice(0, INITIAL_DISPLAY_LIMIT) : list;
 });
 
-// 截断标记：当前渲染条数 < 总条数时为 true，用于显示「展开全部」按钮和提示文案
 const isTruncated = computed(() => visibleOrders.value.length < filteredOrders.value.length);
 const totalOrderCount = computed(() => filteredOrders.value.length);
 
@@ -110,7 +103,6 @@ async function ensureCacheListLoaded() {
 
 async function handleSearch(keyword: string) {
   searchKeyword.value = keyword;
-  // 首次触发搜索时懒加载本地缓存列表
   if (hasLocalCache.value) {
     await ensureCacheListLoaded();
   }
@@ -156,8 +148,6 @@ function handleEmptyAction() {
   void handleSync();
 }
 
-// 切换侧边栏时仅拉取轻量的缓存状态（判断是否有缺口、显示订单计数），
-// 完整订单列表按需加载，避免渲染大量数据导致页面卡顿
 onMounted(async () => {
   await loadCacheStatus();
 });

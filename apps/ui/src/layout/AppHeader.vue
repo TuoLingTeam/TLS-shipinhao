@@ -14,7 +14,6 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const cookieHealth = useCookieHealthStore();
-/** 顶栏与仪表盘共用 cookie 状态；用 ref 追踪避免嵌套 computed 在部分运行时依赖丢失（如 Windows WebView2）。 */
 const { status: cookieStatus, snapshot: cookieSnapshot } = storeToRefs(cookieHealth);
 const storeContext = useStoreContextStore();
 const { show: showToast } = useNotification();
@@ -23,7 +22,6 @@ const pageMeta = computed(() => pageMetaMap[(route.name as PageName) || "dashboa
 const licenseLabel = computed(() => (appStore.isLicensed ? "已授权" : "未激活"));
 const { scalePercent, increment, decrement, reset } = useUiScale();
 
-/** 与 main.css 中 .status-dot.success|warn|error 对齐；用字符串 :class 与授权芯片一致，避免对象形式偶发不合并。 */
 const cookieDotModifier = computed(() => {
   switch (cookieStatus.value) {
     case "healthy":

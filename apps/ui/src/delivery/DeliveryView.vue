@@ -18,7 +18,6 @@ const confirmOpen = ref(false);
 const retryConfirmOpen = ref(false);
 const activeProgressTab = ref<"recent" | "failed">("recent");
 
-// 把多行文本规整成 trim 后的非空行数组
 function splitLines(raw: string): string[] {
   return raw.split("\n").map((line) => line.trim()).filter(Boolean);
 }
@@ -26,11 +25,9 @@ function splitLines(raw: string): string[] {
 watch(
   () => store.draftOrderId,
   (value) => {
-    // draftOrderId 可能是单条订单号，也可能是多行字符串（来自评价匹配的批量预填）
     const incoming = splitLines(value ?? "");
     if (incoming.length === 0) return;
     const existing = splitLines(orderIdsText.value);
-    // 合并：incoming 订单号放在前面，已有订单号追加在后，重复的丢弃（避免一条订单出现两次）
     const existingSet = new Set(existing);
     const incomingNew = incoming.filter((id) => !existingSet.has(id));
     const merged = [...incomingNew, ...existing];

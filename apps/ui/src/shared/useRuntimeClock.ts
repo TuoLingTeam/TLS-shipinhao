@@ -1,20 +1,15 @@
 import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef } from "vue";
 
-/**
- * 应用启动时间。
- *
- * 放在模块级以保证全局唯一：用户即便在不同路由/组件间切换，
- * 「会话时长」也应以首次加载为起点，而不是每次挂载重置。
- */
+/** 模块级启动时间，保证跨路由的会话时长不重置。 */
 const appStartedAt = new Date();
 
-/** 全局共享的「当前时间」ref，所有消费者读同一个值，避免多组件定时器漂移。 */
+/** 全局共享当前时间，避免多组件定时器漂移。 */
 const sharedNow = ref(new Date());
 
-/** 30 秒粒度足够驱动「hh:mm」与「已运行 Nh Mm」两类展示，避免频繁重渲染。 */
+/** 30 秒粒度足够驱动时钟与运行时长展示。 */
 const TICK_INTERVAL_MS = 30_000;
 
-/** 引用计数：0 → 1 启动定时器；1 → 0 停止定时器，避免后台空跑。 */
+/** 引用计数控制共享定时器生命周期。 */
 let refCount = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -40,12 +35,7 @@ export interface RuntimeClock {
   uptimeText: ComputedRef<string>;
 }
 
-/**
- * 获取运行时时钟（启动时间 / 当前时间）。
- *
- * 首次被任意组件调用时启动 30s 定时器，全部组件卸载后自动停止。
- * 多处消费读取同一 ref，保证 UI 在同一帧内显示一致的时间。
- */
+/** 获取运行时时钟，按需启动共享定时器。 */
 export function useRuntimeClock(): RuntimeClock {
   onMounted(() => {
     acquireTimer();

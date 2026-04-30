@@ -1,10 +1,8 @@
-/* 发货管理页样式：DeliveryView.vue / DeliveryTable 等
- * 从 main.css 抽出；cascade 顺序保持等价。 */
+/* 发货管理页样式。 */
 
 .delivery-view {
   width: 100%;
   min-height: 0;
-  /* 内容超过可视高度时由 .delivery-view 自滚；保持两栏/双列输入布局不随窗口高度塌陷 */
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -19,8 +17,6 @@
   min-height: 0;
 }
 
-/* 两张工作面板：左=批量输入；右=进度/引导。与设置 / 订单 / 评价页的"配置区"同一视觉语言：
-   左侧品牌色强调线 + 顶部高光 + 轻柔外投阴影，让面板在整页绿色背景中有清晰层次 */
 .delivery-input-panel,
 .delivery-progress-panel {
   min-height: 0;
@@ -36,7 +32,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
-/* 右上方柔和光斑：呼应 order-hero / review-config 的同款装饰 */
 .delivery-input-panel::before,
 .delivery-progress-panel::before {
   content: "";
@@ -50,7 +45,6 @@
   pointer-events: none;
 }
 
-/* 让 section-header / workspace / action-bar 浮在装饰层之上 */
 .delivery-input-panel > *,
 .delivery-progress-panel > * {
   position: relative;
@@ -70,7 +64,6 @@
   gap: 0.35rem;
 }
 
-/* 两列输入框上方的 label：状态 badge 紧贴"订单号 / 快递单号"文字右侧，留一点呼吸间距 */
 .delivery-field-label {
   display: inline-flex;
   align-items: center;
@@ -85,7 +78,6 @@
   letter-spacing: -0.005em;
 }
 
-/* 行数状态胶囊：默认淡灰，输入后切到品牌绿柔色，与页面整体 pill 设计语言一致 */
 .delivery-field-count {
   display: inline-flex;
   align-items: center;
@@ -143,12 +135,10 @@
   flex: 1 1 auto;
   min-height: 120px;
   resize: none;
-  /* 紧凑横向内边距 + 稍小 monospace 字号：确保 19~20 位订单号/快递号单行显示不折行 */
   padding-left: 0.55rem;
   padding-right: 0.55rem;
   font-size: 0.74rem;
   letter-spacing: 0;
-  /* textarea 抬升：白底 + 轻阴影，"表单在卡片中"的纵深 */
   background-color: #ffffff;
   box-shadow:
     0 10px 26px -22px rgba(15, 23, 42, 0.24),

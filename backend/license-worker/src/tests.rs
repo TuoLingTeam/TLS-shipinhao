@@ -837,9 +837,6 @@ fn new_requests_roundtrip_serde() {
     assert_eq!(parsed, refresh);
 }
 
-// ---- runtime_task_authorize：拒绝路径集成回归（Pass 4 · T15） -----------
-
-/// 公共 helper：激活一把默认许可证，返回 (repo, signer, now)。
 async fn activate_default_license() -> (Repo, LeaseTokenSigner, chrono::DateTime<Utc>) {
     let repo = Repo::seeded();
     let signer = test_signer();
@@ -916,7 +913,6 @@ async fn task_authorize_rejects_when_device_id_does_not_match_activated_binding(
 async fn task_authorize_rejects_after_license_is_revoked() {
     let (repo, _signer, now) = activate_default_license().await;
 
-    // 先调用一次确认活跃状态
     let granted = runtime_task_authorize(
         &repo,
         TaskAuthorizeRequest {
@@ -931,7 +927,6 @@ async fn task_authorize_rejects_after_license_is_revoked() {
     .unwrap();
     assert!(granted.granted);
 
-    // 管理员吊销
     runtime_revoke(
         &repo,
         LeaseRevokeRequest {
@@ -944,7 +939,6 @@ async fn task_authorize_rejects_after_license_is_revoked() {
     .await
     .unwrap();
 
-    // 吊销后再申请任务授权应被拒
     let after_revoke = runtime_task_authorize(
         &repo,
         TaskAuthorizeRequest {
@@ -965,13 +959,9 @@ async fn task_authorize_rejects_after_license_is_revoked() {
     assert!(after_revoke.degraded_reason.is_some());
 }
 
-// ---- 激活时 device_id / device_fingerprint 自洽校验（审计报告 H2） -----
-
 #[test]
 fn device_id_matches_fingerprint_accepts_canonical_pair() {
-    // "fp-1" 的 SHA-256 前 8 字节是 858c06cf9c505c9f
     assert!(device_id_matches_fingerprint("858c06cf9c505c9f", "fp-1"));
-    // 大小写 / 前后空白均容忍
     assert!(device_id_matches_fingerprint(
         "  858C06CF9C505C9F  ",
         "fp-1"
@@ -980,17 +970,13 @@ fn device_id_matches_fingerprint_accepts_canonical_pair() {
 
 #[test]
 fn device_id_matches_fingerprint_rejects_tampered_pair() {
-    // device_id 与 fingerprint 不匹配
     assert!(!device_id_matches_fingerprint("0000000000000000", "fp-1"));
-    // fingerprint 非空时 device_id 空也应拒
     assert!(!device_id_matches_fingerprint("", "fp-1"));
-    // device_id 长度不足 16
     assert!(!device_id_matches_fingerprint("858c06cf", "fp-1"));
 }
 
 #[test]
 fn device_id_matches_fingerprint_bypasses_empty_fingerprint() {
-    // 空指纹的兜底兼容：client 采集失败场景不被硬拒
     assert!(device_id_matches_fingerprint("whatever", ""));
     assert!(device_id_matches_fingerprint("", ""));
 }
@@ -1003,8 +989,6 @@ async fn runtime_activate_rejects_mismatched_device_id_fingerprint() {
         .unwrap()
         .with_timezone(&Utc);
 
-    // 攻击者声称 device_id = 858c06cf9c505c9f（本应对应 fp="fp-1"），
-    // 但实际发送 device_fingerprint = "tampered-fp"（其 SHA[..16] 完全不同）
     let response = runtime_activate(
         &repo,
         &signer,
