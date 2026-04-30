@@ -191,7 +191,7 @@ onMounted(async () => {
     <section
       v-if="store.loading"
       data-testid="order-sync-progress"
-      class="order-progress-shell surface-panel shrink-0 p-3 lg:p-3.5"
+      class="order-progress-shell surface-panel min-h-0 min-w-0 flex-1 p-3 lg:p-3.5"
     >
       <div class="order-progress-head">
         <div class="min-w-0">

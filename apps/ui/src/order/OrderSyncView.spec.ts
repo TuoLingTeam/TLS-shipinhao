@@ -104,6 +104,8 @@ describe("OrderSyncView", () => {
     });
 
     expect(wrapper.get('[data-testid="order-sync-progress"]').classes()).toContain("order-progress-shell");
+    expect(wrapper.get('[data-testid="order-sync-progress"]').classes()).toContain("flex-1");
+    expect(wrapper.get('[data-testid="order-sync-progress"]').classes()).not.toContain("shrink-0");
     expect(wrapper.text()).toContain("同步订单缓存");
     expect(wrapper.text()).toContain("78%");
     expect(wrapper.text()).not.toContain("正在加载");
