@@ -60,12 +60,13 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((info.processedCount / info.totalCount) * 100));
 });
 const failedSteps = computed(() => progress.value?.steps.filter((step) => step.status === "failed") ?? []);
+const retryableFailedSteps = computed(() => failedSteps.value.filter((step) => step.retryable));
 const recentSteps = computed(() => {
   const steps = progress.value?.steps ?? [];
   return steps.slice(-20).reverse();
 });
 const canRetryFailed = computed(() =>
-  Boolean(progress.value && !progress.value.running && failedSteps.value.length > 0),
+  Boolean(progress.value && !progress.value.running && retryableFailedSteps.value.length > 0),
 );
 const confirmMessage = computed(() => {
   const count = parsedBatchItems.value.length;
@@ -267,7 +268,7 @@ function handleExportFailedCsv() {
                 class="action-btn action-btn-primary action-btn-compact"
                 @click="retryConfirmOpen = true"
               >
-                重试 {{ failedSteps.length }} 条
+                重试 {{ retryableFailedSteps.length }} 条
               </button>
               <button
                 v-if="!progress.running"
@@ -373,7 +374,14 @@ function handleExportFailedCsv() {
                     <td class="px-2.5 py-1.5 font-mono text-slate-500">{{ item.index }}</td>
                     <td class="px-2.5 py-1.5 font-mono text-slate-700">{{ item.orderId }}</td>
                     <td class="px-2.5 py-1.5 font-mono text-slate-700">{{ item.trackingNumber }}</td>
-                    <td class="px-2.5 py-1.5 text-red-700">{{ item.errorMessage || "未知错误" }}</td>
+                    <td class="px-2.5 py-1.5 text-red-700">
+                      <div class="flex items-center gap-1.5">
+                        <span>{{ item.errorMessage || "未知错误" }}</span>
+                        <span v-if="!item.retryable" class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                          不可重试
+                        </span>
+                      </div>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -453,7 +461,7 @@ function handleExportFailedCsv() {
                 <span class="delivery-placeholder-step-index">3</span>
                 <div class="min-w-0">
                   <div class="delivery-placeholder-step-title">开始批量</div>
-                  <p class="delivery-placeholder-step-copy">逐条实时进度、失败明细可导出 CSV、支持一键重试。</p>
+                  <p class="delivery-placeholder-step-copy">逐条实时进度、失败明细可导出，可恢复失败支持一键重试。</p>
                 </div>
               </div>
             </div>
@@ -489,7 +497,7 @@ function handleExportFailedCsv() {
     <ConfirmDialog
       :open="retryConfirmOpen"
       title="仅重试失败条目"
-      :message="`将重新提交 ${failedSteps.length} 条失败订单，请确认已修正错误后再继续。`"
+      :message="`将重新提交 ${retryableFailedSteps.length} 条可重试失败订单，请确认已修正错误后再继续。`"
       confirm-text="开始重试"
       cancel-text="取消"
       @confirm="confirmRetryFailed"

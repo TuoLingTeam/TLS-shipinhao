@@ -25,6 +25,7 @@ function normalizeStep(raw: BatchDeliveryStepRaw): BatchDeliveryStep {
     orderId: raw.orderId,
     trackingNumber: raw.trackingNumber,
     status: raw.status,
+    retryable: raw.retryable ?? (raw.status === "failed"),
     oldWaybill: raw.oldWaybill ?? null,
     errorMessage: raw.errorMessage ?? null,
   };
@@ -118,7 +119,7 @@ export function useDelivery() {
     const progress = store.batchProgress;
     if (!progress) return null;
     const failed = progress.steps
-      .filter((item) => item.status === "failed")
+      .filter((item) => item.status === "failed" && item.retryable)
       .map((item) => ({ order_id: item.orderId, tracking_number: item.trackingNumber }));
     if (failed.length === 0) return null;
     return batchDelivery(failed);

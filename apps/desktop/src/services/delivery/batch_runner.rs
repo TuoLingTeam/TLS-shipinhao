@@ -1,3 +1,4 @@
+use super::update::is_non_retryable_delivery_error;
 use serde::{Deserialize, Serialize};
 
 pub const BATCH_DELIVERY_TASK_TYPE: &str = "batch_delivery";
@@ -26,8 +27,14 @@ pub struct BatchDeliveryStepResult {
     pub order_id: String,
     pub tracking_number: String,
     pub status: BatchDeliveryStepStatus,
+    #[serde(default = "default_retryable")]
+    pub retryable: bool,
     pub old_waybill: Option<String>,
     pub error_message: Option<String>,
+}
+
+fn default_retryable() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -119,19 +126,22 @@ where
                     order_id: item.order_id.clone(),
                     tracking_number: item.tracking_number.clone(),
                     status: BatchDeliveryStepStatus::Success,
+                    retryable: false,
                     old_waybill,
                     error_message: None,
                 }
             }
             Err(error) => {
                 report.failure_count += 1;
+                let error_message = error.to_string();
                 BatchDeliveryStepResult {
                     index,
                     order_id: item.order_id.clone(),
                     tracking_number: item.tracking_number.clone(),
                     status: BatchDeliveryStepStatus::Failed,
+                    retryable: !is_non_retryable_delivery_error(&error_message),
                     old_waybill: None,
-                    error_message: Some(error.to_string()),
+                    error_message: Some(error_message),
                 }
             }
         };
@@ -248,13 +258,32 @@ mod tests {
         assert_eq!(report.failure_count, 1);
         assert_eq!(report.steps.len(), 2);
         assert_eq!(report.steps[0].status, BatchDeliveryStepStatus::Success);
+        assert!(!report.steps[0].retryable);
         assert_eq!(report.steps[0].old_waybill.as_deref(), Some("old-1"));
         assert_eq!(report.steps[1].status, BatchDeliveryStepStatus::Failed);
+        assert!(report.steps[1].retryable);
         assert!(report.steps[1]
             .error_message
             .as_deref()
             .unwrap()
             .contains("更新物流信息失败"));
+    }
+
+    #[test]
+    fn confirmed_receipt_failure_is_not_retryable() {
+        let items = vec![item("o-1", "SF0001")];
+        let mut gateway = FakeGateway {
+            results: vec![Err(anyhow::anyhow!(
+                "更新物流信息失败：订单已确认收货，不支持修改物流"
+            ))],
+            ..Default::default()
+        };
+        let mut guard = FakeRuntimeGuard::default();
+        let report = run_batch_delivery(&items, &mut gateway, &mut guard);
+
+        assert_eq!(report.failure_count, 1);
+        assert_eq!(report.steps[0].status, BatchDeliveryStepStatus::Failed);
+        assert!(!report.steps[0].retryable);
     }
 
     #[test]

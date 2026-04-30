@@ -18,6 +18,7 @@ export interface BatchDeliveryStep {
   orderId: string;
   trackingNumber: string;
   status: BatchDeliveryStepStatus;
+  retryable: boolean;
   oldWaybill: string | null;
   errorMessage: string | null;
 }
@@ -38,6 +39,7 @@ export interface BatchDeliveryStepRaw {
   orderId: string;
   trackingNumber: string;
   status: BatchDeliveryStepStatus;
+  retryable?: boolean;
   oldWaybill: string | null;
   errorMessage: string | null;
 }

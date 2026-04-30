@@ -45,6 +45,7 @@ describe("DeliveryView", () => {
           orderId: "order-123",
           trackingNumber: "JT0001",
           status: "success",
+          retryable: false,
           oldWaybill: null,
           errorMessage: null,
         },
@@ -68,5 +69,47 @@ describe("DeliveryView", () => {
     expect(wrapper.text()).not.toContain("单条修正");
     expect(wrapper.text()).not.toContain("发货操作台");
     expect(wrapper.text()).toContain("批量发货");
+  });
+
+  it("does not offer retry for confirmed-receipt delivery failures", async () => {
+    const store = useDeliveryStore();
+    store.batchProgress = {
+      totalCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      processedCount: 1,
+      fatalError: null,
+      stopped: false,
+      running: false,
+      cancelRequested: false,
+      steps: [
+        {
+          index: 1,
+          orderId: "3735894545537057280",
+          trackingNumber: "SF5199163576268",
+          status: "failed",
+          retryable: false,
+          oldWaybill: null,
+          errorMessage: "更新物流信息失败：订单已确认收货，不支持修改物流",
+        },
+      ],
+    };
+
+    const wrapper = mount(DeliveryView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          ConfirmDialog: true,
+        },
+      },
+    });
+
+    const buttonTexts = wrapper.findAll("button").map((button) => button.text());
+    expect(buttonTexts).not.toContain("重试 1 条");
+
+    const failedTab = wrapper.findAll("button").find((button) => button.text().includes("失败条目"));
+    expect(failedTab).toBeTruthy();
+    await failedTab!.trigger("click");
+    expect(wrapper.text()).toContain("不可重试");
   });
 });

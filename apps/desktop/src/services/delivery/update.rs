@@ -3,6 +3,7 @@ use serde_json::Value;
 
 pub const DELIVERY_MISMATCH_MESSAGE: &str = "快递单号与所选物流商不匹配";
 const DELIVERY_MISMATCH_MARKERS: [&str; 2] = [DELIVERY_MISMATCH_MESSAGE, "快递单号有误"];
+const DELIVERY_NON_RETRYABLE_MARKERS: [&str; 2] = ["订单已确认收货", "不支持修改物流"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -190,6 +191,12 @@ pub fn is_delivery_mismatch_error(message: &str) -> bool {
         .any(|marker| message.contains(marker))
 }
 
+pub fn is_non_retryable_delivery_error(message: &str) -> bool {
+    DELIVERY_NON_RETRYABLE_MARKERS
+        .iter()
+        .all(|marker| message.contains(marker))
+}
+
 pub fn determine_delivery_override_on_mismatch(
     tracking_number: &str,
     delivery_product_info: &DeliveryProductInfo,
@@ -336,6 +343,16 @@ mod tests {
         )));
         let same_prefix_info = make_raw_delivery_info("JT", "73666162791371");
         assert!(determine_delivery_override_on_mismatch("JT0001", &same_prefix_info).is_none());
+    }
+
+    #[test]
+    fn confirmed_receipt_error_is_non_retryable() {
+        assert!(is_non_retryable_delivery_error(
+            "更新物流信息失败：订单已确认收货，不支持修改物流"
+        ));
+        assert!(!is_non_retryable_delivery_error(
+            "更新物流信息失败：快递单号与所选物流商不匹配"
+        ));
     }
 
     #[test]
