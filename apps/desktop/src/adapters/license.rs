@@ -5,11 +5,23 @@ use backend::contracts::Rg;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::app_settings::LICENSE_API_TIMEOUT_SECS;
 use backend::blank_debug_release;
 
 blank_debug_release!(Lrr);
 blank_debug_release!(Lar);
+
+/// 卡密验证后端（按顺序依次回退）。每次调用即时解密，避免在 static 区留下明文。
+pub fn license_api_base_urls() -> Vec<String> {
+    vec![
+        obfstr::obfstr!("https://sphapi-cn.199908.top").to_string(),
+        obfstr::obfstr!("https://sphapi.199908.top").to_string(),
+        obfstr::obfstr!("https://sphapi.tuoling.ccwu.cc").to_string(),
+        obfstr::obfstr!("https://sphapi.tuoling.eu.cc").to_string(),
+    ]
+}
+
+/// 与授权 Worker API 超时策略对齐（秒）。
+pub const LICENSE_API_TIMEOUT_SECS: u64 = 10;
 
 /// 授权服务 HTTP 调用的结构化错误。
 ///

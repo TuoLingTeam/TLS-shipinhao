@@ -1,5 +1,4 @@
 use crate::adapters::order::{parse_iso_window, HttpOrderCacheFinder};
-use crate::adapters::order_cache::SqliteOrderCache;
 use crate::commands::license::{authorize_runtime_task, ensure_feature_authorized};
 use crate::commands::shared::{current_store_paths, require_store_runtime_context};
 use crate::error::AppError;
@@ -14,10 +13,87 @@ use desktop::services::order_cache_storage::SqliteOrderCacheRepository;
 use desktop::services::order_sync_service::{
     OrderSyncService, MERGE_TOLERANCE_SECONDS, MIN_GAP_WIDTH_SECONDS, ORDER_CACHE_SCOPE,
 };
+use desktop::services::OrderCacheStore;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
+
+const DB_FILE_NAME: &str = "order_cache.db";
+
+struct SqliteOrderCache {
+    db_path: PathBuf,
+}
+
+impl SqliteOrderCache {
+    fn new(data_dir: PathBuf) -> Self {
+        std::fs::create_dir_all(&data_dir).ok();
+        let db_path = data_dir.join(DB_FILE_NAME);
+        if let Ok(conn) = Connection::open(&db_path) {
+            conn.execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 CREATE TABLE IF NOT EXISTS orders (
+                     order_id TEXT PRIMARY KEY,
+                     buyer_name TEXT NOT NULL DEFAULT '',
+                     amount_cent INTEGER NOT NULL DEFAULT 0,
+                     created_at TEXT NOT NULL DEFAULT '',
+                     updated_at TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .ok();
+        }
+        Self { db_path }
+    }
+}
+
+impl OrderCacheStore for SqliteOrderCache {
+    fn load_recent_orders(&self, window: &TimeWindow) -> anyhow::Result<Vec<OrderCacheEntry>> {
+        let conn = Connection::open(&self.db_path)?;
+        let mut stmt = conn.prepare(
+            "SELECT order_id, buyer_name, amount_cent, created_at, updated_at
+             FROM orders
+             WHERE created_at >= ?1 AND created_at <= ?2
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![&window.start_at, &window.end_at], |row| {
+            Ok(OrderCacheEntry {
+                order_id: row.get(0)?,
+                buyer_name: row.get(1)?,
+                amount_cent: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })?;
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row?);
+        }
+        Ok(entries)
+    }
+
+    fn save_orders(&self, orders: &[OrderCacheEntry]) -> anyhow::Result<()> {
+        let conn = Connection::open(&self.db_path)?;
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO orders (order_id, buyer_name, amount_cent, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)"
+            )?;
+            for o in orders {
+                stmt.execute(params![
+                    &o.order_id,
+                    &o.buyer_name,
+                    o.amount_cent,
+                    &o.created_at,
+                    &o.updated_at,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+}
 
 fn recent_window() -> TimeWindow {
     let (start, end) = recent_day_range_timestamps(30, Some(chrono::Utc::now()));

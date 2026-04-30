@@ -211,7 +211,7 @@ async fn probe_cookie_via_quality_refund(
     has_biz_magic: bool,
     now_rfc: &str,
 ) -> CookieHealthSnapshot {
-    use crate::adapters::quality_refund::HttpQualityRefundSource;
+    use crate::adapters::review::HttpQualityRefundSource;
 
     let source =
         HttpQualityRefundSource::new_with_grant(cookie.to_string(), magic.to_string(), None);

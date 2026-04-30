@@ -295,12 +295,12 @@ npx wrangler deploy
 
 ### 新增 / 调整备用域名检查清单
 
-`apps/desktop/src/app_settings.rs::license_api_base_urls` 与上方路由表是同一份
+`apps/desktop/src/adapters/license.rs::license_api_base_urls` 与上方路由表是同一份
 策略的「客户端视角」与「边缘视角」，任一处漂移都会让客户端配了域名却被
 Cloudflare 判 1014（unknown host），或 Worker 绑了路由却没人调。新增 / 调整
 任一备用域名时按以下三步同步执行：
 
-1. **客户端**：编辑 `apps/desktop/src/app_settings.rs::license_api_base_urls`，
+1. **客户端**：编辑 `apps/desktop/src/adapters/license.rs::license_api_base_urls`，
    用 `obfstr::obfstr!("...")` 包裹新 URL 加入返回数组（顺序代表优先级）。
 2. **Cloudflare 路由**：在 `backend/wrangler.toml` 增补 `routes = [{ pattern = "...", custom_domain = true }]`，
    再 `cd backend && npx wrangler deploy` 让边缘绑定生效。
@@ -314,4 +314,4 @@ Cloudflare 判 1014（unknown host），或 Worker 绑了路由却没人调。�
 - 桌面图标资源位于 `apps/desktop/icons/`
 - JS 混淆配置已关闭 `controlFlowFlattening` / `deadCodeInjection` / `selfDefending` / `debugProtection`，避免破坏 Vue 3 runtime 或触发 Tauri CSP 拦截。**详细原因与触发的真实故障链路**见 [`scripts/obfuscator.config.json`](scripts/obfuscator.config.json) 中 `_note_cff_dci_off` 字段；**不要**为「更难被反混淆」打开这两个开关，否则下次发版会以非常间歇且难复现的方式炸掉
 - Windows 下 `std::process::Command` 调用系统工具（如 `wmic`）需加 `CREATE_NO_WINDOW` 防止黑窗闪现
-- 新增 / 调整授权 Worker 域名前请通读上文「新增 / 调整备用域名检查清单」，避免客户端 `apps/desktop/src/app_settings.rs::license_api_base_urls` 与 `backend/wrangler.toml` 路由对不上
+- 新增 / 调整授权 Worker 域名前请通读上文「新增 / 调整备用域名检查清单」，避免客户端 `apps/desktop/src/adapters/license.rs::license_api_base_urls` 与 `backend/wrangler.toml` 路由对不上

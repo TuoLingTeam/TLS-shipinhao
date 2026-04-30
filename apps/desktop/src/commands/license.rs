@@ -1,5 +1,6 @@
-use crate::adapters::license::{normalize_license_state, HttpLicenseClient, Lar};
-use crate::app_settings::license_api_base_urls;
+use crate::adapters::license::{
+    license_api_base_urls, normalize_license_state, HttpLicenseClient, Lar,
+};
 use crate::error::AppError;
 use crate::security_event::{emit, emit_with_detail, SecurityEventKind};
 use crate::state::{self, AppState, Slp};

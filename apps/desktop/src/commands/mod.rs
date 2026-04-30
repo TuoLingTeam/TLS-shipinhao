@@ -10,10 +10,9 @@
 //! | `review`   | 差评评分匹配、品退直连订单                                   | `find_reviews` / `find_quality_refund_orders` |
 //! | `system`   | 应用元信息、外链、Cookie 登录窗口、旧版 Python 数据迁移等     | `get_app_info` / `open_cookie_login` / `start_legacy_migration` |
 //!
-//! 以下两个模块对业务命令共享使用，不对外暴露为 Tauri 命令：
+//! 以下模块对业务命令共享使用，不对外暴露为 Tauri 命令：
 //!
-//! - `paths`：统一 `cache_data_dir` / `rich_order_cache_path` 等本地磁盘路径，避免各命令复制常量
-//! - `shared`：命令前置校验的公共 helper（`require_cookie_credentials` 等）
+//! - `shared`：命令前置校验与本地路径计算的公共 helper（`require_cookie_credentials` 等）
 //!
 //! 新增命令时需：
 //! 1. 在对应子模块写 `#[tauri::command]` 函数，返回 `Result<T, AppError>`
@@ -36,7 +35,6 @@
 pub mod delivery;
 pub mod license;
 pub mod order;
-pub(crate) mod paths;
 pub mod review;
 pub(crate) mod shared;
 pub mod system;

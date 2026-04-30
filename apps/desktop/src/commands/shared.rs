@@ -3,9 +3,8 @@
 //! 原本 `order` / `review` / `delivery` 命令各自复制了「取锁 → 判 cookie 非空 → 克隆 cookie/biz_magic」
 //! 6 次，任何一处改文案或加埋点都要漏改一份。这里抽到一处，保证所有命令走同一套检查。
 
-use crate::commands::paths::{cache_data_dir_for_store, rich_order_cache_path_for_store};
 use crate::error::AppError;
-use crate::state::{AppState, CookieHealthSnapshot, StoreRegistry};
+use crate::state::{self, AppState, CookieHealthSnapshot, StoreRegistry};
 use desktop::services::CookieProfile;
 use std::path::{Path, PathBuf};
 use tauri::State;
@@ -28,6 +27,33 @@ pub(crate) struct StoreRuntimeContext {
     pub(crate) magic: String,
     pub(crate) data_dir: PathBuf,
     pub(crate) rich_order_cache_path: PathBuf,
+}
+
+/// 应用用户数据目录（`~/Library/Application Support/TLS-shipinhao` 等平台对应位置）。
+/// 平台 API 不可用时回退到当前工作目录，保证 CLI/CI 下也能跑。
+pub(crate) fn default_cache_data_dir() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("TLS-shipinhao")
+}
+
+/// 解析当前店铺的轻缓存目录；未激活店铺时沿用历史全局目录以兼容旧数据。
+pub(crate) fn cache_data_dir_for_store(app_home_dir: &Path, store_id: Option<&str>) -> PathBuf {
+    match store_id
+        .map(str::trim)
+        .filter(|store_id| !store_id.is_empty())
+    {
+        Some(store_id) => state::store_dir(app_home_dir, store_id),
+        None => default_cache_data_dir(),
+    }
+}
+
+/// 当前店铺的富订单缓存 SQLite 文件位置。
+pub(crate) fn rich_order_cache_path_for_store(
+    app_home_dir: &Path,
+    store_id: Option<&str>,
+) -> PathBuf {
+    cache_data_dir_for_store(app_home_dir, store_id).join("order_cache.sqlite3")
 }
 
 fn store_paths_for(app_home_dir: &Path, store_id: Option<&str>) -> CurrentStorePaths {
@@ -116,5 +142,28 @@ pub(crate) async fn cookie_status_snapshot(state: &State<'_, AppState>) -> Cooki
         profile: _cookie_profile.clone(),
         cookie_path: _cookie_path.clone(),
         health: _cookie_health.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_data_dir_for_store_uses_store_directory_when_store_is_active() {
+        let app_home = PathBuf::from("/tmp/tls-shipinhao-home");
+
+        let path = cache_data_dir_for_store(&app_home, Some("wx61f28d69d9174ddf"));
+
+        assert_eq!(path, app_home.join("stores").join("wx61f28d69d9174ddf"));
+    }
+
+    #[test]
+    fn rich_order_cache_path_for_store_falls_back_to_legacy_global_cache() {
+        let app_home = PathBuf::from("/tmp/tls-shipinhao-home");
+
+        let path = rich_order_cache_path_for_store(&app_home, None);
+
+        assert_eq!(path, default_cache_data_dir().join("order_cache.sqlite3"));
     }
 }
