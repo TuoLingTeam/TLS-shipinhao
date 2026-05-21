@@ -43,18 +43,38 @@ export const useCookieHealthStore = defineStore("cookie-health", () => {
     }
   }
 
+  let pendingProbe: Promise<void> | null = null;
+
   async function probe() {
-    if (loading.value) return;
+    if (loading.value) {
+      await pendingProbe;
+      return;
+    }
     loading.value = true;
     error.value = null;
-    try {
-      const result = await invoke<CookieHealthSnapshot>("check_cookie_health");
-      snapshot.value = result;
-    } catch (err) {
-      error.value = toErrorMessage(err);
-    } finally {
-      loading.value = false;
-    }
+    pendingProbe = (async () => {
+      try {
+        const result = await invoke<CookieHealthSnapshot>("check_cookie_health");
+        snapshot.value = result;
+      } catch (err) {
+        error.value = toErrorMessage(err);
+      } finally {
+        loading.value = false;
+        pendingProbe = null;
+      }
+    })();
+    await pendingProbe;
+  }
+
+  function resetForStoreSwitch() {
+    snapshot.value = {
+      healthy: false,
+      configured: false,
+      has_biz_magic: false,
+      last_checked_at: null,
+      hint: null,
+    };
+    error.value = null;
   }
 
   function start() {
@@ -87,6 +107,7 @@ export const useCookieHealthStore = defineStore("cookie-health", () => {
     error,
     status,
     probe,
+    resetForStoreSwitch,
     refreshSilently,
     start,
     stop,

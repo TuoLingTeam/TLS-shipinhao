@@ -119,5 +119,10 @@ backend/.wrangler/
 backend/build/
 backend/.cache/
 
+# 托管端点加密配置（明文 + 密钥禁止提交，密文允许）
+.evn/.secret-hex
+.evn/.gitee-token
+.evn/endpoints.json
+
 # 深度混淆镜像产物（scripts/build-obfuscate.mjs 生成）
 /TLS-shipinhao-release/

@@ -119,7 +119,7 @@ export const useStoreContextStore = defineStore("store-context", () => {
     if (previousStoreId !== activeStoreId.value) {
       resetDomainState();
     }
-    await Promise.allSettled([refreshOrderCacheStatus(), cookieHealth.refreshSilently()]);
+    await Promise.allSettled([refreshOrderCacheStatus(), cookieHealth.probe()]);
   }
 
   async function selectStore(storeId: string) {
@@ -138,8 +138,9 @@ export const useStoreContextStore = defineStore("store-context", () => {
       applySelection(result);
       if (previousStoreId !== result.store.store_id) {
         resetDomainState();
+        cookieHealth.resetForStoreSwitch();
       }
-      await Promise.allSettled([refreshOrderCacheStatus(), cookieHealth.refreshSilently()]);
+      await Promise.allSettled([refreshOrderCacheStatus(), cookieHealth.probe()]);
       return result;
     } catch (err) {
       error.value = toErrorMessage(err);

@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 edition = "2021"
-version = "5.0.3"
+version = "5.0.4"
 license = "Proprietary"
 authors = ["TLS-801"]
 
@@ -55,6 +55,20 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # 编译期字符串加密：用 obfstr!("...") 包装关键明文（URL / API 路径 / 卡密报错），
 # release 产物中 `strings` 扫不出原文，逆向需要还原解密过程
 obfstr = "0.4"
+
+# ── 开发构建优化 ──
+# 目标：缩减 target/debug/ 体积（从 ~19 GB 降至 ~6-8 GB），加速增量编译
+[profile.dev]
+# 只保留行号级调试符号，不生成完整变量/类型信息；减少 .rlib 体积约 30-50%
+debug = "line-tables-only"
+# macOS 拆分 debug info 到 .dSYM 目录，避免 .rlib 内嵌大段 DWARF
+split-debuginfo = "unpacked"
+
+# 对 620 个外部依赖：dev 模式也跑 opt-level=1，大幅减少中间产物体积
+# 且运行时性能更接近 release，调试时只有自己的 workspace crate 是 opt=0
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
 
 [profile.release]
 lto = true

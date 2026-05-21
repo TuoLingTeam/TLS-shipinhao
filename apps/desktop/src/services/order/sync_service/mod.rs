@@ -41,10 +41,14 @@ pub trait CacheOrderFinder {
     ) -> anyhow::Result<CacheFetchResult>;
 }
 
+/// 同步进度回调：(phase 描述, 0..=100 进度值)
+pub type ProgressCallback = Box<dyn Fn(&str, u8) + Send>;
+
 pub struct OrderSyncService<F> {
     pub finder: F,
     pub repository: Arc<dyn OrderCacheRepository>,
     stopped: bool,
+    progress_cb: Option<ProgressCallback>,
 }
 
 fn sync_completed_at(now: Option<chrono::DateTime<chrono::Utc>>) -> i64 {
@@ -60,6 +64,17 @@ where
             finder,
             repository,
             stopped: false,
+            progress_cb: None,
+        }
+    }
+
+    pub fn set_progress_callback(&mut self, cb: ProgressCallback) {
+        self.progress_cb = Some(cb);
+    }
+
+    fn emit_progress(&self, phase: &str, pct: u8) {
+        if let Some(cb) = &self.progress_cb {
+            cb(phase, pct);
         }
     }
 
@@ -241,6 +256,7 @@ where
 
         let state = self.repository.get_state(ORDER_CACHE_SCOPE)?;
         if state.is_none() {
+            self.emit_progress("首次缓存构建中…", 25);
             let (written, warnings) = self.rebuild_cache(now)?;
             return Ok((written, warnings, start_timestamp, end_timestamp));
         }
@@ -254,15 +270,19 @@ where
             MERGE_TOLERANCE_SECONDS,
             MIN_GAP_WIDTH_SECONDS,
         )?;
-        for (segment_start, segment_end) in gaps {
+        let gap_count = gaps.len();
+        for (i, (segment_start, segment_end)) in gaps.into_iter().enumerate() {
             if self.stopped {
                 break;
             }
+            let pct = 25 + ((i as u8) * 30 / (gap_count as u8).max(1));
+            self.emit_progress(&format!("正在补齐缓存缺口 {}/{}…", i + 1, gap_count), pct);
             let (written_count, gap_warnings) =
                 self.sync_range(segment_start, segment_end, "gap_fill", now)?;
             total_written += written_count;
             warnings.extend(gap_warnings);
         }
+        self.emit_progress("正在增量刷新…", 58);
         let (refresh_written, refresh_warnings) = self.refresh_cache(now)?;
         total_written += refresh_written;
         warnings.extend(refresh_warnings);
@@ -277,12 +297,14 @@ where
         now: Option<chrono::DateTime<chrono::Utc>>,
     ) -> anyhow::Result<(usize, Vec<String>, i64, i64)> {
         let current = now.unwrap_or_else(chrono::Utc::now);
+        self.emit_progress("正在检查近 30 天缓存覆盖…", 20);
         let (recent_written, mut warnings, recent_start, recent_end) =
             self.ensure_recent_cache(Some(current))?;
         if self.stopped {
             return Ok((recent_written, warnings, recent_start, recent_end));
         }
 
+        self.emit_progress("正在同步今天的订单…", 65);
         let today_start = start_of_day_timestamp(Some(current));
         let today_end = end_of_day_timestamp(Some(current));
         let (today_written, today_warnings) =

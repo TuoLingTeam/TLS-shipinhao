@@ -247,25 +247,23 @@ impl HttpQualityRefundSource {
         )
     }
 
-    async fn request(&self, method: reqwest::Method) -> anyhow::Result<Value> {
+    async fn request(&self, begin_ts: i64, end_ts: i64) -> anyhow::Result<Value> {
         let headers = self.build_headers();
         let url = format!("{}?token=&lang=zh_CN", quality_refund_order_url());
-        let response = if method == reqwest::Method::POST {
-            self.client
-                .request(method, &url)
-                .headers(headers)
-                .json(&json!({}))
-                .send()
-                .await
-                .context("品退 POST 请求")?
-        } else {
-            self.client
-                .request(method, &url)
-                .headers(headers)
-                .send()
-                .await
-                .context("品退 GET 请求")?
-        };
+        let body = json!({
+            "page": 1,
+            "pageSize": 50,
+            "beginTs": begin_ts,
+            "endTs": end_ts,
+        });
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .json(&body)
+            .send()
+            .await
+            .context("品退 POST 请求")?;
         response.json::<Value>().await.context("品退响应 JSON")
     }
 
@@ -275,10 +273,12 @@ impl HttpQualityRefundSource {
             desktop::services::http_client::build_desktop_http_client(Duration::from_secs(5));
         let headers = self.build_headers();
         let url = format!("{}?token=&lang=zh_CN", quality_refund_order_url());
+        let now = chrono::Utc::now().timestamp();
+        let body = json!({"page": 1, "pageSize": 1, "beginTs": now - 86400, "endTs": now});
         let response = probe_client
             .post(&url)
             .headers(headers)
-            .json(&json!({}))
+            .json(&body)
             .send()
             .await
             .context("品退探测请求失败（超时或网络异常）")?;
@@ -302,36 +302,23 @@ impl HttpQualityRefundSource {
     ) -> anyhow::Result<Vec<OrderMatchResult>> {
         let start_ts = parse_window_boundary(window.start_at.as_str())?;
         let end_ts = parse_window_boundary(window.end_at.as_str())?;
-        let methods = [reqwest::Method::GET, reqwest::Method::POST];
-        let mut errors = Vec::new();
 
-        for method in methods {
-            match self.request(method.clone()).await {
-                Ok(payload) => {
-                    if payload.get("code").and_then(Value::as_i64) != Some(0) {
-                        errors.push(format!("{method} API错误: {payload}"));
-                        continue;
-                    }
-                    let items = payload
-                        .get("data")
-                        .and_then(Value::as_array)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut results = Vec::new();
-                    for (index, item) in items.iter().enumerate() {
-                        if let Some(record) =
-                            parse_quality_refund_record(item, index, start_ts, end_ts)
-                        {
-                            results.push(record);
-                        }
-                    }
-                    return Ok(results);
-                }
-                Err(err) => errors.push(format!("{method} 请求异常: {err}")),
+        let payload = self.request(start_ts, end_ts).await?;
+        if payload.get("code").and_then(Value::as_i64) != Some(0) {
+            anyhow::bail!("品退 API 错误: {payload}");
+        }
+        let items = payload
+            .get("data")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut results = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            if let Some(record) = parse_quality_refund_record(item, index, start_ts, end_ts) {
+                results.push(record);
             }
         }
-
-        anyhow::bail!(errors.join("；"))
+        Ok(results)
     }
 }
 

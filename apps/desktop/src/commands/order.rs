@@ -412,6 +412,10 @@ pub async fn sync_recent_order_cache(
         })?;
         let repository: Arc<dyn OrderCacheRepository> = Arc::new(repository);
         let mut service = OrderSyncService::new(finder, repository);
+        let progress_app = app_clone.clone();
+        service.set_progress_callback(Box::new(move |phase, pct| {
+            emit_order_sync_progress(&progress_app, "manual", "ensure_recent_cache", pct, phase);
+        }));
         let (written, warnings, coverage_start, coverage_end) = service
             .ensure_recent_and_today_cache(Some(chrono::Utc::now()))
             .map_err(|error| {

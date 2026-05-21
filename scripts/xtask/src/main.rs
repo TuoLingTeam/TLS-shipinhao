@@ -1,4 +1,5 @@
 mod bench_match;
+mod encrypt_endpoints;
 mod perf;
 mod release;
 
@@ -25,6 +26,7 @@ fn run(args: Vec<OsString>) -> Result<()> {
         "desktop-build" => run_desktop_build_command(&args[1..]),
         "bench-match" => bench_match::run_bench_match_command(&args[1..]),
         "perf" => perf::run_perf_command(&args[1..]),
+        "encrypt-endpoints" => encrypt_endpoints::run_encrypt_endpoints_command(&args[1..]),
         other => Err(anyhow!("unknown command: {other}")),
     }
 }

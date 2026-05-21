@@ -38,6 +38,7 @@ dirs = "6"
 rfd = "0.15"
 keyring = "3"
 aes-gcm = "0.10"
+hex = "0.4"
 rand = "0.8"
 obfstr = { workspace = true }
 

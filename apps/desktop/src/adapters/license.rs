@@ -10,14 +10,26 @@ use backend::blank_debug_release;
 blank_debug_release!(Lrr);
 blank_debug_release!(Lar);
 
-/// 卡密验证后端（按顺序依次回退）。每次调用即时解密，避免在 static 区留下明文。
+/// 卡密验证后端（按地域优先顺序排列）。
+///
+/// 优先从托管端点管理器读取（AES-GCM 加密 + 远端拉取），
+/// 不可用时 fallback 到 obfstr 硬编码默认值。
 pub fn license_api_base_urls() -> Vec<String> {
-    vec![
-        obfstr::obfstr!("https://sphapi-cn.199908.top").to_string(),
-        obfstr::obfstr!("https://sphapi.199908.top").to_string(),
-        obfstr::obfstr!("https://sphapi.tuoling.ccwu.cc").to_string(),
-        obfstr::obfstr!("https://sphapi.tuoling.eu.cc").to_string(),
-    ]
+    let managed = super::managed_endpoints::global_urls();
+    if !managed.is_empty() {
+        return managed;
+    }
+    fallback_urls()
+}
+
+fn fallback_urls() -> Vec<String> {
+    let cn = obfstr::obfstr!("https://sphapi-cn.199908.top").to_string();
+    let global = obfstr::obfstr!("https://sphapi.199908.top").to_string();
+    if chrono::Local::now().offset().local_minus_utc() == 8 * 3600 {
+        vec![cn, global]
+    } else {
+        vec![global, cn]
+    }
 }
 
 /// 与授权 Worker API 超时策略对齐（秒）。

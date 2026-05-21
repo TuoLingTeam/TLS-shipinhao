@@ -7,6 +7,7 @@ mod migration;
 mod security_event;
 mod state;
 
+use adapters::managed_endpoints;
 use desktop::services::update_service::{fetch_latest_version_info, UPDATE_CHECK_DELAY_MS};
 use security_core::get_device_id;
 use state::AppState;
@@ -76,6 +77,23 @@ fn security_log_path() -> std::path::PathBuf {
     state::app_home_dir().join("security-events.jsonl")
 }
 
+fn init_managed_endpoints() {
+    let fetch_url =
+        obfstr::obfstr!("https://gitee.com/tuolingshe/tuoling-shipinhao/raw/master/endpoints.enc")
+            .to_string();
+    let secret_hex =
+        obfstr::obfstr!("ec5c1157e00f835a85b174654e00f5d57a5beac1bf790b9a8e64e6776aa654b2")
+            .to_string();
+    let cache_dir = state::app_home_dir();
+    managed_endpoints::init_global(fetch_url, &cache_dir, &secret_hex);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build();
+    if let Ok(rt) = rt {
+        rt.block_on(managed_endpoints::global_bootstrap());
+    }
+}
+
 #[cfg(windows)]
 fn configure_portable_webview2_runtime() {
     use std::os::windows::process::CommandExt;
@@ -131,6 +149,7 @@ fn configure_portable_webview2_runtime() {}
 fn main() {
     configure_portable_webview2_runtime();
     init_tracing();
+    init_managed_endpoints();
     tauri::Builder::default()
         .manage(AppState::new())
         .setup(|app| {
@@ -138,8 +157,11 @@ fn main() {
             // 这里拼 " {version}"，升级时只改 version 字段即可同步标题栏。
             let version = app.package_info().version.to_string();
             if let Some(win) = app.get_webview_window("main") {
-                let _ = win.set_title(&format!("驼铃·视频小店差评处理 {version}"));
+                let _ = win.set_title(&format!("驼铃·视频小店助手 {version}"));
             }
+
+            let (_cancel_tx, cancel_rx) = tokio::sync::watch::channel(());
+            tauri::async_runtime::spawn(managed_endpoints::global_run(cancel_rx));
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
