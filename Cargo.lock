@@ -306,7 +306,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "backend"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "build-tools"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "anyhow",
  "backend",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3942,7 +3942,7 @@ dependencies = [
 
 [[package]]
 name = "security_core"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "backend",
  "base64 0.22.1",
@@ -6472,7 +6472,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "aes-gcm",
  "anyhow",

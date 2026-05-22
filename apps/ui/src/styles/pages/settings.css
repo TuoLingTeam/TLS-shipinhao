@@ -13,13 +13,13 @@
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   grid-template-areas: "cookie right";
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: 1fr;
   gap: 1.25rem;
   align-items: stretch;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 0;
 }
 

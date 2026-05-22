@@ -1,6 +1,6 @@
 {
   "productName": "驼铃·视频小店助手",
-  "version": "5.0.4",
+  "version": "5.1.0",
   "identifier": "com.tls.shipinhao",
   "build": {
     "frontendDist": "../ui/dist",

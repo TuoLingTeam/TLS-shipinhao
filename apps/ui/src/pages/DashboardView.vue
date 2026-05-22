@@ -169,7 +169,7 @@ const quickLinks: readonly {
 }[] = [
   { to: "/review", title: "中差评/品退", icon: "review", description: "一键匹配订单并带入发货", tone: "brand" },
   { to: "/order", title: "订单缓存同步", icon: "order", description: "维护近 30 天（不含今天）缓存", tone: "sky" },
-  { to: "/delivery", title: "批量发货", icon: "delivery", description: "逐条进度·失败明细·支持取消", tone: "amber" },
+  { to: "/delivery", title: "批量修改物流", icon: "delivery", description: "逐条进度·失败明细·支持取消", tone: "amber" },
   { to: buildSettingsLocation("license"), title: "设置中心", icon: "settings", description: "授权、Cookie 与版本信息", tone: "slate" },
 ] as const;
 

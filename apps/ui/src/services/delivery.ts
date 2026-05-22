@@ -19,6 +19,27 @@ interface BatchResult {
   steps: BatchDeliveryStepRaw[];
 }
 
+const DELIVERY_ERROR_STRIP_PREFIXES = [
+  "更新物流信息失败：",
+  "更新物流信息失败:",
+  "获取订单详情失败：",
+  "获取订单详情失败:",
+  "发货初始化接口返回失败：",
+  "发货初始化接口返回失败:",
+];
+
+function simplifyErrorMessage(msg: string | null | undefined): string | null {
+  if (!msg) return null;
+  let result = msg;
+  for (const prefix of DELIVERY_ERROR_STRIP_PREFIXES) {
+    if (result.startsWith(prefix)) {
+      result = result.slice(prefix.length);
+      break;
+    }
+  }
+  return result;
+}
+
 function normalizeStep(raw: BatchDeliveryStepRaw): BatchDeliveryStep {
   return {
     index: raw.index,
@@ -27,7 +48,7 @@ function normalizeStep(raw: BatchDeliveryStepRaw): BatchDeliveryStep {
     status: raw.status,
     retryable: raw.retryable ?? (raw.status === "failed"),
     oldWaybill: raw.oldWaybill ?? null,
-    errorMessage: raw.errorMessage ?? null,
+    errorMessage: simplifyErrorMessage(raw.errorMessage),
   };
 }
 
@@ -82,7 +103,7 @@ export function useDelivery() {
           steps: result.steps?.map(normalizeStep),
         });
       } else {
-        store.error = batch.error.value ?? "批量发货失败";
+        store.error = batch.error.value ?? "批量修改物流失败";
         store.finalizeBatch({
           totalCount: items.length,
           successCount: store.batchProgress?.successCount ?? 0,
@@ -154,7 +175,7 @@ export function useDelivery() {
     const anchor = document.createElement("a");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     anchor.href = url;
-    anchor.download = `批量发货失败明细-${stamp}.csv`;
+    anchor.download = `批量修改物流失败明细-${stamp}.csv`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);

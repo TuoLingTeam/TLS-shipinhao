@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use desktop::domain::{DeliveryUpdateRequest, DeliveryUpdateResult};
 use desktop::services::delivery_batch_runner::BatchDeliveryGateway;
 use desktop::services::delivery_update::{
-    build_raw_update_delivery_payload, determine_delivery_override_from_raw_info,
-    is_delivery_mismatch_error,
+    build_compensation_delivery_payload, build_raw_update_delivery_payload,
+    determine_delivery_override_from_raw_info, is_compensation_fallback_error,
+    is_delivery_mismatch_error, DeliveryProductItem, COMPENSATION_REASON_SPLIT_PACKAGE,
 };
 use desktop::services::DeliveryGateway;
 use serde_json::Value;
@@ -25,6 +26,12 @@ fn init_ship_data_url() -> String {
 fn delivery_update_url() -> String {
     obfstr::obfstr!(
         "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/updateDeliveryInfo"
+    )
+    .to_string()
+}
+fn compensation_delivery_url() -> String {
+    obfstr::obfstr!(
+        "https://store.weixin.qq.com/shop-faas/mmchannelstradeorder/ship/cgi/compensationDelivery"
     )
     .to_string()
 }
@@ -143,9 +150,53 @@ impl HttpDeliveryGateway {
         check_update_response(&resp)
     }
 
-    /// 真正执行单条物流更新的 async 入口。命令层 `update_delivery` 直接 `await` 它；
-    /// `DeliveryGateway` / `BatchDeliveryGateway` 同步 trait 实现走 `Handle::block_on`
-    /// 复用同一份业务逻辑，避免重复维护。
+    async fn try_compensation_delivery(
+        &self,
+        order_id: &str,
+        tracking_number: &str,
+        old_info: &Value,
+    ) -> Result<(), CompensationError> {
+        let delivery_id = old_info
+            .get("deliveryId")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let product_infos = extract_product_items_from_raw(old_info);
+        if delivery_id.is_empty() || product_infos.is_empty() {
+            return Err(CompensationError::Fallback);
+        }
+
+        let body = build_compensation_delivery_payload(
+            order_id,
+            tracking_number,
+            delivery_id,
+            COMPENSATION_REASON_SPLIT_PACKAGE,
+            &product_infos,
+        );
+        let resp = self
+            .post_json(&compensation_delivery_url(), &body)
+            .await
+            .map_err(|e| CompensationError::Other(e.to_string()))?;
+
+        let code = resp.get("code").and_then(Value::as_i64).unwrap_or(-1);
+        if code == 0 {
+            return Ok(());
+        }
+        let errmsg =
+            extract_error_message(&resp).unwrap_or_else(|| format!("补发货失败（错误码 {code}）"));
+
+        if is_delivery_mismatch_error(&errmsg) {
+            return Err(CompensationError::Mismatch);
+        }
+        if is_compensation_fallback_error(code) {
+            return Err(CompensationError::Fallback);
+        }
+        Err(CompensationError::Other(errmsg))
+    }
+
+    /// 单条物流更新 async 入口。策略：优先补发货 → 降级到改物流。
+    ///
+    /// 命令层 `update_delivery` 直接 `await` 它；`DeliveryGateway` /
+    /// `BatchDeliveryGateway` 同步 trait 实现走 `Handle::block_on` 复用。
     pub async fn update_delivery_async(
         &self,
         request: &DeliveryUpdateRequest,
@@ -153,30 +204,87 @@ impl HttpDeliveryGateway {
         let (old_info, old_waybill) = self.extract_delivery_info(&request.order_id).await?;
 
         match self
-            .do_update(&request.order_id, &request.tracking_number, &old_info, None)
+            .try_compensation_delivery(&request.order_id, &request.tracking_number, &old_info)
+            .await
+        {
+            Ok(()) => {
+                return Ok(DeliveryUpdateResult {
+                    order_id: request.order_id.clone(),
+                    success: true,
+                    previous_waybill: empty_to_none(old_waybill),
+                    error_message: None,
+                });
+            }
+            Err(CompensationError::Mismatch) => {
+                let prefix_id = tracking_prefix(&request.tracking_number);
+                let product_infos = extract_product_items_from_raw(&old_info);
+                let body = build_compensation_delivery_payload(
+                    &request.order_id,
+                    &request.tracking_number,
+                    &prefix_id,
+                    COMPENSATION_REASON_SPLIT_PACKAGE,
+                    &product_infos,
+                );
+                let resp = self.post_json(&compensation_delivery_url(), &body).await;
+                if let Ok(r) = resp {
+                    if r.get("code").and_then(Value::as_i64) == Some(0) {
+                        return Ok(DeliveryUpdateResult {
+                            order_id: request.order_id.clone(),
+                            success: true,
+                            previous_waybill: empty_to_none(old_waybill),
+                            error_message: None,
+                        });
+                    }
+                }
+            }
+            Err(CompensationError::Fallback) => {
+                // 降级到改物流
+            }
+            Err(CompensationError::Other(msg)) => {
+                return Ok(DeliveryUpdateResult {
+                    order_id: request.order_id.clone(),
+                    success: false,
+                    previous_waybill: None,
+                    error_message: Some(msg),
+                });
+            }
+        }
+
+        self.fallback_update_delivery(request, &old_info, &old_waybill)
+            .await
+    }
+
+    async fn fallback_update_delivery(
+        &self,
+        request: &DeliveryUpdateRequest,
+        old_info: &Value,
+        old_waybill: &str,
+    ) -> anyhow::Result<DeliveryUpdateResult> {
+        match self
+            .do_update(&request.order_id, &request.tracking_number, old_info, None)
             .await
         {
             Ok(()) => Ok(DeliveryUpdateResult {
                 order_id: request.order_id.clone(),
                 success: true,
-                previous_waybill: empty_to_none(old_waybill),
+                previous_waybill: empty_to_none(old_waybill.to_string()),
                 error_message: None,
             }),
             Err(e) if is_delivery_mismatch_error(&e.to_string()) => {
-                if let Some(override_info) =
-                    determine_delivery_override_from_raw_info(&request.tracking_number, &old_info)
+                if let Some(ov) =
+                    determine_delivery_override_from_raw_info(&request.tracking_number, old_info)
                 {
                     self.do_update(
                         &request.order_id,
                         &request.tracking_number,
-                        &old_info,
-                        Some((&override_info.delivery_id, &override_info.delivery_name)),
+                        old_info,
+                        Some((&ov.delivery_id, &ov.delivery_name)),
                     )
                     .await?;
                     return Ok(DeliveryUpdateResult {
                         order_id: request.order_id.clone(),
                         success: true,
-                        previous_waybill: empty_to_none(old_waybill),
+                        previous_waybill: empty_to_none(old_waybill.to_string()),
                         error_message: None,
                     });
                 }
@@ -195,6 +303,37 @@ impl HttpDeliveryGateway {
             }),
         }
     }
+}
+
+enum CompensationError {
+    Mismatch,
+    Fallback,
+    Other(String),
+}
+
+fn tracking_prefix(tracking_number: &str) -> String {
+    tracking_number.trim().chars().take(2).collect()
+}
+
+fn extract_product_items_from_raw(raw_delivery_info: &Value) -> Vec<DeliveryProductItem> {
+    raw_delivery_info
+        .get("productInfos")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let pid = v.get("productId").and_then(Value::as_str)?;
+                    let sid = v.get("skuId").and_then(Value::as_str)?;
+                    let cnt = v.get("productCnt").and_then(Value::as_i64).unwrap_or(1);
+                    Some(DeliveryProductItem {
+                        product_id: pid.to_string(),
+                        sku_id: sid.to_string(),
+                        product_cnt: cnt,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn empty_to_none(value: String) -> Option<String> {

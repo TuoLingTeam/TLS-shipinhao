@@ -71,7 +71,7 @@ const canRetryFailed = computed(() =>
 const confirmMessage = computed(() => {
   const count = parsedBatchItems.value.length;
   const eta = Math.max(1, Math.ceil(count * 0.5));
-  return `即将提交 ${count} 条批量发货，预计耗时约 ${eta} 秒。提交后将无法撤销已发送至小店的条目，请确认无误。`;
+  return `即将提交 ${count} 条批量修改物流，预计耗时约 ${eta} 秒。提交后将无法撤销已发送至小店的条目，请确认无误。`;
 });
 
 function requestBatchDelivery() {
@@ -100,7 +100,7 @@ async function confirmBatchDelivery() {
   const current = store.batchProgress;
   if (!current) return;
   showToast(
-    `批量发货完成：成功 ${current.successCount} 条，失败 ${current.failureCount} 条`,
+    `批量修改物流完成：成功 ${current.successCount} 条，失败 ${current.failureCount} 条`,
     current.failureCount > 0 || current.fatalError ? "error" : "success",
   );
 }
@@ -122,7 +122,7 @@ async function confirmRetryFailed() {
 
 async function handleCancelBatch() {
   await cancelBatchDelivery();
-  showToast(store.error ? store.error : "已请求停止批量发货", store.error ? "error" : "info");
+  showToast(store.error ? store.error : "已请求停止批量修改物流", store.error ? "error" : "info");
 }
 
 function handleClearInputs() {
@@ -147,11 +147,11 @@ function handleExportFailedCsv() {
       当前未激活授权，发货功能不可用，请先前往「设置中心」完成激活。
     </div>
 
-    <section class="delivery-main-grid grid flex-1 min-h-0 gap-app lg:grid-cols-[1fr_1fr]">
+    <section class="delivery-main-grid grid flex-1 min-h-0 gap-app lg:grid-cols-[6fr_7fr]">
       <article class="surface-panel delivery-input-panel p-3 lg:p-4 flex flex-col min-h-0">
         <div class="subsystem-section-header">
           <div class="min-w-0">
-            <h3 class="text-base font-semibold tracking-tight text-slate-900">批量发货</h3>
+            <h3 class="text-base font-semibold tracking-tight text-slate-900">批量修改物流</h3>
           </div>
           <div v-if="lineCountMismatch" class="subsystem-chipbar">
             <span class="subsystem-chip subsystem-chip--warn">
@@ -218,7 +218,7 @@ function handleExportFailedCsv() {
             class="action-btn action-btn-success flex-1"
             @click="requestBatchDelivery"
           >
-            {{ store.loading ? "批量发货中..." : `开始批量发货（${parsedBatchItems.length} 条）` }}
+            {{ store.loading ? "批量修改物流中..." : `开始批量修改物流（${parsedBatchItems.length} 条）` }}
           </button>
           <button
             v-else
@@ -234,7 +234,7 @@ function handleExportFailedCsv() {
             {{
               progress.cancelRequested
                 ? "停止中，将在当前条目完成后终止…"
-                : `停止批量发货（${progress.processedCount}/${progress.totalCount}）`
+                : `停止批量修改物流（${progress.processedCount}/${progress.totalCount}）`
             }}
           </button>
         </div>
@@ -248,7 +248,7 @@ function handleExportFailedCsv() {
         <template v-if="progress">
           <div class="subsystem-section-header">
             <div class="min-w-0">
-              <h3 class="text-base font-semibold text-slate-900">批量发货进度</h3>
+              <h3 class="text-base font-semibold text-slate-900">批量修改物流进度</h3>
               <div class="mt-0.5 text-xs text-slate-500">
                 <template v-if="progress.running">正在处理 {{ progress.processedCount }} / {{ progress.totalCount }} 条</template>
                 <template v-else-if="progress.stopped">已停止于第 {{ progress.processedCount }} 条（{{ progress.cancelRequested ? '用户取消' : '服务端中止' }}）</template>
@@ -284,7 +284,7 @@ function handleExportFailedCsv() {
             <div class="delivery-cancel-status">
               <span class="delivery-cancel-pulse" aria-hidden="true"></span>
               <span class="delivery-cancel-text">
-                <strong class="text-slate-900">批量发货进行中</strong>
+                <strong class="text-slate-900">批量修改物流进行中</strong>
                 <span class="text-slate-500">已处理 {{ progress.processedCount }} / {{ progress.totalCount }} 条</span>
               </span>
             </div>
@@ -298,7 +298,7 @@ function handleExportFailedCsv() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
-              {{ progress.cancelRequested ? "停止中，将在当前条目完成后终止…" : "停止批量发货" }}
+              {{ progress.cancelRequested ? "停止中，将在当前条目完成后终止…" : "停止批量修改物流" }}
             </button>
           </div>
 
@@ -435,9 +435,9 @@ function handleExportFailedCsv() {
                 </svg>
               </div>
               <div class="min-w-0">
-                <h3 class="text-[15px] font-semibold tracking-tight text-slate-800">等待执行批量发货</h3>
+                <h3 class="text-[15px] font-semibold tracking-tight text-slate-800">等待执行批量修改物流</h3>
                 <p class="mt-1 text-[12px] leading-5 text-slate-500">
-                  完成左侧两列粘贴后点击「开始批量发货」，此处会实时展示进度与结果。
+                  完成左侧两列粘贴后点击「开始批量修改物流」，此处会实时展示进度与结果。
                 </p>
               </div>
             </div>
@@ -487,7 +487,7 @@ function handleExportFailedCsv() {
 
     <ConfirmDialog
       :open="confirmOpen"
-      title="确认执行批量发货"
+      title="确认执行批量修改物流"
       :message="confirmMessage"
       confirm-text="立即执行"
       cancel-text="再检查一下"

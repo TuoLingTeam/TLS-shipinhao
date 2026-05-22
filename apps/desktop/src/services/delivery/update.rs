@@ -233,6 +233,50 @@ pub fn determine_delivery_override_from_raw_info(
     )
 }
 
+/// 补发货 reason = 2（商品拆分包裹）。
+pub const COMPENSATION_REASON_SPLIT_PACKAGE: i64 = 2;
+
+/// 这些错误码表示订单不支持补发货，应降级到改物流（updateDeliveryInfo）。
+const COMPENSATION_FALLBACK_CODES: [i64; 4] = [
+    6060494, // 商品未完成发货
+    6060495, // 订单超出补发上限
+    6060497, // 订单不支持补发
+    6060499, // 商品不支持补发
+];
+
+pub fn is_compensation_fallback_error(code: i64) -> bool {
+    COMPENSATION_FALLBACK_CODES.contains(&code)
+}
+
+pub fn build_compensation_delivery_payload(
+    order_id: &str,
+    waybill_id: &str,
+    delivery_id: &str,
+    reason: i64,
+    product_infos: &[DeliveryProductItem],
+) -> Value {
+    let items: Vec<Value> = product_infos
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "productId": p.product_id,
+                "skuId": p.sku_id,
+                "productCnt": p.product_cnt,
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "orderId": order_id.trim(),
+        "reason": reason,
+        "deliveryProductInfo": [{
+            "deliveryId": delivery_id,
+            "waybillId": waybill_id.trim(),
+            "productInfos": items,
+        }],
+    })
+}
+
 pub fn delivery_update_succeeded(result: &Value) -> bool {
     result.get("success").and_then(Value::as_bool) == Some(true)
         || (result.get("code").and_then(Value::as_i64) == Some(0)
@@ -369,6 +413,34 @@ mod tests {
 
         let same_prefix = json!({"deliveryId": "SF", "deliveryName": "顺丰速运"});
         assert!(determine_delivery_override_from_raw_info("SF000123456", &same_prefix).is_none());
+    }
+
+    #[test]
+    fn compensation_fallback_codes_are_recognized() {
+        assert!(is_compensation_fallback_error(6060494));
+        assert!(is_compensation_fallback_error(6060495));
+        assert!(is_compensation_fallback_error(6060497));
+        assert!(is_compensation_fallback_error(6060499));
+        assert!(!is_compensation_fallback_error(0));
+        assert!(!is_compensation_fallback_error(6060479));
+    }
+
+    #[test]
+    fn build_compensation_payload_shapes_correctly() {
+        let infos = vec![DeliveryProductItem {
+            product_id: "P1".into(),
+            sku_id: "S1".into(),
+            product_cnt: 2,
+        }];
+        let payload = build_compensation_delivery_payload("ORD-1", "  WB-123  ", "ZTO", 2, &infos);
+        assert_eq!(payload["orderId"], "ORD-1");
+        assert_eq!(payload["reason"], 2);
+        assert_eq!(payload["deliveryProductInfo"][0]["deliveryId"], "ZTO");
+        assert_eq!(payload["deliveryProductInfo"][0]["waybillId"], "WB-123");
+        assert_eq!(
+            payload["deliveryProductInfo"][0]["productInfos"][0]["productId"],
+            "P1"
+        );
     }
 
     #[test]

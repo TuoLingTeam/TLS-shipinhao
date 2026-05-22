@@ -68,7 +68,7 @@ describe("DeliveryView", () => {
     expect(wrapper.text()).not.toContain("DELIVERY DESK");
     expect(wrapper.text()).not.toContain("单条修正");
     expect(wrapper.text()).not.toContain("发货操作台");
-    expect(wrapper.text()).toContain("批量发货");
+    expect(wrapper.text()).toContain("批量修改物流");
   });
 
   it("does not offer retry for confirmed-receipt delivery failures", async () => {
