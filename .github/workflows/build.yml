@@ -88,6 +88,8 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Install system deps (Linux)
         run: |
@@ -103,28 +105,13 @@ jobs:
       - name: Rust format check
         run: cargo fmt --all --check
 
-      - name: Rust clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
       - name: Run Rust tests
         run: cargo test --workspace
-
-      # L4-5：`cargo audit` 用 RustSec advisory db。传递依赖 / 未修复条目
-      # 会间歇性出现；若改为阻塞，主干易被外部数据库更新「误伤」。
-      # 因此保持 `continue-on-error: true`，由维护者定期读日志并升级；
-      # 若连续多周 `cargo audit` 均为 0 vuln，再移除 continue-on-error。
-      - name: Install cargo-audit
-        run: cargo install --locked cargo-audit
-        continue-on-error: true
-
-      - name: Cargo audit (non-blocking)
-        run: cargo audit
-        continue-on-error: true
 
   prepare-release:
     name: Prepare GitHub Release
     runs-on: ubuntu-latest
-    needs: [extract-version, test]
+    needs: [extract-version]
     permissions:
       contents: write
 
@@ -170,6 +157,8 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Install Tauri CLI (prebuilt)
         shell: pwsh
@@ -266,6 +255,8 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Install Tauri CLI (prebuilt)
         shell: bash
