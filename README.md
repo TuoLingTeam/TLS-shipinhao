@@ -2,7 +2,7 @@
 
 微信视频号小店中差评 / 品退订单查找、订单缓存维护与批量发货桌面工具。
 
-当前版本：**5.0.3**。主线技术栈：**Rust + Tauri 2 + Vue 3 + Tailwind CSS v4**，授权后端运行在 **Cloudflare Workers + D1**。
+当前版本：**5.1.0**。主线技术栈：**Rust + Tauri 2 + Vue 3 + Tailwind CSS v4**，授权后端运行在 **Cloudflare Workers + D1**。
 
 ## 功能概览
 

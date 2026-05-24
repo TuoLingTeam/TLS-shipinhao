@@ -108,7 +108,7 @@ export const IPC_MOCK_BOOT = `
   }
   var handlers = {
     "plugin:app|version": function () {
-      return Promise.resolve("5.0.3+e2e");
+      return Promise.resolve("5.1.0+e2e");
     },
     get_license_status: function () {
       return Promise.resolve({
